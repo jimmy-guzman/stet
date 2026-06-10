@@ -23,14 +23,26 @@ approves, or talks back to an agent — you render judgment on the robot's outpu
   problems panel, inline line markers in the viewer, and per-file markers in the tree — anywhere
   in the repo, not just changed files. Checks re-run automatically once the repo goes quiet.
 
+## Install
+
+```sh
+# standalone binary (macOS / Linux, no runtime needed)
+curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/torre/main/install.sh | bash
+
+# npm (works with npm, bun, pnpm, yarn — pulls a prebuilt binary)
+npm i -g torre
+
+# homebrew
+brew install jimmy-guzman/tap/torre
+```
+
 ## Use it
 
 ```sh
-bun install
-bun run src/main.tsx            # whole repo, worktree vs HEAD
-bun run src/main.tsx main       # compare against another ref
-bun run src/main.tsx --staged   # start in the staged scope
-bun run src/main.tsx --unstaged # start in the unstaged scope
+torre            # whole repo, worktree vs HEAD
+torre main       # compare against another ref
+torre --staged   # start in the staged scope
+torre --unstaged # start in the unstaged scope
 ```
 
 ## Keys
@@ -56,9 +68,17 @@ bun run src/main.tsx --unstaged # start in the unstaged scope
 
 ## Requirements
 
-- [Bun](https://bun.sh) — runtime, test runner, and package manager
 - git
 - macOS for clipboard copy (`pbcopy`) in v1
+
+## Development
+
+```sh
+bun install
+bun run src/main.tsx     # run from source
+bun run check            # tests + typecheck
+bun run build:dist       # build standalone binaries for all targets
+```
 
 ## What it will not do
 

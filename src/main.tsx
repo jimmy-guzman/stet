@@ -2,12 +2,11 @@
 
 import { createCliRenderer } from "@opentui/core"
 import { createRoot } from "@opentui/react"
+import packageJson from "../package.json"
 import { App } from "./App"
 import { helpText, parseArgs } from "./cli"
 import { loadGitModel } from "./git"
 import { createSyntaxConfig } from "./syntax"
-
-const packageJson = await Bun.file(new URL("../package.json", import.meta.url)).json()
 
 try {
   const options = parseArgs(Bun.argv.slice(2))

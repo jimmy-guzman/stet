@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# torre installer: downloads the prebuilt binary from GitHub Releases.
+#   curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/torre/main/install.sh | bash
+# Options (pass after `bash -s --`):
+#   --version <x.y.z>   install a specific version instead of the latest
+set -euo pipefail
+
+REPO="jimmy-guzman/torre"
+APP="torre"
+
+requested_version=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version)
+      requested_version="$2"
+      shift 2
+      ;;
+    *)
+      echo "unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "$(uname -s)" in
+  Darwin) os="darwin" ;;
+  Linux) os="linux" ;;
+  *)
+    echo "unsupported OS: $(uname -s). Try: npm i -g torre" >&2
+    exit 1
+    ;;
+esac
+
+arch="$(uname -m)"
+case "$arch" in
+  aarch64 | arm64) arch="arm64" ;;
+  x86_64) arch="x64" ;;
+  *)
+    echo "unsupported architecture: $arch. Try: npm i -g torre" >&2
+    exit 1
+    ;;
+esac
+
+# Rosetta reports x86_64; prefer the native arm64 build
+if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
+  if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; then
+    arch="arm64"
+  fi
+fi
+
+if [ "$os" = "linux" ]; then
+  if [ -f /etc/alpine-release ] || (ldd --version 2>&1 || true) | grep -qi musl; then
+    echo "musl libc is not supported by the prebuilt binaries yet. Try: npm i -g torre" >&2
+    exit 1
+  fi
+fi
+
+if [ "$os" = "linux" ]; then
+  ext="tar.gz"
+else
+  ext="zip"
+fi
+filename="$APP-$os-$arch.$ext"
+
+if [ -n "$requested_version" ]; then
+  url="https://github.com/$REPO/releases/download/v$requested_version/$filename"
+else
+  url="https://github.com/$REPO/releases/latest/download/$filename"
+fi
+
+install_dir="${TORRE_INSTALL_DIR:-${XDG_BIN_DIR:-$HOME/.torre/bin}}"
+mkdir -p "$install_dir"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+echo "downloading $url"
+curl -fsSL -o "$tmp/$filename" "$url"
+
+if [ "$ext" = "zip" ]; then
+  unzip -qo "$tmp/$filename" -d "$tmp"
+else
+  tar -xzf "$tmp/$filename" -C "$tmp"
+fi
+
+mv "$tmp/$APP" "$install_dir/$APP"
+chmod 755 "$install_dir/$APP"
+
+echo "installed $APP to $install_dir/$APP"
+
+if [ -n "${GITHUB_PATH:-}" ]; then
+  echo "$install_dir" >>"$GITHUB_PATH"
+elif ! command -v "$APP" >/dev/null 2>&1; then
+  case ":$PATH:" in
+    *":$install_dir:"*) ;;
+    *)
+      echo
+      echo "add $APP to your PATH:"
+      echo "  export PATH=\"$install_dir:\$PATH\""
+      ;;
+  esac
+fi
+
+"$install_dir/$APP" --version

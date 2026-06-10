@@ -1,12 +1,17 @@
 {
   "name": "torre",
   "version": "0.1.0",
+  "private": true,
+  "description": "Read-only companion TUI for CLI coding agents",
+  "license": "MIT",
+  "repository": "github:jimmy-guzman/torre",
   "type": "module",
   "bin": {
     "torre": "./src/main.tsx"
   },
   "scripts": {
     "build": "bun build ./src/main.tsx --target bun --compile --outfile /private/tmp/torre-build-check",
+    "build:dist": "bun script/build.ts",
     "check": "bun test && bun run typecheck",
     "torre": "bun run src/main.tsx",
     "typecheck": "tsc --noEmit",

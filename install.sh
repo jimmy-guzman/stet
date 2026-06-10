@@ -12,6 +12,10 @@ requested_version=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)
+      if [ $# -lt 2 ] || [ -z "$2" ]; then
+        echo "--version requires an argument, e.g. --version 0.1.0" >&2
+        exit 1
+      fi
       requested_version="$2"
       shift 2
       ;;

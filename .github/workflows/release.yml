@@ -45,13 +45,20 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: publish platform packages
+      - name: publish npm packages
         run: |
-          for dir in dist/torre-*/; do
-            (cd "$dir" && npm publish)
+          for dir in dist/torre-*/ dist/torre/; do
+            (
+              cd "$dir"
+              name=$(jq -r .name package.json)
+              version=$(jq -r .version package.json)
+              if npm view "$name@$version" version >/dev/null 2>&1; then
+                echo "skipping $name@$version (already published)"
+              else
+                npm publish
+              fi
+            )
           done
-      - name: publish launcher package
-        run: cd dist/torre && npm publish
 
   homebrew:
     needs: [release-please, publish]
@@ -92,5 +99,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/torre.rb
-          git commit -m "torre ${VERSION}"
-          git push
+          if git diff --staged --quiet; then
+            echo "formula unchanged; skipping commit"
+          else
+            git commit -m "torre ${VERSION}"
+            git push
+          fi

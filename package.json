@@ -10,7 +10,7 @@
     "torre": "./src/main.tsx"
   },
   "scripts": {
-    "build": "bun build ./src/main.tsx --target bun --compile --outfile /private/tmp/torre-build-check",
+    "build": "bun build ./src/main.tsx --target bun --compile --outfile ${TMPDIR:-/tmp}/torre-build-check",
     "build:dist": "bun script/build.ts",
     "check": "bun test && bun run typecheck",
     "torre": "bun run src/main.tsx",

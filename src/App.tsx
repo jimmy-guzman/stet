@@ -275,6 +275,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       diff.setLineColors(colors)
     }
 
+    // the diff renderable repaints its own line colors when content settles;
+    // painting again in a microtask keeps the cursor/diagnostic tints on top
     paint()
     queueMicrotask(paint)
 

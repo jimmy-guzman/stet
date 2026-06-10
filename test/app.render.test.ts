@@ -14,9 +14,15 @@ describe("App rendering", () => {
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width: 110, height: 32 })
 
     createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax }))
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    await renderOnce()
-    const frame = captureCharFrame()
+
+    // flush()/waitForFrame() do not pump the React reconciler's async commit,
+    // so poll with renderOnce until the app chrome appears
+    let frame = ""
+    for (let attempt = 0; attempt < 100 && !frame.includes("torre"); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      await renderOnce()
+      frame = captureCharFrame()
+    }
 
     expect(frame).toContain("torre")
     expect(frame).toContain("worktree vs HEAD")

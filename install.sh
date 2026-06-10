@@ -64,8 +64,10 @@ filename="$APP-$os-$arch.$ext"
 
 if [ -n "$requested_version" ]; then
   url="https://github.com/$REPO/releases/download/v$requested_version/$filename"
+  sums_url="https://github.com/$REPO/releases/download/v$requested_version/SHA256SUMS"
 else
   url="https://github.com/$REPO/releases/latest/download/$filename"
+  sums_url="https://github.com/$REPO/releases/latest/download/SHA256SUMS"
 fi
 
 install_dir="${TORRE_INSTALL_DIR:-${XDG_BIN_DIR:-$HOME/.torre/bin}}"
@@ -76,6 +78,24 @@ trap 'rm -rf "$tmp"' EXIT
 
 echo "downloading $url"
 curl -fsSL -o "$tmp/$filename" "$url"
+curl -fsSL -o "$tmp/SHA256SUMS" "$sums_url"
+
+expected="$(awk -v file="$filename" '$2 == file { print $1 }' "$tmp/SHA256SUMS")"
+if [ -z "$expected" ]; then
+  echo "no checksum for $filename in SHA256SUMS; aborting" >&2
+  exit 1
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual="$(sha256sum "$tmp/$filename" | cut -d' ' -f1)"
+else
+  actual="$(shasum -a 256 "$tmp/$filename" | cut -d' ' -f1)"
+fi
+
+if [ "$expected" != "$actual" ]; then
+  echo "checksum mismatch for $filename: expected $expected, got $actual" >&2
+  exit 1
+fi
 
 if [ "$ext" = "zip" ]; then
   unzip -qo "$tmp/$filename" -d "$tmp"

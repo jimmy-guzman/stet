@@ -1,17 +1,18 @@
+import { getTreeSitterClient } from "@opentui/core"
 import { describe, expect, test } from "bun:test"
-import { diffFiletypeFor, type SyntaxConfig } from "../src/syntax"
+import { diffFiletypeFor, torreSyntaxStyle, type SyntaxConfig } from "../src/syntax"
 
 const disabledSyntax: SyntaxConfig = {
   enabled: false,
   status: "syntax disabled",
 }
 
-const enabledSyntax = {
+const enabledSyntax: SyntaxConfig = {
   enabled: true,
   status: "syntax highlighting ready",
-  style: undefined,
-  treeSitterClient: undefined,
-} as unknown as SyntaxConfig
+  style: torreSyntaxStyle,
+  treeSitterClient: getTreeSitterClient(),
+}
 
 describe("diffFiletypeFor", () => {
   test("uses supported parser filetypes when syntax is enabled", () => {

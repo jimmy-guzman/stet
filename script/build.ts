@@ -67,7 +67,7 @@ for (const target of targets) {
     },
     entrypoints: ["./src/main.tsx", parserWorker],
     define: {
-      OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
+      OTUI_TREE_SITTER_WORKER_PATH: JSON.stringify(bunfsRoot + workerRelativePath),
       ...(target.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify("glibc") } : {}),
     },
   })
@@ -131,13 +131,20 @@ if (!single) {
 }
 
 if (archive) {
+  const sums: string[] = []
   for (const name of built) {
+    const archiveName = name.includes("linux") ? `${name}.tar.gz` : `${name}.zip`
     if (name.includes("linux")) {
       await $`tar -czf ../../${name}.tar.gz ${pkg.name}`.cwd(`dist/${name}/bin`)
     } else {
       await $`zip -j ../../${name}.zip ${pkg.name}`.cwd(`dist/${name}/bin`)
     }
+
+    const hasher = new Bun.CryptoHasher("sha256")
+    hasher.update(await Bun.file(`dist/${archiveName}`).arrayBuffer())
+    sums.push(`${hasher.digest("hex")}  ${archiveName}`)
   }
+  await Bun.file("dist/SHA256SUMS").write(`${sums.join("\n")}\n`)
 }
 
 console.log(`built: ${built.join(", ")}`)

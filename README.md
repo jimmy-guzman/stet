@@ -1,27 +1,39 @@
 # sideye
 
-Keep a skeptical side-eye on your CLI coding agents. Run claude code, opencode, or codex in one terminal pane
-and `sideye` in the next — and stop opening an editor just to see **what is there, what is
-happening, and what is the difference**.
+`sideye` is a read-only terminal UI for watching a repo while a CLI coding agent
+changes it.
 
-Everything an IDE shows you, nothing it does for you. The "integrated" part is deliberately
-missing: your agent, your editor, and `sideye` stay decoupled. It never reviews, explains,
-approves, or talks back to an agent — you render judgment on the robot's output, then paste a
-`path:line` reference back into the agent conversation to redirect it in your own words.
+The usual workflow is awkward. The agent is in one terminal pane, but you still
+open an editor just to answer basic questions:
 
-## Pillars
+- What files are in this repo?
+- What changed?
+- What did the agent touch most recently?
+- Did lint, typecheck, or formatting break?
 
-- **The whole repo, with changes overlaid.** The full project tree renders like an IDE sidebar
-  (gitignore respected), changed files tinted and tagged, unchanged files quietly browsable.
-  Open any file read-only with syntax highlighting; open a changed file as a diff.
-- **Simple change scopes.** Cycle between all changes, staged only, and unstaged only with one
-  key — no restart, no flags to remember.
-- **Live, with activity awareness.** The view polls git while the agent works. Recently touched
-  files get a recency dot that decays, the status bar shows the last activity, and one key jumps
-  to whatever the agent just edited.
-- **Static analysis where an IDE would put it.** lint, tsc, and prettier findings show up as a
-  problems panel, inline line markers in the viewer, and per-file markers in the tree — anywhere
-  in the repo, not just changed files. Checks re-run automatically once the repo goes quiet.
+`sideye` is meant to sit in the next pane and answer those questions without
+becoming part of the agent loop. It does not review code, approve changes, talk
+to the agent, or manage a workflow. It shows you the repo, the diff, and the
+problems. You decide what to say next.
+
+## What it does
+
+- Shows the full repo tree, including tracked files and untracked files that are
+  not ignored by git.
+- Marks changed files in place, with staged, unstaged, mixed, and untracked
+  states.
+- Opens unchanged files read-only, with syntax highlighting.
+- Opens changed files as diffs, with a toggle for the full file.
+- Switches between all changes, staged changes, and unstaged changes.
+- Polls git while the agent works, then keeps the current file and selection
+  stable as the view refreshes.
+- Marks recent activity and lets you jump to the latest touched file.
+- Shows diagnostics in the tree, in the viewer, and in a problems panel.
+- Copies a `path:line` reference and snippet so you can paste it back into the
+  agent conversation.
+
+The git-backed file tree renders first. Diagnostics come in later as decorations.
+That keeps the basic view useful even when checks are still running.
 
 ## Install
 
@@ -29,14 +41,14 @@ approves, or talks back to an agent — you render judgment on the robot's outpu
 # standalone binary (macOS / Linux, no runtime needed)
 curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/sideye/main/install.sh | bash
 
-# npm (works with npm, bun, pnpm, yarn — pulls a prebuilt binary)
+# npm (works with npm, bun, pnpm, yarn; pulls a prebuilt binary)
 npm i -g sideye
 
 # homebrew
 brew install jimmy-guzman/tap/sideye
 ```
 
-## Use it
+## Usage
 
 ```sh
 sideye            # whole repo, worktree vs HEAD
@@ -47,25 +59,25 @@ sideye --unstaged # start in the unstaged scope
 
 ## Keys
 
-| Key         | Action                                          |
-| ----------- | ----------------------------------------------- |
-| `j` / `k`   | move in the tree, viewer, or problems panel     |
-| `h` / `l`   | collapse / expand folders                       |
-| `tab`       | switch focus between tree and viewer            |
-| `enter`     | open the focused item / jump to a problem       |
-| `ctrl-p`    | go to file: fuzzy-search the whole repo         |
-| `s`         | cycle scope: all changes → staged → unstaged    |
-| `c`         | toggle changes-only filter for the tree         |
-| `v`         | toggle diff ↔ full file view for a changed file |
-| `p`         | toggle the problems panel                       |
-| `.`         | jump to the most recently changed file          |
-| `n`         | jump to the next file with findings             |
-| `y`         | copy `path:line` + snippet at the cursor        |
-| `f`         | load full content when truncated                |
-| `r`         | re-run checks                                   |
-| `ctrl-d/u`  | half-page cursor movement in the viewer         |
-| `g` / `G`   | jump to first / last line                       |
-| `q` / `esc` | quit (esc closes the problems panel first)      |
+| Key         | Action                                            |
+| ----------- | ------------------------------------------------- |
+| `j` / `k`   | move in the tree, viewer, or problems panel       |
+| `h` / `l`   | collapse / expand folders                         |
+| `tab`       | switch focus between tree and viewer              |
+| `enter`     | open the focused item / jump to a problem         |
+| `ctrl-p`    | go to file: fuzzy-search the whole repo           |
+| `s`         | cycle scope: all changes -> staged -> unstaged    |
+| `c`         | toggle changes-only filter for the tree           |
+| `v`         | toggle diff <-> full file view for a changed file |
+| `p`         | toggle the problems panel                         |
+| `.`         | jump to the most recently changed file            |
+| `n`         | jump to the next file with findings               |
+| `y`         | copy `path:line` + snippet at the cursor          |
+| `f`         | load full content when truncated                  |
+| `r`         | re-run checks                                     |
+| `ctrl-d/u`  | half-page cursor movement in the viewer           |
+| `g` / `G`   | jump to first / last line                         |
+| `q` / `esc` | quit (esc closes the problems panel first)        |
 
 ## Requirements
 
@@ -81,7 +93,9 @@ bun run check            # tests + typecheck
 bun run build:dist       # build standalone binaries for all targets
 ```
 
-## What it will not do
+## Non-goals
 
-No AI integration, no gating, no accept/reject protocol, no generated review explanations.
-The agent never hears from `sideye` — only from you.
+`sideye` is deliberately not an agent integration.
+
+No approvals. No accept/reject protocol. No generated review explanation. No PR
+workflow. No database. The agent never hears from `sideye`, only from you.

@@ -12,7 +12,13 @@ shell_config_file() {
   shell_name="${SHELL##*/}"
   case "$shell_name" in
     zsh) echo "$HOME/.zshrc" ;;
-    bash) echo "$HOME/.bashrc" ;;
+    bash)
+      if [ "$(uname -s)" = "Darwin" ]; then
+        echo "$HOME/.bash_profile"
+      else
+        echo "$HOME/.bashrc"
+      fi
+      ;;
     *) echo "$HOME/.profile" ;;
   esac
 }

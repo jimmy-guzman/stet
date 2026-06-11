@@ -1,6 +1,6 @@
 import { getTreeSitterClient } from "@opentui/core"
 import { describe, expect, test } from "bun:test"
-import { diffFiletypeFor, torreSyntaxStyle, type SyntaxConfig } from "../src/syntax"
+import { diffFiletypeFor, sideyeSyntaxStyle, type SyntaxConfig } from "../src/syntax"
 
 const disabledSyntax: SyntaxConfig = {
   enabled: false,
@@ -10,7 +10,7 @@ const disabledSyntax: SyntaxConfig = {
 const enabledSyntax: SyntaxConfig = {
   enabled: true,
   status: "syntax highlighting ready",
-  style: torreSyntaxStyle,
+  style: sideyeSyntaxStyle,
   treeSitterClient: getTreeSitterClient(),
 }
 

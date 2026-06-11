@@ -2,7 +2,7 @@
 
 ## Product
 
-`torre` (Spanish for tower, as in control tower) is a read-only companion TUI for CLI coding agents (claude code, opencode, codex). The user runs an agent in one terminal pane and `torre` in another, replacing the editor they would otherwise open just to see what is there, what is happening, and what is the difference — everything an IDE shows you, nothing it does for you, with the "integrated" part deliberately missing. The human stays in charge: the tool helps inspect robot output, but it never reviews, explains, approves, rejects, gates, or talks back to an agent.
+`sideye` (as in keeping a skeptical side-eye on your agent's changes) is a read-only companion TUI for CLI coding agents (claude code, opencode, codex). The user runs an agent in one terminal pane and `sideye` in another, replacing the editor they would otherwise open just to see what is there, what is happening, and what is the difference — everything an IDE shows you, nothing it does for you, with the "integrated" part deliberately missing. The human stays in charge: the tool helps inspect robot output, but it never reviews, explains, approves, rejects, gates, or talks back to an agent.
 
 The four pillars:
 
@@ -13,7 +13,7 @@ The four pillars:
 
 The core loop is:
 
-1. Run the agent next to `torre` and follow its edits as they land.
+1. Run the agent next to `sideye` and follow its edits as they land.
 2. Glance at the tree, open any file or diff, check the problems panel.
 3. Copy a `path:line` reference plus snippet.
 4. Paste that reference into the agent conversation and redirect in your own words.
@@ -55,7 +55,7 @@ Project skills are installed under `.agents/skills`.
 
 ## Implementation Guardrails
 
-- `torre [ref]` defaults to the `all` scope (worktree vs `HEAD`); `--staged` and `--unstaged` set the initial scope; `s` cycles scopes in-app (`unstaged` is plain `git diff` and ignores the ref).
+- `sideye [ref]` defaults to the `all` scope (worktree vs `HEAD`); `--staged` and `--unstaged` set the initial scope; `s` cycles scopes in-app (`unstaged` is plain `git diff` and ignores the ref).
 - The tool must work in any git repo, not only this repo or agent-created worktrees.
 - The tree shows the full repo from `git ls-files` (tracked) plus `git ls-files --others --exclude-standard` (untracked, so gitignore is respected), union'd with the changed set so staged deletions stay visible.
 - Tree ordering is directories-first, alphabetical, always — stable under polling by construction, so the list never reorders under the cursor. Single-child directory chains flatten into one row. `c` toggles a changes-only filter.

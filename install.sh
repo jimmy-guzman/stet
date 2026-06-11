@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# torre installer: downloads the prebuilt binary from GitHub Releases.
-#   curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/torre/main/install.sh | bash
+# sideye installer: downloads the prebuilt binary from GitHub Releases.
+#   curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/sideye/main/install.sh | bash
 # Options (pass after `bash -s --`):
 #   --version <x.y.z>   install a specific version instead of the latest
 set -euo pipefail
 
-REPO="jimmy-guzman/torre"
-APP="torre"
+REPO="jimmy-guzman/sideye"
+APP="sideye"
 
 requested_version=""
 while [ $# -gt 0 ]; do
@@ -30,7 +30,7 @@ case "$(uname -s)" in
   Darwin) os="darwin" ;;
   Linux) os="linux" ;;
   *)
-    echo "unsupported OS: $(uname -s). Try: npm i -g torre" >&2
+    echo "unsupported OS: $(uname -s). Try: npm i -g sideye" >&2
     exit 1
     ;;
 esac
@@ -40,7 +40,7 @@ case "$arch" in
   aarch64 | arm64) arch="arm64" ;;
   x86_64) arch="x64" ;;
   *)
-    echo "unsupported architecture: $arch. Try: npm i -g torre" >&2
+    echo "unsupported architecture: $arch. Try: npm i -g sideye" >&2
     exit 1
     ;;
 esac
@@ -54,7 +54,7 @@ fi
 
 if [ "$os" = "linux" ]; then
   if [ -f /etc/alpine-release ] || (ldd --version 2>&1 || true) | grep -qi musl; then
-    echo "musl libc is not supported by the prebuilt binaries yet. Try: npm i -g torre" >&2
+    echo "musl libc is not supported by the prebuilt binaries yet. Try: npm i -g sideye" >&2
     exit 1
   fi
 fi
@@ -74,7 +74,7 @@ else
   sums_url="https://github.com/$REPO/releases/latest/download/SHA256SUMS"
 fi
 
-install_dir="${TORRE_INSTALL_DIR:-${XDG_BIN_DIR:-$HOME/.torre/bin}}"
+install_dir="${SIDEYE_INSTALL_DIR:-${XDG_BIN_DIR:-$HOME/.sideye/bin}}"
 mkdir -p "$install_dir"
 
 tmp="$(mktemp -d)"

@@ -34,8 +34,8 @@ describe("go-to-file palette", () => {
 
     try {
       createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax }))
-      const initial = await settleUntil("app chrome", (frame) => frame.includes("torre"), 5)
-      expect(initial).toContain("torre")
+      const initial = await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5)
+      expect(initial).toContain("sideye")
 
       mockInput.pressKey("p", { ctrl: true })
       const palette = await settleUntil("go-to-file palette", (frame) => frame.includes("go to file"))
@@ -43,8 +43,8 @@ describe("go-to-file palette", () => {
 
       // q must feed the input and show "no matches", not quit the app
       await mockInput.typeText("qqqq")
-      const afterTyping = await settleUntil("empty palette results", (frame) => frame.includes("torre") && frame.includes("no matches"))
-      expect(afterTyping).toContain("torre")
+      const afterTyping = await settleUntil("empty palette results", (frame) => frame.includes("sideye") && frame.includes("no matches"))
+      expect(afterTyping).toContain("sideye")
       expect(afterTyping).toContain("no matches")
 
       for (let index = 0; index < 4; index += 1) {
@@ -66,7 +66,7 @@ describe("go-to-file palette", () => {
 })
 
 function createPaletteFixtureRepo() {
-  const repoRoot = mkdtempSync(join(tmpdir(), "torre-palette-"))
+  const repoRoot = mkdtempSync(join(tmpdir(), "sideye-palette-"))
   mkdirSync(join(repoRoot, "src"))
   mkdirSync(join(repoRoot, "test"))
   writeFileSync(join(repoRoot, "README.md"), "# Fixture\n")
@@ -76,7 +76,7 @@ function createPaletteFixtureRepo() {
 
   execFileSync("git", ["init"], { cwd: repoRoot, stdio: "ignore" })
   execFileSync("git", ["add", "."], { cwd: repoRoot, stdio: "ignore" })
-  execFileSync("git", ["-c", "user.name=Torre Test", "-c", "user.email=torre-test@example.com", "commit", "-m", "fixture"], { cwd: repoRoot, stdio: "ignore" })
+  execFileSync("git", ["-c", "user.name=Sideye Test", "-c", "user.email=sideye-test@example.com", "commit", "-m", "fixture"], { cwd: repoRoot, stdio: "ignore" })
 
   return repoRoot
 }

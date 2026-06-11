@@ -39,7 +39,7 @@ describe("contentToContextPatch", () => {
 })
 
 describe("loadFileContent", () => {
-  const dir = mkdtempSync(join(tmpdir(), "torre-file-view-"))
+  const dir = mkdtempSync(join(tmpdir(), "sideye-file-view-"))
 
   test("reads text files from disk", () => {
     writeFileSync(join(dir, "a.ts"), "const a = 1\n")

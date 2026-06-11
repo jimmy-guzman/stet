@@ -1,11 +1,11 @@
-# torre
+# sideye
 
-A control tower for CLI coding agents. Run claude code, opencode, or codex in one terminal pane
-and `torre` in the next — and stop opening an editor just to see **what is there, what is
+Keep a skeptical side-eye on your CLI coding agents. Run claude code, opencode, or codex in one terminal pane
+and `sideye` in the next — and stop opening an editor just to see **what is there, what is
 happening, and what is the difference**.
 
 Everything an IDE shows you, nothing it does for you. The "integrated" part is deliberately
-missing: your agent, your editor, and `torre` stay decoupled. It never reviews, explains,
+missing: your agent, your editor, and `sideye` stay decoupled. It never reviews, explains,
 approves, or talks back to an agent — you render judgment on the robot's output, then paste a
 `path:line` reference back into the agent conversation to redirect it in your own words.
 
@@ -27,22 +27,22 @@ approves, or talks back to an agent — you render judgment on the robot's outpu
 
 ```sh
 # standalone binary (macOS / Linux, no runtime needed)
-curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/torre/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/sideye/main/install.sh | bash
 
 # npm (works with npm, bun, pnpm, yarn — pulls a prebuilt binary)
-npm i -g torre
+npm i -g sideye
 
 # homebrew
-brew install jimmy-guzman/tap/torre
+brew install jimmy-guzman/tap/sideye
 ```
 
 ## Use it
 
 ```sh
-torre            # whole repo, worktree vs HEAD
-torre main       # compare against another ref
-torre --staged   # start in the staged scope
-torre --unstaged # start in the unstaged scope
+sideye            # whole repo, worktree vs HEAD
+sideye main       # compare against another ref
+sideye --staged   # start in the staged scope
+sideye --unstaged # start in the unstaged scope
 ```
 
 ## Keys
@@ -84,4 +84,4 @@ bun run build:dist       # build standalone binaries for all targets
 ## What it will not do
 
 No AI integration, no gating, no accept/reject protocol, no generated review explanations.
-The agent never hears from `torre` — only from you.
+The agent never hears from `sideye` — only from you.

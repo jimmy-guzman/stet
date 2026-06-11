@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-// Builds standalone torre binaries and the npm package layout.
+// Builds standalone sideye binaries and the npm package layout.
 // Modeled on opencode's build script (anomalyco/opencode packages/opencode/script/build.ts),
 // which established the pattern for compiling OpenTUI apps with `bun build --compile`.
 
@@ -91,8 +91,8 @@ for (const target of targets) {
       {
         name,
         version: pkg.version,
-        description: `torre binary for ${target.os}-${target.arch}`,
-        repository: "github:jimmy-guzman/torre",
+        description: `sideye binary for ${target.os}-${target.arch}`,
+        repository: "github:jimmy-guzman/sideye",
         license: "MIT",
         preferUnplugged: true,
         os: [target.os],
@@ -108,7 +108,7 @@ for (const target of targets) {
 
 if (!single) {
   await $`mkdir -p dist/${pkg.name}/bin`
-  await $`cp script/torre-launcher.cjs dist/${pkg.name}/bin/torre.js`
+  await $`cp script/sideye-launcher.cjs dist/${pkg.name}/bin/sideye.js`
   await $`cp README.md LICENSE dist/${pkg.name}/`
   await Bun.file(`dist/${pkg.name}/package.json`).write(
     JSON.stringify(
@@ -116,12 +116,12 @@ if (!single) {
         name: pkg.name,
         version: pkg.version,
         description: "Read-only companion TUI for CLI coding agents",
-        repository: "github:jimmy-guzman/torre",
-        homepage: "https://github.com/jimmy-guzman/torre",
-        bugs: "https://github.com/jimmy-guzman/torre/issues",
+        repository: "github:jimmy-guzman/sideye",
+        homepage: "https://github.com/jimmy-guzman/sideye",
+        bugs: "https://github.com/jimmy-guzman/sideye/issues",
         keywords: ["tui", "diff", "git", "code-review", "coding-agent", "terminal"],
         license: "MIT",
-        bin: { [pkg.name]: "./bin/torre.js" },
+        bin: { [pkg.name]: "./bin/sideye.js" },
         optionalDependencies: Object.fromEntries(allTargets.map((target) => [`${pkg.name}-${target.os}-${target.arch}`, pkg.version])),
       },
       null,

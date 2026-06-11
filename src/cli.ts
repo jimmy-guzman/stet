@@ -81,13 +81,13 @@ export function scopeLabel(scope: DiffScope) {
 }
 
 export function helpText() {
-  return `torre - read-only companion TUI for CLI coding agents
+  return `sideye - read-only companion TUI for CLI coding agents
 
 Usage:
-  torre
-  torre <ref>
-  torre --staged [ref]
-  torre --unstaged
+  sideye
+  sideye <ref>
+  sideye --staged [ref]
+  sideye --unstaged
 
 Keys:
   tab        switch focus between the file tree and the viewer

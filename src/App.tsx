@@ -23,7 +23,7 @@ type ScrollablePane = { scrollY: number; maxScrollY: number }
 
 type JumpTarget = { path: string; line: number }
 
-const DIFF_ID = "torre-diff"
+const DIFF_ID = "sideye-diff"
 const PROBLEMS_HEIGHT = 10
 const CURSOR_BG = RGBA.fromHex("#3a1530")
 const ADDED_BG = RGBA.fromHex("#102a1c")
@@ -543,7 +543,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor="#09090b">
       <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor="#111113">
-        <text fg="#ff4fb8">torre</text>
+        <text fg="#ff4fb8">sideye</text>
         <text fg="#a1a1aa">
           {scopeLabel(scope)} · {model.changed.length} changed{countsText === "" ? "" : ` · ${countsText}`}
         </text>

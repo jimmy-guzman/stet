@@ -18,13 +18,13 @@ describe("App rendering", () => {
     // flush()/waitForFrame() do not pump the React reconciler's async commit,
     // so poll with renderOnce until the app chrome appears
     let frame = ""
-    for (let attempt = 0; attempt < 100 && !frame.includes("torre"); attempt += 1) {
+    for (let attempt = 0; attempt < 100 && !frame.includes("sideye"); attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10))
       await renderOnce()
       frame = captureCharFrame()
     }
 
-    expect(frame).toContain("torre")
+    expect(frame).toContain("sideye")
     expect(frame).toContain("worktree vs HEAD")
     expect(frame).toContain("src/")
     expect(frame).toContain("test/")

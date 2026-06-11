@@ -18,7 +18,7 @@ Before discovering or installing more skills, read:
 
 Important project constraints:
 
-- `torre` is a human review tool, not an AI reviewer.
+- `sideye` is a human review tool, not an AI reviewer.
 - No agent integration, no gating, no accept/reject protocol, and no generated review explanations.
 - Bun is the runtime and command runner.
 - Use `bun run check` for normal verification and `bun run build` for the compile smoke check.

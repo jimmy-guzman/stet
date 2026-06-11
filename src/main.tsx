@@ -5,7 +5,7 @@ import { createRoot } from "@opentui/react"
 import packageJson from "../package.json"
 import { App } from "./App"
 import { helpText, parseArgs } from "./cli"
-import { loadGitModel } from "./git"
+import { loadGitModel, resolveRepoRoot } from "./git"
 import { createSyntaxConfig } from "./syntax"
 
 try {
@@ -21,7 +21,7 @@ try {
     process.exit(0)
   }
 
-  const model = loadGitModel(process.cwd(), options.scope)
+  const model = await loadGitModel(resolveRepoRoot(process.cwd()), options.scope)
   const syntax = await createSyntaxConfig()
   const renderer = await createCliRenderer({ exitOnCtrlC: true })
   createRoot(renderer).render(<App model={model} scope={options.scope} syntax={syntax} />)

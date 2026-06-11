@@ -1,6 +1,7 @@
+import { statSync } from "node:fs"
 import type { DiffScope } from "./cli"
 import { loadFileContent } from "./file-view"
-import { runCommand } from "./process"
+import { runCommand, runCommandAsync } from "./process"
 
 export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked"
 
@@ -15,6 +16,8 @@ export type ChangedFile = {
   deletions: number
   binary: boolean
   warnings: string[]
+  // worktree mtime so edits that keep the churn counts identical still register
+  mtimeMs: number
 }
 
 export type RepoFile = {
@@ -37,16 +40,27 @@ type StatusEntry = {
   kind: ChangeKind
 }
 
-export function loadGitModel(cwd: string, scope: DiffScope): GitModel {
-  const repoRoot = runCommand(["git", "rev-parse", "--show-toplevel"], cwd).stdout.trim()
-  const trackedOutput = runCommand(["git", "ls-files", "-z"], repoRoot).stdout
-  const untrackedOutput = runCommand(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot).stdout
+export function resolveRepoRoot(cwd: string) {
+  return runCommand(["git", "rev-parse", "--show-toplevel"], cwd).stdout.trim()
+}
+
+export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<GitModel> {
+  const [tracked, untrackedFiles, nameStatusResult, numstatResult, porcelain] = await Promise.all([
+    runCommandAsync(["git", "ls-files", "-z"], repoRoot),
+    runCommandAsync(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
+    runCommandAsync(nameStatusArgs(scope), repoRoot),
+    runCommandAsync(numstatArgs(scope), repoRoot),
+    runCommandAsync(["git", "status", "--porcelain=v1", "-z"], repoRoot),
+  ])
+
+  const trackedOutput = tracked.stdout
+  const untrackedOutput = untrackedFiles.stdout
   const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedOutput)
-  const nameStatus = parseNameStatus(runCommand(nameStatusArgs(scope), repoRoot).stdout)
+  const nameStatus = parseNameStatus(nameStatusResult.stdout)
   const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]))
-  const numstat = parseNumstat(runCommand(numstatArgs(scope), repoRoot).stdout)
+  const numstat = parseNumstat(numstatResult.stdout)
   const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]))
-  const stageByPath = parsePorcelainStatus(runCommand(["git", "status", "--porcelain=v1", "-z"], repoRoot).stdout)
+  const stageByPath = parsePorcelainStatus(porcelain.stdout)
   const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
 
   const changed = Array.from(paths)
@@ -64,6 +78,7 @@ export function loadGitModel(cwd: string, scope: DiffScope): GitModel {
         deletions: stat?.deletions ?? 0,
         binary: stat?.binary ?? untrackedStat?.binary ?? false,
         warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
+        mtimeMs: kind === "deleted" ? 0 : fileMtime(repoRoot, path),
       }
       return file
     })
@@ -92,11 +107,12 @@ export function loadFileDiff(repoRoot: string, scope: DiffScope, file: ChangedFi
 }
 
 export function numstatArgs(scope: DiffScope) {
-  return [...diffArgs(scope), "--numstat"]
+  // -z keeps non-ASCII paths literal instead of core.quotePath's C-quoting
+  return [...diffArgs(scope), "--numstat", "-z"]
 }
 
 export function nameStatusArgs(scope: DiffScope) {
-  return [...diffArgs(scope), "--name-status"]
+  return [...diffArgs(scope), "--name-status", "-z"]
 }
 
 export function diffArgs(scope: DiffScope) {
@@ -146,7 +162,30 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
     return prev
   }
 
-  return next
+  // keep identity for untouched files so per-file memos (e.g. the selected diff) hold
+  const changed = next.changed.map((file) => {
+    const before = prev.changedByPath.get(file.path)
+    return before !== undefined && sameChangedFile(before, file) ? before : file
+  })
+
+  if (changed.every((file, index) => file === next.changed[index])) {
+    return next
+  }
+
+  return { ...next, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) }
+}
+
+function sameChangedFile(a: ChangedFile, b: ChangedFile) {
+  return (
+    a.path === b.path &&
+    a.oldPath === b.oldPath &&
+    a.kind === b.kind &&
+    a.stage === b.stage &&
+    a.additions === b.additions &&
+    a.deletions === b.deletions &&
+    a.binary === b.binary &&
+    a.mtimeMs === b.mtimeMs
+  )
 }
 
 function stageFromCodes(index: string, worktree: string): StageState {
@@ -164,7 +203,9 @@ function stageFromCodes(index: string, worktree: string): StageState {
 }
 
 function changedSignature(files: ChangedFile[]) {
-  return files.map((file) => `${file.path}\0${file.kind}\0${file.stage}\0${file.additions}\0${file.deletions}`).join("\x01")
+  return files
+    .map((file) => `${file.path}\0${file.kind}\0${file.stage}\0${file.additions}\0${file.deletions}\0${file.mtimeMs}`)
+    .join("\x01")
 }
 
 let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined
@@ -203,44 +244,69 @@ export function parseUntrackedFiles(output: string): StatusEntry[] {
 }
 
 export function parseNumstat(output: string) {
-  return output
-    .split("\n")
-    .filter((line) => line.trim() !== "")
-    .map((line) => {
-      const [addedRaw = "0", deletedRaw = "0", ...pathParts] = line.split("\t")
-      const path = normalizeNumstatPath(pathParts.join("\t"))
-      const binary = addedRaw === "-" || deletedRaw === "-"
-      return {
-        path,
-        additions: binary ? 0 : Number.parseInt(addedRaw, 10),
-        deletions: binary ? 0 : Number.parseInt(deletedRaw, 10),
-        binary,
-      }
+  const tokens = output.split("\0")
+  const entries: Array<{ path: string; additions: number; deletions: number; binary: boolean }> = []
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]
+    if (token === undefined || token === "") {
+      continue
+    }
+
+    const [addedRaw = "0", deletedRaw = "0", ...pathParts] = token.split("\t")
+    let path = pathParts.join("\t")
+    if (token.endsWith("\t")) {
+      // a rename record carries no inline path: "added\tdeleted\t" NUL old NUL new
+      path = tokens[index + 2] ?? ""
+      index += 2
+    }
+
+    const binary = addedRaw === "-" || deletedRaw === "-"
+    entries.push({
+      path,
+      additions: binary ? 0 : Number.parseInt(addedRaw, 10),
+      deletions: binary ? 0 : Number.parseInt(deletedRaw, 10),
+      binary,
     })
+  }
+
+  return entries
 }
 
 export function parseNameStatus(output: string): StatusEntry[] {
-  return output
-    .split("\n")
-    .filter((line) => line.trim() !== "")
-    .map((line) => {
-      const [status = "M", firstPath = "", secondPath] = line.split("\t")
-      const code = status[0]
+  const tokens = output.split("\0")
+  const entries: StatusEntry[] = []
 
-      if (code === "R") {
-        return { path: secondPath ?? firstPath, oldPath: firstPath, kind: "renamed" }
-      }
+  for (let index = 0; index < tokens.length; index += 1) {
+    const status = tokens[index]
+    if (status === undefined || status.trim() === "") {
+      continue
+    }
 
-      if (code === "A") {
-        return { path: firstPath, kind: "added" }
-      }
+    const code = status[0]
 
-      if (code === "D") {
-        return { path: firstPath, kind: "deleted" }
-      }
+    if (code === "R" || code === "C") {
+      const oldPath = tokens[index + 1] ?? ""
+      const path = tokens[index + 2] ?? oldPath
+      index += 2
+      // a copy leaves the source untouched, so only the destination is a change
+      entries.push(code === "R" ? { path, oldPath, kind: "renamed" } : { path, kind: "added" })
+      continue
+    }
 
-      return { path: firstPath, kind: "modified" }
-    })
+    const path = tokens[index + 1] ?? ""
+    index += 1
+
+    if (code === "A") {
+      entries.push({ path, kind: "added" })
+    } else if (code === "D") {
+      entries.push({ path, kind: "deleted" })
+    } else {
+      entries.push({ path, kind: "modified" })
+    }
+  }
+
+  return entries
 }
 
 function inferKind(path: string, deletions: number, additions: number): ChangeKind {
@@ -255,18 +321,12 @@ function inferKind(path: string, deletions: number, additions: number): ChangeKi
   return "modified"
 }
 
-function normalizeNumstatPath(path: string) {
-  const braceMatch = path.match(/^(.*)\{([^{}]+) => ([^{}]+)\}(.*)$/)
-  if (braceMatch) {
-    return `${braceMatch[1]}${braceMatch[3]}${braceMatch[4]}`
+function fileMtime(repoRoot: string, path: string) {
+  try {
+    return statSync(`${repoRoot}/${path}`).mtimeMs
+  } catch {
+    return 0
   }
-
-  const arrowIndex = path.indexOf(" => ")
-  if (arrowIndex >= 0) {
-    return path.slice(arrowIndex + 4)
-  }
-
-  return path
 }
 
 function warningsFor(path: string, kind: ChangeKind, additions: number, deletions: number) {

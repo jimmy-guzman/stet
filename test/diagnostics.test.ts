@@ -23,6 +23,7 @@ const file: ChangedFile = {
   deletions: 0,
   binary: false,
   warnings: [],
+  mtimeMs: 0,
 }
 
 function diagnostic(overrides: Partial<Diagnostic>): Diagnostic {

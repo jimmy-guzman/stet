@@ -162,10 +162,33 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   }, [])
 
   useEffect(() => {
-    const load = () => setModel((previous) => mergeModel(previous, loadGitModel(initialModel.repoRoot, scope)))
-    load()
-    const id = setInterval(load, 750)
-    return () => clearInterval(id)
+    let cancelled = false
+    let inFlight = false
+
+    const load = async () => {
+      if (inFlight) {
+        return
+      }
+
+      inFlight = true
+      try {
+        const next = await loadGitModel(initialModel.repoRoot, scope)
+        if (!cancelled) {
+          setModel((previous) => mergeModel(previous, next))
+        }
+      } catch {
+        // transient git failures (e.g. an agent holding index.lock) resolve on the next poll
+      } finally {
+        inFlight = false
+      }
+    }
+
+    void load()
+    const id = setInterval(() => void load(), 750)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
   }, [initialModel.repoRoot, scope])
 
   useEffect(() => {

@@ -10,7 +10,7 @@ import {
 import type { ChangedFile, RepoFile } from "../src/git"
 
 function changed(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
-  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], ...overrides }
+  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], mtimeMs: 0, ...overrides }
 }
 
 const repoFiles: RepoFile[] = [

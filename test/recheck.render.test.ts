@@ -15,7 +15,7 @@ const syntax: SyntaxConfig = { enabled: false, status: "syntax disabled for test
 describe("re-running checks", () => {
   test("r reports checks finished once diagnostics complete", async () => {
     const repoRoot = createFixtureRepo()
-    const model = loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+    const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
     const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ width: 120, height: 34 })
 
     const settleUntil = async (label: string, predicate: (frame: string) => boolean, minAttempts = 1) => {

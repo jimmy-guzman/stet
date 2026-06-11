@@ -10,7 +10,7 @@ const syntax: SyntaxConfig = { enabled: false, status: "syntax disabled for test
 
 describe("App rendering", () => {
   test("renders the repo tree, scope label, and status bar", async () => {
-    const model = loadGitModel(process.cwd(), { kind: "all", ref: "HEAD" })
+    const model = await loadGitModel(process.cwd(), { kind: "all", ref: "HEAD" })
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width: 110, height: 32 })
 
     createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax }))

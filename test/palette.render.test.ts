@@ -15,7 +15,7 @@ const syntax: SyntaxConfig = { enabled: false, status: "syntax disabled for test
 describe("go-to-file palette", () => {
   test("opens with ctrl-p, swallows global keys, fuzzy-jumps on enter", async () => {
     const repoRoot = createPaletteFixtureRepo()
-    const model = loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+    const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
     const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ width: 120, height: 34 })
 
     const settleUntil = async (label: string, predicate: (frame: string) => boolean, minAttempts = 1) => {

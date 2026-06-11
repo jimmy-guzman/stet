@@ -18,7 +18,7 @@ import {
 import { createFixtureRepo, runGit } from "../test/helpers"
 
 function file(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
-  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], ...overrides }
+  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], mtimeMs: 0, ...overrides }
 }
 
 function model(changed: ChangedFile[], repoFilesKey = "key", scopeKey = "all:HEAD"): GitModel {
@@ -35,19 +35,19 @@ function model(changed: ChangedFile[], repoFilesKey = "key", scopeKey = "all:HEA
 describe("scope arguments", () => {
   test("all compares the worktree against the ref", () => {
     expect(diffArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main"])
-    expect(numstatArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main", "--numstat"])
-    expect(nameStatusArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main", "--name-status"])
+    expect(numstatArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main", "--numstat", "-z"])
+    expect(nameStatusArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main", "--name-status", "-z"])
   })
 
   test("staged compares the index against the ref", () => {
     expect(diffArgs({ kind: "staged", ref: "HEAD" })).toEqual(["git", "diff", "--cached", "HEAD"])
-    expect(numstatArgs({ kind: "staged", ref: "HEAD" })).toEqual(["git", "diff", "--cached", "HEAD", "--numstat"])
+    expect(numstatArgs({ kind: "staged", ref: "HEAD" })).toEqual(["git", "diff", "--cached", "HEAD", "--numstat", "-z"])
   })
 
   test("unstaged compares the worktree against the index and ignores the ref", () => {
     expect(diffArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff"])
-    expect(numstatArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff", "--numstat"])
-    expect(nameStatusArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff", "--name-status"])
+    expect(numstatArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff", "--numstat", "-z"])
+    expect(nameStatusArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff", "--name-status", "-z"])
   })
 })
 
@@ -61,26 +61,34 @@ describe("parseUntrackedFiles", () => {
 })
 
 describe("parseNumstat", () => {
-  test("parses text and binary churn", () => {
-    expect(parseNumstat("10\t2\tsrc/a.ts\n-\t-\timage.png\n")).toEqual([
-      { path: "src/a.ts", additions: 10, deletions: 2, binary: false },
+  test("parses nul-delimited text and binary churn, keeping unicode paths literal", () => {
+    expect(parseNumstat("10\t2\tsrc/café.ts\0-\t-\timage.png\0")).toEqual([
+      { path: "src/café.ts", additions: 10, deletions: 2, binary: false },
       { path: "image.png", additions: 0, deletions: 0, binary: true },
     ])
   })
 
-  test("normalizes renamed brace paths", () => {
-    expect(parseNumstat("1\t1\tsrc/{old.ts => new.ts}\n")).toEqual([{ path: "src/new.ts", additions: 1, deletions: 1, binary: false }])
+  test("parses rename records whose paths follow as separate fields", () => {
+    expect(parseNumstat("1\t1\t\0src/old.ts\0src/new.ts\0")).toEqual([{ path: "src/new.ts", additions: 1, deletions: 1, binary: false }])
+  })
+
+  test("keeps paths that contain tabs intact", () => {
+    expect(parseNumstat("1\t0\tweird\tname.ts\0")).toEqual([{ path: "weird\tname.ts", additions: 1, deletions: 0, binary: false }])
   })
 })
 
 describe("parseNameStatus", () => {
-  test("parses tracked diff status", () => {
-    expect(parseNameStatus("M\tsrc/a.ts\nA\tsrc/b.ts\nD\tsrc/c.ts\nR100\tsrc/d.ts\tsrc/e.ts\n")).toEqual([
+  test("parses nul-delimited diff status", () => {
+    expect(parseNameStatus("M\0src/a.ts\0A\0src/b.ts\0D\0src/c.ts\0R100\0src/d.ts\0src/e.ts\0")).toEqual([
       { path: "src/a.ts", kind: "modified" },
       { path: "src/b.ts", kind: "added" },
       { path: "src/c.ts", kind: "deleted" },
       { path: "src/e.ts", oldPath: "src/d.ts", kind: "renamed" },
     ])
+  })
+
+  test("treats a copy as an addition of the destination", () => {
+    expect(parseNameStatus("C075\0src/a.ts\0src/copy.ts\0")).toEqual([{ path: "src/copy.ts", kind: "added" }])
   })
 })
 
@@ -102,18 +110,37 @@ describe("parsePorcelainStatus", () => {
 })
 
 describe("loadGitModel in a fixture repo", () => {
-  test("survives a dangling untracked symlink instead of crashing", () => {
+  test("survives a dangling untracked symlink instead of crashing", async () => {
     const repoRoot = createFixtureRepo("sideye-git-symlink-", { "a.ts": "const a = 1\n" })
     try {
       symlinkSync("/nonexistent-target", join(repoRoot, "broken-link"))
-      const loaded = loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+      const loaded = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
       expect(loaded.changedByPath.get("broken-link")).toMatchObject({ kind: "untracked", additions: 0 })
     } finally {
       rmSync(repoRoot, { recursive: true, force: true })
     }
   })
 
-  test("diffs a rename as a rename, not a whole-file add", () => {
+  test("keeps non-ascii filenames literal end to end", async () => {
+    const repoRoot = createFixtureRepo("sideye-git-unicode-", { "src/café.ts": "const a = 1\n" })
+    try {
+      writeFileSync(join(repoRoot, "src", "café.ts"), "const a = 2\n")
+      const loaded = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+      const changed = loaded.changedByPath.get("src/café.ts")
+      expect(changed).toMatchObject({ kind: "modified", additions: 1, deletions: 1 })
+      expect(loaded.changed).toHaveLength(1)
+      if (changed === undefined) {
+        throw new Error("unicode file missing from model")
+      }
+
+      const diff = loadFileDiff(loaded.repoRoot, { kind: "all", ref: "HEAD" }, changed)
+      expect(diff).toContain("+const a = 2")
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("diffs a rename as a rename, not a whole-file add", async () => {
     const content = Array.from({ length: 12 }, (_, index) => `const line${index} = ${index}`).join("\n")
     const repoRoot = createFixtureRepo("sideye-git-rename-", { "src/old.ts": `${content}\n` })
     try {
@@ -122,7 +149,7 @@ describe("loadGitModel in a fixture repo", () => {
       runGit(repoRoot, ["add", "-A"])
 
       const scope = { kind: "all", ref: "HEAD" } as const
-      const loaded = loadGitModel(repoRoot, scope)
+      const loaded = await loadGitModel(repoRoot, scope)
       const renamed = loaded.changedByPath.get("src/new.ts")
       expect(renamed).toMatchObject({ kind: "renamed", oldPath: "src/old.ts" })
       if (renamed === undefined) {
@@ -152,15 +179,37 @@ describe("mergeModel", () => {
     expect(mergeModel(prev, next)).toBe(next)
   })
 
-  test("returns the next model when repo files change", () => {
-    const prev = model([file("a.ts")], "before")
+  test("returns a fresh model when repo files change, reusing untouched file objects", () => {
+    const stable = file("a.ts")
+    const prev = model([stable], "before")
     const next = model([file("a.ts")], "after")
+    const merged = mergeModel(prev, next)
+    expect(merged).not.toBe(prev)
+    expect(merged.repoFilesKey).toBe("after")
+    expect(merged.changedByPath.get("a.ts")).toBe(stable)
+  })
+
+  test("returns a fresh model when the scope changes, even with identical content", () => {
+    const prev = model([file("a.ts")], "key", "all:HEAD")
+    const next = model([file("a.ts")], "key", "unstaged:HEAD")
+    const merged = mergeModel(prev, next)
+    expect(merged).not.toBe(prev)
+    expect(merged.scopeKey).toBe("unstaged:HEAD")
+  })
+
+  test("returns the next model when only a file's mtime changes", () => {
+    const prev = model([file("a.ts", { mtimeMs: 1 })])
+    const next = model([file("a.ts", { mtimeMs: 2 })])
     expect(mergeModel(prev, next)).toBe(next)
   })
 
-  test("returns the next model when the scope changes, even with identical content", () => {
-    const prev = model([file("a.ts")], "key", "all:HEAD")
-    const next = model([file("a.ts")], "key", "unstaged:HEAD")
-    expect(mergeModel(prev, next)).toBe(next)
+  test("keeps identity for untouched files when other files churn", () => {
+    const stable = file("a.ts")
+    const prev = model([stable, file("b.ts")])
+    const next = model([file("a.ts"), file("b.ts", { additions: 9 })])
+    const merged = mergeModel(prev, next)
+    expect(merged).not.toBe(prev)
+    expect(merged.changedByPath.get("a.ts")).toBe(stable)
+    expect(merged.changedByPath.get("b.ts")).toBe(next.changedByPath.get("b.ts"))
   })
 })

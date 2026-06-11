@@ -20,7 +20,7 @@ import { contentToContextPatch, loadFileContent, type FileContent } from "./file
 import { rankFiles } from "./fuzzy"
 import type { ChangedFile, GitModel, StageState } from "./git"
 import { loadFileDiff, loadGitModel, mergeModel } from "./git"
-import { lineReference, renderPatch } from "./patch"
+import { lineReference, renderPatch, type ParsedDiffLine } from "./patch"
 import { diffFiletypeFor, type SyntaxConfig } from "./syntax"
 import {
   buildFileTree,
@@ -41,7 +41,9 @@ type AppProps = {
 
 type ScrollablePane = { scrollY: number; maxScrollY: number }
 
-type JumpTarget = { path: string; line: number }
+// escalate lets a jump switch into file view to find its exact line; without
+// it a miss lands on the nearest line in the current view
+type JumpTarget = { path: string; line: number; escalate: boolean }
 
 const DIFF_ID = "sideye-diff"
 const PROBLEMS_HEIGHT = 10
@@ -232,8 +234,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     previousChangedRef.current = model.changed
     previousScopeKeyRef.current = model.scopeKey
 
-    // a scope switch swaps the changed set wholesale; that is not agent activity
+    // a scope switch swaps the changed set wholesale; that is not agent
+    // activity, but the new set still needs checker state, so re-run checks
     if (previousScopeKey !== model.scopeKey) {
+      runChecksRef.current()
       return
     }
 
@@ -334,18 +338,24 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       return
     }
 
-    if (selectedFile !== undefined && !fileView) {
-      setFileView(true)
-      return
-    }
-
-    if (!fullContentPaths.has(jumpTarget.path)) {
+    // the line may simply not be rendered yet; un-truncate the current view first
+    if (truncated && !fullContentPaths.has(jumpTarget.path)) {
       setFullContentPaths((current) => new Set(current).add(jumpTarget.path))
       return
     }
 
+    if (jumpTarget.escalate && selectedFile !== undefined && !fileView) {
+      setFileView(true)
+      return
+    }
+
+    // land on the nearest line instead of bouncing between views
+    const nearest = nearestNavigableIndex(navigableLines, jumpTarget.line)
+    if (nearest >= 0) {
+      setCursorIndex(nearest)
+    }
     setJumpTarget(undefined)
-  }, [fileView, fullContentPaths, jumpTarget, navigableLines, selectedFile, selectedPath])
+  }, [fileView, fullContentPaths, jumpTarget, navigableLines, selectedFile, selectedPath, truncated])
 
   const problemsHeight = problemsOpen ? PROBLEMS_HEIGHT : 0
   const paneHeight = Math.max(1, height - 4 - problemsHeight)
@@ -482,7 +492,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       const line = navigableLines[cursorIndex]
       const lineNumber = line?.newLine ?? line?.oldLine
       if (lineNumber !== undefined) {
-        setJumpTarget({ path: selectedPath, line: lineNumber })
+        setJumpTarget({ path: selectedPath, line: lineNumber, escalate: false })
       }
       setFileView((current) => !current)
       return
@@ -530,7 +540,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         if (problem !== undefined) {
           selectFile(problem.path)
           if (problem.line !== undefined) {
-            setJumpTarget({ path: problem.path, line: problem.line })
+            setJumpTarget({ path: problem.path, line: problem.line, escalate: true })
           }
           setFocusedPane("diff")
         }
@@ -1021,6 +1031,25 @@ function kindLetter(kind: ChangedFile["kind"]) {
   }
 
   return "M"
+}
+
+function nearestNavigableIndex(lines: ParsedDiffLine[], target: number) {
+  let best = -1
+  let bestDistance = Number.POSITIVE_INFINITY
+  lines.forEach((line, index) => {
+    const reference = line.newLine ?? line.oldLine
+    if (reference === undefined) {
+      return
+    }
+
+    const distance = Math.abs(reference - target)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = index
+    }
+  })
+
+  return best
 }
 
 function orderedFindingPaths(problems: Diagnostic[]) {

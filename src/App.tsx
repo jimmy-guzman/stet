@@ -18,7 +18,7 @@ import {
 import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
 import { rankFiles } from "./fuzzy"
 import type { ChangedFile, GitModel, StageState } from "./git"
-import { loadFileDiff, loadGitModel, mergeModel } from "./git"
+import { loadChangedFiles, loadFileDiff, loadRepoFiles, mergeChanged } from "./git"
 import { lineReference, renderPatch, type ParsedDiffLine } from "./patch"
 import { diffFiletypeFor, type SyntaxConfig } from "./syntax"
 import {
@@ -207,33 +207,71 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     return () => abortRef.current?.abort()
   }, [])
 
+  const lastChangeRef = useRef<number>(Date.now())
+
   useEffect(() => {
     let cancelled = false
-    let inFlight = false
+    let fastInFlight = false
+    let slowInFlight = false
 
-    const load = async () => {
-      if (inFlight) {
-        return
-      }
-
-      inFlight = true
+    const loadFast = async () => {
+      if (fastInFlight) return
+      fastInFlight = true
       try {
-        const next = await loadGitModel(initialModel.repoRoot, scope)
+        const next = await loadChangedFiles(initialModel.repoRoot, scope)
         if (!cancelled) {
-          setModel((previous) => mergeModel(previous, next))
+          setModel((previous) => mergeChanged(previous, next))
         }
       } catch {
         // transient git failures (e.g. an agent holding index.lock) resolve on the next poll
       } finally {
-        inFlight = false
+        fastInFlight = false
       }
     }
 
-    void load()
-    const id = setInterval(() => void load(), 750)
+    const loadSlow = async () => {
+      if (slowInFlight) return
+      slowInFlight = true
+      try {
+        const next = await loadRepoFiles(initialModel.repoRoot)
+        if (!cancelled) {
+          setModel((previous) =>
+            previous.repoFilesKey === next.repoFilesKey
+              ? previous
+              : { ...previous, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey },
+          )
+        }
+      } catch {
+        // ignore transient errors
+      } finally {
+        slowInFlight = false
+      }
+    }
+
+    void loadFast()
+    void loadSlow()
+
+    // Adaptive fast poll: 750ms when active, 2000ms after 10s of quiet.
+    let fastId: ReturnType<typeof setTimeout>
+    const scheduleFast = () => {
+      const quiet = Date.now() - lastChangeRef.current > 10_000
+      fastId = setTimeout(
+        () => {
+          void loadFast()
+          scheduleFast()
+        },
+        quiet ? 2_000 : 750,
+      )
+    }
+    scheduleFast()
+
+    // Separate long interval just for the expensive tracked-files list.
+    const slowId = setInterval(() => void loadSlow(), 5_000)
+
     return () => {
       cancelled = true
-      clearInterval(id)
+      clearTimeout(fastId)
+      clearInterval(slowId)
     }
   }, [initialModel.repoRoot, scope])
 
@@ -267,6 +305,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     if (entries.length > 0) {
+      lastChangeRef.current = Date.now()
       setCheckerState((current) =>
         markPending(
           current,

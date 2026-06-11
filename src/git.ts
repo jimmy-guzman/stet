@@ -44,6 +44,83 @@ export function resolveRepoRoot(cwd: string) {
   return runCommand(["git", "rev-parse", "--show-toplevel"], cwd).stdout.trim()
 }
 
+export async function loadChangedFiles(
+  repoRoot: string,
+  scope: DiffScope,
+): Promise<Pick<GitModel, "changed" | "changedByPath" | "scopeKey">> {
+  const [untrackedFiles, nameStatusResult, numstatResult, porcelain] = await Promise.all([
+    runCommandAsync(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
+    runCommandAsync(nameStatusArgs(scope), repoRoot),
+    runCommandAsync(numstatArgs(scope), repoRoot),
+    runCommandAsync(["git", "status", "--porcelain=v1", "-z"], repoRoot),
+  ])
+
+  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedFiles.stdout)
+  const nameStatus = parseNameStatus(nameStatusResult.stdout)
+  const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]))
+  const numstat = parseNumstat(numstatResult.stdout)
+  const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]))
+  const stageByPath = parsePorcelainStatus(porcelain.stdout)
+  const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
+
+  const changed = Array.from(paths)
+    .map((path) => {
+      const stat = numstatByPath.get(path)
+      const statusEntry = statusByPath.get(path)
+      const kind = statusEntry?.kind ?? inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0)
+      const untrackedStat = kind === "untracked" && stat === undefined ? statUntrackedFile(repoRoot, path) : undefined
+      const file: ChangedFile = {
+        path,
+        oldPath: statusEntry?.oldPath,
+        kind,
+        stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
+        additions: stat?.additions ?? untrackedStat?.additions ?? 0,
+        deletions: stat?.deletions ?? 0,
+        binary: stat?.binary ?? untrackedStat?.binary ?? false,
+        warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
+        mtimeMs: kind === "deleted" ? 0 : fileMtime(repoRoot, path),
+      }
+      return file
+    })
+    .toSorted((a, b) => a.path.localeCompare(b.path))
+
+  return {
+    changed,
+    changedByPath: new Map(changed.map((file) => [file.path, file])),
+    scopeKey: `${scope.kind}:${scope.ref}`,
+  }
+}
+
+export async function loadRepoFiles(repoRoot: string): Promise<Pick<GitModel, "repoFiles" | "repoFilesKey">> {
+  const [tracked, untrackedFiles] = await Promise.all([
+    runCommandAsync(["git", "ls-files", "-z"], repoRoot),
+    runCommandAsync(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
+  ])
+
+  const trackedOutput = tracked.stdout
+  const untrackedOutput = untrackedFiles.stdout
+  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
+
+  return { repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey), repoFilesKey }
+}
+
+export function mergeChanged(prev: GitModel, next: Pick<GitModel, "changed" | "changedByPath" | "scopeKey">): GitModel {
+  if (prev.scopeKey === next.scopeKey && changedSignature(prev.changed) === changedSignature(next.changed)) {
+    return prev
+  }
+
+  const changed = next.changed.map((file) => {
+    const before = prev.changedByPath.get(file.path)
+    return before !== undefined && sameChangedFile(before, file) ? before : file
+  })
+
+  if (prev.scopeKey === next.scopeKey && changed.every((file, index) => file === next.changed[index])) {
+    return { ...prev, scopeKey: next.scopeKey, changed: next.changed, changedByPath: next.changedByPath }
+  }
+
+  return { ...prev, scopeKey: next.scopeKey, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) }
+}
+
 export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<GitModel> {
   const [tracked, untrackedFiles, nameStatusResult, numstatResult, porcelain] = await Promise.all([
     runCommandAsync(["git", "ls-files", "-z"], repoRoot),

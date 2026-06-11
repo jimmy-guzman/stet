@@ -6,7 +6,6 @@ import { nextScope, scopeLabel, type DiffScope } from "./cli"
 import { copyToClipboard, formatCopyReference } from "./copy-reference"
 import {
   allFindings,
-  checkerFailures,
   checkerSummary,
   countBySeverity,
   findingsLineMap,
@@ -93,7 +92,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
   const runGenerationRef = useRef(0)
   const abortRef = useRef<AbortController | undefined>(undefined)
-  const previousChecksInFlightRef = useRef(0)
 
   const selectedFile = selectedPath === undefined ? undefined : model.changedByPath.get(selectedPath)
   const showFileContent = selectedPath !== undefined && (selectedFile === undefined || fileView)
@@ -171,18 +169,33 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
     setCheckerState(initialCheckerState(model.changed))
     setChecksInFlight((count) => count + 1)
+    const failures: string[] = []
     return runDiagnostics(
       model.repoRoot,
       model.changed,
       (checker, nextState) => {
         // a newer run owns the state; drop results arriving from a stale run
-        if (generation === runGenerationRef.current) {
-          setCheckerState((current) => ({ ...current, [checker]: nextState }))
+        if (generation !== runGenerationRef.current) {
+          return
+        }
+
+        setCheckerState((current) => ({ ...current, [checker]: nextState }))
+        for (const fileState of nextState.values()) {
+          if (fileState.status === "failed") {
+            // a failed run stamps every file with the same run-level message
+            failures.push(`${checker} failed: ${fileState.message?.split("\n")[0] ?? ""}`)
+            break
+          }
         }
       },
       controller.signal,
     ).finally(() => {
       setChecksInFlight((count) => Math.max(0, count - 1))
+      // the run reports its own completion: every trigger path (mount, the r
+      // key, the quiet-period rerun) gets a status, and only the latest run speaks
+      if (generation === runGenerationRef.current) {
+        setStatus(failures[0] ?? "checks finished")
+      }
     })
   }
 
@@ -193,18 +206,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     runChecksRef.current()
     return () => abortRef.current?.abort()
   }, [])
-
-  // "checks finished" is derived from the in-flight count reaching zero, so
-  // every trigger path (mount, the r key, the quiet-period rerun) reports
-  useEffect(() => {
-    const previous = previousChecksInFlightRef.current
-    previousChecksInFlightRef.current = checksInFlight
-    if (previous > 0 && checksInFlight === 0) {
-      const failures = checkerFailures(checkerState)
-      const failure = failures[0]
-      setStatus(failure === undefined ? "checks finished" : `${failure.checker} failed: ${failure.message.split("\n")[0]}`)
-    }
-  }, [checkerState, checksInFlight])
 
   useEffect(() => {
     let cancelled = false

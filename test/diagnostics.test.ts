@@ -4,7 +4,6 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   allFindings,
-  checkerFailures,
   checkerSummary,
   countBySeverity,
   findingsLineMap,
@@ -82,13 +81,12 @@ describe("problem helpers", () => {
     expect(checkerSummary("src/a.ts", state)).toEqual({ pending: true, failed: false, errors: 1, warnings: 0 })
   })
 
-  test("checkerSummary and checkerFailures surface failed runs", () => {
+  test("checkerSummary surfaces failed runs", () => {
     const state: CheckerState = {
       ...initialCheckerState([file]),
       lint: new Map([["src/a.ts", { status: "failed", count: 0, diagnostics: [], message: "boom\ndetail" }]]),
     }
     expect(checkerSummary("src/a.ts", state).failed).toBe(true)
-    expect(checkerFailures(state)).toEqual([{ checker: "lint", message: "boom\ndetail" }])
   })
 
   test("findingsLineMap groups by line number", () => {

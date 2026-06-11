@@ -87,22 +87,6 @@ export function checkerSummary(path: string, state: CheckerState) {
   return { pending, failed, ...countBySeverity(diagnostics) }
 }
 
-export function checkerFailures(state: CheckerState) {
-  const failures: Array<{ checker: CheckerName; message: string }> = []
-
-  for (const checker of checkerNames) {
-    for (const fileState of state[checker].values()) {
-      if (fileState.status === "failed") {
-        // a failed run stamps every file with the same run-level message
-        failures.push({ checker, message: fileState.message ?? `${checker} failed` })
-        break
-      }
-    }
-  }
-
-  return failures
-}
-
 const severityRank = { error: 0, warning: 1, info: 2 } as const
 
 export function allFindings(state: CheckerState): Diagnostic[] {

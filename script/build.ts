@@ -133,12 +133,10 @@ if (!single) {
 if (archive) {
   const sums: string[] = []
   for (const name of built) {
-    const archiveName = name.includes("linux") ? `${name}.tar.gz` : `${name}.zip`
-    if (name.includes("linux")) {
-      await $`tar -czf ../../${name}.tar.gz ${pkg.name}`.cwd(`dist/${name}/bin`)
-    } else {
-      await $`zip -j ../../${name}.zip ${pkg.name}`.cwd(`dist/${name}/bin`)
-    }
+    // every platform ships tar.gz so the format never needs to be re-derived
+    // by install.sh, release.yml, or the homebrew formula
+    const archiveName = `${name}.tar.gz`
+    await $`tar -czf ../../${archiveName} ${pkg.name}`.cwd(`dist/${name}/bin`)
 
     const hasher = new Bun.CryptoHasher("sha256")
     hasher.update(await Bun.file(`dist/${archiveName}`).arrayBuffer())

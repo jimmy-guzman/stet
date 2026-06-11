@@ -59,12 +59,7 @@ if [ "$os" = "linux" ]; then
   fi
 fi
 
-if [ "$os" = "linux" ]; then
-  ext="tar.gz"
-else
-  ext="zip"
-fi
-filename="$APP-$os-$arch.$ext"
+filename="$APP-$os-$arch.tar.gz"
 
 if [ -n "$requested_version" ]; then
   url="https://github.com/$REPO/releases/download/v$requested_version/$filename"
@@ -101,11 +96,7 @@ if [ "$expected" != "$actual" ]; then
   exit 1
 fi
 
-if [ "$ext" = "zip" ]; then
-  unzip -qo "$tmp/$filename" -d "$tmp"
-else
-  tar -xzf "$tmp/$filename" -C "$tmp"
-fi
+tar -xzf "$tmp/$filename" -C "$tmp"
 
 mv "$tmp/$APP" "$install_dir/$APP"
 chmod 755 "$install_dir/$APP"

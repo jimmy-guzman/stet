@@ -36,6 +36,10 @@ describe("fuzzyMatch", () => {
     // greedy-from-first-occurrence would match the c in "src" and ruin the score
     expect(fuzzyMatch("cli", "src/cli.ts") ?? 0).toBeGreaterThan(fuzzyMatch("cli", "test/cli.test.ts") ?? 0)
   })
+
+  test("considers candidate starts after the first ten occurrences", () => {
+    expect(fuzzyMatch("abc", "aaaaaaaaaa/src/abc.ts")).toBeDefined()
+  })
 })
 
 describe("rankFiles", () => {
@@ -50,6 +54,10 @@ describe("rankFiles", () => {
 
   test("the exact basename wins over its test file", () => {
     expect(rankFiles("git", ["test/git.test.ts", "src/git.ts"], noContext)[0]).toBe("src/git.ts")
+  })
+
+  test("ranks matches found after many candidate starts", () => {
+    expect(rankFiles("abc", ["aaaaaaaaaa/src/abc.ts", "src/a-b-c.ts"], noContext)[0]).toBe("aaaaaaaaaa/src/abc.ts")
   })
 
   test("drops non-matching paths", () => {

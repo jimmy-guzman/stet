@@ -18,13 +18,11 @@ export function fuzzyMatch(query: string, path: string): number | undefined {
   // "src/cli.ts" for "cli" (the stray c in "src" eats the match), so try each
   // occurrence of the first query char and keep the best alignment
   let best: number | undefined
-  let starts = 0
-  for (let index = 0; index < p.length && starts < 10; index += 1) {
+  for (let index = 0; index < p.length; index += 1) {
     if (p[index] !== q[0]) {
       continue
     }
 
-    starts += 1
     const score = scanFrom(q, p, path, index)
     if (score !== undefined && (best === undefined || score > best)) {
       best = score

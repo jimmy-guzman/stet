@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { createRoot } from "@opentui/react"
@@ -10,45 +14,69 @@ const syntax: SyntaxConfig = { enabled: false, status: "syntax disabled for test
 
 describe("go-to-file palette", () => {
   test("opens with ctrl-p, swallows global keys, fuzzy-jumps on enter", async () => {
-    const model = loadGitModel(process.cwd(), { kind: "all", ref: "HEAD" })
+    const repoRoot = createPaletteFixtureRepo()
+    const model = loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
     const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ width: 120, height: 34 })
 
-    // flush()/waitForFrame() do not pump the React reconciler's async commit,
-    // so settle with a quiet period and a single renderOnce per step; rapid
-    // renderOnce polling around mock input wedges the test renderer
-    const settle = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250))
-      await renderOnce()
+    const settleUntil = async (label: string, predicate: (frame: string) => boolean, minAttempts = 1) => {
+      let frame = ""
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        await renderOnce()
+        frame = captureCharFrame()
+        if (attempt + 1 >= minAttempts && predicate(frame)) {
+          return frame
+        }
+      }
+
+      throw new Error(`timed out waiting for ${label}\n\n${frame}`)
     }
 
-    createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax }))
-    await settle()
-    expect(captureCharFrame()).toContain("torre")
+    try {
+      createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax }))
+      const initial = await settleUntil("app chrome", (frame) => frame.includes("torre"), 5)
+      expect(initial).toContain("torre")
 
-    await mockInput.pressKeys(["\x10"]) // ctrl-p
-    await settle()
-    expect(captureCharFrame()).toContain("go to file")
+      mockInput.pressKey("p", { ctrl: true })
+      const palette = await settleUntil("go-to-file palette", (frame) => frame.includes("go to file"))
+      expect(palette).toContain("go to file")
 
-    // q must feed the input and show "no matches", not quit the app
-    await mockInput.typeText("qqqq")
-    await settle()
-    const afterTyping = captureCharFrame()
-    expect(afterTyping).toContain("torre")
-    expect(afterTyping).toContain("no matches")
+      // q must feed the input and show "no matches", not quit the app
+      await mockInput.typeText("qqqq")
+      const afterTyping = await settleUntil("empty palette results", (frame) => frame.includes("torre") && frame.includes("no matches"))
+      expect(afterTyping).toContain("torre")
+      expect(afterTyping).toContain("no matches")
 
-    for (let index = 0; index < 4; index += 1) {
-      mockInput.pressBackspace()
+      for (let index = 0; index < 4; index += 1) {
+        mockInput.pressBackspace()
+      }
+      await mockInput.typeText("treets")
+      const afterSearch = await settleUntil("tree search result", (frame) => frame.includes("src/tree.ts"))
+      expect(afterSearch).toContain("src/tree.ts")
+
+      mockInput.pressEnter()
+      const after = await settleUntil("selected tree file", (frame) => frame.includes("src/tree.ts ·") && !frame.includes("go to file"))
+      expect(after).toContain("src/tree.ts ·")
+      expect(after).not.toContain("go to file")
+    } finally {
+      renderer.destroy()
+      rmSync(repoRoot, { recursive: true, force: true })
     }
-    await mockInput.typeText("treets")
-    await settle()
-    expect(captureCharFrame()).toContain("src/tree.ts")
-
-    mockInput.pressEnter()
-    await settle()
-    const after = captureCharFrame()
-    expect(after).toContain("src/tree.ts ·")
-    expect(after).not.toContain("go to file")
-
-    renderer.destroy()
   }, 20_000)
 })
+
+function createPaletteFixtureRepo() {
+  const repoRoot = mkdtempSync(join(tmpdir(), "torre-palette-"))
+  mkdirSync(join(repoRoot, "src"))
+  mkdirSync(join(repoRoot, "test"))
+  writeFileSync(join(repoRoot, "README.md"), "# Fixture\n")
+  writeFileSync(join(repoRoot, "src", "App.tsx"), "export function App() { return null }\n")
+  writeFileSync(join(repoRoot, "src", "tree.ts"), "export const tree = true\n")
+  writeFileSync(join(repoRoot, "test", "tree.test.ts"), "export const testTree = true\n")
+
+  execFileSync("git", ["init"], { cwd: repoRoot, stdio: "ignore" })
+  execFileSync("git", ["add", "."], { cwd: repoRoot, stdio: "ignore" })
+  execFileSync("git", ["-c", "user.name=Torre Test", "-c", "user.email=torre-test@example.com", "commit", "-m", "fixture"], { cwd: repoRoot, stdio: "ignore" })
+
+  return repoRoot
+}

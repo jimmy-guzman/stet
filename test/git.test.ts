@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import { diffArgs, mergeModel, nameStatusArgs, numstatArgs, parseNameStatus, parseNumstat, parsePorcelainStatus, parseUntrackedFiles, type ChangedFile, type GitModel } from "../src/git"
+import {
+  diffArgs,
+  mergeModel,
+  nameStatusArgs,
+  numstatArgs,
+  parseNameStatus,
+  parseNumstat,
+  parsePorcelainStatus,
+  parseUntrackedFiles,
+  type ChangedFile,
+  type GitModel,
+} from "../src/git"
 
 function file(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
   return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], ...overrides }

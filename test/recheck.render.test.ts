@@ -54,7 +54,10 @@ function createFixtureRepo() {
 
   execFileSync("git", ["init"], { cwd: repoRoot, stdio: "ignore" })
   execFileSync("git", ["add", "."], { cwd: repoRoot, stdio: "ignore" })
-  execFileSync("git", ["-c", "user.name=Sideye Test", "-c", "user.email=sideye-test@example.com", "commit", "-m", "fixture"], { cwd: repoRoot, stdio: "ignore" })
+  execFileSync("git", ["-c", "user.name=Sideye Test", "-c", "user.email=sideye-test@example.com", "commit", "-m", "fixture"], {
+    cwd: repoRoot,
+    stdio: "ignore",
+  })
 
   return repoRoot
 }

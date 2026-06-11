@@ -25,7 +25,14 @@ describe("recordActivity", () => {
 describe("derived views", () => {
   test("lastChangedAt keeps the latest timestamp per path", () => {
     let log = recordActivity(emptyActivityLog, [{ path: "a.ts", kind: "appeared" }], 1_000)
-    log = recordActivity(log, [{ path: "a.ts", kind: "changed" }, { path: "b.ts", kind: "changed" }], 2_000)
+    log = recordActivity(
+      log,
+      [
+        { path: "a.ts", kind: "changed" },
+        { path: "b.ts", kind: "changed" },
+      ],
+      2_000,
+    )
 
     expect(lastChangedAt(log).get("a.ts")).toBe(2_000)
     expect(lastChangedAt(log).get("b.ts")).toBe(2_000)

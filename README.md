@@ -47,25 +47,25 @@ sideye --unstaged # start in the unstaged scope
 
 ## Keys
 
-| Key        | Action                                              |
-| ---------- | --------------------------------------------------- |
-| `j` / `k`  | move in the tree, viewer, or problems panel         |
-| `h` / `l`  | collapse / expand folders                           |
-| `tab`      | switch focus between tree and viewer                |
-| `enter`    | open the focused item / jump to a problem           |
-| `ctrl-p`   | go to file: fuzzy-search the whole repo             |
-| `s`        | cycle scope: all changes → staged → unstaged        |
-| `c`        | toggle changes-only filter for the tree             |
-| `v`        | toggle diff ↔ full file view for a changed file     |
-| `p`        | toggle the problems panel                           |
-| `.`        | jump to the most recently changed file              |
-| `n`        | jump to the next file with findings                 |
-| `y`        | copy `path:line` + snippet at the cursor            |
-| `f`        | load full content when truncated                    |
-| `r`        | re-run checks                                       |
-| `ctrl-d/u` | half-page cursor movement in the viewer             |
-| `g` / `G`  | jump to first / last line                           |
-| `q` / `esc`| quit (esc closes the problems panel first)          |
+| Key         | Action                                          |
+| ----------- | ----------------------------------------------- |
+| `j` / `k`   | move in the tree, viewer, or problems panel     |
+| `h` / `l`   | collapse / expand folders                       |
+| `tab`       | switch focus between tree and viewer            |
+| `enter`     | open the focused item / jump to a problem       |
+| `ctrl-p`    | go to file: fuzzy-search the whole repo         |
+| `s`         | cycle scope: all changes → staged → unstaged    |
+| `c`         | toggle changes-only filter for the tree         |
+| `v`         | toggle diff ↔ full file view for a changed file |
+| `p`         | toggle the problems panel                       |
+| `.`         | jump to the most recently changed file          |
+| `n`         | jump to the next file with findings             |
+| `y`         | copy `path:line` + snippet at the cursor        |
+| `f`         | load full content when truncated                |
+| `r`         | re-run checks                                   |
+| `ctrl-d/u`  | half-page cursor movement in the viewer         |
+| `g` / `G`   | jump to first / last line                       |
+| `q` / `esc` | quit (esc closes the problems panel first)      |
 
 ## Requirements
 

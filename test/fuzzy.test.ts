@@ -66,7 +66,10 @@ describe("rankFiles", () => {
 
   test("empty query orders by recency, then changed, then name", () => {
     const results = rankFiles("", paths, {
-      lastChangedAt: new Map([["src/tree.ts", 2_000], ["src/git.ts", 1_000]]),
+      lastChangedAt: new Map([
+        ["src/tree.ts", 2_000],
+        ["src/git.ts", 1_000],
+      ]),
       changed: new Set(["test/git.test.ts"]),
       limit: 50,
     })

@@ -58,7 +58,9 @@ function findBinary(startDir) {
 const resolved = process.env.SIDEYE_BIN_PATH || findBinary(__dirname)
 
 if (!resolved) {
-  console.error(`Could not find the sideye binary for your platform. Your package manager may have skipped optional dependencies; try reinstalling, or install "${packageName}" directly. Supported platforms: darwin/linux on arm64/x64.`)
+  console.error(
+    `Could not find the sideye binary for your platform. Your package manager may have skipped optional dependencies; try reinstalling, or install "${packageName}" directly. Supported platforms: darwin/linux on arm64/x64.`,
+  )
   process.exit(1)
 }
 

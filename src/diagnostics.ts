@@ -95,8 +95,11 @@ export function allFindings(state: CheckerState): Diagnostic[] {
     }
   }
 
-  return findings.sort(
-    (a, b) => severityRank[a.severity] - severityRank[b.severity] || a.path.localeCompare(b.path) || (a.line ?? Number.MAX_SAFE_INTEGER) - (b.line ?? Number.MAX_SAFE_INTEGER),
+  return findings.toSorted(
+    (a, b) =>
+      severityRank[a.severity] - severityRank[b.severity] ||
+      a.path.localeCompare(b.path) ||
+      (a.line ?? Number.MAX_SAFE_INTEGER) - (b.line ?? Number.MAX_SAFE_INTEGER),
   )
 }
 
@@ -154,7 +157,11 @@ export function findingsLineMap(path: string, state: CheckerState) {
   return byLine
 }
 
-export async function runDiagnostics(repoRoot: string, files: ChangedFile[], onCheckerDone: (checker: CheckerName, state: Map<string, CheckerFileState>) => void) {
+export async function runDiagnostics(
+  repoRoot: string,
+  files: ChangedFile[],
+  onCheckerDone: (checker: CheckerName, state: Map<string, CheckerFileState>) => void,
+) {
   const commands = discoverCheckerCommands(repoRoot, files)
   await Promise.all(
     commands.map(async (command) => {
@@ -178,7 +185,11 @@ export function discoverCheckerCommands(repoRoot: string, files: ChangedFile[]):
   const packageJson = readPackageJson(repoRoot)
   const changedPaths = files.filter((file) => file.kind !== "deleted").map((file) => file.path)
 
-  return [lintCommand(repoRoot, packageJson, changedPaths), prettierCommand(repoRoot, changedPaths), typecheckCommand(repoRoot, packageJson)]
+  return [
+    lintCommand(repoRoot, packageJson, changedPaths),
+    prettierCommand(repoRoot, changedPaths),
+    typecheckCommand(repoRoot, packageJson),
+  ]
 }
 
 function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, changedPaths: string[]): CheckerCommand {
@@ -191,11 +202,21 @@ function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, cha
   }
 
   if (hasBinary(repoRoot, "oxlint")) {
-    return { checker: "lint", command: ["bunx", "oxlint", "--format", "json", ...changedPaths], parser: parseOxlintJson, allowedExitCodes: [0, 1] }
+    return {
+      checker: "lint",
+      command: ["bunx", "oxlint", "--format", "json", ...changedPaths],
+      parser: parseOxlintJson,
+      allowedExitCodes: [0, 1],
+    }
   }
 
   if (hasBinary(repoRoot, "eslint")) {
-    return { checker: "lint", command: ["bunx", "eslint", "--format", "json", ...changedPaths], parser: parseEslintJson, allowedExitCodes: [0, 1] }
+    return {
+      checker: "lint",
+      command: ["bunx", "eslint", "--format", "json", ...changedPaths],
+      parser: parseEslintJson,
+      allowedExitCodes: [0, 1],
+    }
   }
 
   return unconfiguredChecker("lint")
@@ -206,7 +227,12 @@ function prettierCommand(repoRoot: string, changedPaths: string[]): CheckerComma
     return unconfiguredChecker("prettier")
   }
 
-  return { checker: "prettier", command: ["bunx", "prettier", "--list-different", ...changedPaths], parser: parsePrettierList, allowedExitCodes: [0, 1] }
+  return {
+    checker: "prettier",
+    command: ["bunx", "prettier", "--list-different", ...changedPaths],
+    parser: parsePrettierList,
+    allowedExitCodes: [0, 1],
+  }
 }
 
 function typecheckCommand(repoRoot: string, packageJson: PackageJson | undefined): CheckerCommand {
@@ -247,7 +273,9 @@ export function parseOxlintJson(output: { stdout: string }): Diagnostic[] {
     return []
   }
 
-  const parsed = JSON.parse(output.stdout) as { diagnostics?: Array<{ filename?: string; message?: string; labels?: Array<{ span?: { line?: number } }> }> }
+  const parsed = JSON.parse(output.stdout) as {
+    diagnostics?: Array<{ filename?: string; message?: string; labels?: Array<{ span?: { line?: number } }> }>
+  }
   return (parsed.diagnostics ?? []).map((diagnostic) => ({
     checker: "lint" as const,
     path: diagnostic.filename ?? "",
@@ -271,24 +299,22 @@ export function parsePrettierList(output: { stdout: string }): Diagnostic[] {
 }
 
 export function parseTypeScriptOutput(output: { stdout: string; stderr: string }): Diagnostic[] {
-  const diagnostics = `${output.stdout}\n${output.stderr}`
-    .split("\n")
-    .flatMap((line) => {
-      const match = line.match(/^(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)$/)
-      if (match === null) {
-        return []
-      }
+  const diagnostics = `${output.stdout}\n${output.stderr}`.split("\n").flatMap((line) => {
+    const match = line.match(/^(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)$/)
+    if (match === null) {
+      return []
+    }
 
-      return [
-        {
-          checker: "typecheck" as const,
-          path: match[1],
-          line: Number.parseInt(match[2], 10),
-          severity: "error" as const,
-          message: match[4],
-        },
-      ]
-    })
+    return [
+      {
+        checker: "typecheck" as const,
+        path: match[1],
+        line: Number.parseInt(match[2], 10),
+        severity: "error" as const,
+        message: match[4],
+      },
+    ]
+  })
 
   if (diagnostics.length === 0 && "exitCode" in output && output.exitCode !== undefined && output.exitCode !== 0) {
     const text = `${output.stdout}\n${output.stderr}`.trim()

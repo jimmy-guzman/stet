@@ -4,14 +4,33 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { emptyActivityLog, lastChangedAt, latestActivity, recordActivity, recencyLevel, RECENT_MS, type RecencyLevel } from "./activity"
 import { nextScope, scopeLabel, type DiffScope } from "./cli"
 import { copyToClipboard, formatCopyReference } from "./copy-reference"
-import { allFindings, findingsLineMap, globalCounts, initialCheckerState, markPending, problemCounts, runDiagnostics, type CheckerState, type Diagnostic } from "./diagnostics"
+import {
+  allFindings,
+  findingsLineMap,
+  globalCounts,
+  initialCheckerState,
+  markPending,
+  problemCounts,
+  runDiagnostics,
+  type CheckerState,
+  type Diagnostic,
+} from "./diagnostics"
 import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
 import { rankFiles } from "./fuzzy"
 import type { ChangedFile, GitModel, StageState } from "./git"
 import { loadFileDiff, loadGitModel, mergeModel } from "./git"
 import { lineReference, renderPatch } from "./patch"
 import { diffFiletypeFor, type SyntaxConfig } from "./syntax"
-import { buildFileTree, defaultExpandedDirectories, expandAncestorsForPath, findRowIndexForPath, firstFileInNode, flattenTree, type DirectoryNode, type FileTreeRow } from "./tree"
+import {
+  buildFileTree,
+  defaultExpandedDirectories,
+  expandAncestorsForPath,
+  findRowIndexForPath,
+  firstFileInNode,
+  flattenTree,
+  type DirectoryNode,
+  type FileTreeRow,
+} from "./tree"
 
 type AppProps = {
   model: GitModel
@@ -68,7 +87,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
   const selectedFile = selectedPath === undefined ? undefined : model.changedByPath.get(selectedPath)
   const showFileContent = selectedPath !== undefined && (selectedFile === undefined || fileView)
-  const tree = useMemo(() => buildFileTree(model.repoFiles, model.changedByPath, { changesOnly }), [changesOnly, model.changedByPath, model.repoFiles])
+  const tree = useMemo(
+    () => buildFileTree(model.repoFiles, model.changedByPath, { changesOnly }),
+    [changesOnly, model.changedByPath, model.repoFiles],
+  )
   const treeRows = useMemo(() => flattenTree(tree, expandedDirectories), [expandedDirectories, tree])
   const problems = useMemo(() => allFindings(checkerState), [checkerState])
   const counts = useMemo(() => globalCounts(checkerState), [checkerState])
@@ -81,14 +103,18 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     const paths = [...new Set([...model.repoFiles.map((file) => file.path), ...model.changedByPath.keys()])]
     return rankFiles(paletteQuery, paths, { lastChangedAt: recencyByPath, changed: new Set(model.changedByPath.keys()), limit: 50 })
   }, [model.changedByPath, model.repoFiles, paletteOpen, paletteQuery, recencyByPath])
-  const lineMap = useMemo(() => (selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, checkerState)), [checkerState, selectedPath])
+  const lineMap = useMemo(
+    () => (selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, checkerState)),
+    [checkerState, selectedPath],
+  )
 
   const fileContent = useMemo<FileContent | undefined>(() => {
     if (!showFileContent || selectedPath === undefined) {
       return undefined
     }
 
-    const gitSpec = selectedFile?.kind === "deleted" ? (scope.kind === "unstaged" ? `:${selectedPath}` : `${scope.ref}:${selectedPath}`) : undefined
+    const gitSpec =
+      selectedFile?.kind === "deleted" ? (scope.kind === "unstaged" ? `:${selectedPath}` : `${scope.ref}:${selectedPath}`) : undefined
     return loadFileContent(model.repoRoot, selectedPath, { full: fullContentPaths.has(selectedPath), gitSpec })
     // model identity changes whenever git state changes, keeping live content fresh
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,7 +141,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     [fullContentPaths, selectedDiff, selectedPath, showFileContent],
   )
   const navigableLines = useMemo(() => renderedPatch.parsed.hunks.flatMap((hunk) => hunk.lines), [renderedPatch])
-  const truncated = renderedPatch.truncated || fileContent?.kind === "text" && fileContent.truncated
+  const truncated = renderedPatch.truncated || (fileContent?.kind === "text" && fileContent.truncated)
 
   function runChecks() {
     setCheckerState(initialCheckerState(model.changed))
@@ -166,7 +192,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     if (entries.length > 0) {
-      setCheckerState((current) => markPending(current, model.changed, entries.map((entry) => entry.path)))
+      setCheckerState((current) =>
+        markPending(
+          current,
+          model.changed,
+          entries.map((entry) => entry.path),
+        ),
+      )
       setActivityLog((current) => recordActivity(current, entries, Date.now()))
     }
   }, [model.changed, model.scopeKey])
@@ -406,7 +438,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     if (key.name === "r") {
       setStatus("re-running checks")
       void runChecks().then(() => {
-        setStatus((current) => current === "re-running checks" ? "checks finished" : current)
+        setStatus((current) => (current === "re-running checks" ? "checks finished" : current))
       })
       return
     }
@@ -535,9 +567,12 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const cursorLineNumber = cursorLine?.newLine ?? cursorLine?.oldLine
   const cursorFindings = cursorLine?.newLine === undefined ? undefined : lineMap.get(cursorLine.newLine)
   const latest = latestActivity(activityLog)
-  const activityText = latest === undefined || now - latest.at >= RECENT_MS ? "" : `${Math.max(0, Math.round((now - latest.at) / 1000))}s ago ${latest.path}`
+  const activityText =
+    latest === undefined || now - latest.at >= RECENT_MS ? "" : `${Math.max(0, Math.round((now - latest.at) / 1000))}s ago ${latest.path}`
   const statusRight = truncate(
-    cursorFindings?.[0] !== undefined ? `${cursorFindings[0].checker}: ${cursorFindings[0].message}` : [activityText, truncated === true ? `${status} · truncated; f for full` : status].filter((part) => part !== "").join(" · "),
+    cursorFindings?.[0] !== undefined
+      ? `${cursorFindings[0].checker}: ${cursorFindings[0].message}`
+      : [activityText, truncated === true ? `${status} · truncated; f for full` : status].filter((part) => part !== "").join(" · "),
     Math.max(20, width - 50),
   )
   const countsText = `${counts.errors > 0 ? `✖${counts.errors}` : ""}${counts.warnings > 0 ? ` ⚠${counts.warnings}` : ""}`.trim()
@@ -551,7 +586,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         </text>
       </box>
       <box flexGrow={1} flexDirection="row">
-        <box width={sidebarWidth} height="100%" flexDirection="column" borderStyle="single" borderColor={focusedPane === "tree" ? "#ff4fb8" : "#27272a"}>
+        <box
+          width={sidebarWidth}
+          height="100%"
+          flexDirection="column"
+          borderStyle="single"
+          borderColor={focusedPane === "tree" ? "#ff4fb8" : "#27272a"}
+        >
           <scrollbox ref={sidebarRef} width="100%" height={paneHeight} scrollY viewportCulling>
             {treeRows.map((row) => (
               <TreeRow
@@ -567,7 +608,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
             ))}
           </scrollbox>
         </box>
-        <box flexGrow={1} height="100%" flexDirection="column" borderStyle="single" borderColor={focusedPane === "diff" ? "#ff4fb8" : "#27272a"}>
+        <box
+          flexGrow={1}
+          height="100%"
+          flexDirection="column"
+          borderStyle="single"
+          borderColor={focusedPane === "diff" ? "#ff4fb8" : "#27272a"}
+        >
           <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
             <text fg="#e4e4e7">{viewerTitle(selectedPath, selectedFile, showFileContent, fileContent)}</text>
             <text fg="#71717a">
@@ -605,7 +652,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         </box>
       </box>
       {problemsOpen ? (
-        <box height={PROBLEMS_HEIGHT} width="100%" flexDirection="column" borderStyle="single" borderColor={focusedPane === "problems" ? "#ff4fb8" : "#27272a"}>
+        <box
+          height={PROBLEMS_HEIGHT}
+          width="100%"
+          flexDirection="column"
+          borderStyle="single"
+          borderColor={focusedPane === "problems" ? "#ff4fb8" : "#27272a"}
+        >
           <scrollbox ref={problemsRef} width="100%" height={PROBLEMS_HEIGHT - 2} scrollY viewportCulling>
             {problems.length === 0 ? (
               <box id="problem-empty" paddingLeft={1}>
@@ -613,7 +666,15 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
               </box>
             ) : (
               problems.map((problem, index) => (
-                <box key={`problem-${index}`} id={`problem-${index}`} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1} backgroundColor={index === problemIndex && focusedPane === "problems" ? "#3a1530" : "#09090b"}>
+                <box
+                  key={`problem-${index}`}
+                  id={`problem-${index}`}
+                  width="100%"
+                  flexDirection="row"
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={index === problemIndex && focusedPane === "problems" ? "#3a1530" : "#09090b"}
+                >
                   <text fg={problem.severity === "error" ? "#ff5c8a" : "#fbbf24"}>{problem.severity === "error" ? "✖ " : "⚠ "}</text>
                   <text fg="#d4d4d8">{`${problem.path}${problem.line === undefined ? "" : `:${problem.line}`} `}</text>
                   <text fg="#a1a1aa">{problem.message}</text>
@@ -629,7 +690,17 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         <text fg="#a1a1aa">{statusRight}</text>
       </box>
       {paletteOpen ? (
-        <box position="absolute" left={paletteLeft} top={1} width={paletteWidth} flexDirection="column" borderStyle="single" borderColor="#ff4fb8" backgroundColor="#111113" zIndex={100}>
+        <box
+          position="absolute"
+          left={paletteLeft}
+          top={1}
+          width={paletteWidth}
+          flexDirection="column"
+          borderStyle="single"
+          borderColor="#ff4fb8"
+          backgroundColor="#111113"
+          zIndex={100}
+        >
           <input
             focused
             width="100%"
@@ -656,9 +727,20 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                 // key and id both by index: reordering results must never
                 // change a live renderable's id or the scrollbox loses rows
                 return (
-                  <box key={`palette-${index}`} id={`palette-${index}`} width="100%" flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor={index === paletteIndex ? "#3a1530" : "#111113"}>
+                  <box
+                    key={`palette-${index}`}
+                    id={`palette-${index}`}
+                    width="100%"
+                    flexDirection="row"
+                    justifyContent="space-between"
+                    paddingLeft={1}
+                    paddingRight={1}
+                    backgroundColor={index === paletteIndex ? "#3a1530" : "#111113"}
+                  >
                     <box flexDirection="row">
-                      <text fg={index === paletteIndex ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)}>{path}</text>
+                      <text fg={index === paletteIndex ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)}>
+                        {path}
+                      </text>
                       {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
                     </box>
                     {changed === undefined ? null : <text fg={stageColor(changed.stage)}>{kindLetter(changed.kind)}</text>}
@@ -692,7 +774,15 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
     const chevron = expandedDirectories.has(node.id) ? "▾" : "▸"
     const recency = directoryRecency(node, expandedDirectories, recencyByPath, now)
     return (
-      <box id={node.id} width="100%" flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor={background}>
+      <box
+        id={node.id}
+        width="100%"
+        flexDirection="row"
+        justifyContent="space-between"
+        paddingLeft={1}
+        paddingRight={1}
+        backgroundColor={background}
+      >
         <box flexDirection="row">
           <text fg={focused ? "#ffffff" : "#d4d4d8"}>{`${indent}${chevron} ${node.name}/`}</text>
           {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
@@ -710,7 +800,15 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
   const pending = changed !== undefined && hasPendingChecker(node.path, checkerState)
 
   return (
-    <box id={node.id} width="100%" flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor={background}>
+    <box
+      id={node.id}
+      width="100%"
+      flexDirection="row"
+      justifyContent="space-between"
+      paddingLeft={1}
+      paddingRight={1}
+      backgroundColor={background}
+    >
       <box flexDirection="row">
         <text fg={nameFg}>{`${indent}${node.name}`}</text>
         {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
@@ -727,7 +825,12 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
   )
 }
 
-function directoryRecency(node: DirectoryNode, expandedDirectories: Set<string>, recencyByPath: Map<string, number>, now: number): RecencyLevel {
+function directoryRecency(
+  node: DirectoryNode,
+  expandedDirectories: Set<string>,
+  recencyByPath: Map<string, number>,
+  now: number,
+): RecencyLevel {
   if (expandedDirectories.has(node.id)) {
     return "none"
   }
@@ -753,10 +856,19 @@ function directoryRecency(node: DirectoryNode, expandedDirectories: Set<string>,
 }
 
 function hasPendingChecker(path: string, state: CheckerState) {
-  return state.lint.get(path)?.status === "pending" || state.prettier.get(path)?.status === "pending" || state.typecheck.get(path)?.status === "pending"
+  return (
+    state.lint.get(path)?.status === "pending" ||
+    state.prettier.get(path)?.status === "pending" ||
+    state.typecheck.get(path)?.status === "pending"
+  )
 }
 
-function viewerTitle(selectedPath: string | undefined, selectedFile: ChangedFile | undefined, showFileContent: boolean, fileContent: FileContent | undefined) {
+function viewerTitle(
+  selectedPath: string | undefined,
+  selectedFile: ChangedFile | undefined,
+  showFileContent: boolean,
+  fileContent: FileContent | undefined,
+) {
   if (selectedPath === undefined) {
     return ""
   }
@@ -864,7 +976,12 @@ function nextFindingPath(paths: string[], selectedPath: string | undefined) {
   return paths[(current + 1) % paths.length]
 }
 
-function moveFocus(direction: -1 | 1, rows: FileTreeRow[], setFocusedRowIndex: (updater: (current: number) => number) => void, selectFile: (path: string) => void) {
+function moveFocus(
+  direction: -1 | 1,
+  rows: FileTreeRow[],
+  setFocusedRowIndex: (updater: (current: number) => number) => void,
+  selectFile: (path: string) => void,
+) {
   setFocusedRowIndex((current) => {
     const next = Math.max(0, Math.min(current + direction, rows.length - 1))
     const row = rows[next]

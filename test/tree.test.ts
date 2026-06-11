@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { buildFileTree, defaultExpandedDirectories, expandAncestorsForPath, findRowIndexForPath, firstFileInNode, flattenTree } from "../src/tree"
+import {
+  buildFileTree,
+  defaultExpandedDirectories,
+  expandAncestorsForPath,
+  findRowIndexForPath,
+  firstFileInNode,
+  flattenTree,
+} from "../src/tree"
 import type { ChangedFile, RepoFile } from "../src/git"
 
 function changed(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
@@ -79,7 +86,7 @@ describe("buildFileTree", () => {
 describe("expansion", () => {
   test("default expansion covers ancestors of changed paths only", () => {
     const expanded = defaultExpandedDirectories(["src/App.tsx", "src/components/ui/Button.tsx"])
-    expect(Array.from(expanded).sort()).toEqual(["dir:src", "dir:src/components", "dir:src/components/ui"])
+    expect(Array.from(expanded).toSorted()).toEqual(["dir:src", "dir:src/components", "dir:src/components/ui"])
   })
 
   test("expands ancestors for a selected path", () => {

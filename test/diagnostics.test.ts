@@ -1,5 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { allFindings, findingsLineMap, globalCounts, initialCheckerState, parseEslintJson, parsePrettierList, parseTypeScriptOutput, problemCounts, runDiagnostics, stateForResolvedChecker, type CheckerState, type Diagnostic } from "../src/diagnostics"
+import {
+  allFindings,
+  findingsLineMap,
+  globalCounts,
+  initialCheckerState,
+  parseEslintJson,
+  parsePrettierList,
+  parseTypeScriptOutput,
+  problemCounts,
+  runDiagnostics,
+  stateForResolvedChecker,
+  type CheckerState,
+  type Diagnostic,
+} from "../src/diagnostics"
 import type { ChangedFile } from "../src/git"
 
 const file: ChangedFile = {

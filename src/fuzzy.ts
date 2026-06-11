@@ -68,7 +68,7 @@ function scanFrom(q: string, p: string, path: string, start: number): number | u
 export function rankFiles(query: string, paths: string[], options: RankOptions): string[] {
   if (query.trim() === "") {
     return [...paths]
-      .sort((a, b) => {
+      .toSorted((a, b) => {
         const recencyDelta = (options.lastChangedAt.get(b) ?? 0) - (options.lastChangedAt.get(a) ?? 0)
         if (recencyDelta !== 0) {
           return recencyDelta
@@ -89,7 +89,7 @@ export function rankFiles(query: string, paths: string[], options: RankOptions):
       const score = fuzzyMatch(query, path)
       return score === undefined ? [] : [{ path, score }]
     })
-    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+    .toSorted((a, b) => b.score - a.score || a.path.localeCompare(b.path))
     .slice(0, options.limit)
     .map((match) => match.path)
 }

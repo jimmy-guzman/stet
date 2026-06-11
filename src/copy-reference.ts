@@ -30,4 +30,3 @@ export function copyToClipboard(text: string) {
     throw new Error(stderr.trim() === "" ? "pbcopy failed" : stderr.trim())
   }
 }
-

@@ -67,7 +67,7 @@ export function loadGitModel(cwd: string, scope: DiffScope): GitModel {
       }
       return file
     })
-    .sort((a, b) => a.path.localeCompare(b.path))
+    .toSorted((a, b) => a.path.localeCompare(b.path))
 
   const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
 
@@ -135,7 +135,12 @@ export function parsePorcelainStatus(output: string): Map<string, StageState> {
 }
 
 export function mergeModel(prev: GitModel, next: GitModel): GitModel {
-  if (prev.repoRoot === next.repoRoot && prev.scopeKey === next.scopeKey && prev.repoFilesKey === next.repoFilesKey && changedSignature(prev.changed) === changedSignature(next.changed)) {
+  if (
+    prev.repoRoot === next.repoRoot &&
+    prev.scopeKey === next.scopeKey &&
+    prev.repoFilesKey === next.repoFilesKey &&
+    changedSignature(prev.changed) === changedSignature(next.changed)
+  ) {
     return prev
   }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.3...sideye-v0.1.4) (2026-06-11)
+
+
+### Performance Improvements
+
+* ⚡️ two-tier polling to reduce ls-files frequency on large repos ([#8](https://github.com/jimmy-guzman/sideye/issues/8)) ([4e4372f](https://github.com/jimmy-guzman/sideye/commit/4e4372f9c96199d34537f5c6d28bf91568cf5bef))
+
 ## [0.1.3](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.2...sideye-v0.1.3) (2026-06-11)
 
 

@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from "node:fs"
 import type { ChangedFile } from "./git"
 import { runCommandAsync } from "./process"
 
-export type CheckerName = "typecheck" | "lint" | "prettier"
-export type CheckerStatus = "pending" | "clean" | "findings" | "failed"
+export const checkerNames = ["lint", "prettier", "typecheck"] as const
+export type CheckerName = (typeof checkerNames)[number]
+export type CheckerStatus = "pending" | "clean" | "findings" | "failed" | "unavailable"
 
 export type Diagnostic = {
   checker: CheckerName
@@ -32,14 +33,23 @@ type CheckerCommand = {
   unavailableMessage?: string
 }
 
-const checkerNames: CheckerName[] = ["lint", "prettier", "typecheck"]
+type DiscoverChecker = (repoRoot: string, packageJson: PackageJson | undefined, changedPaths: string[]) => CheckerCommand
+
+// adding a checker means one name in checkerNames and one entry here; the
+// Record type makes the compiler reject a missing entry
+const checkerRegistry: Record<CheckerName, DiscoverChecker> = {
+  lint: lintCommand,
+  prettier: prettierCommand,
+  typecheck: typecheckCommand,
+}
 
 export function initialCheckerState(files: ChangedFile[]): CheckerState {
-  return {
-    lint: initialFileState(files),
-    prettier: initialFileState(files),
-    typecheck: initialFileState(files),
+  const state = {} as CheckerState
+  for (const checker of checkerNames) {
+    state[checker] = initialFileState(files)
   }
+
+  return state
 }
 
 export function markPending(state: CheckerState, files: ChangedFile[], changedPaths: string[]): CheckerState {
@@ -58,31 +68,39 @@ export function markPending(state: CheckerState, files: ChangedFile[], changedPa
   return next
 }
 
-export function summarizeBadges(path: string, state: CheckerState) {
-  return checkerNames.map((checker) => {
+export function checkerSummary(path: string, state: CheckerState) {
+  let pending = false
+  let failed = false
+  const diagnostics: Diagnostic[] = []
+
+  for (const checker of checkerNames) {
     const fileState = state[checker].get(path)
     if (fileState === undefined) {
-      return `${checker}:?`
+      continue
     }
 
-    if (fileState.status === "pending") {
-      return `${shortChecker(checker)}:...`
-    }
+    pending = pending || fileState.status === "pending"
+    failed = failed || fileState.status === "failed"
+    diagnostics.push(...fileState.diagnostics)
+  }
 
-    if (fileState.status === "clean") {
-      return `${shortChecker(checker)}:ok`
-    }
-
-    if (fileState.status === "failed") {
-      return `${shortChecker(checker)}:fail`
-    }
-
-    return `${shortChecker(checker)}:${fileState.count}`
-  })
+  return { pending, failed, ...countBySeverity(diagnostics) }
 }
 
-export function fileHasFindings(path: string, state: CheckerState) {
-  return checkerNames.some((checker) => state[checker].get(path)?.status === "findings")
+export function checkerFailures(state: CheckerState) {
+  const failures: Array<{ checker: CheckerName; message: string }> = []
+
+  for (const checker of checkerNames) {
+    for (const fileState of state[checker].values()) {
+      if (fileState.status === "failed") {
+        // a failed run stamps every file with the same run-level message
+        failures.push({ checker, message: fileState.message ?? `${checker} failed` })
+        break
+      }
+    }
+  }
+
+  return failures
 }
 
 const severityRank = { error: 0, warning: 1, info: 2 } as const
@@ -103,34 +121,14 @@ export function allFindings(state: CheckerState): Diagnostic[] {
   )
 }
 
-export function globalCounts(state: CheckerState) {
+export function countBySeverity(diagnostics: Iterable<Diagnostic>) {
   let errors = 0
   let warnings = 0
-  for (const checker of checkerNames) {
-    for (const fileState of state[checker].values()) {
-      for (const diagnostic of fileState.diagnostics) {
-        if (diagnostic.severity === "error") {
-          errors += 1
-        } else {
-          warnings += 1
-        }
-      }
-    }
-  }
-
-  return { errors, warnings }
-}
-
-export function problemCounts(path: string, state: CheckerState) {
-  let errors = 0
-  let warnings = 0
-  for (const checker of checkerNames) {
-    for (const diagnostic of state[checker].get(path)?.diagnostics ?? []) {
-      if (diagnostic.severity === "error") {
-        errors += 1
-      } else {
-        warnings += 1
-      }
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.severity === "error") {
+      errors += 1
+    } else {
+      warnings += 1
     }
   }
 
@@ -161,21 +159,23 @@ export async function runDiagnostics(
   repoRoot: string,
   files: ChangedFile[],
   onCheckerDone: (checker: CheckerName, state: Map<string, CheckerFileState>) => void,
+  signal?: AbortSignal,
 ) {
   const commands = discoverCheckerCommands(repoRoot, files)
   await Promise.all(
     commands.map(async (command) => {
       try {
         if (command.command === undefined) {
-          onCheckerDone(command.checker, stateForFailedChecker(files, command.unavailableMessage ?? `${command.checker} is not configured`))
+          const message = command.unavailableMessage ?? `${command.checker} is not configured`
+          onCheckerDone(command.checker, stateForEveryFile(files, "unavailable", message))
           return
         }
 
-        const result = await runCommandAsync(command.command, repoRoot, command.allowedExitCodes)
+        const result = await runCommandAsync(command.command, repoRoot, command.allowedExitCodes, signal)
         const diagnostics = command.parser(result)
         onCheckerDone(command.checker, stateForResolvedChecker(command.checker, files, diagnostics, repoRoot))
       } catch (error) {
-        onCheckerDone(command.checker, stateForFailedChecker(files, error instanceof Error ? error.message : String(error)))
+        onCheckerDone(command.checker, stateForEveryFile(files, "failed", error instanceof Error ? error.message : String(error)))
       }
     }),
   )
@@ -185,16 +185,16 @@ export function discoverCheckerCommands(repoRoot: string, files: ChangedFile[]):
   const packageJson = readPackageJson(repoRoot)
   const changedPaths = files.filter((file) => file.kind !== "deleted").map((file) => file.path)
 
-  return [
-    lintCommand(repoRoot, packageJson, changedPaths),
-    prettierCommand(repoRoot, changedPaths),
-    typecheckCommand(repoRoot, packageJson),
-  ]
+  return checkerNames.map((checker) => checkerRegistry[checker](repoRoot, packageJson, changedPaths))
 }
 
 function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, changedPaths: string[]): CheckerCommand {
-  if (packageJson?.scripts?.lint !== undefined) {
-    return { checker: "lint", command: ["bun", "run", "lint"], parser: parseEslintJsonOrText("lint"), allowedExitCodes: [0, 1] }
+  const script = packageJson?.scripts?.lint
+  if (script !== undefined) {
+    // eslint and oxlint accept --format json; other scripts fall back to
+    // parseLintOutput's exit-code interpretation
+    const jsonArgs = /^(?:eslint|oxlint)\b/.test(script) ? ["--format", "json"] : []
+    return { checker: "lint", command: ["bun", "run", "lint", ...jsonArgs], parser: parseLintOutput, allowedExitCodes: [0, 1] }
   }
 
   if (changedPaths.length === 0) {
@@ -205,7 +205,7 @@ function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, cha
     return {
       checker: "lint",
       command: ["bunx", "oxlint", "--format", "json", ...changedPaths],
-      parser: parseOxlintJson,
+      parser: parseLintOutput,
       allowedExitCodes: [0, 1],
     }
   }
@@ -214,7 +214,7 @@ function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, cha
     return {
       checker: "lint",
       command: ["bunx", "eslint", "--format", "json", ...changedPaths],
-      parser: parseEslintJson,
+      parser: parseLintOutput,
       allowedExitCodes: [0, 1],
     }
   }
@@ -222,7 +222,7 @@ function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, cha
   return unconfiguredChecker("lint")
 }
 
-function prettierCommand(repoRoot: string, changedPaths: string[]): CheckerCommand {
+function prettierCommand(repoRoot: string, _packageJson: PackageJson | undefined, changedPaths: string[]): CheckerCommand {
   if (changedPaths.length === 0 || !hasBinary(repoRoot, "prettier")) {
     return unconfiguredChecker("prettier")
   }
@@ -235,7 +235,7 @@ function prettierCommand(repoRoot: string, changedPaths: string[]): CheckerComma
   }
 }
 
-function typecheckCommand(repoRoot: string, packageJson: PackageJson | undefined): CheckerCommand {
+function typecheckCommand(repoRoot: string, packageJson: PackageJson | undefined, _changedPaths: string[]): CheckerCommand {
   if (packageJson?.scripts?.typecheck !== undefined) {
     return { checker: "typecheck", command: ["bun", "run", "typecheck"], parser: parseTypeScriptOutput, allowedExitCodes: [0, 1, 2] }
   }
@@ -247,42 +247,60 @@ function typecheckCommand(repoRoot: string, packageJson: PackageJson | undefined
   return unconfiguredChecker("typecheck")
 }
 
-export function parseEslintJson(output: { stdout: string }): Diagnostic[] {
-  if (output.stdout.trim() === "") {
+export function parseLintOutput(output: { stdout: string; stderr: string; exitCode?: number }): Diagnostic[] {
+  const stdout = output.stdout.trim()
+  const fromJson = stdout === "" ? [] : parseLintJson(stdout)
+  if (fromJson !== undefined) {
+    return fromJson
+  }
+
+  // text output: trust the exit code — 0 is clean, 1 is findings, and
+  // anything else was already rejected by allowedExitCodes as a failure
+  if (output.exitCode === 0) {
     return []
   }
 
-  const parsed = JSON.parse(output.stdout) as Array<{
-    filePath: string
-    messages: Array<{ line?: number; severity?: number; message: string }>
-  }>
-
-  return parsed.flatMap((file) =>
-    file.messages.map((message) => ({
-      checker: "lint" as const,
-      path: file.filePath,
-      line: message.line,
-      severity: message.severity === 2 ? ("error" as const) : ("warning" as const),
-      message: message.message,
-    })),
-  )
+  const summary = (stdout !== "" ? stdout : output.stderr.trim()).split("\n")[0] ?? ""
+  return [{ checker: "lint", path: "", severity: "error", message: summary === "" ? "lint reported findings" : summary }]
 }
 
-export function parseOxlintJson(output: { stdout: string }): Diagnostic[] {
-  if (output.stdout.trim() === "") {
-    return []
+function parseLintJson(stdout: string): Diagnostic[] | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stdout)
+  } catch {
+    return undefined
   }
 
-  const parsed = JSON.parse(output.stdout) as {
-    diagnostics?: Array<{ filename?: string; message?: string; labels?: Array<{ span?: { line?: number } }> }>
+  if (Array.isArray(parsed)) {
+    // eslint --format json
+    const files = parsed as Array<{ filePath?: string; messages?: Array<{ line?: number; severity?: number; message?: string }> }>
+    return files.flatMap((file) =>
+      (file.messages ?? []).map((message) => ({
+        checker: "lint" as const,
+        path: file.filePath ?? "",
+        line: message.line,
+        severity: message.severity === 2 ? ("error" as const) : ("warning" as const),
+        message: message.message ?? "lint finding",
+      })),
+    )
   }
-  return (parsed.diagnostics ?? []).map((diagnostic) => ({
-    checker: "lint" as const,
-    path: diagnostic.filename ?? "",
-    line: diagnostic.labels?.[0]?.span?.line,
-    severity: "error" as const,
-    message: diagnostic.message ?? "oxlint finding",
-  }))
+
+  if (typeof parsed === "object" && parsed !== null && "diagnostics" in parsed) {
+    // oxlint --format json
+    const report = parsed as {
+      diagnostics?: Array<{ filename?: string; message?: string; severity?: string; labels?: Array<{ span?: { line?: number } }> }>
+    }
+    return (report.diagnostics ?? []).map((diagnostic) => ({
+      checker: "lint" as const,
+      path: diagnostic.filename ?? "",
+      line: diagnostic.labels?.[0]?.span?.line,
+      severity: diagnostic.severity === "warning" ? ("warning" as const) : ("error" as const),
+      message: diagnostic.message ?? "oxlint finding",
+    }))
+  }
+
+  return undefined
 }
 
 export function parsePrettierList(output: { stdout: string }): Diagnostic[] {
@@ -298,7 +316,7 @@ export function parsePrettierList(output: { stdout: string }): Diagnostic[] {
     }))
 }
 
-export function parseTypeScriptOutput(output: { stdout: string; stderr: string }): Diagnostic[] {
+export function parseTypeScriptOutput(output: { stdout: string; stderr: string; exitCode?: number }): Diagnostic[] {
   const diagnostics = `${output.stdout}\n${output.stderr}`.split("\n").flatMap((line) => {
     const match = line.match(/^(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)$/)
     if (match === null) {
@@ -316,27 +334,12 @@ export function parseTypeScriptOutput(output: { stdout: string; stderr: string }
     ]
   })
 
-  if (diagnostics.length === 0 && "exitCode" in output && output.exitCode !== undefined && output.exitCode !== 0) {
+  if (diagnostics.length === 0 && output.exitCode !== undefined && output.exitCode !== 0) {
     const text = `${output.stdout}\n${output.stderr}`.trim()
     throw new Error(text === "" ? "typecheck failed without parseable diagnostics" : text.split("\n")[0])
   }
 
   return diagnostics
-}
-
-function parseEslintJsonOrText(checker: CheckerName) {
-  return (output: { stdout: string; stderr: string }) => {
-    try {
-      return parseEslintJson(output)
-    } catch {
-      const text = `${output.stdout}\n${output.stderr}`.trim()
-      if (text === "") {
-        return []
-      }
-
-      throw new Error(text.split("\n")[0] ?? `${checker} failed without parseable diagnostics`)
-    }
-  }
 }
 
 export function stateForResolvedChecker(checker: CheckerName, files: ChangedFile[], diagnostics: Diagnostic[], repoRoot: string) {
@@ -367,12 +370,12 @@ export function stateForResolvedChecker(checker: CheckerName, files: ChangedFile
   return state
 }
 
-function stateForFailedChecker(files: ChangedFile[], message: string) {
+function stateForEveryFile(files: ChangedFile[], status: "failed" | "unavailable", message: string) {
   return new Map(
     files.map((file) => [
       file.path,
       {
-        status: "failed" as const,
+        status,
         count: 0,
         diagnostics: [],
         message,
@@ -388,18 +391,6 @@ function unconfiguredChecker(checker: CheckerName): CheckerCommand {
     allowedExitCodes: [0],
     unavailableMessage: `${checker} is not configured`,
   }
-}
-
-function shortChecker(checker: CheckerName) {
-  if (checker === "typecheck") {
-    return "ts"
-  }
-
-  if (checker === "prettier") {
-    return "fmt"
-  }
-
-  return "lint"
 }
 
 function initialFileState(files: ChangedFile[]) {

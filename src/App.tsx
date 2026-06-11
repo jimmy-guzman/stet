@@ -6,11 +6,12 @@ import { nextScope, scopeLabel, type DiffScope } from "./cli"
 import { copyToClipboard, formatCopyReference } from "./copy-reference"
 import {
   allFindings,
+  checkerFailures,
+  checkerSummary,
+  countBySeverity,
   findingsLineMap,
-  globalCounts,
   initialCheckerState,
   markPending,
-  problemCounts,
   runDiagnostics,
   type CheckerState,
   type Diagnostic,
@@ -76,6 +77,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const [paletteIndex, setPaletteIndex] = useState(0)
   const [cursorIndex, setCursorIndex] = useState(0)
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | undefined>(undefined)
+  const [checksInFlight, setChecksInFlight] = useState(0)
   const [activityLog, setActivityLog] = useState(emptyActivityLog)
   const [now, setNow] = useState(() => Date.now())
   const sidebarRef = useRef<ScrollBoxRenderable>(null)
@@ -84,6 +86,9 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const diffRef = useRef<DiffRenderable>(null)
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
+  const runGenerationRef = useRef(0)
+  const abortRef = useRef<AbortController | undefined>(undefined)
+  const previousChecksInFlightRef = useRef(0)
 
   const selectedFile = selectedPath === undefined ? undefined : model.changedByPath.get(selectedPath)
   const showFileContent = selectedPath !== undefined && (selectedFile === undefined || fileView)
@@ -93,7 +98,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   )
   const treeRows = useMemo(() => flattenTree(tree, expandedDirectories), [expandedDirectories, tree])
   const problems = useMemo(() => allFindings(checkerState), [checkerState])
-  const counts = useMemo(() => globalCounts(checkerState), [checkerState])
+  const counts = useMemo(() => countBySeverity(problems), [problems])
   const recencyByPath = useMemo(() => lastChangedAt(activityLog), [activityLog])
   const paletteResults = useMemo(() => {
     if (!paletteOpen) {
@@ -148,9 +153,26 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const truncated = renderedPatch.truncated || (fileContent?.kind === "text" && fileContent.truncated)
 
   function runChecks() {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const generation = runGenerationRef.current + 1
+    runGenerationRef.current = generation
+
     setCheckerState(initialCheckerState(model.changed))
-    return runDiagnostics(model.repoRoot, model.changed, (checker, nextState) => {
-      setCheckerState((current) => ({ ...current, [checker]: nextState }))
+    setChecksInFlight((count) => count + 1)
+    return runDiagnostics(
+      model.repoRoot,
+      model.changed,
+      (checker, nextState) => {
+        // a newer run owns the state; drop results arriving from a stale run
+        if (generation === runGenerationRef.current) {
+          setCheckerState((current) => ({ ...current, [checker]: nextState }))
+        }
+      },
+      controller.signal,
+    ).finally(() => {
+      setChecksInFlight((count) => Math.max(0, count - 1))
     })
   }
 
@@ -159,7 +181,20 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
   useEffect(() => {
     runChecksRef.current()
+    return () => abortRef.current?.abort()
   }, [])
+
+  // "checks finished" is derived from the in-flight count reaching zero, so
+  // every trigger path (mount, the r key, the quiet-period rerun) reports
+  useEffect(() => {
+    const previous = previousChecksInFlightRef.current
+    previousChecksInFlightRef.current = checksInFlight
+    if (previous > 0 && checksInFlight === 0) {
+      const failures = checkerFailures(checkerState)
+      const failure = failures[0]
+      setStatus(failure === undefined ? "checks finished" : `${failure.checker} failed: ${failure.message.split("\n")[0]}`)
+    }
+  }, [checkerState, checksInFlight])
 
   useEffect(() => {
     let cancelled = false
@@ -391,7 +426,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     if (key.name === "q") {
-      renderer.destroy()
+      quit()
       return
     }
 
@@ -400,7 +435,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         setProblemsOpen(false)
         setFocusedPane((current) => (current === "problems" ? "tree" : current))
       } else {
-        renderer.destroy()
+        quit()
       }
       return
     }
@@ -463,10 +498,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     if (key.name === "r") {
-      setStatus("re-running checks")
-      void runChecks().then(() => {
-        setStatus((current) => (current === "re-running checks" ? "checks finished" : current))
-      })
+      void runChecks()
       return
     }
 
@@ -572,6 +604,11 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
   })
 
+  function quit() {
+    abortRef.current?.abort()
+    renderer.destroy()
+  }
+
   function selectFile(path: string) {
     setSelectedPath(path)
     setFileView(false)
@@ -596,10 +633,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const latest = latestActivity(activityLog)
   const activityText =
     latest === undefined || now - latest.at >= RECENT_MS ? "" : `${Math.max(0, Math.round((now - latest.at) / 1000))}s ago ${latest.path}`
+  const displayStatus = checksInFlight > 0 ? "running checks…" : status
   const statusRight = truncate(
     cursorFindings?.[0] !== undefined
       ? `${cursorFindings[0].checker}: ${cursorFindings[0].message}`
-      : [activityText, truncated === true ? `${status} · truncated; f for full` : status].filter((part) => part !== "").join(" · "),
+      : [activityText, truncated === true ? `${displayStatus} · truncated; f for full` : displayStatus]
+          .filter((part) => part !== "")
+          .join(" · "),
     Math.max(20, width - 50),
   )
   const countsText = `${counts.errors > 0 ? `✖${counts.errors}` : ""}${counts.warnings > 0 ? ` ⚠${counts.warnings}` : ""}`.trim()
@@ -821,10 +861,10 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
 
   const changed = node.changed
   const recency = recencyLevel(recencyByPath.get(node.path), now)
-  const problemsAt = problemCounts(node.path, checkerState)
+  const summary = checkerSummary(node.path, checkerState)
   const selected = selectedPath === node.path
   const nameFg = focused || selected ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)
-  const pending = changed !== undefined && hasPendingChecker(node.path, checkerState)
+  const pending = changed !== undefined && summary.pending
 
   return (
     <box
@@ -841,8 +881,9 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
         {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
       </box>
       <box flexDirection="row">
-        {problemsAt.errors > 0 ? <text fg="#ff5c8a">{`✖${problemsAt.errors} `}</text> : null}
-        {problemsAt.errors === 0 && problemsAt.warnings > 0 ? <text fg="#fbbf24">{`⚠${problemsAt.warnings} `}</text> : null}
+        {summary.failed ? <text fg="#ff5c8a">fail </text> : null}
+        {summary.errors > 0 ? <text fg="#ff5c8a">{`✖${summary.errors} `}</text> : null}
+        {summary.errors === 0 && summary.warnings > 0 ? <text fg="#fbbf24">{`⚠${summary.warnings} `}</text> : null}
         {changed !== undefined && changed.warnings.length > 0 ? <text fg="#fbbf24">! </text> : null}
         {changed === undefined ? null : <text fg="#71717a">{`+${changed.additions} -${changed.deletions} `}</text>}
         {pending ? <text fg="#71717a">… </text> : null}
@@ -880,14 +921,6 @@ function directoryRecency(
   }
 
   return level
-}
-
-function hasPendingChecker(path: string, state: CheckerState) {
-  return (
-    state.lint.get(path)?.status === "pending" ||
-    state.prettier.get(path)?.status === "pending" ||
-    state.typecheck.get(path)?.status === "pending"
-  )
 }
 
 function viewerTitle(

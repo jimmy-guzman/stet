@@ -32,25 +32,36 @@ export function runCommand(command: string[], cwd: string, allowedExitCodes = [0
   return output
 }
 
-export async function runCommandAsync(command: string[], cwd: string, allowedExitCodes = [0]) {
-  const process = Bun.spawn({
+export async function runCommandAsync(command: string[], cwd: string, allowedExitCodes = [0], signal?: AbortSignal) {
+  const child = Bun.spawn({
     cmd: command,
     cwd,
     stdout: "pipe",
     stderr: "pipe",
   })
 
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited,
-  ])
-
-  const result = { exitCode, stdout, stderr }
-
-  if (!allowedExitCodes.includes(exitCode)) {
-    throw commandFailedError(command, result)
+  const kill = () => child.kill()
+  if (signal?.aborted === true) {
+    kill()
+  } else {
+    signal?.addEventListener("abort", kill, { once: true })
   }
 
-  return result
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+
+    const result = { exitCode, stdout, stderr }
+
+    if (!allowedExitCodes.includes(exitCode)) {
+      throw commandFailedError(command, result)
+    }
+
+    return result
+  } finally {
+    signal?.removeEventListener("abort", kill)
+  }
 }

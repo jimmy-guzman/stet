@@ -25,6 +25,59 @@ describe("parsePatch", () => {
     ])
   })
 
+  test("keeps removed '--' and added '++' content and does not drift line numbers", () => {
+    const tricky = `--- a/q.sql
++++ b/q.sql
+@@ -1,3 +1,3 @@
+ select 1
+--- old comment
++++ counter
+ select 2`
+    const parsed = parsePatch(tricky)
+
+    expect(parsed.header).toEqual(["--- a/q.sql", "+++ b/q.sql"])
+    expect(parsed.hunks[0]?.lines.map((line) => [line.type, line.oldLine, line.newLine, line.content])).toEqual([
+      ["context", 1, 1, "select 1"],
+      ["remove", 2, undefined, "-- old comment"],
+      ["add", undefined, 2, "++ counter"],
+      ["context", 3, 3, "select 2"],
+    ])
+  })
+
+  test("recognizes the next file's hunks once a hunk's counts are spent", () => {
+    const multi = `--- a/a.ts
++++ b/a.ts
+@@ -1,1 +1,1 @@
+-old a
++new a
+--- a/b.ts
++++ b/b.ts
+@@ -5,1 +5,1 @@
+-old b
++new b`
+    const parsed = parsePatch(multi)
+
+    expect(parsed.hunks).toHaveLength(2)
+    expect(parsed.hunks[1]?.lines.map((line) => line.content)).toEqual(["old b", "new b"])
+    expect(parsed.hunks[1]?.lines[0]?.oldLine).toBe(5)
+  })
+
+  test("ignores no-newline markers without spending hunk counts", () => {
+    const noNewline = `--- a/a.ts
++++ b/a.ts
+@@ -1,1 +1,1 @@
+-old
+\\ No newline at end of file
++new
+\\ No newline at end of file`
+    const parsed = parsePatch(noNewline)
+
+    expect(parsed.hunks[0]?.lines.map((line) => [line.type, line.content])).toEqual([
+      ["remove", "old"],
+      ["add", "new"],
+    ])
+  })
+
   test("builds a copy reference for a diff line", () => {
     const lines = parsePatch(diff).hunks[0]?.lines ?? []
     const added = lines.find((line) => line.type === "add")

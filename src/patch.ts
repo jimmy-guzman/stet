@@ -31,8 +31,47 @@ export function parsePatch(diff: string): ParsedPatch {
   let current: ParsedHunk | undefined
   let oldLine = 0
   let newLine = 0
+  // the @@ header's line counts say exactly how much body follows; while they
+  // are unspent, every -/+/space line is content — even raw "---…"/"+++…",
+  // which only mark file headers between hunks (e.g. a removed "-- comment")
+  let remainingOld = 0
+  let remainingNew = 0
 
   for (const raw of diff.split("\n")) {
+    if (current !== undefined && (remainingOld > 0 || remainingNew > 0)) {
+      if (raw.startsWith("+")) {
+        current.lines.push({ type: "add", newLine, content: raw.slice(1), raw })
+        newLine += 1
+        remainingNew -= 1
+        continue
+      }
+
+      if (raw.startsWith("-")) {
+        current.lines.push({ type: "remove", oldLine, content: raw.slice(1), raw })
+        oldLine += 1
+        remainingOld -= 1
+        continue
+      }
+
+      if (raw.startsWith(" ")) {
+        current.lines.push({ type: "context", oldLine, newLine, content: raw.slice(1), raw })
+        oldLine += 1
+        newLine += 1
+        remainingOld -= 1
+        remainingNew -= 1
+        continue
+      }
+
+      if (raw.startsWith("\\")) {
+        // "\ No newline at end of file" annotates the previous line
+        continue
+      }
+
+      // anything else means the counts were inconsistent; close the hunk
+      remainingOld = 0
+      remainingNew = 0
+    }
+
     const hunkMatch = raw.match(hunkPattern)
     if (hunkMatch !== null) {
       current = {
@@ -46,33 +85,14 @@ export function parsePatch(diff: string): ParsedPatch {
       }
       oldLine = current.oldStart
       newLine = current.newStart
+      remainingOld = current.oldLines
+      remainingNew = current.newLines
       hunks.push(current)
       continue
     }
 
-    if (current === undefined) {
-      if (raw !== "") {
-        header.push(raw)
-      }
-      continue
-    }
-
-    if (raw.startsWith("+") && !raw.startsWith("+++")) {
-      current.lines.push({ type: "add", newLine, content: raw.slice(1), raw })
-      newLine += 1
-      continue
-    }
-
-    if (raw.startsWith("-") && !raw.startsWith("---")) {
-      current.lines.push({ type: "remove", oldLine, content: raw.slice(1), raw })
-      oldLine += 1
-      continue
-    }
-
-    if (raw.startsWith(" ")) {
-      current.lines.push({ type: "context", oldLine, newLine, content: raw.slice(1), raw })
-      oldLine += 1
-      newLine += 1
+    if (hunks.length === 0 && raw !== "") {
+      header.push(raw)
     }
   }
 

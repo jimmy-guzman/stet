@@ -12,7 +12,7 @@ describe("scope switching", () => {
   test("re-runs checks for the new scope's changed set", async () => {
     // the lint script crashes, so the initial run must surface an explicit failure
     const repoRoot = createFixtureRepo("sideye-scope-", {
-      "package.json": `${JSON.stringify({ scripts: { lint: "exit 2" } })}\n`,
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 2", typecheck: "exit 0" } })}\n`,
       "src/a.ts": "const a = 1\n",
     })
     writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n")

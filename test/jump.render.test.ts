@@ -11,7 +11,11 @@ import { createFixtureRepo, disabledSyntax, makeSettleUntil } from "../test/help
 describe("view toggle jumps", () => {
   test("v returns to the diff even from a line outside every hunk", async () => {
     const lines = Array.from({ length: 30 }, (_, index) => `const line${index + 1} = ${index + 1}`)
-    const repoRoot = createFixtureRepo("sideye-jump-", { "src/a.ts": `${lines.join("\n")}\n` })
+    // pin the checkers so binaries on the runner's PATH cannot lint the fixture
+    const repoRoot = createFixtureRepo("sideye-jump-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": `${lines.join("\n")}\n`,
+    })
     writeFileSync(join(repoRoot, "src", "a.ts"), `${["const line1 = 1", "const changed = true", ...lines.slice(2)].join("\n")}\n`)
 
     const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
@@ -26,9 +30,10 @@ describe("view toggle jumps", () => {
       mockInput.pressTab()
       mockInput.pressKey("v")
       await settleUntil("file view", (frame) => frame.includes("file · ln"))
-      mockInput.pressKey("d", { ctrl: true })
-      mockInput.pressKey("d", { ctrl: true })
-      mockInput.pressKey("d", { ctrl: true })
+      // plain j presses: ctrl-d (0x04) is not delivered on every platform
+      for (let press = 0; press < lines.length; press += 1) {
+        mockInput.pressKey("j")
+      }
       await settleUntil("cursor at end of file", (frame) => frame.includes("file · ln 30"))
 
       // toggling back must land on the nearest hunk line, not bounce to file view

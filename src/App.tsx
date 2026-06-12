@@ -1330,6 +1330,9 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
         {summary.errors > 0 ? <text fg={theme.colors.severity.error}>{`✖${summary.errors} `}</text> : null}
         {summary.errors === 0 && summary.warnings > 0 ? <text fg={theme.colors.severity.warning}>{`⚠${summary.warnings} `}</text> : null}
         {changed !== undefined && changed.warnings.length > 0 ? <text fg={theme.colors.severity.warning}>! </text> : null}
+        {changed !== undefined && !pending && !summary.failed && summary.errors === 0 && summary.warnings === 0 ? (
+          <text fg={theme.colors.success}>✓ </text>
+        ) : null}
         {changed === undefined ? null : <text fg={theme.colors.text.muted}>{`+${changed.additions} -${changed.deletions} `}</text>}
         {pending ? <text fg={theme.colors.text.muted}>… </text> : null}
         {changed === undefined ? null : <text fg={theme.colors.stage[changed.stage]}>{kindLetter(changed.kind)}</text>}

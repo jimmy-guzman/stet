@@ -2,6 +2,7 @@ import { DiffRenderable, type RGBA } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { afterAll, describe, expect, test } from "bun:test"
 import { createSyntaxConfig, diffFiletypeFor } from "../src/syntax"
+import { darkTheme } from "../src/theme/dark"
 
 function toDiff(path: string, lines: string[]) {
   return `--- a/${path}\n+++ b/${path}\n@@ -1,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}\n`
@@ -30,7 +31,7 @@ afterAll(() => {
 })
 
 async function renderDiffSpans(path: string, lines: string[], sentinel: string, sentinelFg: string) {
-  const syntax = await createSyntaxConfig()
+  const syntax = await createSyntaxConfig(darkTheme.syntax)
   if (!syntax.enabled) {
     throw new Error(`syntax config failed: ${syntax.status}`)
   }

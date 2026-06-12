@@ -85,6 +85,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const [fileView, setFileView] = useState(false)
   const [focusedPane, setFocusedPane] = useState<"tree" | "diff" | "problems">("tree")
   const [problemsOpen, setProblemsOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [problemIndex, setProblemIndex] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteQuery, setPaletteQuery] = useState("")
@@ -565,6 +566,16 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       return
     }
 
+    if (key.name === "b") {
+      setSidebarOpen((open) => {
+        if (open && focusedPane === "tree") {
+          setFocusedPane("diff")
+        }
+        return !open
+      })
+      return
+    }
+
     if (key.name === "s") {
       setScope((current) => {
         const next = { ...current, kind: nextScope(current.kind) }
@@ -742,7 +753,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     setPaletteOpen(false)
   }, [paletteResults, paletteIndex, selectFile])
 
-  const sidebarWidth = Math.max(34, Math.min(54, Math.floor(width * 0.34)))
+  const sidebarWidth = sidebarOpen ? Math.max(34, Math.min(54, Math.floor(width * 0.34))) : 0
   const paletteWidth = Math.max(30, Math.min(70, width - 8))
   const paletteLeft = Math.max(0, Math.floor((width - paletteWidth) / 2))
   const cursorLine = navigableLines[cursorIndex]
@@ -771,29 +782,31 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         </text>
       </box>
       <box flexGrow={1} flexDirection="row">
-        <box
-          width={sidebarWidth}
-          height="100%"
-          flexDirection="column"
-          borderStyle="single"
-          borderColor={focusedPane === "tree" ? "#ff4fb8" : "#27272a"}
-        >
-          <scrollbox ref={sidebarRef} width="100%" height={paneHeight} scrollY viewportCulling>
-            {treeRows.map((row) => (
-              <TreeRow
-                key={row.node.id}
-                row={row}
-                focused={row.index === focusedRowIndex}
-                selectedPath={selectedPath}
-                expandedDirectories={expandedDirectories}
-                checkerState={checkerState}
-                recencyByPath={recencyByPath}
-                now={now}
-                treeWidth={sidebarWidth}
-              />
-            ))}
-          </scrollbox>
-        </box>
+        {sidebarOpen && (
+          <box
+            width={sidebarWidth}
+            height="100%"
+            flexDirection="column"
+            borderStyle="single"
+            borderColor={focusedPane === "tree" ? "#ff4fb8" : "#27272a"}
+          >
+            <scrollbox ref={sidebarRef} width="100%" height={paneHeight} scrollY viewportCulling>
+              {treeRows.map((row) => (
+                <TreeRow
+                  key={row.node.id}
+                  row={row}
+                  focused={row.index === focusedRowIndex}
+                  selectedPath={selectedPath}
+                  expandedDirectories={expandedDirectories}
+                  checkerState={checkerState}
+                  recencyByPath={recencyByPath}
+                  now={now}
+                  treeWidth={sidebarWidth}
+                />
+              ))}
+            </scrollbox>
+          </box>
+        )}
         <box
           flexGrow={1}
           height="100%"
@@ -1151,10 +1164,10 @@ function keyHints(pane: "tree" | "diff" | "problems") {
   }
 
   if (pane === "diff") {
-    return "j/k · v file/diff · y copy · ctrl-p goto · p problems · q quit"
+    return "j/k · v file/diff · y copy · ctrl-p goto · b tree · p problems · q quit"
   }
 
-  return "j/k · h/l fold · ctrl-p goto · s scope · c changes · p problems · q quit"
+  return "j/k · h/l fold · ctrl-p goto · s scope · c changes · b tree · p problems · q quit"
 }
 
 function stageColor(stage: StageState) {

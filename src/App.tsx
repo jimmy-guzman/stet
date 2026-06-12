@@ -1,43 +1,34 @@
 import { existsSync } from "node:fs"
-import { basename } from "node:path"
 import packageJson from "../package.json"
-import type { DiffRenderable, LineColorConfig, RGBA, ScrollBoxRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { emptyActivityLog, lastChangedAt, latestActivity, recordActivity, recencyLevel, RECENT_MS, type RecencyLevel } from "./activity"
-import { nextScope, scopeLabel, type DiffScope } from "./cli"
-import { copyToClipboard, formatCopyReference } from "./copy-reference"
-import {
-  allFindings,
-  checkerNames,
-  checkerSummary,
-  directorySummary,
-  countBySeverity,
-  findingsLineMap,
-  initialCheckerState,
-  markPending,
-  runDiagnostics,
-  type CheckerName,
-  type CheckerState,
-  type Diagnostic,
-} from "./diagnostics"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
+import type { DiffScope } from "./cli"
+import { HeaderBar } from "./components/HeaderBar"
+import { HelpOverlay } from "./components/HelpOverlay"
+import { Palette } from "./components/Palette"
+import { ProblemsPanel } from "./components/ProblemsPanel"
+import { Sidebar } from "./components/Sidebar"
+import { StatusBar } from "./components/StatusBar"
+import { Viewer } from "./components/Viewer"
+import { WorktreePicker } from "./components/WorktreePicker"
+import { PROBLEMS_HEIGHT } from "./constants"
+import { findingsLineMap, markPending, type Diagnostic } from "./diagnostics"
 import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
 import { rankFiles } from "./fuzzy"
-import type { ChangedFile, GitModel, Worktree } from "./git"
-import { listWorktrees, loadChangedFiles, loadFileDiff, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
-import { lineReference, renderPatch, type ParsedDiffLine } from "./patch"
-import { diffFiletypeFor, type SyntaxConfig } from "./syntax"
+import type { GitModel, Worktree } from "./git"
+import { loadFileDiff, loadGitModel } from "./git"
+import { useActivity } from "./hooks/useActivity"
+import { useDiagnostics } from "./hooks/useDiagnostics"
+import { useDiffCursor } from "./hooks/useDiffCursor"
+import { useGitModel } from "./hooks/useGitModel"
+import { createKeyHandler } from "./keymap"
+import { renderPatch } from "./patch"
+import type { SyntaxConfig } from "./syntax"
 import { useTheme } from "./theme/context"
-import {
-  buildFileTree,
-  defaultExpandedDirectories,
-  expandAncestorsForPath,
-  findRowIndexForPath,
-  firstFileInNode,
-  flattenTree,
-  type DirectoryNode,
-  type FileTreeRow,
-} from "./tree"
+import { buildFileTree, defaultExpandedDirectories, expandAncestorsForPath, findRowIndexForPath, flattenTree } from "./tree"
+import { truncate, worktreeLabel } from "./ui-helpers"
 
 interface AppProps {
   model: GitModel
@@ -45,33 +36,15 @@ interface AppProps {
   syntax: SyntaxConfig
 }
 
-interface ScrollablePane {
-  scrollY: number
-  maxScrollY: number
-}
-
-// Escalate lets a jump switch into file view to find its exact line; without
-// It a miss lands on the nearest line in the current view
-interface JumpTarget {
-  path: string
-  line: number
-  escalate: boolean
-}
-
-const DIFF_ID = "sideye-diff"
-const PROBLEMS_HEIGHT = 10
-
 export function App({ model: initialModel, scope: initialScope, syntax }: AppProps) {
   const renderer = useRenderer()
   const theme = useTheme()
   const { width, height } = useTerminalDimensions()
-  const [model, setModel] = useState(initialModel)
   const [scope, setScope] = useState(initialScope)
+  const { lastChangeRef, model, previousChangedRef, previousScopeKeyRef, setModel } = useGitModel(initialModel, scope)
   const [changesOnly, setChangesOnly] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | undefined>(initialModel.changed[0]?.path ?? initialModel.repoFiles[0]?.path)
   const [focusedRowIndex, setFocusedRowIndex] = useState(0)
-  const [checkerState, setCheckerState] = useState<CheckerState>(() => initialCheckerState(initialModel.changed))
-  const [status, setStatus] = useState(syntax.status)
   const [expandedDirectories, setExpandedDirectories] = useState(() => {
     const expanded = defaultExpandedDirectories(initialModel.changed.map((file) => file.path))
     const selected = initialModel.changed[0]?.path ?? initialModel.repoFiles[0]?.path
@@ -90,11 +63,20 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const [worktreeIndex, setWorktreeIndex] = useState(0)
   const [worktrees, setWorktrees] = useState<Worktree[] | undefined>(undefined)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [cursorIndex, setCursorIndex] = useState(0)
-  const [jumpTarget, setJumpTarget] = useState<JumpTarget | undefined>(undefined)
-  const [checksInFlight, setChecksInFlight] = useState(0)
-  const [activityLog, setActivityLog] = useState(emptyActivityLog)
-  const [now, setNow] = useState(() => Date.now())
+  const { activityLog, setActivityLog, now, recencyByPath } = useActivity()
+  const {
+    abortRef,
+    allProblemItems,
+    checkerState,
+    checksInFlight,
+    counts,
+    problems,
+    runChecks,
+    runChecksRef,
+    setCheckerState,
+    setStatus,
+    status,
+  } = useDiagnostics(model, activityLog, syntax.status)
   const sidebarRef = useRef<ScrollBoxRenderable>(null)
   const problemsRef = useRef<ScrollBoxRenderable>(null)
   const paletteRef = useRef<ScrollBoxRenderable>(null)
@@ -102,11 +84,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   // Bumped on every picker open/close so a slow listWorktrees from an earlier
   // Open cannot repopulate or close a newer picker
   const worktreeRequestRef = useRef(0)
-  const diffRef = useRef<DiffRenderable>(null)
-  const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
-  const previousScopeKeyRef = useRef(initialModel.scopeKey)
-  const runGenerationRef = useRef(0)
-  const abortRef = useRef<AbortController | undefined>(undefined)
 
   const selectedFile = selectedPath === undefined ? undefined : model.changedByPath.get(selectedPath)
   const showFileContent = selectedPath !== undefined && (selectedFile === undefined || fileView)
@@ -115,39 +92,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     [changesOnly, model.changedByPath, model.repoFiles],
   )
   const treeRows = useMemo(() => flattenTree(tree, expandedDirectories), [expandedDirectories, tree])
-  const problems = useMemo(() => allFindings(checkerState), [checkerState])
-  const counts = useMemo(() => countBySeverity(problems), [problems])
-  const checkerFailures = useMemo(
-    () =>
-      checkerNames.flatMap((checker) => {
-        for (const [, fileState] of checkerState[checker]) {
-          if (fileState.status === "failed" && fileState.message !== undefined) {
-            return [{ checker, message: fileState.message }]
-          }
-        }
-        return []
-      }),
-    [checkerState],
-  )
-  const allProblemItems = useMemo(() => {
-    const items: (
-      | { kind: "failure"; id: string; checker: CheckerName; line: string; isFirst: boolean }
-      | { kind: "problem"; id: string; problem: Diagnostic }
-    )[] = []
-    checkerFailures.forEach(({ checker, message }, fi) => {
-      message
-        .split("\n")
-        .filter((l) => l.trim() !== "")
-        .forEach((line, li) => {
-          items.push({ checker, id: `failure-${fi}-${li}`, isFirst: li === 0, kind: "failure", line })
-        })
-    })
-    problems.forEach((problem, index) => {
-      items.push({ id: `problem-${index}`, kind: "problem", problem })
-    })
-    return items
-  }, [checkerFailures, problems])
-  const recencyByPath = useMemo(() => lastChangedAt(activityLog), [activityLog])
   const changedPathSet = useMemo(() => new Set(model.changedByPath.keys()), [model.changedByPath])
   // Hoisted out of paletteResults so a keystroke only pays for ranking
   const allPaths = useMemo(
@@ -205,129 +149,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   )
   const truncated = renderedPatch.truncated || (fileContent?.kind === "text" && fileContent.truncated)
 
-  function runChecks(target: GitModel = model) {
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-    const generation = runGenerationRef.current + 1
-    runGenerationRef.current = generation
-
-    setCheckerState(initialCheckerState(target.changed))
-    setChecksInFlight((count) => count + 1)
-    const failures: string[] = []
-    return runDiagnostics(
-      target.repoRoot,
-      target.changed,
-      (checker, nextState) => {
-        // A newer run owns the state; drop results arriving from a stale run
-        if (generation !== runGenerationRef.current) {
-          return
-        }
-
-        setCheckerState((current) => ({ ...current, [checker]: nextState }))
-        for (const fileState of nextState.values()) {
-          if (fileState.status === "failed") {
-            // A failed run stamps every file with the same run-level message
-            failures.push(`${checker} failed: ${fileState.message?.split("\n")[0] ?? ""}`)
-            break
-          }
-        }
-      },
-      controller.signal,
-    ).finally(() => {
-      setChecksInFlight((count) => Math.max(0, count - 1))
-      // The run reports its own completion: every trigger path (mount, the r
-      // Key, the quiet-period rerun) gets a status, and only the latest run speaks
-      if (generation === runGenerationRef.current) {
-        setStatus(failures[0] ?? "checks finished")
-      }
-    })
-  }
-
-  const runChecksRef = useRef(runChecks)
-  runChecksRef.current = runChecks
-
-  useEffect(() => {
-    runChecksRef.current()
-    return () => abortRef.current?.abort()
-  }, [])
-
-  const lastChangeRef = useRef<number>(Date.now())
-  const repoRoot = model.repoRoot
-
-  useEffect(() => {
-    let cancelled = false
-    let fastInFlight = false
-    let slowInFlight = false
-
-    async function loadFast() {
-      if (fastInFlight) {
-        return
-      }
-      fastInFlight = true
-      try {
-        const next = await loadChangedFiles(repoRoot, scope)
-        if (!cancelled) {
-          // A worktree switch may commit between this poll starting and landing
-          setModel((previous) => (previous.repoRoot === repoRoot ? mergeChanged(previous, next) : previous))
-        }
-      } catch {
-        // Transient git failures (e.g. an agent holding index.lock) resolve on the next poll
-      } finally {
-        fastInFlight = false
-      }
-    }
-
-    async function loadSlow() {
-      if (slowInFlight) {
-        return
-      }
-      slowInFlight = true
-      try {
-        const next = await loadRepoFiles(repoRoot)
-        if (!cancelled) {
-          setModel((previous) =>
-            previous.repoRoot !== repoRoot || previous.repoFilesKey === next.repoFilesKey
-              ? previous
-              : { ...previous, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey },
-          )
-        }
-      } catch {
-        // Ignore transient errors
-      } finally {
-        slowInFlight = false
-      }
-    }
-
-    void loadFast()
-    void loadSlow()
-
-    // Adaptive fast poll: 750ms when active, 2000ms after 10s of quiet.
-    let fastId: ReturnType<typeof setTimeout>
-    function scheduleFast() {
-      const quiet = Date.now() - lastChangeRef.current > 10_000
-      fastId = setTimeout(
-        () => {
-          void loadFast()
-          if (!cancelled) {
-            scheduleFast()
-          }
-        },
-        quiet ? 2000 : 750,
-      )
-    }
-    scheduleFast()
-
-    // Separate long interval just for the expensive tracked-files list.
-    const slowId = setInterval(() => void loadSlow(), 5000)
-
-    return () => {
-      cancelled = true
-      clearTimeout(fastId)
-      clearInterval(slowId)
-    }
-  }, [repoRoot, scope])
-
   useEffect(() => {
     const previousByPath = new Map(previousChangedRef.current.map((file) => [file.path, file]))
     const previousScopeKey = previousScopeKeyRef.current
@@ -368,27 +189,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       )
       setActivityLog((current) => recordActivity(current, entries, Date.now()))
     }
-  }, [model.changed, model.scopeKey])
-
-  useEffect(() => {
-    if (activityLog.events.length === 0) {
-      return
-    }
-
-    // Checks re-run once the repo has been quiet for 2s
-    const id = setTimeout(() => runChecksRef.current(), 2000)
-    return () => clearTimeout(id)
-  }, [activityLog])
-
-  useEffect(() => {
-    const latest = latestActivity(activityLog)
-    if (latest === undefined || now - latest.at >= RECENT_MS) {
-      return
-    }
-
-    const id = setTimeout(() => setNow(Date.now()), 1000)
-    return () => clearTimeout(id)
-  }, [activityLog, now])
+  }, [model.changed, model.scopeKey, lastChangeRef, previousChangedRef, previousScopeKeyRef, runChecksRef, setActivityLog, setCheckerState])
 
   useEffect(() => {
     if (selectedPath === undefined) {
@@ -426,383 +227,79 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
   }, [worktreeIndex, worktreeOpen])
 
-  useEffect(() => {
-    const firstChanged = navigableLines.findIndex((line) => line.type !== "context")
-    setCursorIndex(firstChanged === -1 ? 0 : firstChanged)
-    // Reset to the first change only when the file changes, not on live edits of the same file
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPath])
-
-  useEffect(() => {
-    if (jumpTarget === undefined || jumpTarget.path !== selectedPath) {
-      return
-    }
-
-    const index = navigableLines.findIndex((line) => line.newLine === jumpTarget.line)
-    if (index !== -1) {
-      setCursorIndex(index)
-      setJumpTarget(undefined)
-      return
-    }
-
-    // The line may simply not be rendered yet; un-truncate the current view first
-    if (truncated && !fullContentPaths.has(jumpTarget.path)) {
-      setFullContentPaths((current) => new Set(current).add(jumpTarget.path))
-      return
-    }
-
-    if (jumpTarget.escalate && selectedFile !== undefined && !fileView) {
-      setFileView(true)
-      return
-    }
-
-    // Land on the nearest line instead of bouncing between views
-    const nearest = nearestNavigableIndex(navigableLines, jumpTarget.line)
-    if (nearest >= 0) {
-      setCursorIndex(nearest)
-    }
-    setJumpTarget(undefined)
-  }, [fileView, fullContentPaths, jumpTarget, navigableLines, selectedFile, selectedPath, truncated])
-
   const problemsHeight = problemsOpen ? PROBLEMS_HEIGHT : 0
   const paneHeight = Math.max(1, height - 4 - problemsHeight)
   // The viewer pane spends one extra row on its path header
   const viewerHeight = Math.max(1, paneHeight - 1)
 
-  // The add/remove/diagnostic tints only change with the content, so a cursor
-  // Move just copies this map and overlays the cursor row
-  const baseLineColors = useMemo(() => {
-    const { addedBg, errorGutterBg, removedBg, transparent, warningGutterBg } = theme.rgba
-    const colors = new Map<number, LineColorConfig>()
-    navigableLines.forEach((line, index) => {
-      let gutter = transparent
-      let content = transparent
-      if (line.type === "add") {
-        content = addedBg
-      } else if (line.type === "remove") {
-        content = removedBg
-      }
-
-      const findings = line.newLine === undefined ? undefined : lineMap.get(line.newLine)
-      if (findings !== undefined) {
-        gutter = findings.some((finding) => finding.severity === "error") ? errorGutterBg : warningGutterBg
-      }
-
-      if (gutter !== transparent || content !== transparent) {
-        colors.set(index, { content, gutter })
-      }
-    })
-    return colors
-  }, [lineMap, navigableLines, theme])
-
-  useEffect(() => {
-    const diff = diffRef.current
-    if (diff === null || navigableLines.length === 0) {
-      return
-    }
-
-    const last = navigableLines.length - 1
-    if (cursorIndex > last) {
-      setCursorIndex(last)
-      return
-    }
-
-    // oxlint-disable-next-line func-style
-    const paint = () => {
-      const colors = new Map<number, string | RGBA | LineColorConfig>(baseLineColors)
-      colors.set(cursorIndex, { content: theme.rgba.cursorBg, gutter: theme.rgba.cursorBg })
-      diff.setLineColors(colors)
-    }
-
-    // The diff renderable repaints its own line colors when content settles;
-    // Painting again in a microtask keeps the cursor/diagnostic tints on top
-    paint()
-    queueMicrotask(paint)
-
-    const pane = diff.findDescendantById(`${DIFF_ID}-left-code`) as ScrollablePane | undefined
-    if (pane !== undefined) {
-      if (cursorIndex < pane.scrollY) {
-        pane.scrollY = cursorIndex
-      } else if (cursorIndex >= pane.scrollY + viewerHeight) {
-        pane.scrollY = cursorIndex - viewerHeight + 1
-      }
-    }
-
-    renderer.requestRender()
-  }, [baseLineColors, cursorIndex, navigableLines, viewerHeight, renderer, theme])
-
-  useKeyboard((key) => {
-    if (helpOpen) {
-      if (key.name === "escape" || key.name === "?" || key.name === "q") {
-        setHelpOpen(false)
-      }
-      // Every other key belongs to the help overlay
-      return
-    }
-
-    if (worktreeOpen) {
-      const lastIndex = Math.max(0, (worktrees?.length ?? 1) - 1)
-      if (key.name === "escape" || key.name === "w") {
-        worktreeRequestRef.current += 1
-        setWorktreeOpen(false)
-      } else if (key.name === "j" || key.name === "down") {
-        setWorktreeIndex((current) => Math.min(current + 1, lastIndex))
-      } else if (key.name === "k" || key.name === "up") {
-        setWorktreeIndex((current) => Math.max(current - 1, 0))
-      } else if (key.name === "return") {
-        const worktree = worktrees?.[worktreeIndex]
-        if (worktree !== undefined) {
-          void switchWorktree(worktree)
-        }
-      }
-      // Every other key belongs to the picker
-      return
-    }
-
-    if (paletteOpen) {
-      if (key.name === "escape") {
-        setPaletteOpen(false)
-      } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
-        setPaletteIndex((current) => Math.min(current + 1, Math.max(0, paletteResults.length - 1)))
-      } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
-        setPaletteIndex((current) => Math.max(current - 1, 0))
-      }
-      // Every other key belongs to the palette input
-      return
-    }
-
-    if (key.ctrl && key.name === "p") {
-      setPaletteOpen(true)
-      setPaletteQuery("")
-      setPaletteIndex(0)
-      return
-    }
-
-    if (key.name === "q") {
-      quit()
-      return
-    }
-
-    if (key.name === "escape") {
-      if (problemsOpen) {
-        setProblemsOpen(false)
-        setFocusedPane((current) => (current === "problems" ? "tree" : current))
-      } else {
-        quit()
-      }
-      return
-    }
-
-    if (key.name === "tab") {
-      setFocusedPane((current) => (current === "diff" ? "tree" : "diff"))
-      return
-    }
-
-    if (key.name === "p") {
-      setProblemsOpen((open) => {
-        setFocusedPane(open ? "tree" : "problems")
-        return !open
-      })
-      return
-    }
-
-    if (key.name === "b") {
-      setSidebarOpen((open) => {
-        if (open && focusedPane === "tree") {
-          setFocusedPane("diff")
-        }
-        return !open
-      })
-      return
-    }
-
-    if (key.name === "?") {
-      setHelpOpen(true)
-      return
-    }
-
-    if (key.name === "w") {
-      const request = worktreeRequestRef.current + 1
-      worktreeRequestRef.current = request
-      setWorktreeOpen(true)
-      setWorktreeIndex(0)
-      setWorktrees(undefined)
-      void listWorktrees(model.repoRoot)
-        .then((list) => {
-          if (worktreeRequestRef.current !== request) {
-            return
-          }
-          // Bare entries have no files to review
-          const selectable = list.filter((worktree) => !worktree.bare)
-          setWorktrees(selectable)
-          setWorktreeIndex(
-            Math.max(
-              0,
-              selectable.findIndex((worktree) => worktree.path === model.repoRoot),
-            ),
-          )
-        })
-        .catch((error: unknown) => {
-          if (worktreeRequestRef.current !== request) {
-            return
-          }
-          setWorktreeOpen(false)
-          setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error))
-        })
-      return
-    }
-
-    if (key.name === "s") {
-      setScope((current) => {
-        const next = { ...current, kind: nextScope(current.kind) }
-        setStatus(`scope: ${scopeLabel(next)}`)
-        return next
-      })
-      return
-    }
-
-    if (key.name === "c") {
-      setChangesOnly((current) => {
-        setStatus(current ? "showing all files" : "showing changes only")
-        return !current
-      })
-      return
-    }
-
-    if (key.name === ".") {
-      const latest = latestActivity(activityLog)
-      if (latest !== undefined) {
-        selectFile(latest.path)
-      }
-      return
-    }
-
-    if (key.name === "v" && selectedFile !== undefined && selectedPath !== undefined) {
-      const line = navigableLines[cursorIndex]
-      const lineNumber = line?.newLine ?? line?.oldLine
-      if (lineNumber !== undefined) {
-        setJumpTarget({ escalate: false, line: lineNumber, path: selectedPath })
-      }
-      setFileView((current) => !current)
-      return
-    }
-
-    if (key.name === "n") {
-      const paths = orderedFindingPaths(problems)
-      const next = nextFindingPath(paths, selectedPath)
-      if (next !== undefined) {
-        selectFile(next)
-      }
-      return
-    }
-
-    if (key.name === "r") {
-      void runChecks()
-      return
-    }
-
-    if (key.name === "f" && selectedPath !== undefined) {
-      setFullContentPaths((current) => new Set(current).add(selectedPath))
-      setStatus(`loaded full content for ${selectedPath}`)
-      return
-    }
-
-    if (key.name === "y" && selectedPath !== undefined) {
-      try {
-        const line = navigableLines[cursorIndex]
-        const reference = line === undefined ? { path: selectedPath } : lineReference(selectedPath, line)
-        copyToClipboard(formatCopyReference(reference))
-        setStatus(`copied ${formatCopyReference(reference).split("\n")[0]}`)
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error))
-      }
-      return
-    }
-
-    if (focusedPane === "problems") {
-      if (key.name === "j" || key.name === "down") {
-        setProblemIndex((current) => Math.min(current + 1, Math.max(0, allProblemItems.length - 1)))
-      } else if (key.name === "k" || key.name === "up") {
-        setProblemIndex((current) => Math.max(current - 1, 0))
-      } else if (key.name === "return") {
-        const item = allProblemItems[problemIndex]
-        if (item?.kind === "problem") {
-          const { problem } = item
-          selectFile(problem.path)
-          if (problem.line !== undefined) {
-            setJumpTarget({ escalate: true, line: problem.line, path: problem.path })
-          }
-          setFocusedPane("diff")
-        }
-      }
-      return
-    }
-
-    if (focusedPane === "diff") {
-      const last = navigableLines.length - 1
-      const halfPage = Math.max(1, Math.floor(viewerHeight / 2))
-
-      if (key.name === "j" || key.name === "down") {
-        setCursorIndex((current) => Math.max(0, Math.min(current + 1, last)))
-      } else if (key.name === "k" || key.name === "up") {
-        setCursorIndex((current) => Math.max(current - 1, 0))
-      } else if (key.ctrl && key.name === "d") {
-        setCursorIndex((current) => Math.max(0, Math.min(current + halfPage, last)))
-      } else if (key.ctrl && key.name === "u") {
-        setCursorIndex((current) => Math.max(current - halfPage, 0))
-      } else if (key.name === "g" && !key.shift) {
-        setCursorIndex(0)
-      } else if (key.name === "g" || key.name === "G") {
-        setCursorIndex(Math.max(0, last))
-      } else if (key.name === "h" || key.name === "left") {
-        setFocusedPane("tree")
-      }
-
-      return
-    }
-
-    if (key.name === "j" || key.name === "down") {
-      moveFocus(1, treeRows, setFocusedRowIndex, selectFile)
-      return
-    }
-
-    if (key.name === "k" || key.name === "up") {
-      moveFocus(-1, treeRows, setFocusedRowIndex, selectFile)
-      return
-    }
-
-    if (key.name === "l" || key.name === "right") {
-      const row = treeRows[focusedRowIndex]
-      if (row?.node.type === "directory") {
-        setExpandedDirectories((current) => new Set(current).add(row.node.id))
-      } else if (row?.node.type === "file") {
-        selectFile(row.node.path)
-      }
-      return
-    }
-
-    if (key.name === "h" || key.name === "left") {
-      const row = treeRows[focusedRowIndex]
-      if (row?.node.type === "directory") {
-        setExpandedDirectories((current) => {
-          const next = new Set(current)
-          next.delete(row.node.id)
-          return next
-        })
-      }
-      return
-    }
-
-    if (key.name === "return") {
-      const row = treeRows[focusedRowIndex]
-      if (row !== undefined) {
-        const file = firstFileInNode(row.node)
-        if (file !== undefined) {
-          selectFile(file.path)
-        }
-      }
-    }
+  const { cursorIndex, diffRef, setCursorIndex, setJumpTarget } = useDiffCursor({
+    fileView,
+    fullContentPaths,
+    lineMap,
+    navigableLines,
+    selectedFile,
+    selectedPath,
+    setFileView,
+    setFullContentPaths,
+    truncated,
+    viewerHeight,
   })
+
+  const selectFile = useCallback((path: string) => {
+    setSelectedPath(path)
+    setFileView(false)
+    setExpandedDirectories((current) => expandAncestorsForPath(current, path))
+  }, [])
+
+  useKeyboard(
+    createKeyHandler({
+      activityLog,
+      allProblemItems,
+      cursorIndex,
+      focusedPane,
+      focusedRowIndex,
+      helpOpen,
+      model,
+      navigableLines,
+      paletteOpen,
+      paletteResults,
+      problemIndex,
+      problems,
+      problemsOpen,
+      quit,
+      runChecks,
+      selectFile,
+      selectedFile,
+      selectedPath,
+      setChangesOnly,
+      setCursorIndex,
+      setExpandedDirectories,
+      setFileView,
+      setFocusedPane,
+      setFocusedRowIndex,
+      setFullContentPaths,
+      setHelpOpen,
+      setJumpTarget,
+      setPaletteIndex,
+      setPaletteOpen,
+      setPaletteQuery,
+      setProblemIndex,
+      setProblemsOpen,
+      setScope,
+      setSidebarOpen,
+      setStatus,
+      setWorktreeIndex,
+      setWorktreeOpen,
+      setWorktrees,
+      switchWorktree,
+      treeRows,
+      viewerHeight,
+      worktreeIndex,
+      worktreeOpen,
+      worktreeRequestRef,
+      worktrees,
+    }),
+  )
 
   function quit() {
     abortRef.current?.abort()
@@ -850,12 +347,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
   }
 
-  const selectFile = useCallback((path: string) => {
-    setSelectedPath(path)
-    setFileView(false)
-    setExpandedDirectories((current) => expandAncestorsForPath(current, path))
-  }, [])
-
   const handlePaletteInput = useCallback((value: string) => {
     setPaletteQuery(value)
     setPaletteIndex(0)
@@ -894,651 +385,77 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={theme.colors.surface.base}>
-      <box
-        height={1}
-        flexDirection="row"
-        justifyContent="space-between"
-        paddingLeft={1}
-        paddingRight={1}
-        backgroundColor={theme.colors.surface.panel}
-      >
-        <box flexDirection="row">
-          <text fg={theme.colors.accent.primary}>sideye</text>
-          <text fg={theme.colors.text.faint}>@{packageJson.version}</text>
-        </box>
-        <text fg={theme.colors.text.secondary}>
-          {basename(model.repoRoot)} · {scopeLabel(scope)} · {model.changed.length} changed{countsText === "" ? "" : ` · ${countsText}`}
-        </text>
-      </box>
+      <HeaderBar
+        version={packageJson.version}
+        repoRoot={model.repoRoot}
+        scope={scope}
+        changedCount={model.changed.length}
+        countsText={countsText}
+      />
       <box flexGrow={1} flexDirection="row">
         {sidebarOpen && (
-          <box
-            width={sidebarWidth}
-            height="100%"
-            flexDirection="column"
-            borderStyle="single"
-            borderColor={focusedPane === "tree" ? theme.colors.border.focused : theme.colors.border.unfocused}
-          >
-            <scrollbox ref={sidebarRef} width="100%" height={paneHeight} scrollY viewportCulling>
-              {treeRows.map((row) => (
-                <TreeRow
-                  key={row.node.id}
-                  row={row}
-                  focused={row.index === focusedRowIndex}
-                  selectedPath={selectedPath}
-                  expandedDirectories={expandedDirectories}
-                  checkerState={checkerState}
-                  recencyByPath={recencyByPath}
-                  now={now}
-                  treeWidth={sidebarWidth}
-                />
-              ))}
-              {treeRows.length < paneHeight && (
-                <box id="tree-filler" width="100%" height={paneHeight - treeRows.length} backgroundColor={theme.colors.surface.base} />
-              )}
-            </scrollbox>
-          </box>
+          <Sidebar
+            sidebarRef={sidebarRef}
+            sidebarWidth={sidebarWidth}
+            paneHeight={paneHeight}
+            focused={focusedPane === "tree"}
+            treeRows={treeRows}
+            focusedRowIndex={focusedRowIndex}
+            selectedPath={selectedPath}
+            expandedDirectories={expandedDirectories}
+            checkerState={checkerState}
+            recencyByPath={recencyByPath}
+            now={now}
+          />
         )}
-        <box
-          flexGrow={1}
-          height="100%"
-          flexDirection="column"
-          borderStyle="single"
-          borderColor={focusedPane === "diff" ? theme.colors.border.focused : theme.colors.border.unfocused}
-        >
-          <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
-            <text fg={theme.colors.text.primary}>{viewerTitle(selectedPath, selectedFile, showFileContent, fileContent)}</text>
-            <text fg={theme.colors.text.muted}>
-              {showFileContent ? "file" : "diff"}
-              {cursorLineNumber === undefined ? "" : ` · ln ${cursorLineNumber}`}
-            </text>
-          </box>
-          {showFileContent && fileContent !== undefined && fileContent.kind !== "text" ? (
-            <box height={viewerHeight} paddingLeft={1}>
-              <text fg={theme.colors.text.muted}>{placeholderText(fileContent)}</text>
-            </box>
-          ) : (
-            <diff
-              id={DIFF_ID}
-              ref={diffRef}
-              key={`${selectedPath ?? "empty"}:${showFileContent}:${selectedPath !== undefined && fullContentPaths.has(selectedPath)}`}
-              width="100%"
-              height={viewerHeight}
-              diff={renderedPatch.diff}
-              view="unified"
-              filetype={selectedPath === undefined ? "text" : diffFiletypeFor(selectedPath, syntax)}
-              syntaxStyle={syntax.enabled ? syntax.style : undefined}
-              treeSitterClient={syntax.enabled ? syntax.treeSitterClient : undefined}
-              showLineNumbers
-              wrapMode="none"
-              addedBg={theme.colors.diff.addedBg}
-              removedBg={theme.colors.diff.removedBg}
-              addedLineNumberBg={theme.colors.diff.addedLineNumberBg}
-              removedLineNumberBg={theme.colors.diff.removedLineNumberBg}
-              addedSignColor={theme.colors.diff.addedSign}
-              removedSignColor={theme.colors.diff.removedSign}
-              lineNumberFg={theme.colors.diff.lineNumberFg}
-            />
-          )}
-        </box>
+        <Viewer
+          diffRef={diffRef}
+          focused={focusedPane === "diff"}
+          viewerHeight={viewerHeight}
+          selectedPath={selectedPath}
+          selectedFile={selectedFile}
+          showFileContent={showFileContent}
+          fileContent={fileContent}
+          cursorLineNumber={cursorLineNumber}
+          diff={renderedPatch.diff}
+          fullContent={selectedPath !== undefined && fullContentPaths.has(selectedPath)}
+          syntax={syntax}
+        />
       </box>
       {problemsOpen ? (
-        <box
-          height={PROBLEMS_HEIGHT}
-          width="100%"
-          flexDirection="column"
-          borderStyle="single"
-          borderColor={focusedPane === "problems" ? theme.colors.border.focused : theme.colors.border.unfocused}
-        >
-          <scrollbox ref={problemsRef} width="100%" height={PROBLEMS_HEIGHT - 2} scrollY viewportCulling>
-            {allProblemItems.length === 0 ? (
-              <box id="problem-empty" paddingLeft={1}>
-                <text fg={theme.colors.text.muted}>no problems</text>
-              </box>
-            ) : (
-              <>
-                {allProblemItems.map((item, index) =>
-                  item.kind === "failure" ? (
-                    <box
-                      key={item.id}
-                      id={item.id}
-                      width="100%"
-                      flexDirection="row"
-                      paddingLeft={1}
-                      paddingRight={1}
-                      backgroundColor={
-                        index === problemIndex && focusedPane === "problems" ? theme.colors.surface.cursor : theme.colors.surface.base
-                      }
-                    >
-                      <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
-                      <text fg={theme.colors.text.secondary}>{item.line}</text>
-                      {item.isFirst && <text fg={theme.colors.text.muted}>{`  [${item.checker}]`}</text>}
-                    </box>
-                  ) : (
-                    <box
-                      key={item.id}
-                      id={item.id}
-                      width="100%"
-                      flexDirection="row"
-                      paddingLeft={1}
-                      paddingRight={1}
-                      backgroundColor={
-                        index === problemIndex && focusedPane === "problems" ? theme.colors.surface.cursor : theme.colors.surface.base
-                      }
-                    >
-                      <text fg={item.problem.severity === "error" ? theme.colors.severity.error : theme.colors.severity.warning}>
-                        {item.problem.severity === "error" ? "✖ " : "⚠ "}
-                      </text>
-                      <text
-                        fg={theme.colors.text.strong}
-                      >{`${item.problem.path}${item.problem.line === undefined ? "" : `:${item.problem.line}`} `}</text>
-                      <text fg={theme.colors.text.secondary}>{item.problem.message}</text>
-                      <text fg={theme.colors.text.muted}>{`  [${item.problem.checker}]`}</text>
-                    </box>
-                  ),
-                )}
-              </>
-            )}
-          </scrollbox>
-        </box>
+        <ProblemsPanel
+          problemsRef={problemsRef}
+          allProblemItems={allProblemItems}
+          problemIndex={problemIndex}
+          focused={focusedPane === "problems"}
+        />
       ) : null}
-      <box
-        height={1}
-        flexDirection="row"
-        justifyContent="space-between"
-        paddingLeft={1}
-        paddingRight={1}
-        backgroundColor={theme.colors.surface.panel}
-      >
-        <text fg={theme.colors.text.muted}>{hints}</text>
-        <text fg={theme.colors.text.secondary}>{statusRight}</text>
-      </box>
+      <StatusBar hints={hints} statusRight={statusRight} />
       {paletteOpen ? (
-        <box
-          position="absolute"
-          left={paletteLeft}
-          top={1}
-          width={paletteWidth}
-          flexDirection="column"
-          borderStyle="single"
-          borderColor={theme.colors.border.focused}
-          backgroundColor={theme.colors.surface.panel}
-          zIndex={100}
-        >
-          <input
-            focused
-            width="100%"
-            placeholder="go to file…"
-            backgroundColor={theme.colors.surface.panel}
-            focusedBackgroundColor={theme.colors.surface.panel}
-            textColor={theme.colors.text.primary}
-            cursorColor={theme.colors.accent.primary}
-            onInput={handlePaletteInput}
-            onSubmit={pickPaletteResult}
-          />
-          <scrollbox ref={paletteRef} width="100%" height={Math.min(12, Math.max(1, paletteResults.length))} scrollY viewportCulling>
-            {paletteResults.length === 0 ? (
-              <box id="palette-empty" paddingLeft={1}>
-                <text fg={theme.colors.text.muted}>no matches</text>
-              </box>
-            ) : (
-              paletteResults.map((path, index) => {
-                const changed = model.changedByPath.get(path)
-                const recency = recencyLevel(recencyByPath.get(path), now)
-                // Key and id both by index: reordering results must never
-                // Change a live renderable's id or the scrollbox loses rows
-                // oxlint-disable react/no-array-index-key -- intentional: stable id-by-index required by scrollbox
-                return (
-                  <box
-                    key={`palette-${index}`}
-                    id={`palette-${index}`}
-                    width="100%"
-                    flexDirection="row"
-                    justifyContent="space-between"
-                    paddingLeft={1}
-                    paddingRight={1}
-                    backgroundColor={index === paletteIndex ? theme.colors.surface.cursor : theme.colors.surface.panel}
-                  >
-                    <box flexDirection="row">
-                      <text
-                        fg={
-                          index === paletteIndex
-                            ? theme.colors.text.selected
-                            : changed === undefined
-                              ? theme.colors.text.secondary
-                              : theme.colors.kind[changed.kind]
-                        }
-                      >
-                        {path}
-                      </text>
-                      <RecencyDot level={recency} />
-                    </box>
-                    {changed === undefined ? null : <text fg={theme.colors.stage[changed.stage]}>{kindLetter(changed.kind)}</text>}
-                  </box>
-                )
-                // oxlint-enable react/no-array-index-key
-              })
-            )}
-          </scrollbox>
-        </box>
+        <Palette
+          paletteRef={paletteRef}
+          paletteLeft={paletteLeft}
+          paletteWidth={paletteWidth}
+          paletteResults={paletteResults}
+          paletteIndex={paletteIndex}
+          changedByPath={model.changedByPath}
+          recencyByPath={recencyByPath}
+          now={now}
+          onInput={handlePaletteInput}
+          onSubmit={pickPaletteResult}
+        />
       ) : null}
       {worktreeOpen ? (
-        <box
-          position="absolute"
-          left={paletteLeft}
-          top={1}
-          width={paletteWidth}
-          flexDirection="column"
-          borderStyle="single"
-          borderColor={theme.colors.border.focused}
-          backgroundColor={theme.colors.surface.panel}
-          zIndex={100}
-        >
-          <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-            <text fg={theme.colors.accent.primary}>worktrees</text>
-          </box>
-          <scrollbox ref={worktreeRef} width="100%" height={Math.min(12, Math.max(1, worktrees?.length ?? 1))} scrollY viewportCulling>
-            {worktrees === undefined ? (
-              <box id="worktree-loading" paddingLeft={1}>
-                <text fg={theme.colors.text.muted}>loading…</text>
-              </box>
-            ) : worktrees.length === 0 ? (
-              <box id="worktree-empty" paddingLeft={1}>
-                <text fg={theme.colors.text.muted}>no worktrees</text>
-              </box>
-            ) : (
-              worktrees.map((worktree, index) => {
-                const current = worktree.path === model.repoRoot
-                const badges = [worktree.locked ? "locked" : "", worktree.prunable ? "prunable" : ""]
-                  .filter((badge) => badge !== "")
-                  .join(" ")
-                // Key and id both by index: reordering results must never
-                // Change a live renderable's id or the scrollbox loses rows
-                // oxlint-disable react/no-array-index-key -- intentional: stable id-by-index required by scrollbox
-                return (
-                  <box
-                    key={`worktree-${index}`}
-                    id={`worktree-${index}`}
-                    width="100%"
-                    flexDirection="row"
-                    justifyContent="space-between"
-                    paddingLeft={1}
-                    paddingRight={1}
-                    backgroundColor={index === worktreeIndex ? theme.colors.surface.cursor : theme.colors.surface.panel}
-                  >
-                    <text
-                      fg={
-                        index === worktreeIndex
-                          ? theme.colors.text.selected
-                          : current
-                            ? theme.colors.accent.primary
-                            : theme.colors.text.strong
-                      }
-                    >
-                      {`${current ? "● " : "  "}${worktreeLabel(worktree)}`}
-                    </text>
-                    <box flexDirection="row">
-                      {badges === "" ? null : <text fg={theme.colors.severity.warning}>{`${badges} `}</text>}
-                      <text fg={theme.colors.text.muted}>
-                        {truncateLeft(collapseHome(worktree.path), Math.max(10, paletteWidth - worktreeLabel(worktree).length - 16))}
-                      </text>
-                    </box>
-                  </box>
-                )
-                // oxlint-enable react/no-array-index-key
-              })
-            )}
-          </scrollbox>
-        </box>
+        <WorktreePicker
+          worktreeRef={worktreeRef}
+          paletteLeft={paletteLeft}
+          paletteWidth={paletteWidth}
+          worktrees={worktrees}
+          worktreeIndex={worktreeIndex}
+          repoRoot={model.repoRoot}
+        />
       ) : null}
-      {helpOpen ? (
-        <box
-          position="absolute"
-          left={paletteLeft}
-          top={1}
-          width={paletteWidth}
-          flexDirection="column"
-          borderStyle="single"
-          borderColor={theme.colors.border.focused}
-          backgroundColor={theme.colors.surface.panel}
-          zIndex={100}
-        >
-          <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-            <text fg={theme.colors.accent.primary}>keys</text>
-          </box>
-          <scrollbox width="100%" height={Math.min(KEY_HELP.length, Math.max(1, height - 6))} scrollY viewportCulling>
-            {KEY_HELP.map(([combo, action]) => (
-              <box
-                key={combo}
-                id={`help-${combo}`}
-                width="100%"
-                flexDirection="row"
-                paddingLeft={1}
-                paddingRight={1}
-                backgroundColor={theme.colors.surface.panel}
-              >
-                <text fg={theme.colors.accent.primary}>{combo.padEnd(11)}</text>
-                <text fg={theme.colors.text.secondary}>{action}</text>
-              </box>
-            ))}
-          </scrollbox>
-        </box>
-      ) : null}
+      {helpOpen ? <HelpOverlay paletteLeft={paletteLeft} paletteWidth={paletteWidth} height={height} /> : null}
     </box>
   )
-}
-
-interface TreeRowProps {
-  row: FileTreeRow
-  focused: boolean
-  selectedPath: string | undefined
-  expandedDirectories: Set<string>
-  checkerState: CheckerState
-  recencyByPath: Map<string, number>
-  now: number
-  treeWidth: number
-}
-
-// Memoized so cursor moves and status updates do not re-render every row
-const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now, treeWidth }: TreeRowProps) => {
-  const theme = useTheme()
-  const node = row.node
-  const indent = " ".repeat(Math.max(0, row.depth) * 2)
-  const background = focused ? theme.colors.surface.cursor : theme.colors.surface.base
-  const contentWidth = treeWidth - 4
-
-  if (node.type === "directory") {
-    const isExpanded = expandedDirectories.has(node.id)
-    const chevron = isExpanded ? "▾" : "▸"
-    const recency = directoryRecency(node, expandedDirectories, recencyByPath, now)
-    const summary = isExpanded ? null : directorySummary(node.path, checkerState)
-    const nameFg = focused ? theme.colors.text.selected : node.changedCount > 0 ? theme.colors.text.primary : theme.colors.text.strong
-    const hasBadges =
-      !isExpanded &&
-      (node.changedCount > 0 ||
-        Boolean(summary?.failed) ||
-        Boolean(summary?.pending) ||
-        (summary?.errors ?? 0) > 0 ||
-        (summary?.warnings ?? 0) > 0)
-    const badgeReserve = hasBadges ? 14 : 0
-    const maxNameLen = contentWidth - indent.length - 2 - badgeReserve
-    return (
-      <box
-        id={node.id}
-        width="100%"
-        flexDirection="row"
-        justifyContent="space-between"
-        paddingLeft={1}
-        paddingRight={1}
-        backgroundColor={background}
-      >
-        <box flexDirection="row">
-          <text fg={nameFg}>{`${indent}${chevron} ${truncateName(`${node.name}/`, maxNameLen)}`}</text>
-          <RecencyDot level={recency} />
-        </box>
-        <box flexDirection="row">
-          {summary?.failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
-          {summary !== null && summary.errors > 0 ? <text fg={theme.colors.severity.error}>{`✖${summary.errors} `}</text> : null}
-          {summary !== null && summary.errors === 0 && summary.warnings > 0 ? (
-            <text fg={theme.colors.severity.warning}>{`⚠${summary.warnings} `}</text>
-          ) : null}
-          {summary?.pending ? <text fg={theme.colors.text.muted}>… </text> : null}
-          {summary !== null &&
-          node.changedCount > 0 &&
-          !summary.failed &&
-          !summary.pending &&
-          summary.errors === 0 &&
-          summary.warnings === 0 ? (
-            <text fg={theme.colors.success}>✓ </text>
-          ) : null}
-          {node.changedCount > 0 ? (
-            <text
-              fg={node.stage !== undefined ? theme.colors.stage[node.stage] : theme.colors.text.muted}
-            >{`+${node.additions} -${node.deletions}`}</text>
-          ) : null}
-        </box>
-      </box>
-    )
-  }
-
-  const changed = node.changed
-  const recency = recencyLevel(recencyByPath.get(node.path), now)
-  const summary = checkerSummary(node.path, checkerState)
-  const selected = selectedPath === node.path
-  const nameFg =
-    focused || selected ? theme.colors.text.selected : changed === undefined ? theme.colors.text.secondary : theme.colors.kind[changed.kind]
-  const pending = changed !== undefined && summary.pending
-  const hasBadges = changed !== undefined || summary.failed || summary.errors > 0 || summary.warnings > 0 || summary.pending
-  const badgeReserve = hasBadges ? 14 : 0
-
-  return (
-    <box
-      id={node.id}
-      width="100%"
-      flexDirection="row"
-      justifyContent="space-between"
-      paddingLeft={1}
-      paddingRight={1}
-      backgroundColor={background}
-    >
-      <box flexDirection="row">
-        <text fg={nameFg}>{`${indent}${truncateName(node.name, contentWidth - indent.length - badgeReserve)}`}</text>
-        <RecencyDot level={recency} />
-      </box>
-      <box flexDirection="row">
-        {summary.failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
-        {summary.errors > 0 ? <text fg={theme.colors.severity.error}>{`✖${summary.errors} `}</text> : null}
-        {summary.errors === 0 && summary.warnings > 0 ? <text fg={theme.colors.severity.warning}>{`⚠${summary.warnings} `}</text> : null}
-        {changed !== undefined && changed.warnings.length > 0 ? <text fg={theme.colors.severity.warning}>! </text> : null}
-        {changed !== undefined && !pending && !summary.failed && summary.errors === 0 && summary.warnings === 0 ? (
-          <text fg={theme.colors.success}>✓ </text>
-        ) : null}
-        {changed === undefined ? null : <text fg={theme.colors.text.muted}>{`+${changed.additions} -${changed.deletions} `}</text>}
-        {pending ? <text fg={theme.colors.text.muted}>… </text> : null}
-        {changed === undefined ? null : <text fg={theme.colors.stage[changed.stage]}>{kindLetter(changed.kind)}</text>}
-      </box>
-    </box>
-  )
-})
-
-function RecencyDot({ level }: { level: RecencyLevel }) {
-  const theme = useTheme()
-  if (level === "none") {
-    return null
-  }
-
-  return <text fg={level === "fresh" ? theme.colors.accent.primary : theme.colors.accent.dim}> ●</text>
-}
-
-function directoryRecency(
-  node: DirectoryNode,
-  expandedDirectories: Set<string>,
-  recencyByPath: Map<string, number>,
-  now: number,
-): RecencyLevel {
-  if (expandedDirectories.has(node.id)) {
-    return "none"
-  }
-
-  const prefix = `${node.path}/`
-  let level: RecencyLevel = "none"
-  for (const [path, at] of recencyByPath) {
-    if (!path.startsWith(prefix)) {
-      continue
-    }
-
-    const pathLevel = recencyLevel(at, now)
-    if (pathLevel === "fresh") {
-      return "fresh"
-    }
-
-    if (pathLevel === "recent") {
-      level = "recent"
-    }
-  }
-
-  return level
-}
-
-function viewerTitle(
-  selectedPath: string | undefined,
-  selectedFile: ChangedFile | undefined,
-  showFileContent: boolean,
-  fileContent: FileContent | undefined,
-) {
-  if (selectedPath === undefined) {
-    return ""
-  }
-
-  if (showFileContent) {
-    const lines = fileContent?.kind === "text" ? ` · ${fileContent.lineCount} lines${fileContent.truncated ? " (truncated)" : ""}` : ""
-    return `${selectedPath}${lines}`
-  }
-
-  const rename = selectedFile?.oldPath === undefined ? "" : ` (from ${selectedFile.oldPath})`
-  const warnings = selectedFile === undefined || selectedFile.warnings.length === 0 ? "" : ` !${selectedFile.warnings.join(",")}`
-  return `${selectedPath}${rename}  +${selectedFile?.additions ?? 0} -${selectedFile?.deletions ?? 0}${warnings}`
-}
-
-function truncate(text: string, max: number) {
-  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`
-}
-
-function worktreeLabel(worktree: Worktree) {
-  return worktree.branch ?? `${worktree.head.slice(0, 7)} (detached)`
-}
-
-function collapseHome(path: string) {
-  const home = process.env["HOME"]
-  return home !== undefined && home !== "" && path.startsWith(home) ? `~${path.slice(home.length)}` : path
-}
-
-function truncateLeft(text: string, max: number) {
-  if (text.length <= max) {
-    return text
-  }
-  if (max <= 1) {
-    return max === 1 ? "…" : ""
-  }
-  return `…${text.slice(text.length - (max - 1))}`
-}
-
-function truncateName(name: string, max: number) {
-  if (name.length <= max) {
-    return name
-  }
-  if (max <= 1) {
-    return max === 1 ? "…" : ""
-  }
-  const dot = name.lastIndexOf(".")
-  const ext = dot > 0 ? name.slice(dot) : ""
-  const keep = max - 1 - ext.length
-  if (keep <= 0) {
-    return `${name.slice(0, max - 1)}…`
-  }
-  return `${name.slice(0, keep)}…${ext}`
-}
-
-function placeholderText(content: FileContent) {
-  if (content.kind === "binary") {
-    return "binary file"
-  }
-
-  if (content.kind === "too-large") {
-    return `file too large (${Math.round(content.bytes / 1024)}kb) · f to load`
-  }
-
-  return "file not found"
-}
-
-// Mirrors the Keys table in README.md
-const KEY_HELP: [combo: string, action: string][] = [
-  ["j / k", "move in the tree, viewer, or problems panel"],
-  ["h / l", "collapse / expand folders"],
-  ["tab", "switch focus between tree and viewer"],
-  ["enter", "open the focused item / jump to a problem"],
-  ["ctrl-p", "go to file: fuzzy-search the whole repo"],
-  ["s", "cycle scope: all changes → staged → unstaged"],
-  ["w", "switch to another git worktree"],
-  ["c", "toggle changes-only filter for the tree"],
-  ["v", "toggle diff ↔ full file view for a changed file"],
-  ["p", "toggle the problems panel"],
-  ["b", "toggle the file tree sidebar"],
-  [".", "jump to the most recently changed file"],
-  ["n", "jump to the next file with findings"],
-  ["y", "copy path:line + snippet at the cursor"],
-  ["f", "load full content when truncated"],
-  ["r", "re-run checks"],
-  ["ctrl-d/u", "half-page cursor movement in the viewer"],
-  ["g / G", "jump to first / last line"],
-  ["?", "show all keybindings"],
-  ["q / esc", "quit (esc closes panels first)"],
-]
-
-function kindLetter(kind: ChangedFile["kind"]) {
-  if (kind === "untracked") {
-    return "U"
-  }
-
-  if (kind === "added") {
-    return "A"
-  }
-
-  if (kind === "deleted") {
-    return "D"
-  }
-
-  if (kind === "renamed") {
-    return "R"
-  }
-
-  return "M"
-}
-
-function nearestNavigableIndex(lines: ParsedDiffLine[], target: number) {
-  let best = -1
-  let bestDistance = Number.POSITIVE_INFINITY
-  lines.forEach((line, index) => {
-    const reference = line.newLine ?? line.oldLine
-    if (reference === undefined) {
-      return
-    }
-
-    const distance = Math.abs(reference - target)
-    if (distance < bestDistance) {
-      bestDistance = distance
-      best = index
-    }
-  })
-
-  return best
-}
-
-function orderedFindingPaths(problems: Diagnostic[]) {
-  return [...new Set(problems.map((problem) => problem.path))]
-}
-
-function nextFindingPath(paths: string[], selectedPath: string | undefined) {
-  if (paths.length === 0) {
-    return undefined
-  }
-
-  const current = selectedPath === undefined ? -1 : paths.indexOf(selectedPath)
-  return paths[(current + 1) % paths.length]
-}
-
-function moveFocus(
-  direction: -1 | 1,
-  rows: FileTreeRow[],
-  setFocusedRowIndex: (updater: (current: number) => number) => void,
-  selectFile: (path: string) => void,
-) {
-  setFocusedRowIndex((current) => {
-    const next = Math.max(0, Math.min(current + direction, rows.length - 1))
-    const row = rows[next]
-    if (row?.node.type === "file") {
-      selectFile(row.node.path)
-    }
-    return next
-  })
 }

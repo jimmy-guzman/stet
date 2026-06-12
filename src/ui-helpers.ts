@@ -1,0 +1,127 @@
+import type { Diagnostic } from "./diagnostics"
+import type { FileContent } from "./file-view"
+import type { ChangedFile, Worktree } from "./git"
+import type { ParsedDiffLine } from "./patch"
+
+export function viewerTitle(
+  selectedPath: string | undefined,
+  selectedFile: ChangedFile | undefined,
+  showFileContent: boolean,
+  fileContent: FileContent | undefined,
+) {
+  if (selectedPath === undefined) {
+    return ""
+  }
+
+  if (showFileContent) {
+    const lines = fileContent?.kind === "text" ? ` · ${fileContent.lineCount} lines${fileContent.truncated ? " (truncated)" : ""}` : ""
+    return `${selectedPath}${lines}`
+  }
+
+  const rename = selectedFile?.oldPath === undefined ? "" : ` (from ${selectedFile.oldPath})`
+  const warnings = selectedFile === undefined || selectedFile.warnings.length === 0 ? "" : ` !${selectedFile.warnings.join(",")}`
+  return `${selectedPath}${rename}  +${selectedFile?.additions ?? 0} -${selectedFile?.deletions ?? 0}${warnings}`
+}
+
+export function truncate(text: string, max: number) {
+  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`
+}
+
+export function worktreeLabel(worktree: Worktree) {
+  return worktree.branch ?? `${worktree.head.slice(0, 7)} (detached)`
+}
+
+export function collapseHome(path: string) {
+  const home = process.env["HOME"]
+  return home !== undefined && home !== "" && path.startsWith(home) ? `~${path.slice(home.length)}` : path
+}
+
+export function truncateLeft(text: string, max: number) {
+  if (text.length <= max) {
+    return text
+  }
+  if (max <= 1) {
+    return max === 1 ? "…" : ""
+  }
+  return `…${text.slice(text.length - (max - 1))}`
+}
+
+export function truncateName(name: string, max: number) {
+  if (name.length <= max) {
+    return name
+  }
+  if (max <= 1) {
+    return max === 1 ? "…" : ""
+  }
+  const dot = name.lastIndexOf(".")
+  const ext = dot > 0 ? name.slice(dot) : ""
+  const keep = max - 1 - ext.length
+  if (keep <= 0) {
+    return `${name.slice(0, max - 1)}…`
+  }
+  return `${name.slice(0, keep)}…${ext}`
+}
+
+export function placeholderText(content: FileContent) {
+  if (content.kind === "binary") {
+    return "binary file"
+  }
+
+  if (content.kind === "too-large") {
+    return `file too large (${Math.round(content.bytes / 1024)}kb) · f to load`
+  }
+
+  return "file not found"
+}
+
+export function kindLetter(kind: ChangedFile["kind"]) {
+  if (kind === "untracked") {
+    return "U"
+  }
+
+  if (kind === "added") {
+    return "A"
+  }
+
+  if (kind === "deleted") {
+    return "D"
+  }
+
+  if (kind === "renamed") {
+    return "R"
+  }
+
+  return "M"
+}
+
+export function nearestNavigableIndex(lines: ParsedDiffLine[], target: number) {
+  let best = -1
+  let bestDistance = Number.POSITIVE_INFINITY
+  lines.forEach((line, index) => {
+    const reference = line.newLine ?? line.oldLine
+    if (reference === undefined) {
+      return
+    }
+
+    const distance = Math.abs(reference - target)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = index
+    }
+  })
+
+  return best
+}
+
+export function orderedFindingPaths(problems: Diagnostic[]) {
+  return [...new Set(problems.map((problem) => problem.path))]
+}
+
+export function nextFindingPath(paths: string[], selectedPath: string | undefined) {
+  if (paths.length === 0) {
+    return undefined
+  }
+
+  const current = selectedPath === undefined ? -1 : paths.indexOf(selectedPath)
+  return paths[(current + 1) % paths.length]
+}

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.5...sideye-v0.1.6) (2026-06-12)
+
+
+### Features
+
+* **ui:** ✨ display version in header ([#21](https://github.com/jimmy-guzman/sideye/issues/21)) ([77a7a43](https://github.com/jimmy-guzman/sideye/commit/77a7a43054f122d37d07d1e3cd31e6123b98b241))
+* **ui:** ✨ switch git worktrees with w key ([#23](https://github.com/jimmy-guzman/sideye/issues/23)) ([8294122](https://github.com/jimmy-guzman/sideye/commit/82941224d0602ff4ab81d47741c38510c89a7c56))
+
 ## [0.1.5](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.4...sideye-v0.1.5) (2026-06-12)
 
 

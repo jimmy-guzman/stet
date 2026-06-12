@@ -1121,11 +1121,14 @@ function truncateName(name: string, max: number) {
   if (name.length <= max) {
     return name
   }
+  if (max <= 1) {
+    return max === 1 ? "…" : ""
+  }
   const dot = name.lastIndexOf(".")
   const ext = dot > 0 ? name.slice(dot) : ""
   const keep = max - 1 - ext.length
   if (keep <= 0) {
-    return `${name.slice(0, Math.max(1, max - 1))}…`
+    return `${name.slice(0, max - 1)}…`
   }
   return `${name.slice(0, keep)}…${ext}`
 }

@@ -789,6 +789,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                 checkerState={checkerState}
                 recencyByPath={recencyByPath}
                 now={now}
+                treeWidth={sidebarWidth}
               />
             ))}
           </scrollbox>
@@ -967,13 +968,16 @@ interface TreeRowProps {
   checkerState: CheckerState
   recencyByPath: Map<string, number>
   now: number
+  treeWidth: number
 }
 
 // Memoized so cursor moves and status updates do not re-render every row
-const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now }: TreeRowProps) => {
+const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now, treeWidth }: TreeRowProps) => {
   const node = row.node
   const indent = " ".repeat(Math.max(0, row.depth) * 2)
   const background = focused ? CURSOR_BG_HEX : "#09090b"
+  const contentWidth = treeWidth - 4
+  const badgeReserve = 14
 
   if (node.type === "directory") {
     const isExpanded = expandedDirectories.has(node.id)
@@ -981,6 +985,7 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
     const recency = directoryRecency(node, expandedDirectories, recencyByPath, now)
     const summary = isExpanded ? null : directorySummary(node.path, checkerState)
     const nameFg = focused ? "#ffffff" : node.changedCount > 0 ? "#e4e4e7" : "#d4d4d8"
+    const maxNameLen = contentWidth - indent.length - 2 - badgeReserve
     return (
       <box
         id={node.id}
@@ -992,7 +997,7 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
         backgroundColor={background}
       >
         <box flexDirection="row">
-          <text fg={nameFg}>{`${indent}${chevron} ${node.name}/`}</text>
+          <text fg={nameFg}>{`${indent}${chevron} ${truncateName(`${node.name}/`, maxNameLen)}`}</text>
           <RecencyDot level={recency} />
         </box>
         <box flexDirection="row">
@@ -1034,7 +1039,7 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
       backgroundColor={background}
     >
       <box flexDirection="row">
-        <text fg={nameFg}>{`${indent}${node.name}`}</text>
+        <text fg={nameFg}>{`${indent}${truncateName(node.name, contentWidth - indent.length - badgeReserve)}`}</text>
         <RecencyDot level={recency} />
       </box>
       <box flexDirection="row">
@@ -1110,6 +1115,19 @@ function viewerTitle(
 
 function truncate(text: string, max: number) {
   return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`
+}
+
+function truncateName(name: string, max: number) {
+  if (name.length <= max) {
+    return name
+  }
+  const dot = name.lastIndexOf(".")
+  const ext = dot > 0 ? name.slice(dot) : ""
+  const keep = max - 1 - ext.length
+  if (keep <= 0) {
+    return `${name.slice(0, Math.max(1, max - 1))}…`
+  }
+  return `${name.slice(0, keep)}…${ext}`
 }
 
 function placeholderText(content: FileContent) {

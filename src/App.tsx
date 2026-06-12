@@ -302,7 +302,9 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       fastId = setTimeout(
         () => {
           void loadFast()
-          scheduleFast()
+          if (!cancelled) {
+            scheduleFast()
+          }
         },
         quiet ? 2000 : 750,
       )

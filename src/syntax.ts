@@ -1,10 +1,12 @@
 import { SyntaxStyle, getTreeSitterClient, type TreeSitterClient } from "@opentui/core"
 import { supportedFiletypeFor } from "./filetype"
 import { languages } from "./languages"
+import type { SyntaxCaptureStyles } from "./theme/tokens"
 
 export type SyntaxConfig =
   | {
       enabled: true
+      querySources: string[]
       style: SyntaxStyle
       treeSitterClient: TreeSitterClient
       status: string
@@ -14,70 +16,12 @@ export type SyntaxConfig =
       status: string
     }
 
-type CaptureStyles = Parameters<typeof SyntaxStyle.fromStyles>[0]
-
-// The theme lives at the semantic-group level; expandCaptureStyles aliases the
-// Dotted captures each grammar actually emits onto these entries
-export const baseCaptureStyles: CaptureStyles = {
-  attribute: { fg: "#f0abfc", italic: true },
-  boolean: { bold: true, fg: "#fbbf24" },
-  character: { fg: "#86efac" },
-  comment: { dim: true, fg: "#71717a" },
-  "comment.documentation": { fg: "#71717a", italic: true },
-  constant: { fg: "#fbbf24" },
-  "constant.builtin": { bold: true, fg: "#fbbf24" },
-  constructor: { fg: "#f0abfc" },
-  default: { fg: "#e4e4e7" },
-  escape: { fg: "#f5a3d7" },
-  function: { fg: "#67e8f9" },
-  "function.builtin": { bold: true, fg: "#67e8f9" },
-  "function.test": { bold: true, fg: "#f0abfc" },
-  "function.test.assert": { bold: true, fg: "#67e8f9" },
-  "function.test.suite": { bold: true, fg: "#ff4fb8" },
-  keyword: { bold: true, fg: "#ff4fb8" },
-  label: { fg: "#93c5fd" },
-  markup: { fg: "#e4e4e7" },
-  "markup.heading": { bold: true, fg: "#ff4fb8" },
-  "markup.heading.1": { bold: true, fg: "#ff4fb8", underline: true },
-  "markup.heading.2": { bold: true, fg: "#ff4fb8" },
-  "markup.heading.3": { fg: "#ff4fb8" },
-  "markup.heading.4": { fg: "#ff4fb8" },
-  "markup.heading.5": { fg: "#ff4fb8" },
-  "markup.heading.6": { fg: "#ff4fb8" },
-  "markup.italic": { fg: "#e4e4e7", italic: true },
-  "markup.link": { fg: "#67e8f9", underline: true },
-  "markup.link.bracket.close": { fg: "#67e8f9" },
-  "markup.link.label": { fg: "#93c5fd" },
-  "markup.list": { fg: "#ff4fb8" },
-  "markup.list.checked": { fg: "#86efac" },
-  "markup.list.unchecked": { fg: "#fbbf24" },
-  "markup.quote": { fg: "#a1a1aa", italic: true },
-  "markup.raw": { fg: "#86efac" },
-  "markup.strikethrough": { dim: true, fg: "#71717a" },
-  "markup.strong": { bold: true, fg: "#e4e4e7" },
-  module: { fg: "#93c5fd" },
-  number: { fg: "#fbbf24" },
-  operator: { fg: "#f5a3d7" },
-  property: { fg: "#93c5fd" },
-  punctuation: { fg: "#a1a1aa" },
-  "punctuation.special": { fg: "#f5a3d7" },
-  string: { fg: "#86efac" },
-  "string.escape": { fg: "#f5a3d7" },
-  "string.regexp": { fg: "#f5a3d7" },
-  "string.special.key": { fg: "#93c5fd" },
-  type: { fg: "#f0abfc" },
-  "type.builtin": { bold: true, fg: "#f0abfc" },
-  variable: { fg: "#e4e4e7" },
-  "variable.builtin": { fg: "#f0abfc" },
-  "variable.member": { fg: "#93c5fd" },
-}
-
 // OpenTUI resolves a capture as exact name -> first dotted segment -> default,
 // So a dotted capture without an exact entry silently loses its specific
 // Style. Alias every dotted capture the given queries emit to its longest
 // Styled prefix (e.g. a future "keyword.import" -> "keyword").
-export function expandCaptureStyles(querySources: string[]): CaptureStyles {
-  const expanded = { ...baseCaptureStyles }
+export function expandCaptureStyles(captureStyles: SyntaxCaptureStyles, querySources: string[]): SyntaxCaptureStyles {
+  const expanded = { ...captureStyles }
 
   for (const source of querySources) {
     for (const name of captureNames(source)) {
@@ -104,7 +48,14 @@ function captureNames(source: string) {
   return new Set(matches.map((capture) => capture.slice(1)).filter((name) => !name.startsWith("_")))
 }
 
-export async function createSyntaxConfig(): Promise<SyntaxConfig> {
+// The rebuild seam for a future runtime theme switch: compile a new
+// SyntaxStyle from another theme's capture styles and the already-loaded
+// QuerySources, then pass it to <diff syntaxStyle> — no tree-sitter re-init
+export function compileSyntaxStyle(captureStyles: SyntaxCaptureStyles, querySources: string[]): SyntaxStyle {
+  return SyntaxStyle.fromStyles(expandCaptureStyles(captureStyles, querySources))
+}
+
+export async function createSyntaxConfig(captureStyles: SyntaxCaptureStyles): Promise<SyntaxConfig> {
   try {
     const treeSitterClient = getTreeSitterClient()
 
@@ -138,8 +89,9 @@ export async function createSyntaxConfig(): Promise<SyntaxConfig> {
 
     return {
       enabled: true,
+      querySources,
       status: "syntax highlighting ready",
-      style: SyntaxStyle.fromStyles(expandCaptureStyles(querySources)),
+      style: compileSyntaxStyle(captureStyles, querySources),
       treeSitterClient,
     }
   } catch (error) {

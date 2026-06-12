@@ -2,7 +2,10 @@ import { SyntaxStyle, getTreeSitterClient } from "@opentui/core"
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { baseCaptureStyles, diffFiletypeFor, expandCaptureStyles, type SyntaxConfig } from "../src/syntax"
+import { diffFiletypeFor, expandCaptureStyles, type SyntaxConfig } from "../src/syntax"
+import { darkTheme } from "../src/theme/dark"
+
+const baseCaptureStyles = darkTheme.syntax
 
 const disabledSyntax: SyntaxConfig = {
   enabled: false,
@@ -11,6 +14,7 @@ const disabledSyntax: SyntaxConfig = {
 
 const enabledSyntax: SyntaxConfig = {
   enabled: true,
+  querySources: [],
   status: "syntax highlighting ready",
   style: SyntaxStyle.fromStyles(baseCaptureStyles),
   treeSitterClient: getTreeSitterClient(),
@@ -35,18 +39,18 @@ describe("diffFiletypeFor", () => {
 
 describe("expandCaptureStyles", () => {
   test("aliases an unknown dotted capture to its longest styled prefix", () => {
-    const expanded = expandCaptureStyles(["(import_statement) @keyword.import"])
+    const expanded = expandCaptureStyles(baseCaptureStyles, ["(import_statement) @keyword.import"])
     expect(expanded["keyword.import"]).toEqual(baseCaptureStyles["keyword"])
   })
 
   test("prefers a longer prefix over the first segment", () => {
-    const expanded = expandCaptureStyles(["(link) @markup.link.url"])
+    const expanded = expandCaptureStyles(baseCaptureStyles, ["(link) @markup.link.url"])
     expect(expanded["markup.link.url"]).toEqual(baseCaptureStyles["markup.link"])
     expect(expanded["markup.link.url"]).not.toEqual(baseCaptureStyles["markup"])
   })
 
   test("never overrides an explicit theme entry", () => {
-    const expanded = expandCaptureStyles(["(heading) @markup.heading.1"])
+    const expanded = expandCaptureStyles(baseCaptureStyles, ["(heading) @markup.heading.1"])
     expect(expanded["markup.heading.1"]).toEqual(baseCaptureStyles["markup.heading.1"])
   })
 })
@@ -72,7 +76,7 @@ describe("capture coverage", () => {
   // Because OpenTUI's fallback (first dotted segment) loses specificity
   test("every emitted capture resolves to an exact expanded style", () => {
     const sources = queryFiles.map((file) => readFileSync(file, "utf8"))
-    const expanded = expandCaptureStyles(sources)
+    const expanded = expandCaptureStyles(baseCaptureStyles, sources)
     const unresolved: string[] = []
 
     for (const [index, source] of sources.entries()) {

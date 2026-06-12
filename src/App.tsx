@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { basename } from "node:path"
 import packageJson from "../package.json"
-import { RGBA, type DiffRenderable, type LineColorConfig, type ScrollBoxRenderable } from "@opentui/core"
+import type { DiffRenderable, LineColorConfig, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { emptyActivityLog, lastChangedAt, latestActivity, recordActivity, recencyLevel, RECENT_MS, type RecencyLevel } from "./activity"
@@ -23,10 +23,11 @@ import {
 } from "./diagnostics"
 import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
 import { rankFiles } from "./fuzzy"
-import type { ChangedFile, GitModel, StageState, Worktree } from "./git"
+import type { ChangedFile, GitModel, Worktree } from "./git"
 import { listWorktrees, loadChangedFiles, loadFileDiff, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
 import { lineReference, renderPatch, type ParsedDiffLine } from "./patch"
 import { diffFiletypeFor, type SyntaxConfig } from "./syntax"
+import { useTheme } from "./theme/context"
 import {
   buildFileTree,
   defaultExpandedDirectories,
@@ -59,18 +60,10 @@ interface JumpTarget {
 
 const DIFF_ID = "sideye-diff"
 const PROBLEMS_HEIGHT = 10
-const CURSOR_BG_HEX = "#3a1530"
-const ADDED_BG_HEX = "#102a1c"
-const REMOVED_BG_HEX = "#32131f"
-const CURSOR_BG = RGBA.fromHex(CURSOR_BG_HEX)
-const ADDED_BG = RGBA.fromHex(ADDED_BG_HEX)
-const REMOVED_BG = RGBA.fromHex(REMOVED_BG_HEX)
-const ERROR_GUTTER = RGBA.fromHex("#52141f")
-const WARNING_GUTTER = RGBA.fromHex("#4a3a10")
-const TRANSPARENT = RGBA.fromValues(0, 0, 0, 0)
 
 export function App({ model: initialModel, scope: initialScope, syntax }: AppProps) {
   const renderer = useRenderer()
+  const theme = useTheme()
   const { width, height } = useTerminalDimensions()
   const [model, setModel] = useState(initialModel)
   const [scope, setScope] = useState(initialScope)
@@ -479,27 +472,28 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   // The add/remove/diagnostic tints only change with the content, so a cursor
   // Move just copies this map and overlays the cursor row
   const baseLineColors = useMemo(() => {
+    const { addedBg, errorGutterBg, removedBg, transparent, warningGutterBg } = theme.rgba
     const colors = new Map<number, LineColorConfig>()
     navigableLines.forEach((line, index) => {
-      let gutter = TRANSPARENT
-      let content = TRANSPARENT
+      let gutter = transparent
+      let content = transparent
       if (line.type === "add") {
-        content = ADDED_BG
+        content = addedBg
       } else if (line.type === "remove") {
-        content = REMOVED_BG
+        content = removedBg
       }
 
       const findings = line.newLine === undefined ? undefined : lineMap.get(line.newLine)
       if (findings !== undefined) {
-        gutter = findings.some((finding) => finding.severity === "error") ? ERROR_GUTTER : WARNING_GUTTER
+        gutter = findings.some((finding) => finding.severity === "error") ? errorGutterBg : warningGutterBg
       }
 
-      if (gutter !== TRANSPARENT || content !== TRANSPARENT) {
+      if (gutter !== transparent || content !== transparent) {
         colors.set(index, { content, gutter })
       }
     })
     return colors
-  }, [lineMap, navigableLines])
+  }, [lineMap, navigableLines, theme])
 
   useEffect(() => {
     const diff = diffRef.current
@@ -516,7 +510,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     // oxlint-disable-next-line func-style
     const paint = () => {
       const colors = new Map<number, string | RGBA | LineColorConfig>(baseLineColors)
-      colors.set(cursorIndex, { content: CURSOR_BG, gutter: CURSOR_BG })
+      colors.set(cursorIndex, { content: theme.rgba.cursorBg, gutter: theme.rgba.cursorBg })
       diff.setLineColors(colors)
     }
 
@@ -535,7 +529,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     renderer.requestRender()
-  }, [baseLineColors, cursorIndex, navigableLines, viewerHeight, renderer])
+  }, [baseLineColors, cursorIndex, navigableLines, viewerHeight, renderer, theme])
 
   useKeyboard((key) => {
     if (helpOpen) {
@@ -899,13 +893,20 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const countsText = `${counts.errors > 0 ? `✖${counts.errors}` : ""}${counts.warnings > 0 ? ` ⚠${counts.warnings}` : ""}`.trim()
 
   return (
-    <box width="100%" height="100%" flexDirection="column" backgroundColor="#09090b">
-      <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor="#111113">
+    <box width="100%" height="100%" flexDirection="column" backgroundColor={theme.colors.surface.base}>
+      <box
+        height={1}
+        flexDirection="row"
+        justifyContent="space-between"
+        paddingLeft={1}
+        paddingRight={1}
+        backgroundColor={theme.colors.surface.panel}
+      >
         <box flexDirection="row">
-          <text fg="#ff4fb8">sideye</text>
-          <text fg="#52525b">@{packageJson.version}</text>
+          <text fg={theme.colors.accent.primary}>sideye</text>
+          <text fg={theme.colors.text.faint}>@{packageJson.version}</text>
         </box>
-        <text fg="#a1a1aa">
+        <text fg={theme.colors.text.secondary}>
           {basename(model.repoRoot)} · {scopeLabel(scope)} · {model.changed.length} changed{countsText === "" ? "" : ` · ${countsText}`}
         </text>
       </box>
@@ -916,7 +917,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
             height="100%"
             flexDirection="column"
             borderStyle="single"
-            borderColor={focusedPane === "tree" ? "#ff4fb8" : "#27272a"}
+            borderColor={focusedPane === "tree" ? theme.colors.border.focused : theme.colors.border.unfocused}
           >
             <scrollbox ref={sidebarRef} width="100%" height={paneHeight} scrollY viewportCulling>
               {treeRows.map((row) => (
@@ -933,7 +934,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                 />
               ))}
               {treeRows.length < paneHeight && (
-                <box id="tree-filler" width="100%" height={paneHeight - treeRows.length} backgroundColor="#09090b" />
+                <box id="tree-filler" width="100%" height={paneHeight - treeRows.length} backgroundColor={theme.colors.surface.base} />
               )}
             </scrollbox>
           </box>
@@ -943,18 +944,18 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           height="100%"
           flexDirection="column"
           borderStyle="single"
-          borderColor={focusedPane === "diff" ? "#ff4fb8" : "#27272a"}
+          borderColor={focusedPane === "diff" ? theme.colors.border.focused : theme.colors.border.unfocused}
         >
           <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
-            <text fg="#e4e4e7">{viewerTitle(selectedPath, selectedFile, showFileContent, fileContent)}</text>
-            <text fg="#71717a">
+            <text fg={theme.colors.text.primary}>{viewerTitle(selectedPath, selectedFile, showFileContent, fileContent)}</text>
+            <text fg={theme.colors.text.muted}>
               {showFileContent ? "file" : "diff"}
               {cursorLineNumber === undefined ? "" : ` · ln ${cursorLineNumber}`}
             </text>
           </box>
           {showFileContent && fileContent !== undefined && fileContent.kind !== "text" ? (
             <box height={viewerHeight} paddingLeft={1}>
-              <text fg="#71717a">{placeholderText(fileContent)}</text>
+              <text fg={theme.colors.text.muted}>{placeholderText(fileContent)}</text>
             </box>
           ) : (
             <diff
@@ -970,13 +971,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
               treeSitterClient={syntax.enabled ? syntax.treeSitterClient : undefined}
               showLineNumbers
               wrapMode="none"
-              addedBg={ADDED_BG_HEX}
-              removedBg={REMOVED_BG_HEX}
-              addedLineNumberBg="#0d2117"
-              removedLineNumberBg="#260f18"
-              addedSignColor="#3ddc84"
-              removedSignColor="#ff5c8a"
-              lineNumberFg="#52525b"
+              addedBg={theme.colors.diff.addedBg}
+              removedBg={theme.colors.diff.removedBg}
+              addedLineNumberBg={theme.colors.diff.addedLineNumberBg}
+              removedLineNumberBg={theme.colors.diff.removedLineNumberBg}
+              addedSignColor={theme.colors.diff.addedSign}
+              removedSignColor={theme.colors.diff.removedSign}
+              lineNumberFg={theme.colors.diff.lineNumberFg}
             />
           )}
         </box>
@@ -987,12 +988,12 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           width="100%"
           flexDirection="column"
           borderStyle="single"
-          borderColor={focusedPane === "problems" ? "#ff4fb8" : "#27272a"}
+          borderColor={focusedPane === "problems" ? theme.colors.border.focused : theme.colors.border.unfocused}
         >
           <scrollbox ref={problemsRef} width="100%" height={PROBLEMS_HEIGHT - 2} scrollY viewportCulling>
             {allProblemItems.length === 0 ? (
               <box id="problem-empty" paddingLeft={1}>
-                <text fg="#71717a">no problems</text>
+                <text fg={theme.colors.text.muted}>no problems</text>
               </box>
             ) : (
               <>
@@ -1005,11 +1006,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                       flexDirection="row"
                       paddingLeft={1}
                       paddingRight={1}
-                      backgroundColor={index === problemIndex && focusedPane === "problems" ? CURSOR_BG_HEX : "#09090b"}
+                      backgroundColor={
+                        index === problemIndex && focusedPane === "problems" ? theme.colors.surface.cursor : theme.colors.surface.base
+                      }
                     >
-                      <text fg="#ff5c8a">{item.isFirst ? "✖ " : "  "}</text>
-                      <text fg="#a1a1aa">{item.line}</text>
-                      {item.isFirst && <text fg="#71717a">{`  [${item.checker}]`}</text>}
+                      <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
+                      <text fg={theme.colors.text.secondary}>{item.line}</text>
+                      {item.isFirst && <text fg={theme.colors.text.muted}>{`  [${item.checker}]`}</text>}
                     </box>
                   ) : (
                     <box
@@ -1019,14 +1022,18 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                       flexDirection="row"
                       paddingLeft={1}
                       paddingRight={1}
-                      backgroundColor={index === problemIndex && focusedPane === "problems" ? CURSOR_BG_HEX : "#09090b"}
+                      backgroundColor={
+                        index === problemIndex && focusedPane === "problems" ? theme.colors.surface.cursor : theme.colors.surface.base
+                      }
                     >
-                      <text fg={item.problem.severity === "error" ? "#ff5c8a" : "#fbbf24"}>
+                      <text fg={item.problem.severity === "error" ? theme.colors.severity.error : theme.colors.severity.warning}>
                         {item.problem.severity === "error" ? "✖ " : "⚠ "}
                       </text>
-                      <text fg="#d4d4d8">{`${item.problem.path}${item.problem.line === undefined ? "" : `:${item.problem.line}`} `}</text>
-                      <text fg="#a1a1aa">{item.problem.message}</text>
-                      <text fg="#71717a">{`  [${item.problem.checker}]`}</text>
+                      <text
+                        fg={theme.colors.text.strong}
+                      >{`${item.problem.path}${item.problem.line === undefined ? "" : `:${item.problem.line}`} `}</text>
+                      <text fg={theme.colors.text.secondary}>{item.problem.message}</text>
+                      <text fg={theme.colors.text.muted}>{`  [${item.problem.checker}]`}</text>
                     </box>
                   ),
                 )}
@@ -1035,9 +1042,16 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           </scrollbox>
         </box>
       ) : null}
-      <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor="#111113">
-        <text fg="#71717a">{hints}</text>
-        <text fg="#a1a1aa">{statusRight}</text>
+      <box
+        height={1}
+        flexDirection="row"
+        justifyContent="space-between"
+        paddingLeft={1}
+        paddingRight={1}
+        backgroundColor={theme.colors.surface.panel}
+      >
+        <text fg={theme.colors.text.muted}>{hints}</text>
+        <text fg={theme.colors.text.secondary}>{statusRight}</text>
       </box>
       {paletteOpen ? (
         <box
@@ -1047,25 +1061,25 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           width={paletteWidth}
           flexDirection="column"
           borderStyle="single"
-          borderColor="#ff4fb8"
-          backgroundColor="#111113"
+          borderColor={theme.colors.border.focused}
+          backgroundColor={theme.colors.surface.panel}
           zIndex={100}
         >
           <input
             focused
             width="100%"
             placeholder="go to file…"
-            backgroundColor="#111113"
-            focusedBackgroundColor="#111113"
-            textColor="#e4e4e7"
-            cursorColor="#ff4fb8"
+            backgroundColor={theme.colors.surface.panel}
+            focusedBackgroundColor={theme.colors.surface.panel}
+            textColor={theme.colors.text.primary}
+            cursorColor={theme.colors.accent.primary}
             onInput={handlePaletteInput}
             onSubmit={pickPaletteResult}
           />
           <scrollbox ref={paletteRef} width="100%" height={Math.min(12, Math.max(1, paletteResults.length))} scrollY viewportCulling>
             {paletteResults.length === 0 ? (
               <box id="palette-empty" paddingLeft={1}>
-                <text fg="#71717a">no matches</text>
+                <text fg={theme.colors.text.muted}>no matches</text>
               </box>
             ) : (
               paletteResults.map((path, index) => {
@@ -1083,15 +1097,23 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                     justifyContent="space-between"
                     paddingLeft={1}
                     paddingRight={1}
-                    backgroundColor={index === paletteIndex ? CURSOR_BG_HEX : "#111113"}
+                    backgroundColor={index === paletteIndex ? theme.colors.surface.cursor : theme.colors.surface.panel}
                   >
                     <box flexDirection="row">
-                      <text fg={index === paletteIndex ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)}>
+                      <text
+                        fg={
+                          index === paletteIndex
+                            ? theme.colors.text.selected
+                            : changed === undefined
+                              ? theme.colors.text.secondary
+                              : theme.colors.kind[changed.kind]
+                        }
+                      >
                         {path}
                       </text>
                       <RecencyDot level={recency} />
                     </box>
-                    {changed === undefined ? null : <text fg={stageColor(changed.stage)}>{kindLetter(changed.kind)}</text>}
+                    {changed === undefined ? null : <text fg={theme.colors.stage[changed.stage]}>{kindLetter(changed.kind)}</text>}
                   </box>
                 )
                 // oxlint-enable react/no-array-index-key
@@ -1108,21 +1130,21 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           width={paletteWidth}
           flexDirection="column"
           borderStyle="single"
-          borderColor="#ff4fb8"
-          backgroundColor="#111113"
+          borderColor={theme.colors.border.focused}
+          backgroundColor={theme.colors.surface.panel}
           zIndex={100}
         >
-          <box height={1} paddingLeft={1} backgroundColor="#111113">
-            <text fg="#ff4fb8">worktrees</text>
+          <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+            <text fg={theme.colors.accent.primary}>worktrees</text>
           </box>
           <scrollbox ref={worktreeRef} width="100%" height={Math.min(12, Math.max(1, worktrees?.length ?? 1))} scrollY viewportCulling>
             {worktrees === undefined ? (
               <box id="worktree-loading" paddingLeft={1}>
-                <text fg="#71717a">loading…</text>
+                <text fg={theme.colors.text.muted}>loading…</text>
               </box>
             ) : worktrees.length === 0 ? (
               <box id="worktree-empty" paddingLeft={1}>
-                <text fg="#71717a">no worktrees</text>
+                <text fg={theme.colors.text.muted}>no worktrees</text>
               </box>
             ) : (
               worktrees.map((worktree, index) => {
@@ -1142,14 +1164,22 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                     justifyContent="space-between"
                     paddingLeft={1}
                     paddingRight={1}
-                    backgroundColor={index === worktreeIndex ? CURSOR_BG_HEX : "#111113"}
+                    backgroundColor={index === worktreeIndex ? theme.colors.surface.cursor : theme.colors.surface.panel}
                   >
-                    <text fg={index === worktreeIndex ? "#ffffff" : current ? "#ff4fb8" : "#d4d4d8"}>
+                    <text
+                      fg={
+                        index === worktreeIndex
+                          ? theme.colors.text.selected
+                          : current
+                            ? theme.colors.accent.primary
+                            : theme.colors.text.strong
+                      }
+                    >
                       {`${current ? "● " : "  "}${worktreeLabel(worktree)}`}
                     </text>
                     <box flexDirection="row">
-                      {badges === "" ? null : <text fg="#fbbf24">{`${badges} `}</text>}
-                      <text fg="#71717a">
+                      {badges === "" ? null : <text fg={theme.colors.severity.warning}>{`${badges} `}</text>}
+                      <text fg={theme.colors.text.muted}>
                         {truncateLeft(collapseHome(worktree.path), Math.max(10, paletteWidth - worktreeLabel(worktree).length - 16))}
                       </text>
                     </box>
@@ -1169,12 +1199,12 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           width={paletteWidth}
           flexDirection="column"
           borderStyle="single"
-          borderColor="#ff4fb8"
-          backgroundColor="#111113"
+          borderColor={theme.colors.border.focused}
+          backgroundColor={theme.colors.surface.panel}
           zIndex={100}
         >
-          <box height={1} paddingLeft={1} backgroundColor="#111113">
-            <text fg="#ff4fb8">keys</text>
+          <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+            <text fg={theme.colors.accent.primary}>keys</text>
           </box>
           <scrollbox width="100%" height={Math.min(KEY_HELP.length, Math.max(1, height - 6))} scrollY viewportCulling>
             {KEY_HELP.map(([combo, action]) => (
@@ -1185,10 +1215,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                 flexDirection="row"
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor="#111113"
+                backgroundColor={theme.colors.surface.panel}
               >
-                <text fg="#ff4fb8">{combo.padEnd(11)}</text>
-                <text fg="#a1a1aa">{action}</text>
+                <text fg={theme.colors.accent.primary}>{combo.padEnd(11)}</text>
+                <text fg={theme.colors.text.secondary}>{action}</text>
               </box>
             ))}
           </scrollbox>
@@ -1211,9 +1241,10 @@ interface TreeRowProps {
 
 // Memoized so cursor moves and status updates do not re-render every row
 const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now, treeWidth }: TreeRowProps) => {
+  const theme = useTheme()
   const node = row.node
   const indent = " ".repeat(Math.max(0, row.depth) * 2)
-  const background = focused ? CURSOR_BG_HEX : "#09090b"
+  const background = focused ? theme.colors.surface.cursor : theme.colors.surface.base
   const contentWidth = treeWidth - 4
 
   if (node.type === "directory") {
@@ -1221,7 +1252,7 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
     const chevron = isExpanded ? "▾" : "▸"
     const recency = directoryRecency(node, expandedDirectories, recencyByPath, now)
     const summary = isExpanded ? null : directorySummary(node.path, checkerState)
-    const nameFg = focused ? "#ffffff" : node.changedCount > 0 ? "#e4e4e7" : "#d4d4d8"
+    const nameFg = focused ? theme.colors.text.selected : node.changedCount > 0 ? theme.colors.text.primary : theme.colors.text.strong
     const hasBadges =
       !isExpanded &&
       (node.changedCount > 0 ||
@@ -1246,20 +1277,24 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
           <RecencyDot level={recency} />
         </box>
         <box flexDirection="row">
-          {summary?.failed ? <text fg="#ff5c8a">fail </text> : null}
-          {summary !== null && summary.errors > 0 ? <text fg="#ff5c8a">{`✖${summary.errors} `}</text> : null}
-          {summary !== null && summary.errors === 0 && summary.warnings > 0 ? <text fg="#fbbf24">{`⚠${summary.warnings} `}</text> : null}
-          {summary?.pending ? <text fg="#71717a">… </text> : null}
+          {summary?.failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
+          {summary !== null && summary.errors > 0 ? <text fg={theme.colors.severity.error}>{`✖${summary.errors} `}</text> : null}
+          {summary !== null && summary.errors === 0 && summary.warnings > 0 ? (
+            <text fg={theme.colors.severity.warning}>{`⚠${summary.warnings} `}</text>
+          ) : null}
+          {summary?.pending ? <text fg={theme.colors.text.muted}>… </text> : null}
           {summary !== null &&
           node.changedCount > 0 &&
           !summary.failed &&
           !summary.pending &&
           summary.errors === 0 &&
           summary.warnings === 0 ? (
-            <text fg="#3ddc84">✓ </text>
+            <text fg={theme.colors.success}>✓ </text>
           ) : null}
           {node.changedCount > 0 ? (
-            <text fg={node.stage !== undefined ? stageColor(node.stage) : "#71717a"}>{`+${node.additions} -${node.deletions}`}</text>
+            <text
+              fg={node.stage !== undefined ? theme.colors.stage[node.stage] : theme.colors.text.muted}
+            >{`+${node.additions} -${node.deletions}`}</text>
           ) : null}
         </box>
       </box>
@@ -1270,7 +1305,8 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
   const recency = recencyLevel(recencyByPath.get(node.path), now)
   const summary = checkerSummary(node.path, checkerState)
   const selected = selectedPath === node.path
-  const nameFg = focused || selected ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)
+  const nameFg =
+    focused || selected ? theme.colors.text.selected : changed === undefined ? theme.colors.text.secondary : theme.colors.kind[changed.kind]
   const pending = changed !== undefined && summary.pending
   const hasBadges = changed !== undefined || summary.failed || summary.errors > 0 || summary.warnings > 0 || summary.pending
   const badgeReserve = hasBadges ? 14 : 0
@@ -1290,24 +1326,25 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
         <RecencyDot level={recency} />
       </box>
       <box flexDirection="row">
-        {summary.failed ? <text fg="#ff5c8a">fail </text> : null}
-        {summary.errors > 0 ? <text fg="#ff5c8a">{`✖${summary.errors} `}</text> : null}
-        {summary.errors === 0 && summary.warnings > 0 ? <text fg="#fbbf24">{`⚠${summary.warnings} `}</text> : null}
-        {changed !== undefined && changed.warnings.length > 0 ? <text fg="#fbbf24">! </text> : null}
-        {changed === undefined ? null : <text fg="#71717a">{`+${changed.additions} -${changed.deletions} `}</text>}
-        {pending ? <text fg="#71717a">… </text> : null}
-        {changed === undefined ? null : <text fg={stageColor(changed.stage)}>{kindLetter(changed.kind)}</text>}
+        {summary.failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
+        {summary.errors > 0 ? <text fg={theme.colors.severity.error}>{`✖${summary.errors} `}</text> : null}
+        {summary.errors === 0 && summary.warnings > 0 ? <text fg={theme.colors.severity.warning}>{`⚠${summary.warnings} `}</text> : null}
+        {changed !== undefined && changed.warnings.length > 0 ? <text fg={theme.colors.severity.warning}>! </text> : null}
+        {changed === undefined ? null : <text fg={theme.colors.text.muted}>{`+${changed.additions} -${changed.deletions} `}</text>}
+        {pending ? <text fg={theme.colors.text.muted}>… </text> : null}
+        {changed === undefined ? null : <text fg={theme.colors.stage[changed.stage]}>{kindLetter(changed.kind)}</text>}
       </box>
     </box>
   )
 })
 
 function RecencyDot({ level }: { level: RecencyLevel }) {
+  const theme = useTheme()
   if (level === "none") {
     return null
   }
 
-  return <text fg={level === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>
+  return <text fg={level === "fresh" ? theme.colors.accent.primary : theme.colors.accent.dim}> ●</text>
 }
 
 function directoryRecency(
@@ -1434,38 +1471,6 @@ const KEY_HELP: [combo: string, action: string][] = [
   ["?", "show all keybindings"],
   ["q / esc", "quit (esc closes panels first)"],
 ]
-
-function stageColor(stage: StageState) {
-  if (stage === "staged") {
-    return "#3ddc84"
-  }
-
-  if (stage === "unstaged") {
-    return "#fbbf24"
-  }
-
-  if (stage === "mixed") {
-    return "#fb923c"
-  }
-
-  return "#a1a1aa"
-}
-
-function kindColor(kind: ChangedFile["kind"]) {
-  if (kind === "untracked" || kind === "added") {
-    return "#3ddc84"
-  }
-
-  if (kind === "deleted") {
-    return "#ff5c8a"
-  }
-
-  if (kind === "renamed") {
-    return "#c084fc"
-  }
-
-  return "#fbbf24"
-}
 
 function kindLetter(kind: ChangedFile["kind"]) {
   if (kind === "untracked") {

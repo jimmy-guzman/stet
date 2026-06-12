@@ -804,6 +804,9 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                   treeWidth={sidebarWidth}
                 />
               ))}
+              {treeRows.length < paneHeight && (
+                <box id="tree-filler" width="100%" height={paneHeight - treeRows.length} backgroundColor="#09090b" />
+              )}
             </scrollbox>
           </box>
         )}
@@ -990,7 +993,6 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
   const indent = " ".repeat(Math.max(0, row.depth) * 2)
   const background = focused ? CURSOR_BG_HEX : "#09090b"
   const contentWidth = treeWidth - 4
-  const badgeReserve = 14
 
   if (node.type === "directory") {
     const isExpanded = expandedDirectories.has(node.id)
@@ -998,6 +1000,14 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
     const recency = directoryRecency(node, expandedDirectories, recencyByPath, now)
     const summary = isExpanded ? null : directorySummary(node.path, checkerState)
     const nameFg = focused ? "#ffffff" : node.changedCount > 0 ? "#e4e4e7" : "#d4d4d8"
+    const hasBadges =
+      !isExpanded &&
+      (node.changedCount > 0 ||
+        Boolean(summary?.failed) ||
+        Boolean(summary?.pending) ||
+        (summary?.errors ?? 0) > 0 ||
+        (summary?.warnings ?? 0) > 0)
+    const badgeReserve = hasBadges ? 14 : 0
     const maxNameLen = contentWidth - indent.length - 2 - badgeReserve
     return (
       <box
@@ -1040,6 +1050,8 @@ const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checker
   const selected = selectedPath === node.path
   const nameFg = focused || selected ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)
   const pending = changed !== undefined && summary.pending
+  const hasBadges = changed !== undefined || summary.failed || summary.errors > 0 || summary.warnings > 0 || summary.pending
+  const badgeReserve = hasBadges ? 14 : 0
 
   return (
     <box

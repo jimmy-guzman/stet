@@ -1,26 +1,27 @@
-import { Atom } from "effect/unstable/reactivity"
+import { Schedule, Stream } from "effect"
+import { Atom, AsyncResult } from "effect/unstable/reactivity"
 import { emptyActivityLog, lastChangedAt, latestActivity, RECENT_MS } from "../activity"
 
 export const activityLogAtom = Atom.make(emptyActivityLog).pipe(Atom.keepAlive)
 
 export const recencyByPathAtom = Atom.make((get) => lastChangedAt(get(activityLogAtom)))
 
-// Mirrors the old useActivity clock: ticks "Ns ago" labels once a second while
-// Activity is recent, then stays quiescent so an idle session does not re-render.
-export const nowAtom = Atom.make((get) => {
+// Ticks once a second to keep "Ns ago" labels fresh while activity is recent,
+// Then the stream ends so an idle session stays quiescent. Re-keys (and resumes
+// Ticking) whenever new activity is recorded.
+const nowTickAtom = Atom.make((get) => {
   const latest = latestActivity(get(activityLogAtom))
-  const now = Date.now()
-
-  if (latest !== undefined && now - latest.at < RECENT_MS) {
-    const id = setInterval(() => {
-      const tick = Date.now()
-      get.setSelf(tick)
-      if (tick - latest.at >= RECENT_MS) {
-        clearInterval(id)
-      }
-    }, 1000)
-    get.addFinalizer(() => clearInterval(id))
+  if (latest === undefined || Date.now() - latest.at >= RECENT_MS) {
+    return Stream.make(Date.now())
   }
 
-  return now
+  return Stream.fromSchedule(Schedule.spaced("1 second")).pipe(
+    Stream.map(() => Date.now()),
+    Stream.takeWhile(() => Date.now() - latest.at < RECENT_MS),
+  )
 }).pipe(Atom.keepAlive)
+
+export const nowAtom = Atom.make((get) => {
+  const tick = get(nowTickAtom)
+  return AsyncResult.isSuccess(tick) ? tick.value : Date.now()
+})

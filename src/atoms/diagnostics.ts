@@ -1,5 +1,7 @@
 import { Effect, Stream } from "effect"
-import { Atom } from "effect/unstable/reactivity"
+import { Atom, AtomRegistry } from "effect/unstable/reactivity"
+import { activityLogAtom } from "./activity"
+import { gitModelAtom } from "./git"
 import {
   allFindings,
   checkerNames,
@@ -82,3 +84,20 @@ export const lineMapAtom = Atom.make((get) => {
   const selectedPath = get(selectedPathAtom)
   return selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, get(checkerStateAtom))
 })
+
+// Re-run the checks once the repo has been quiet for 2s. Re-keying on each new
+// Activity interrupts the prior sleep, which is the debounce the old setTimeout
+// Gave us, now as fiber interruption.
+export const quietRerunAtom = Atom.make((get) => {
+  if (get(activityLogAtom).events.length === 0) {
+    return Stream.empty
+  }
+
+  return Stream.fromEffect(
+    Effect.gen(function* quietRerun() {
+      const registry = yield* AtomRegistry.AtomRegistry
+      yield* Effect.sleep("2 seconds")
+      yield* Effect.sync(() => registry.set(runChecksAtom, registry.get(gitModelAtom)))
+    }),
+  )
+}).pipe(Atom.keepAlive)

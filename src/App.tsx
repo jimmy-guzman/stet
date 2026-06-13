@@ -6,7 +6,15 @@ import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useContext, useEffect, useRef } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
-import { allProblemItemsAtom, checkerStateAtom, countsAtom, lineMapAtom, runChecksAtom, statusAtom } from "./atoms/diagnostics"
+import {
+  allProblemItemsAtom,
+  checkerStateAtom,
+  countsAtom,
+  lineMapAtom,
+  quietRerunAtom,
+  runChecksAtom,
+  statusAtom,
+} from "./atoms/diagnostics"
 import { gitModelAtom, gitPollAtom, lastChangeAtom, repoRootAtom } from "./atoms/git"
 import { paletteResultsAtom } from "./atoms/palette"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
@@ -92,6 +100,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const setLastChange = useAtomSet(lastChangeAtom)
   const setRepoRoot = useAtomSet(repoRootAtom)
   useAtomMount(gitPollAtom)
+  useAtomMount(quietRerunAtom)
   const selectedPath = useAtomValue(selectedPathAtom)
   const setSelectedPath = useAtomSet(selectedPathAtom)
   const focusedRowIndex = useAtomValue(focusedRowIndexAtom)
@@ -197,16 +206,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     // When the atom is disposed on unmount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    if (activityLog.events.length === 0) {
-      return
-    }
-
-    // Checks re-run once the repo has been quiet for 2s
-    const id = setTimeout(() => runChecks(model), 2000)
-    return () => clearTimeout(id)
-  }, [activityLog, model, runChecks])
 
   useEffect(() => {
     const focusedRow = treeRows[focusedRowIndex]

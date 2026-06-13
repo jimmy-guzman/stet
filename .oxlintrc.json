@@ -31,5 +31,8 @@
   "ignorePatterns": ["dist", ".agents"],
   "env": {
     "builtin": true
+  },
+  "options": {
+    "typeAware": true
   }
 }

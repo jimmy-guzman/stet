@@ -72,7 +72,7 @@ export function parsePatch(diff: string): ParsedPatch {
       remainingNew = 0
     }
 
-    const hunkMatch = raw.match(hunkPattern)
+    const hunkMatch = hunkPattern.exec(raw)
     if (hunkMatch !== null) {
       current = {
         header: raw,

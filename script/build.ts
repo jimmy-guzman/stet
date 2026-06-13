@@ -62,7 +62,7 @@ for (const target of targets) {
       autoloadPackageJson: true,
       autoloadTsconfig: true,
       outfile: `dist/${name}/bin/${pkg.name}`,
-      target: `bun-${target.os}-${target.arch}` as never,
+      target: `bun-${target.os}-${target.arch}`,
     },
     conditions: ["bun", "node"],
     define: {
@@ -78,7 +78,7 @@ for (const target of targets) {
   })
 
   if (!result.success) {
-    console.error(result.logs.join("\n"))
+    console.error(result.logs.map((log) => log.message).join("\n"))
     process.exit(1)
   }
 

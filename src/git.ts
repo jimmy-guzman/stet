@@ -210,7 +210,7 @@ export function parsePorcelainStatus(output: string): Map<string, StageState> {
     const stage = stageFromCodes(token[0] ?? " ", token[1] ?? " ")
     stageByPath.set(token.slice(3), stage)
 
-    if (token[0] === "R" || token[0] === "C" || token[1] === "R" || token[1] === "C") {
+    if (token.startsWith("R") || token.startsWith("C") || token[1] === "R" || token[1] === "C") {
       const original = tokens[index + 1]
       if (original !== undefined && original !== "") {
         stageByPath.set(original, stage)

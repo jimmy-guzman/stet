@@ -48,28 +48,29 @@ const checkerRegistry: Record<CheckerName, DiscoverChecker> = {
 }
 
 export function initialCheckerState(files: ChangedFile[]): CheckerState {
-  const state = {} as CheckerState
-  for (const checker of checkerNames) {
-    state[checker] = initialFileState(files)
+  return {
+    lint: initialFileState(files),
+    prettier: initialFileState(files),
+    typecheck: initialFileState(files),
   }
-
-  return state
 }
 
 export function markPending(state: CheckerState, files: ChangedFile[], changedPaths: string[]): CheckerState {
   const changed = new Set(changedPaths)
-  const next = {} as CheckerState
-  for (const checker of checkerNames) {
-    const map = new Map(state[checker])
+  function mark(map: Map<string, CheckerFileState>) {
+    const next = new Map(map)
     for (const file of files) {
-      if (map.get(file.path) === undefined || changed.has(file.path)) {
-        map.set(file.path, { count: 0, diagnostics: [], status: "pending" })
+      if (next.get(file.path) === undefined || changed.has(file.path)) {
+        next.set(file.path, { count: 0, diagnostics: [], status: "pending" })
       }
     }
-    next[checker] = map
+    return next
   }
-
-  return next
+  return {
+    lint: mark(state.lint),
+    prettier: mark(state.prettier),
+    typecheck: mark(state.typecheck),
+  }
 }
 
 export function directorySummary(path: string, state: CheckerState) {
@@ -285,14 +286,7 @@ function discoverWorkspaceTypechecks(repoRoot: string, packageJson: PackageJson 
 
 function getWorkspacePatterns(repoRoot: string, packageJson: PackageJson | undefined): string[] {
   const ws = packageJson?.workspaces
-  const fromPackageJson: string[] =
-    ws === undefined
-      ? []
-      : Array.isArray(ws)
-        ? ws
-        : Array.isArray((ws as { packages?: unknown }).packages)
-          ? (ws as { packages: string[] }).packages
-          : []
+  const fromPackageJson = ws === undefined ? [] : Array.isArray(ws) ? ws : ws.packages
   return [...fromPackageJson, ...getPnpmWorkspacePatterns(repoRoot)]
 }
 
@@ -302,7 +296,7 @@ function getPnpmWorkspacePatterns(repoRoot: string): string[] {
     return []
   }
   const text = readFileSync(path, "utf8")
-  const match = text.match(/^packages:\s*\n(?<block>(?:[ \t]+-[^\n]*\n?)+)/m)
+  const match = /^packages:\s*\n(?<block>(?:[ \t]+-[^\n]*\n?)+)/m.exec(text)
   if (match === null) {
     return []
   }
@@ -357,6 +351,10 @@ export function parseLintOutput(output: { stdout: string; stderr: string; exitCo
   return [{ checker: "lint", message: summary === "" ? "lint reported findings" : summary, path: "", severity: "error" }]
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
 function parseLintJson(stdout: string): Diagnostic[] | undefined {
   let parsed: unknown
   try {
@@ -367,30 +365,31 @@ function parseLintJson(stdout: string): Diagnostic[] | undefined {
 
   if (Array.isArray(parsed)) {
     // eslint --format json
-    const files = parsed as { filePath?: string; messages?: { line?: number; severity?: number; message?: string }[] }[]
-    return files.flatMap((file) =>
-      (file.messages ?? []).map((message) => ({
+    return parsed.filter(isRecord).flatMap((file) => {
+      const messages: unknown[] = Array.isArray(file.messages) ? file.messages : []
+      return messages.filter(isRecord).map((message) => ({
         checker: "lint" as const,
-        line: message.line,
-        message: message.message ?? "lint finding",
-        path: file.filePath ?? "",
+        line: typeof message.line === "number" ? message.line : undefined,
+        message: typeof message.message === "string" ? message.message : "lint finding",
+        path: typeof file.filePath === "string" ? file.filePath : "",
         severity: message.severity === 2 ? ("error" as const) : ("warning" as const),
-      })),
-    )
+      }))
+    })
   }
 
-  if (typeof parsed === "object" && parsed !== null && "diagnostics" in parsed) {
+  if (isRecord(parsed) && Array.isArray(parsed.diagnostics)) {
     // Oxlint --format json
-    const report = parsed as {
-      diagnostics?: { filename?: string; message?: string; severity?: string; labels?: { span?: { line?: number } }[] }[]
-    }
-    return (report.diagnostics ?? []).map((diagnostic) => ({
-      checker: "lint" as const,
-      line: diagnostic.labels?.[0]?.span?.line,
-      message: diagnostic.message ?? "oxlint finding",
-      path: diagnostic.filename ?? "",
-      severity: diagnostic.severity === "warning" ? ("warning" as const) : ("error" as const),
-    }))
+    return parsed.diagnostics.filter(isRecord).map((diagnostic) => {
+      const labels: unknown[] = Array.isArray(diagnostic.labels) ? diagnostic.labels : []
+      const span = isRecord(labels[0]) && isRecord(labels[0].span) ? labels[0].span : undefined
+      return {
+        checker: "lint" as const,
+        line: span !== undefined && typeof span.line === "number" ? span.line : undefined,
+        message: typeof diagnostic.message === "string" ? diagnostic.message : "oxlint finding",
+        path: typeof diagnostic.filename === "string" ? diagnostic.filename : "",
+        severity: diagnostic.severity === "warning" ? ("warning" as const) : ("error" as const),
+      }
+    })
   }
 
   return undefined
@@ -411,7 +410,7 @@ export function parsePrettierList(output: { stdout: string }): Diagnostic[] {
 
 export function parseTypeScriptOutput(output: { stdout: string; stderr: string; exitCode?: number }): Diagnostic[] {
   const diagnostics = `${output.stdout}\n${output.stderr}`.split("\n").flatMap((line) => {
-    const match = line.match(/^(?<path>.+?)\((?<line>\d+),(?<col>\d+)\):\s+error\s+TS\d+:\s+(?<message>.+)$/)
+    const match = /^(?<path>.+?)\((?<line>\d+),(?<col>\d+)\):\s+error\s+TS\d+:\s+(?<message>.+)$/.exec(line)
     if (match === null) {
       return []
     }
@@ -499,13 +498,37 @@ function initialFileState(files: ChangedFile[]) {
   )
 }
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string")
+}
+
+function isWorkspaces(value: unknown): value is string[] | { packages: string[] } {
+  if (Array.isArray(value)) {
+    return value.every((entry) => typeof entry === "string")
+  }
+  return isRecord(value) && Array.isArray(value.packages) && value.packages.every((entry) => typeof entry === "string")
+}
+
 function readPackageJson(repoRoot: string): PackageJson | undefined {
   const path = `${repoRoot}/package.json`
   if (!existsSync(path)) {
     return undefined
   }
 
-  return JSON.parse(readFileSync(path, "utf8")) as PackageJson
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"))
+  } catch {
+    return undefined
+  }
+  if (!isRecord(parsed)) {
+    return undefined
+  }
+
+  return {
+    scripts: isStringRecord(parsed.scripts) ? parsed.scripts : undefined,
+    workspaces: isWorkspaces(parsed.workspaces) ? parsed.workspaces : undefined,
+  }
 }
 
 function hasBinary(repoRoot: string, binary: string) {

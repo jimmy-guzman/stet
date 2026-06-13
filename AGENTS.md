@@ -1,82 +1,84 @@
-# Agent Instructions
+# Agent instructions
 
-## Product
+`sideye` is a read-only companion TUI for CLI coding agents (claude code, opencode, codex). You run an agent in one terminal pane and `sideye` in another to inspect what changed: everything an IDE shows you, nothing it does for you. **It only inspects. It never reviews, explains, approves, rejects, gates, talks to an agent, or writes to the repo.** That constraint shapes every change here.
 
-`sideye` (as in keeping a skeptical side-eye on your agent's changes) is a read-only companion TUI for CLI coding agents (claude code, opencode, codex). The user runs an agent in one terminal pane and `sideye` in another, replacing the editor they would otherwise open just to see what is there, what is happening, and what is the difference — everything an IDE shows you, nothing it does for you, with the "integrated" part deliberately missing. The human stays in charge: the tool helps inspect robot output, but it never reviews, explains, approves, rejects, gates, or talks back to an agent.
+See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md` for the implementation invariants behind those features. Read SPEC before changing tree construction, the viewer, recency, diagnostics, scopes, or worktrees.
 
-The four pillars:
+## Stack
 
-1. **Full repo tree with changed overlay** — browse the entire project tree like an IDE sidebar; open and read any file (read-only, syntax highlighted); changed files are tinted and tagged in place.
-2. **Simple change scopes** — all changes, staged only, and unstaged only, cycled in-app. No commit-log browser, no timelines, no snapshots.
-3. **Live with activity awareness** — git polling keeps the view fresh while the agent edits; recency markers show what was just touched and decay silently; one key jumps to the latest activity.
-4. **Static analysis surfaced like an IDE** — lint/tsc/fmt findings appear in a problems panel, as inline line markers in the viewer, and as per-file markers in the tree, repo-wide rather than changed-files-only; checks re-run automatically after the repo goes quiet.
+- Bun for runtime, scripts, dependencies, tests, and build.
+- TypeScript with `strict` enabled.
+- `@opentui/core` and `@opentui/react`; JSX configured with `jsxImportSource: "@opentui/react"`.
+- Git output is the synchronous source of truth. The git-backed file map renders before any checker or diagnostic resolves; diagnostics are independent async decorations over the stable git file list.
+- v1 is macOS-first (clipboard via `pbcopy`).
 
-The core loop is:
+## Conventions
 
-1. Run the agent next to `sideye` and follow its edits as they land.
-2. Glance at the tree, open any file or diff, check the problems panel.
-3. Copy a `path:line` reference plus snippet.
-4. Paste that reference into the agent conversation and redirect in your own words.
+- Read the relevant `SKILL.md` under `.agents/skills` before related work: `bun` before any dependency/script/build change, `opentui` before any OpenTUI code.
+- Prefer `bun run`, `bun test`, `bun install`, `bun add`, `bun add -d`, `bun remove`, `bun build`. No Node/npm/Jest/esbuild wrappers unless explicitly requested. Runtime flags go before `run` (e.g. `bun --watch run <script>`).
+- Keep `bun.lock` changes paired with dependency changes. Declare direct dependencies in `package.json`; don't rely on transitive ones.
+- Lint and format are oxlint and oxfmt (`bun run lint`, `bun run format`); do not add ESLint or Prettier.
+- Use `===` and `!==`; never `== null` or `!= null`.
+- No explicit return type annotations unless needed for exported API clarity, recursion, overloads, or inference limits.
+- Do not reach for `as`, `!`, or `any` without first exhausting proper solutions.
+- Do not silence lint or type errors with rule overrides or casts. Fix the root cause.
+- Comments are JSDoc or `TODO`/`FIXME` only; keep them sparse and useful, and do not narrate obvious code.
+- Prefer small typed modules (git parsing, diagnostics, clipboard, CLI args, UI state), and structured parsing over ad hoc string manipulation when a command offers machine-readable output.
+- No AI-generated sign-offs in commits, PR text, docs, or generated content.
 
-## Technical Defaults
+## Code design
 
-- Use Bun for runtime, scripts, dependency management, test commands, and build smoke checks.
-- Use TypeScript with `strict` enabled.
-- Use `@opentui/core` and `@opentui/react` for the terminal UI.
-- Configure JSX with `jsxImportSource: "@opentui/react"`.
-- Treat git output as the synchronous source of truth.
-- Render the git-backed file map before any checker or diagnostic process resolves.
-- Run diagnostics as independent async decorations over the stable git file list.
-- Keep v1 macOS-first for clipboard support with `pbcopy`.
+- **Extraction is a design decision, not a refactor.** When you see duplication, surface it and propose. Do not extract shared helpers, types, or components unprompted, regardless of usage count. Whether two similar blocks are one concept or two is a judgment you don't have the context to make alone.
+- **No speculative generality.** Don't add config options, generic parameters, or extension points for use cases that don't exist yet. The right abstraction for a future need is almost never the one you'd guess before seeing it.
+- **Duplication is cheaper than the wrong abstraction.** Code that looks similar isn't necessarily the same thing. Deduping two unrelated pieces couples their futures; when one needs to change and the other doesn't, the abstraction has to grow conditionals or split back apart, both of which are worse than having kept them separate.
 
-## Local Skills
+## Testing
 
-Project skills are installed under `.agents/skills`.
+- **Test behavior, not implementation.** Assert what a caller or user observes, not how the code achieves it. "Caller" and "user" scale with the unit under test: for a component it's the person clicking, for a function it's the code calling it. Tests that assert internals break on every refactor and prove nothing about whether the code works.
+- **Prefer clarity over DRY in tests.** Inline setup, repeat literals, skip shared fixtures when they'd obscure the case under test. A test's job is to be readable in isolation; the pull toward DRY that makes production code better usually makes tests worse.
+- **Test real behavior, not hypothetical behavior.** Cover the cases the contract actually promises. Do not manufacture edge cases the code doesn't claim to handle just to pad coverage.
 
-- Use `.agents/skills/find-skills/SKILL.md` when discovering additional skills.
-- Use `.agents/skills/bun/SKILL.md` before changing dependencies, scripts, tests, runtime behavior, or build commands.
-- Use `.agents/skills/opentui/SKILL.md` before writing or changing OpenTUI code.
-- For OpenTUI React work, start with `.agents/skills/opentui/docs/bindings/react.mdx`, then read component docs such as `docs/components/diff.mdx`, `docs/components/select.mdx`, `docs/components/scrollbox.mdx`, `docs/components/box.mdx`, and `docs/components/text.mdx` as needed.
-- For keyboard/navigation behavior, read `.agents/skills/opentui/docs/core-concepts/keyboard.mdx` and `.agents/skills/opentui/docs/keymap/overview.mdx`.
-- For testing OpenTUI behavior, read `.agents/skills/opentui/docs/core-concepts/testing.mdx`.
+## Writing
 
-## Coding Conventions
+- **No em dashes.** Use a comma, period, or restructure the sentence instead.
+- **No horizontal rules as section dividers.** Don't use `---` to separate sections when a heading is already doing that job. Exception: `---` is fine as a thematic break when there is no heading on either side.
+- **No curly/smart quotes in prose.** Use straight quotes (`"`) not curly quotes. Applies to prose only; code blocks are verbatim and exempt.
+- **Sentence case subheadings.** Write `## Like this` not `## Like This`. Exception: proper nouns and acronyms follow their standard casing.
 
-- Prefer `bun run`, `bun test`, `bun install`, `bun add`, `bun add -d`, `bun remove`, and `bun build`; do not introduce Node/npm/Jest/esbuild wrappers unless explicitly requested.
-- Put Bun runtime flags before `run`, such as `bun --watch run <script>`.
-- Keep `bun.lock` text lockfile changes with dependency changes.
-- Do not rely on transitive dependencies; declare direct dependencies in `package.json`.
-- Use `===` and `!==`; never use `== null` or `!= null`.
-- Avoid explicit return type annotations on functions unless needed for exported API clarity, recursion, overloads, or type inference limits.
-- Prefer small typed modules for git parsing, diagnostics, clipboard, CLI args, and UI state.
-- Prefer structured parsing over ad hoc string manipulation when a command offers machine-readable output.
-- Keep comments sparse and useful; do not narrate obvious code.
-- Do not add AI-generated sign-offs to commits, PR text, docs, or generated content.
+## Docs
 
-## Implementation Guardrails
+- **After introducing a new pattern, feature, convention, or structural change, ask whether `AGENTS.md` and/or `README.md` should be updated, then apply the changes.** Docs rot the moment the code moves without them. Catching the update at the point of change is the only time it reliably happens.
 
-- `sideye [ref]` defaults to the `all` scope (worktree vs `HEAD`); `--staged` and `--unstaged` set the initial scope; `s` cycles scopes in-app (`unstaged` is plain `git diff` and ignores the ref).
-- The tool must work in any git repo, not only this repo or agent-created worktrees.
-- The tree shows the full repo from `git ls-files` (tracked) plus `git ls-files --others --exclude-standard` (untracked, so gitignore is respected), union'd with the changed set so staged deletions stay visible.
-- Tree ordering is directories-first, alphabetical, always — stable under polling by construction, so the list never reorders under the cursor. Single-child directory chains flatten into one row. `c` toggles a changes-only filter.
-- Include untracked files in the changed set (except in the `staged` scope) and render them as all-added diffs.
-- Tag each changed file with its stage state (staged, unstaged, mixed, untracked) from `git status` and keep it distinguishable in the tree.
-- The view is live: poll git and refresh the tree, diff, and file content while the user watches. Preserve selection (by path) and the cursor across refreshes; reset the cursor only on file switch.
-- Selecting an unchanged file shows its full content read-only; `v` toggles a changed file between diff and full content. Full files render through the diff viewer as synthesized all-context patches. Binary, missing, and oversized files render explicit placeholders, never raw bytes.
-- Recency markers come from an append-only in-memory activity event log (the seam for a future persistence layer); they decay silently (fresh under 5s, recent under 30s) and `.` jumps to the latest activity. A scope switch is not activity.
-- Diagnostics retain findings for every reported path, not just changed files (tsc runs project-wide). They surface in the problems panel (`p`), as inline line markers in the viewer, and as per-file markers in the tree.
-- Late diagnostics must fill badges and markers in place and never reorder the tree.
-- Checker badges must use explicit states: `pending`, `clean`, `findings`, and `failed` when needed. Missing or empty diagnostics must never render as clean; a file that changes returns its badges to `pending` until checks re-run.
-- Diagnostics run at startup, on `r`, and automatically once the repo has been quiet for ~2s after activity. New-vs-baseline diagnostics are deferred.
-- Git data renders first; diagnostics stream in later as decorations over the stable tree.
-- Do not implement an LSP client, web preview, PR workflow, accept/reject protocol, agent integration, or a database in v1.
+## Deciding what to do
+
+Judge every piece of work by whether it **should** be done (is it correct, is the current state wrong or inconsistent, does it serve the goal), and **never by ROI, cost, effort, or "is it worth it."** Do not label a known-wrong thing "low-value," "marginal," "an edge case," or "not worth it" to justify leaving it unfixed; reasoning by ROI is exactly what keeps work mediocre. ("The reference / competitor also gets it wrong" is a _gap_ argument, not a correctness one; it never makes a wrong thing acceptable.)
+
+The only valid reason to stop short of doing the right thing is that it **provably cannot** be done: a demonstrated limit of the model or tools, not an assumed or cost-based one. "Hard," "heavy," "expensive," or "a lot of work" is never a reason to stop; "proven impossible / blocked" is. When unsure which it is, find out (try it, measure it, prove it) before deciding, and never declare a limit you have not proven.
+
+Present choices by correctness and feasibility (real impossibilities, real _capability_ tradeoffs like portability or expressiveness), not by ROI.
+
+## Fixing bugs
+
+Assume a correct architecture has no bugs, so every bug is evidence that the architecture _permits_ it to exist, not merely that one code path is wrong. **Before fixing any bug, first diagnose the root cause: ask why the architecture allowed this bug to exist at all,** and whether it is one instance of a whole _class_ of bugs the same structure would keep producing.
+
+Prefer fixes that remove the structural condition that let the bug exist, so this bug and others like it can no longer occur, over patches at the symptom layer (a guard, a special case, or a workaround that leaves the enabling structure in place). Reach for a symptom-layer patch only when the root-cause fix is **provably** infeasible or genuinely belongs in a separate change, never merely because it is larger or harder; when you do, say so and name the root cause you are deferring.
+
+This is a thinking-first rule, not a mandate to refactor on every fix: the root-cause analysis is **always** required; reshaping the architecture to act on it is frequent but conditional on its being the right and feasible move.
+
+## Pausing
+
+- **Between phases:** after completing a discrete chunk of work, stop. Post a short summary, then ask before starting the next.
+- **On uncertainty:** if a decision is not covered by existing rules or context, do not invent. Stop and ask.
+- **On a debug loop:** if the same error persists after 3 consecutive fix attempts, stop. Report the error, what was tried, and the likely cause. Do not attempt a fourth fix without input.
+
+## Scope guardrails (v1)
+
+Do not implement an LSP client, web preview, PR workflow, accept/reject protocol, agent integration, or a database. The tool must work in any git repo, not only this one or agent-created worktrees.
 
 ## Verification
 
-- Use Bun commands for local checks.
-- Use `bun run check` as the default pre-submit command.
-- Use `bun run build` as the Bun compile smoke check.
-- Use `bun run src/main.tsx --help` as the CLI smoke check.
-- Run `bun install` after package or lockfile changes.
-- Add focused tests for git parsing, CLI argument handling, diagnostic parsing, checker state transitions, and copy-reference formatting.
-- Keep OpenTUI rendering tests separate from pure parsing/state tests where practical.
+- `bun run check`: default pre-submit command.
+- `bun run build`: Bun compile smoke check.
+- `bun run src/main.tsx --help`: CLI smoke check.
+- `bun install` after package or lockfile changes.
+- Add focused tests for git parsing, CLI argument handling, diagnostic parsing, checker state transitions, and copy-reference formatting. Keep OpenTUI rendering tests separate from pure parsing/state tests where practical.

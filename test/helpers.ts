@@ -6,6 +6,7 @@ import { RegistryProvider } from "@effect/atom-react"
 import { Effect, Layer } from "effect"
 import { createElement, type ReactElement } from "react"
 import type { DiffScope } from "../src/cli"
+import type { ChangedFile } from "../src/git"
 import { Git, GitLive } from "../src/services/git"
 import { ProcessLive } from "../src/services/process"
 import type { SyntaxConfig } from "../src/syntax"
@@ -14,12 +15,30 @@ export const disabledSyntax: SyntaxConfig = { enabled: false, status: "syntax di
 
 const GitTestLive = GitLive.pipe(Layer.provide(ProcessLive))
 
-// Seed a real GitModel from a fixture repo by running the Git service, the same
-// Path the app uses, so tests exercise the production load instead of a mock.
+// Run the Git service against a fixture repo, the same path the app uses, so
+// Tests exercise the production load instead of a mock.
 export function loadModel(repoRoot: string, scope: DiffScope) {
   return Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.loadModel(repoRoot, scope)),
+      Effect.provide(GitTestLive),
+    ),
+  )
+}
+
+export function loadWorktrees(repoRoot: string) {
+  return Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.worktrees(repoRoot)),
+      Effect.provide(GitTestLive),
+    ),
+  )
+}
+
+export function loadFileDiff(repoRoot: string, scope: DiffScope, changed: ChangedFile) {
+  return Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.fileDiff(repoRoot, scope, changed)),
       Effect.provide(GitTestLive),
     ),
   )

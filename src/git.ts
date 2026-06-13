@@ -220,16 +220,6 @@ export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<
   )
 }
 
-export function loadFileDiff(repoRoot: string, scope: DiffScope, file: ChangedFile) {
-  if (file.kind === "untracked") {
-    return runCommand(["git", "diff", "--no-index", "--", "/dev/null", file.path], repoRoot, [0, 1]).stdout
-  }
-
-  // The old path must be in the pathspec or git cannot pair the rename and shows a whole-file add
-  const pathspec = file.oldPath === undefined ? [file.path] : [file.oldPath, file.path]
-  return runCommand([...diffArgs(scope), "--", ...pathspec], repoRoot, [0, 1]).stdout
-}
-
 export function numstatArgs(scope: DiffScope) {
   // -z keeps non-ASCII paths literal instead of core.quotePath's C-quoting
   return [...diffArgs(scope), "--numstat", "-z"]

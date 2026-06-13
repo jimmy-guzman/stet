@@ -1,7 +1,7 @@
 import { statSync } from "node:fs"
 import type { DiffScope } from "./cli"
 import { loadFileContent } from "./file-view"
-import { runCommand, runCommandAsync } from "./process"
+import { runCommandAsync } from "./process"
 
 export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked"
 
@@ -50,10 +50,6 @@ export interface Worktree {
   prunable: boolean
 }
 
-export function resolveRepoRoot(cwd: string) {
-  return runCommand(["git", "rev-parse", "--show-toplevel"], cwd).stdout.trim()
-}
-
 export async function listWorktrees(repoRoot: string): Promise<Worktree[]> {
   const result = await runCommandAsync(["git", "worktree", "list", "--porcelain", "-z"], repoRoot)
   return parseWorktreeList(result.stdout)
@@ -100,20 +96,6 @@ export function parseWorktreeList(output: string): Worktree[] {
   }
 
   return worktrees
-}
-
-export async function loadChangedFiles(
-  repoRoot: string,
-  scope: DiffScope,
-): Promise<Pick<GitModel, "changed" | "changedByPath" | "scopeKey">> {
-  const [untrackedFiles, nameStatusResult, numstatResult, porcelain] = await Promise.all([
-    runCommandAsync(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
-    runCommandAsync(nameStatusArgs(scope), repoRoot),
-    runCommandAsync(numstatArgs(scope), repoRoot),
-    runCommandAsync(["git", "status", "--porcelain=v1", "-z"], repoRoot),
-  ])
-
-  return assembleChanged(repoRoot, scope, untrackedFiles.stdout, nameStatusResult.stdout, numstatResult.stdout, porcelain.stdout)
 }
 
 // Pure assembly of the changed set from raw git output, shared by the loaders and the Git service.

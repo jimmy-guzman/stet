@@ -59,7 +59,7 @@ export interface KeyHandlerCtx {
   setFileView: Dispatch<SetStateAction<boolean>>
   setFullContentPaths: Dispatch<SetStateAction<Set<string>>>
   setCursorIndex: Dispatch<SetStateAction<number>>
-  setFocusedRowIndex: Dispatch<SetStateAction<number>>
+  setFocusedRowIndex: (direction: number) => void
   setExpandedDirectories: Dispatch<SetStateAction<Set<string>>>
 }
 
@@ -347,12 +347,12 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
     }
 
     if (key.name === "j" || key.name === "down") {
-      moveFocus(1, treeRows, setFocusedRowIndex, selectFile)
+      setFocusedRowIndex(1)
       return
     }
 
     if (key.name === "k" || key.name === "up") {
-      moveFocus(-1, treeRows, setFocusedRowIndex, selectFile)
+      setFocusedRowIndex(-1)
       return
     }
 
@@ -388,20 +388,4 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
       }
     }
   }
-}
-
-function moveFocus(
-  direction: -1 | 1,
-  rows: FileTreeRow[],
-  setFocusedRowIndex: (updater: (current: number) => number) => void,
-  selectFile: (path: string) => void,
-) {
-  setFocusedRowIndex((current) => {
-    const next = Math.max(0, Math.min(current + direction, rows.length - 1))
-    const row = rows[next]
-    if (row?.node.type === "file") {
-      selectFile(row.node.path)
-    }
-    return next
-  })
 }

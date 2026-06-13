@@ -7,8 +7,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
 import { gitModelAtom } from "./atoms/git"
-import { treeRowsAtom } from "./atoms/tree"
-import { changesOnlyAtom, expandedDirectoriesAtom, selectedPathAtom } from "./atoms/ui"
+import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
+import { changesOnlyAtom, expandedDirectoriesAtom, fileViewAtom, focusedNodeIdAtom, selectedPathAtom } from "./atoms/ui"
 import type { DiffScope } from "./cli"
 import { HeaderBar } from "./components/HeaderBar"
 import { HelpOverlay } from "./components/HelpOverlay"
@@ -30,7 +30,7 @@ import { createKeyHandler } from "./keymap"
 import { renderPatch } from "./patch"
 import type { SyntaxConfig } from "./syntax"
 import { useTheme } from "./theme/context"
-import { defaultExpandedDirectories, expandAncestorsForPath, findRowIndexForPath } from "./tree"
+import { defaultExpandedDirectories, expandAncestorsForPath } from "./tree"
 import { truncate, worktreeLabel } from "./ui-helpers"
 
 interface AppProps {
@@ -50,6 +50,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   useAtomInitialValues([
     [gitModelAtom, initialModel],
     [selectedPathAtom, initialSelectedPath],
+    [focusedNodeIdAtom, initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`],
     [expandedDirectoriesAtom, initialExpanded],
   ])
 
@@ -62,11 +63,14 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const setChangesOnly = useAtomSet(changesOnlyAtom)
   const selectedPath = useAtomValue(selectedPathAtom)
   const setSelectedPath = useAtomSet(selectedPathAtom)
-  const [focusedRowIndex, setFocusedRowIndex] = useState(0)
+  const focusedRowIndex = useAtomValue(focusedRowIndexAtom)
+  const setFocusedRowIndex = useAtomSet(focusedRowIndexAtom)
+  const setFocusedNodeId = useAtomSet(focusedNodeIdAtom)
   const expandedDirectories = useAtomValue(expandedDirectoriesAtom)
   const setExpandedDirectories = useAtomSet(expandedDirectoriesAtom)
   const [fullContentPaths, setFullContentPaths] = useState<Set<string>>(() => new Set())
-  const [fileView, setFileView] = useState(false)
+  const fileView = useAtomValue(fileViewAtom)
+  const setFileView = useAtomSet(fileViewAtom)
   const [focusedPane, setFocusedPane] = useState<"tree" | "diff" | "problems">("tree")
   const [problemsOpen, setProblemsOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -284,17 +288,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   }, [repoRoot, scope, setGitModel, initialModel])
 
   useEffect(() => {
-    if (selectedPath === undefined) {
-      return
-    }
-
-    const rowIndex = findRowIndexForPath(treeRows, selectedPath)
-    if (rowIndex >= 0) {
-      setFocusedRowIndex(rowIndex)
-    }
-  }, [selectedPath, treeRows])
-
-  useEffect(() => {
     const focusedRow = treeRows[focusedRowIndex]
     if (focusedRow !== undefined) {
       sidebarRef.current?.scrollChildIntoView(focusedRow.node.id)
@@ -340,10 +333,11 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const selectFile = useCallback(
     (path: string) => {
       setSelectedPath(path)
+      setFocusedNodeId(`file:${path}`)
       setFileView(false)
       setExpandedDirectories((current) => expandAncestorsForPath(current, path))
     },
-    [setSelectedPath, setExpandedDirectories],
+    [setSelectedPath, setFocusedNodeId, setFileView, setExpandedDirectories],
   )
 
   useKeyboard(
@@ -424,7 +418,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       setGitModel(fresh)
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path
       setSelectedPath(selected)
-      setFocusedRowIndex(0)
+      setFocusedNodeId(selected === undefined ? "" : `file:${selected}`)
       setExpandedDirectories(() => {
         const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path))
         return selected === undefined ? expanded : expandAncestorsForPath(expanded, selected)

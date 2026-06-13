@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { RegistryProvider } from "@effect/atom-react"
 import { createCliRenderer } from "@opentui/core"
 import { createRoot } from "@opentui/react"
 import packageJson from "../package.json"
@@ -36,9 +37,11 @@ try {
   // oxlint-disable-next-line react-perf/jsx-no-new-object-as-prop -- one-time startup render, not inside a component
   const model: GitModel = { repoRoot, ...changedResult, repoFiles: [], repoFilesKey: "" }
   createRoot(renderer).render(
-    <ThemeProvider theme={theme}>
-      <App model={model} scope={options.scope} syntax={syntax} />
-    </ThemeProvider>,
+    <RegistryProvider>
+      <ThemeProvider theme={theme}>
+        <App model={model} scope={options.scope} syntax={syntax} />
+      </ThemeProvider>
+    </RegistryProvider>,
   )
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error))

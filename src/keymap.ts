@@ -3,6 +3,7 @@ import type { Atom, AtomRegistry } from "effect/unstable/reactivity"
 import type { RefObject } from "react"
 import { latestActivity } from "./activity"
 import { activityLogAtom } from "./atoms/activity"
+import { copyAtom } from "./atoms/clipboard"
 import { allProblemItemsAtom, problemsAtom, runChecksAtom, statusAtom } from "./atoms/diagnostics"
 import { cursorIndexAtom, jumpTargetAtom } from "./atoms/diff"
 import { gitModelAtom } from "./atoms/git"
@@ -29,7 +30,7 @@ import {
 } from "./atoms/ui"
 import { navigableLinesAtom, selectedFileAtom } from "./atoms/viewer"
 import { nextScope, scopeLabel } from "./cli"
-import { copyToClipboard, formatCopyReference } from "./copy-reference"
+import { formatCopyReference } from "./copy-reference"
 import { listWorktrees, type Worktree } from "./git"
 import { lineReference } from "./patch"
 import { firstFileInNode } from "./tree"
@@ -238,14 +239,9 @@ export function createKeyHandler(registry: AtomRegistry.AtomRegistry, ctx: KeyHa
     }
 
     if (key.name === "y" && selectedPath !== undefined) {
-      try {
-        const line = get(navigableLinesAtom)[get(cursorIndexAtom)]
-        const reference = line === undefined ? { path: selectedPath } : lineReference(selectedPath, line)
-        copyToClipboard(formatCopyReference(reference))
-        set(statusAtom, `copied ${formatCopyReference(reference).split("\n")[0]}`)
-      } catch (error) {
-        set(statusAtom, error instanceof Error ? error.message : String(error))
-      }
+      const line = get(navigableLinesAtom)[get(cursorIndexAtom)]
+      const reference = line === undefined ? { path: selectedPath } : lineReference(selectedPath, line)
+      set(copyAtom, formatCopyReference(reference))
       return
     }
 

@@ -3,9 +3,18 @@ import packageJson from "../package.json"
 import { useAtomInitialValues, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
+import {
+  allProblemItemsAtom,
+  checkerStateAtom,
+  countsAtom,
+  lineMapAtom,
+  problemsAtom,
+  runChecksAtom,
+  statusAtom,
+} from "./atoms/diagnostics"
 import { gitModelAtom } from "./atoms/git"
 import { paletteResultsAtom } from "./atoms/palette"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
@@ -47,10 +56,9 @@ import { StatusBar } from "./components/StatusBar"
 import { Viewer } from "./components/Viewer"
 import { WorktreePicker } from "./components/WorktreePicker"
 import { PROBLEMS_HEIGHT } from "./constants"
-import { findingsLineMap, markPending, type Diagnostic } from "./diagnostics"
+import { initialCheckerState, markPending } from "./diagnostics"
 import type { ChangedFile, GitModel, Worktree } from "./git"
 import { loadChangedFiles, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
-import { useDiagnostics } from "./hooks/useDiagnostics"
 import { useDiffCursor } from "./hooks/useDiffCursor"
 import { createKeyHandler } from "./keymap"
 import type { SyntaxConfig } from "./syntax"
@@ -78,6 +86,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     [selectedPathAtom, initialSelectedPath],
     [focusedNodeIdAtom, initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`],
     [expandedDirectoriesAtom, initialExpanded],
+    [checkerStateAtom, initialCheckerState(initialModel.changed)],
+    [statusAtom, syntax.status],
   ])
 
   const scope = useAtomValue(scopeAtom)
@@ -124,19 +134,15 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const setActivityLog = useAtomSet(activityLogAtom)
   const now = useAtomValue(nowAtom)
   const recencyByPath = useAtomValue(recencyByPathAtom)
-  const {
-    abortRef,
-    allProblemItems,
-    checkerState,
-    checksInFlight,
-    counts,
-    problems,
-    runChecks,
-    runChecksRef,
-    setCheckerState,
-    setStatus,
-    status,
-  } = useDiagnostics(model, activityLog, syntax.status)
+  const checkerState = useAtomValue(checkerStateAtom)
+  const setCheckerState = useAtomSet(checkerStateAtom)
+  const status = useAtomValue(statusAtom)
+  const setStatus = useAtomSet(statusAtom)
+  const runChecks = useAtomSet(runChecksAtom)
+  const checksRunning = useAtomValue(runChecksAtom).waiting
+  const problems = useAtomValue(problemsAtom)
+  const counts = useAtomValue(countsAtom)
+  const allProblemItems = useAtomValue(allProblemItemsAtom)
   const sidebarRef = useRef<ScrollBoxRenderable>(null)
   const problemsRef = useRef<ScrollBoxRenderable>(null)
   const paletteRef = useRef<ScrollBoxRenderable>(null)
@@ -149,10 +155,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const showFileContent = useAtomValue(showFileContentAtom)
   const treeRows = useAtomValue(treeRowsAtom)
   const paletteResults = useAtomValue(paletteResultsAtom)
-  const lineMap = useMemo(
-    () => (selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, checkerState)),
-    [checkerState, selectedPath],
-  )
+  const lineMap = useAtomValue(lineMapAtom)
   const fileContent = useAtomValue(fileContentAtom)
   const renderedPatch = useAtomValue(renderedPatchAtom)
   const navigableLines = useAtomValue(navigableLinesAtom)
@@ -167,7 +170,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     // A scope switch swaps the changed set wholesale; that is not agent
     // Activity, but the new set still needs checker state, so re-run checks
     if (previousScopeKey !== model.scopeKey) {
-      runChecksRef.current()
+      runChecks(model)
       return
     }
 
@@ -198,7 +201,25 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       )
       setActivityLog((current) => recordActivity(current, entries, Date.now()))
     }
-  }, [model.changed, model.scopeKey, lastChangeRef, previousChangedRef, previousScopeKeyRef, runChecksRef, setActivityLog, setCheckerState])
+  }, [model, lastChangeRef, previousChangedRef, previousScopeKeyRef, runChecks, setActivityLog, setCheckerState])
+
+  useEffect(() => {
+    runChecks(model)
+    // Mount-only: a fresh run for the initial model; later runs come from scope
+    // Switches, the quiet-period timer, and the r key. The fiber is interrupted
+    // When the atom is disposed on unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (activityLog.events.length === 0) {
+      return
+    }
+
+    // Checks re-run once the repo has been quiet for 2s
+    const id = setTimeout(() => runChecks(model), 2000)
+    return () => clearTimeout(id)
+  }, [activityLog, model, runChecks])
 
   const repoRoot = model.repoRoot
   useEffect(() => {
@@ -378,7 +399,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   )
 
   function quit() {
-    abortRef.current?.abort()
     renderer.destroy()
   }
 
@@ -396,7 +416,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
     try {
       const fresh = await loadGitModel(worktree.path, scope)
-      abortRef.current?.abort()
       // Prime the activity refs so the swap is not mistaken for agent edits;
       // ScopeKey matches across worktrees, so that effect will not re-run checks
       previousChangedRef.current = fresh.changed
@@ -417,7 +436,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       setActivityLog(emptyActivityLog)
       setFocusedPane("tree")
       setStatus(`worktree: ${worktreeLabel(worktree)}`)
-      void runChecksRef.current(fresh)
+      runChecks(fresh)
     } catch (error) {
       setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error))
     }
@@ -449,7 +468,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const latest = latestActivity(activityLog)
   const activityText =
     latest === undefined || now - latest.at >= RECENT_MS ? "" : `${Math.max(0, Math.round((now - latest.at) / 1000))}s ago ${latest.path}`
-  const displayStatus = checksInFlight > 0 ? "running checks…" : status
+  const displayStatus = checksRunning ? "running checks…" : status
   const hints = "? keys · q quit"
   // The hints are navigation; the status is transient and yields on narrow terminals
   const statusRight = truncate(

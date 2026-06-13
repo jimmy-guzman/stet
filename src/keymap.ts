@@ -7,7 +7,7 @@ import { copyToClipboard, formatCopyReference } from "./copy-reference"
 import type { Diagnostic } from "./diagnostics"
 import type { ChangedFile, GitModel, Worktree } from "./git"
 import { listWorktrees } from "./git"
-import type { ProblemItem } from "./hooks/useDiagnostics"
+import type { ProblemItem } from "./atoms/diagnostics"
 import type { JumpTarget } from "./atoms/diff"
 import { lineReference, type ParsedDiffLine } from "./patch"
 import { firstFileInNode, type FileTreeRow } from "./tree"
@@ -40,7 +40,7 @@ export interface KeyHandlerCtx {
   quit: () => void
   switchWorktree: (worktree: Worktree) => Promise<void> | void
   selectFile: (path: string) => void
-  runChecks: () => void
+  runChecks: (target: GitModel) => void
   setHelpOpen: Dispatch<SetStateAction<boolean>>
   setWorktreeOpen: Dispatch<SetStateAction<boolean>>
   setWorktreeIndex: Dispatch<SetStateAction<number>>
@@ -282,7 +282,7 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
     }
 
     if (key.name === "r") {
-      void runChecks()
+      runChecks(model)
       return
     }
 

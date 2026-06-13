@@ -51,7 +51,7 @@ function captureNames(source: string) {
 // The rebuild seam for a future runtime theme switch: compile a new
 // SyntaxStyle from another theme's capture styles and the already-loaded
 // QuerySources, then pass it to <diff syntaxStyle> — no tree-sitter re-init
-export function compileSyntaxStyle(captureStyles: SyntaxCaptureStyles, querySources: string[]): SyntaxStyle {
+function compileSyntaxStyle(captureStyles: SyntaxCaptureStyles, querySources: string[]): SyntaxStyle {
   return SyntaxStyle.fromStyles(expandCaptureStyles(captureStyles, querySources))
 }
 

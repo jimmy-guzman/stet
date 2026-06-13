@@ -31,8 +31,11 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
   }
 }
 
-// Seam for system light/dark detection (renderer.waitForThemeMode / THEME_MODE
-// Event); returns dark until a light theme exists
+/**
+ * @beta Seam for system light/dark detection (renderer.waitForThemeMode / THEME_MODE event).
+ * Returns dark until a light theme exists.
+ * @lintignore
+ */
 export function themeForMode(_mode: "dark" | "light"): Theme {
   return darkTheme
 }

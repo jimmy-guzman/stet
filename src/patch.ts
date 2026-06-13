@@ -8,7 +8,7 @@ export interface ParsedDiffLine {
   raw: string
 }
 
-export interface ParsedHunk {
+interface ParsedHunk {
   index: number
   header: string
   oldStart: number

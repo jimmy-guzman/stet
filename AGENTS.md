@@ -18,17 +18,26 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 - Prefer `bun run`, `bun test`, `bun install`, `bun add`, `bun add -d`, `bun remove`, `bun build`. No Node/npm/Jest/esbuild wrappers unless explicitly requested. Runtime flags go before `run` (e.g. `bun --watch run <script>`).
 - Keep `bun.lock` changes paired with dependency changes. Declare direct dependencies in `package.json`; don't rely on transitive ones.
 - Lint and format are oxlint and oxfmt (`bun run lint`, `bun run format`); do not add ESLint or Prettier.
+- Dead exports are caught by knip (`bun run knip`, also part of `bun run check`). Remove the `export` keyword rather than suppressing.
 - Use `===` and `!==`; never `== null` or `!= null`.
 - No explicit return type annotations unless needed for exported API clarity, recursion, overloads, or inference limits.
+- Rely on type inference; avoid explicit annotations or interfaces unless needed for exports or clarity, and inline single-use values rather than naming them.
+- Prefer `const`; use ternaries or early returns instead of reassignment, and early returns instead of `else`.
+- Prefer functional array methods (`map`/`filter`/`flatMap`) over loops; use type guards on `filter` to keep inference downstream.
+- Use Bun APIs where they exist (`Bun.file`, and so on).
+- Never alias imports (no `import { x as y }`).
+- Prefer dynamic imports for heavy modules on startup-sensitive paths; bind them at the top of the narrowest scope that needs them, and keep branch-specific imports inside their branch so the git tree renders before anything heavy loads.
 - Do not reach for `as`, `!`, or `any` without first exhausting proper solutions.
 - Do not silence lint or type errors with rule overrides or casts. Fix the root cause.
 - Comments are JSDoc or `TODO`/`FIXME` only; keep them sparse and useful, and do not narrate obvious code.
 - Prefer small typed modules (git parsing, diagnostics, clipboard, CLI args, UI state), and structured parsing over ad hoc string manipulation when a command offers machine-readable output.
+- Conventional commit style for commits and PR titles: `type(scope): summary`, with types `feat`/`fix`/`docs`/`chore`/`refactor`/`test` and an optional scope.
 - No AI-generated sign-offs in commits, PR text, docs, or generated content.
 
 ## Code design
 
 - **Extraction is a design decision, not a refactor.** When you see duplication, surface it and propose. Do not extract shared helpers, types, or components unprompted, regardless of usage count. Whether two similar blocks are one concept or two is a judgment you don't have the context to make alone.
+- **Inline by default; extract only when it earns a name.** Don't pull out single-use helpers preemptively: inline at the call site unless the helper is reused, hides a genuinely complex boundary, or has a clear independent name that improves the caller. When a function grows several branches, let the main function read as the happy path and move supporting detail into small named helpers (`requireConfig`, `readMetadata`) kept just below it.
 - **No speculative generality.** Don't add config options, generic parameters, or extension points for use cases that don't exist yet. The right abstraction for a future need is almost never the one you'd guess before seeing it.
 - **Duplication is cheaper than the wrong abstraction.** Code that looks similar isn't necessarily the same thing. Deduping two unrelated pieces couples their futures; when one needs to change and the other doesn't, the abstraction has to grow conditionals or split back apart, both of which are worse than having kept them separate.
 
@@ -37,6 +46,7 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 - **Test behavior, not implementation.** Assert what a caller or user observes, not how the code achieves it. "Caller" and "user" scale with the unit under test: for a component it's the person clicking, for a function it's the code calling it. Tests that assert internals break on every refactor and prove nothing about whether the code works.
 - **Prefer clarity over DRY in tests.** Inline setup, repeat literals, skip shared fixtures when they'd obscure the case under test. A test's job is to be readable in isolation; the pull toward DRY that makes production code better usually makes tests worse.
 - **Test real behavior, not hypothetical behavior.** Cover the cases the contract actually promises. Do not manufacture edge cases the code doesn't claim to handle just to pad coverage.
+- **Avoid mocks.** Test the actual implementation; reach for a mock only when a real dependency is genuinely unavailable, and never duplicate the code's own logic into the test.
 
 ## Writing
 

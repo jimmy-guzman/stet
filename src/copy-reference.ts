@@ -21,7 +21,7 @@ export function formatCopyReference(payload: CopyReferencePayload) {
 
 const LINUX_CLIPBOARD_COMMANDS = [["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]]
 
-export function clipboardCommand() {
+function clipboardCommand() {
   if (process.platform === "darwin") {
     return ["pbcopy"]
   }

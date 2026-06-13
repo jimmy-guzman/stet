@@ -7,7 +7,7 @@ export type FileContent =
   | { kind: "missing" }
   | { kind: "too-large"; bytes: number }
 
-export const MAX_FILE_BYTES = 1_000_000
+const MAX_FILE_BYTES = 1_000_000
 export const MAX_FILE_LINES = 5000
 
 export interface LoadFileContentOptions {

@@ -5,7 +5,7 @@ import { runCommandAsync } from "./process"
 
 export const checkerNames = ["lint", "prettier", "typecheck"] as const
 export type CheckerName = (typeof checkerNames)[number]
-export type CheckerStatus = "pending" | "clean" | "findings" | "failed" | "unavailable"
+type CheckerStatus = "pending" | "clean" | "findings" | "failed" | "unavailable"
 
 export interface Diagnostic {
   checker: CheckerName

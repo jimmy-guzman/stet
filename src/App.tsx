@@ -3,12 +3,31 @@ import packageJson from "../package.json"
 import { useAtomInitialValues, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
 import { gitModelAtom } from "./atoms/git"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
-import { changesOnlyAtom, expandedDirectoriesAtom, fileViewAtom, focusedNodeIdAtom, selectedPathAtom } from "./atoms/ui"
+import {
+  changesOnlyAtom,
+  expandedDirectoriesAtom,
+  fileViewAtom,
+  focusedNodeIdAtom,
+  focusedPaneAtom,
+  fullContentPathsAtom,
+  helpOpenAtom,
+  paletteIndexAtom,
+  paletteOpenAtom,
+  paletteQueryAtom,
+  problemIndexAtom,
+  problemsOpenAtom,
+  scopeAtom,
+  selectedPathAtom,
+  sidebarOpenAtom,
+  worktreeIndexAtom,
+  worktreeOpenAtom,
+  worktreesAtom,
+} from "./atoms/ui"
 import type { DiffScope } from "./cli"
 import { HeaderBar } from "./components/HeaderBar"
 import { HelpOverlay } from "./components/HelpOverlay"
@@ -49,12 +68,14 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const initialExpanded = initialSelectedPath === undefined ? baseExpanded : expandAncestorsForPath(baseExpanded, initialSelectedPath)
   useAtomInitialValues([
     [gitModelAtom, initialModel],
+    [scopeAtom, initialScope],
     [selectedPathAtom, initialSelectedPath],
     [focusedNodeIdAtom, initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`],
     [expandedDirectoriesAtom, initialExpanded],
   ])
 
-  const [scope, setScope] = useState(initialScope)
+  const scope = useAtomValue(scopeAtom)
+  const setScope = useAtomSet(scopeAtom)
   const setGitModel = useAtomSet(gitModelAtom)
   const model = useAtomValue(gitModelAtom) ?? initialModel
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
@@ -68,20 +89,32 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const setFocusedNodeId = useAtomSet(focusedNodeIdAtom)
   const expandedDirectories = useAtomValue(expandedDirectoriesAtom)
   const setExpandedDirectories = useAtomSet(expandedDirectoriesAtom)
-  const [fullContentPaths, setFullContentPaths] = useState<Set<string>>(() => new Set())
+  const fullContentPaths = useAtomValue(fullContentPathsAtom)
+  const setFullContentPaths = useAtomSet(fullContentPathsAtom)
   const fileView = useAtomValue(fileViewAtom)
   const setFileView = useAtomSet(fileViewAtom)
-  const [focusedPane, setFocusedPane] = useState<"tree" | "diff" | "problems">("tree")
-  const [problemsOpen, setProblemsOpen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [problemIndex, setProblemIndex] = useState(0)
-  const [paletteOpen, setPaletteOpen] = useState(false)
-  const [paletteQuery, setPaletteQuery] = useState("")
-  const [paletteIndex, setPaletteIndex] = useState(0)
-  const [worktreeOpen, setWorktreeOpen] = useState(false)
-  const [worktreeIndex, setWorktreeIndex] = useState(0)
-  const [worktrees, setWorktrees] = useState<Worktree[] | undefined>(undefined)
-  const [helpOpen, setHelpOpen] = useState(false)
+  const focusedPane = useAtomValue(focusedPaneAtom)
+  const setFocusedPane = useAtomSet(focusedPaneAtom)
+  const problemsOpen = useAtomValue(problemsOpenAtom)
+  const setProblemsOpen = useAtomSet(problemsOpenAtom)
+  const sidebarOpen = useAtomValue(sidebarOpenAtom)
+  const setSidebarOpen = useAtomSet(sidebarOpenAtom)
+  const problemIndex = useAtomValue(problemIndexAtom)
+  const setProblemIndex = useAtomSet(problemIndexAtom)
+  const paletteOpen = useAtomValue(paletteOpenAtom)
+  const setPaletteOpen = useAtomSet(paletteOpenAtom)
+  const paletteQuery = useAtomValue(paletteQueryAtom)
+  const setPaletteQuery = useAtomSet(paletteQueryAtom)
+  const paletteIndex = useAtomValue(paletteIndexAtom)
+  const setPaletteIndex = useAtomSet(paletteIndexAtom)
+  const worktreeOpen = useAtomValue(worktreeOpenAtom)
+  const setWorktreeOpen = useAtomSet(worktreeOpenAtom)
+  const worktreeIndex = useAtomValue(worktreeIndexAtom)
+  const setWorktreeIndex = useAtomSet(worktreeIndexAtom)
+  const worktrees = useAtomValue(worktreesAtom)
+  const setWorktrees = useAtomSet(worktreesAtom)
+  const helpOpen = useAtomValue(helpOpenAtom)
+  const setHelpOpen = useAtomSet(helpOpenAtom)
   const activityLog = useAtomValue(activityLogAtom)
   const setActivityLog = useAtomSet(activityLogAtom)
   const now = useAtomValue(nowAtom)
@@ -436,10 +469,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
   }
 
-  const handlePaletteInput = useCallback((value: string) => {
-    setPaletteQuery(value)
-    setPaletteIndex(0)
-  }, [])
+  const handlePaletteInput = useCallback(
+    (value: string) => {
+      setPaletteQuery(value)
+      setPaletteIndex(0)
+    },
+    [setPaletteQuery, setPaletteIndex],
+  )
 
   const pickPaletteResult = useCallback(() => {
     const path = paletteResults[paletteIndex]
@@ -448,7 +484,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       setFocusedPane("diff")
     }
     setPaletteOpen(false)
-  }, [paletteResults, paletteIndex, selectFile])
+  }, [paletteResults, paletteIndex, selectFile, setFocusedPane, setPaletteOpen])
 
   const sidebarWidth = sidebarOpen ? Math.max(34, Math.min(54, Math.floor(width * 0.34))) : 0
   const paletteWidth = Math.max(30, Math.min(70, width - 8))

@@ -1,6 +1,15 @@
 import { Atom } from "effect/unstable/reactivity"
 import type { GitModel } from "../git"
 
-// Holds the live git model. Undefined until the first poll lands; App falls back
-// To the initial model passed at startup so the first frame is never empty.
-export const gitModelAtom = Atom.make<GitModel | undefined>(undefined)
+// Placeholder until App seeds the real initial model (synchronously, before the
+// First read), so derived atoms never have to guard an undefined model.
+const emptyModel: GitModel = {
+  changed: [],
+  changedByPath: new Map(),
+  repoFiles: [],
+  repoFilesKey: "",
+  repoRoot: "",
+  scopeKey: "",
+}
+
+export const gitModelAtom = Atom.make(emptyModel)

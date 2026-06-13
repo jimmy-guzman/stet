@@ -7,7 +7,16 @@ import { useCallback, useEffect, useMemo, useRef } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
 import { gitModelAtom } from "./atoms/git"
+import { paletteResultsAtom } from "./atoms/palette"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
+import {
+  fileContentAtom,
+  navigableLinesAtom,
+  renderedPatchAtom,
+  selectedFileAtom,
+  showFileContentAtom,
+  truncatedAtom,
+} from "./atoms/viewer"
 import {
   changesOnlyAtom,
   expandedDirectoriesAtom,
@@ -39,14 +48,11 @@ import { Viewer } from "./components/Viewer"
 import { WorktreePicker } from "./components/WorktreePicker"
 import { PROBLEMS_HEIGHT } from "./constants"
 import { findingsLineMap, markPending, type Diagnostic } from "./diagnostics"
-import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
-import { rankFiles } from "./fuzzy"
 import type { ChangedFile, GitModel, Worktree } from "./git"
-import { loadChangedFiles, loadFileDiff, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
+import { loadChangedFiles, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
 import { useDiagnostics } from "./hooks/useDiagnostics"
 import { useDiffCursor } from "./hooks/useDiffCursor"
 import { createKeyHandler } from "./keymap"
-import { renderPatch } from "./patch"
 import type { SyntaxConfig } from "./syntax"
 import { useTheme } from "./theme/context"
 import { defaultExpandedDirectories, expandAncestorsForPath } from "./tree"
@@ -77,7 +83,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const scope = useAtomValue(scopeAtom)
   const setScope = useAtomSet(scopeAtom)
   const setGitModel = useAtomSet(gitModelAtom)
-  const model = useAtomValue(gitModelAtom) ?? initialModel
+  const model = useAtomValue(gitModelAtom)
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
   const lastChangeRef = useRef(Date.now())
@@ -103,7 +109,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const setProblemIndex = useAtomSet(problemIndexAtom)
   const paletteOpen = useAtomValue(paletteOpenAtom)
   const setPaletteOpen = useAtomSet(paletteOpenAtom)
-  const paletteQuery = useAtomValue(paletteQueryAtom)
   const setPaletteQuery = useAtomSet(paletteQueryAtom)
   const paletteIndex = useAtomValue(paletteIndexAtom)
   const setPaletteIndex = useAtomSet(paletteIndexAtom)
@@ -140,65 +145,18 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   // Open cannot repopulate or close a newer picker
   const worktreeRequestRef = useRef(0)
 
-  const selectedFile = selectedPath === undefined ? undefined : model.changedByPath.get(selectedPath)
-  const showFileContent = selectedPath !== undefined && (selectedFile === undefined || fileView)
+  const selectedFile = useAtomValue(selectedFileAtom)
+  const showFileContent = useAtomValue(showFileContentAtom)
   const treeRows = useAtomValue(treeRowsAtom)
-  const changedPathSet = useMemo(() => new Set(model.changedByPath.keys()), [model.changedByPath])
-  // Hoisted out of paletteResults so a keystroke only pays for ranking
-  const allPaths = useMemo(
-    () => [...new Set([...model.repoFiles.map((file) => file.path), ...model.changedByPath.keys()])],
-    [model.changedByPath, model.repoFiles],
-  )
-  const paletteResults = useMemo(() => {
-    if (!paletteOpen) {
-      return []
-    }
-
-    return rankFiles(paletteQuery, allPaths, { changed: changedPathSet, lastChangedAt: recencyByPath, limit: 50 })
-  }, [allPaths, changedPathSet, paletteOpen, paletteQuery, recencyByPath])
+  const paletteResults = useAtomValue(paletteResultsAtom)
   const lineMap = useMemo(
     () => (selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, checkerState)),
     [checkerState, selectedPath],
   )
-
-  const fileContent = useMemo<FileContent | undefined>(() => {
-    if (!showFileContent || selectedPath === undefined) {
-      return undefined
-    }
-
-    const gitSpec =
-      selectedFile?.kind === "deleted" ? (scope.kind === "unstaged" ? `:${selectedPath}` : `${scope.ref}:${selectedPath}`) : undefined
-    return loadFileContent(model.repoRoot, selectedPath, { full: fullContentPaths.has(selectedPath), gitSpec })
-    // Model identity changes whenever git state changes, keeping live content fresh
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showFileContent, selectedPath, selectedFile, scope, model, fullContentPaths])
-
-  const selectedDiff = useMemo(() => {
-    if (selectedPath === undefined) {
-      return ""
-    }
-
-    if (showFileContent) {
-      return fileContent?.kind === "text" ? contentToContextPatch(selectedPath, fileContent.content) : ""
-    }
-
-    return selectedFile === undefined ? "" : loadFileDiff(model.repoRoot, scope, selectedFile)
-  }, [fileContent, model.repoRoot, scope, selectedFile, selectedPath, showFileContent])
-
-  const renderedPatch = useMemo(
-    () =>
-      renderPatch(selectedDiff, {
-        full: showFileContent || (selectedPath !== undefined && fullContentPaths.has(selectedPath)),
-        maxLines: 1600,
-      }),
-    [fullContentPaths, selectedDiff, selectedPath, showFileContent],
-  )
-  // Clamp navigation to the lines renderPatch actually emitted, not the full parse
-  const navigableLines = useMemo(
-    () => renderedPatch.parsed.hunks.flatMap((hunk) => hunk.lines).slice(0, renderedPatch.bodyLineCount),
-    [renderedPatch],
-  )
-  const truncated = renderedPatch.truncated || (fileContent?.kind === "text" && fileContent.truncated)
+  const fileContent = useAtomValue(fileContentAtom)
+  const renderedPatch = useAtomValue(renderedPatchAtom)
+  const navigableLines = useAtomValue(navigableLinesAtom)
+  const truncated = useAtomValue(truncatedAtom)
 
   useEffect(() => {
     const previousByPath = new Map(previousChangedRef.current.map((file) => [file.path, file]))
@@ -257,10 +215,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         const next = await loadChangedFiles(repoRoot, scope)
         if (!cancelled) {
           // A worktree switch may commit between this poll starting and landing
-          setGitModel((previous) => {
-            const base = previous ?? initialModel
-            return base.repoRoot === repoRoot ? mergeChanged(base, next) : base
-          })
+          setGitModel((previous) => (previous.repoRoot === repoRoot ? mergeChanged(previous, next) : previous))
         }
       } catch {
         // Transient git failures (e.g. an agent holding index.lock) resolve on the next poll
@@ -277,12 +232,11 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       try {
         const next = await loadRepoFiles(repoRoot)
         if (!cancelled) {
-          setGitModel((previous) => {
-            const base = previous ?? initialModel
-            return base.repoRoot !== repoRoot || base.repoFilesKey === next.repoFilesKey
-              ? base
-              : { ...base, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey }
-          })
+          setGitModel((previous) =>
+            previous.repoRoot !== repoRoot || previous.repoFilesKey === next.repoFilesKey
+              ? previous
+              : { ...previous, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey },
+          )
         }
       } catch {
         // Ignore transient errors
@@ -318,7 +272,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       clearTimeout(fastId)
       clearInterval(slowId)
     }
-  }, [repoRoot, scope, setGitModel, initialModel])
+  }, [repoRoot, scope, setGitModel])
 
   useEffect(() => {
     const focusedRow = treeRows[focusedRowIndex]

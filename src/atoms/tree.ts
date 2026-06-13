@@ -5,12 +5,7 @@ import { changesOnlyAtom, expandedDirectoriesAtom, fileViewAtom, focusedNodeIdAt
 
 const treeAtom = Atom.make((get) => {
   const model = get(gitModelAtom)
-  const changesOnly = get(changesOnlyAtom)
-  if (model === undefined) {
-    return []
-  }
-
-  return buildFileTree(model.repoFiles, model.changedByPath, { changesOnly })
+  return buildFileTree(model.repoFiles, model.changedByPath, { changesOnly: get(changesOnlyAtom) })
 })
 
 export const treeRowsAtom = Atom.make((get) => flattenTree(get(treeAtom), get(expandedDirectoriesAtom)))

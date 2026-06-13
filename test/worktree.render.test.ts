@@ -5,8 +5,7 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
-import { loadGitModel } from "../src/git"
-import { createFixtureRepo, disabledSyntax, makeSettleUntil, runGit, withRegistry } from "../test/helpers"
+import { loadModel, createFixtureRepo, disabledSyntax, makeSettleUntil, runGit, withRegistry } from "../test/helpers"
 
 describe("worktree picker", () => {
   test("opens with w, escape keeps the current worktree, enter switches the whole app", async () => {
@@ -19,7 +18,7 @@ describe("worktree picker", () => {
     writeFileSync(join(linkedRoot, "side-only.ts"), "export const side = true\n")
     writeFileSync(join(repoRoot, "src", "main-only.ts"), "export const main = false\n")
 
-    const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" })
     const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ height: 34, width: 120 })
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 

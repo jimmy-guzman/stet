@@ -3,12 +3,11 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
-import { loadGitModel } from "../src/git"
-import { disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
+import { loadModel, disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
 
 describe("App rendering", () => {
   test("renders the repo tree, scope label, and status bar", async () => {
-    const model = await loadGitModel(process.cwd(), { kind: "all", ref: "HEAD" })
+    const model = await loadModel(process.cwd(), { kind: "all", ref: "HEAD" })
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ height: 32, width: 110 })
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 

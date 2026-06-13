@@ -5,8 +5,7 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
-import { loadGitModel } from "../src/git"
-import { createFixtureRepo, disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
+import { loadModel, createFixtureRepo, disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
 
 describe("view toggle jumps", () => {
   test("v returns to the diff even from a line outside every hunk", async () => {
@@ -18,7 +17,7 @@ describe("view toggle jumps", () => {
     })
     writeFileSync(join(repoRoot, "src", "a.ts"), `${["const line1 = 1", "const changed = true", ...lines.slice(2)].join("\n")}\n`)
 
-    const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" })
     const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ height: 34, width: 120 })
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 

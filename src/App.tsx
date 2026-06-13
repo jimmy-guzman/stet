@@ -1,9 +1,11 @@
 import { existsSync } from "node:fs"
 import packageJson from "../package.json"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
+import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
 import type { DiffScope } from "./cli"
 import { HeaderBar } from "./components/HeaderBar"
 import { HelpOverlay } from "./components/HelpOverlay"
@@ -19,7 +21,6 @@ import { contentToContextPatch, loadFileContent, type FileContent } from "./file
 import { rankFiles } from "./fuzzy"
 import type { GitModel, Worktree } from "./git"
 import { loadFileDiff, loadGitModel } from "./git"
-import { useActivity } from "./hooks/useActivity"
 import { useDiagnostics } from "./hooks/useDiagnostics"
 import { useDiffCursor } from "./hooks/useDiffCursor"
 import { useGitModel } from "./hooks/useGitModel"
@@ -63,7 +64,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const [worktreeIndex, setWorktreeIndex] = useState(0)
   const [worktrees, setWorktrees] = useState<Worktree[] | undefined>(undefined)
   const [helpOpen, setHelpOpen] = useState(false)
-  const { activityLog, setActivityLog, now, recencyByPath } = useActivity()
+  const activityLog = useAtomValue(activityLogAtom)
+  const setActivityLog = useAtomSet(activityLogAtom)
+  const now = useAtomValue(nowAtom)
+  const recencyByPath = useAtomValue(recencyByPathAtom)
   const {
     abortRef,
     allProblemItems,

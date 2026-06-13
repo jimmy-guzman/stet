@@ -1,6 +1,5 @@
 import type { KeyEvent } from "@opentui/core"
 import type { Atom, AtomRegistry } from "effect/unstable/reactivity"
-import type { RefObject } from "react"
 import { latestActivity } from "./activity"
 import { activityLogAtom } from "./atoms/activity"
 import { copyAtom } from "./atoms/clipboard"
@@ -9,6 +8,7 @@ import { cursorIndexAtom, jumpTargetAtom } from "./atoms/diff"
 import { gitModelAtom } from "./atoms/git"
 import { paletteResultsAtom } from "./atoms/palette"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
+import { loadWorktreesAtom } from "./atoms/worktree"
 import {
   changesOnlyAtom,
   expandedDirectoriesAtom,
@@ -31,14 +31,13 @@ import {
 import { navigableLinesAtom, selectedFileAtom } from "./atoms/viewer"
 import { nextScope, scopeLabel } from "./cli"
 import { formatCopyReference } from "./copy-reference"
-import { listWorktrees, type Worktree } from "./git"
+import type { Worktree } from "./git"
 import { lineReference } from "./patch"
 import { firstFileInNode } from "./tree"
 import { nextFindingPath, orderedFindingPaths } from "./ui-helpers"
 
 interface KeyHandlerCtx {
   viewerHeight: number
-  worktreeRequestRef: RefObject<number>
   quit: () => void
   switchWorktree: (worktree: Worktree) => Promise<void> | void
   selectFile: (path: string) => void
@@ -50,7 +49,7 @@ interface KeyHandlerCtx {
 // Branch can act on them. State is read and written through the atom registry,
 // So every keypress sees the latest values, not a render-time snapshot.
 export function createKeyHandler(registry: AtomRegistry.AtomRegistry, ctx: KeyHandlerCtx) {
-  const { viewerHeight, worktreeRequestRef, quit, switchWorktree, selectFile } = ctx
+  const { viewerHeight, quit, switchWorktree, selectFile } = ctx
 
   function get<A>(atom: Atom.Atom<A>) {
     return registry.get(atom)
@@ -73,7 +72,6 @@ export function createKeyHandler(registry: AtomRegistry.AtomRegistry, ctx: KeyHa
       const worktrees = get(worktreesAtom)
       const lastIndex = Math.max(0, (worktrees?.length ?? 1) - 1)
       if (key.name === "escape" || key.name === "w") {
-        worktreeRequestRef.current += 1
         set(worktreeOpenAtom, false)
       } else if (key.name === "j" || key.name === "down") {
         set(worktreeIndexAtom, Math.min(get(worktreeIndexAtom) + 1, lastIndex))
@@ -152,35 +150,10 @@ export function createKeyHandler(registry: AtomRegistry.AtomRegistry, ctx: KeyHa
     }
 
     if (key.name === "w") {
-      const request = worktreeRequestRef.current + 1
-      worktreeRequestRef.current = request
       set(worktreeOpenAtom, true)
       set(worktreeIndexAtom, 0)
       set(worktreesAtom, undefined)
-      const repoRoot = get(gitModelAtom).repoRoot
-      void listWorktrees(repoRoot)
-        .then((list) => {
-          if (worktreeRequestRef.current !== request) {
-            return
-          }
-          // Bare entries have no files to review
-          const selectable = list.filter((worktree) => !worktree.bare)
-          set(worktreesAtom, selectable)
-          set(
-            worktreeIndexAtom,
-            Math.max(
-              0,
-              selectable.findIndex((worktree) => worktree.path === repoRoot),
-            ),
-          )
-        })
-        .catch((error: unknown) => {
-          if (worktreeRequestRef.current !== request) {
-            return
-          }
-          set(worktreeOpenAtom, false)
-          set(statusAtom, error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error))
-        })
+      set(loadWorktreesAtom, get(gitModelAtom).repoRoot)
       return
     }
 

@@ -6,6 +6,7 @@ import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useContext, useEffect, useRef } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
+import { copyAtom } from "./atoms/clipboard"
 import {
   allProblemItemsAtom,
   checkerStateAtom,
@@ -18,6 +19,7 @@ import {
 import { gitModelAtom, gitPollAtom, lastChangeAtom, repoRootAtom } from "./atoms/git"
 import { paletteResultsAtom } from "./atoms/palette"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
+import { loadModelAtom, loadWorktreesAtom } from "./atoms/worktree"
 import {
   fileContentAtom,
   navigableLinesAtom,
@@ -57,7 +59,6 @@ import { WorktreePicker } from "./components/WorktreePicker"
 import { PROBLEMS_HEIGHT } from "./constants"
 import { initialCheckerState, markPending } from "./diagnostics"
 import type { ChangedFile, GitModel, Worktree } from "./git"
-import { loadGitModel } from "./git"
 import { useDiffCursor } from "./hooks/useDiffCursor"
 import { createKeyHandler } from "./keymap"
 import type { SyntaxConfig } from "./syntax"
@@ -143,9 +144,12 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const problemsRef = useRef<ScrollBoxRenderable>(null)
   const paletteRef = useRef<ScrollBoxRenderable>(null)
   const worktreeRef = useRef<ScrollBoxRenderable>(null)
-  // Bumped on every picker open/close so a slow listWorktrees from an earlier
-  // Open cannot repopulate or close a newer picker
-  const worktreeRequestRef = useRef(0)
+  const loadModel = useAtomSet(loadModelAtom, { mode: "promise" })
+  // The keymap dispatches these fn atoms through the registry, which only runs
+  // Their effect while the atom is mounted; mount them here so a keypress fires
+  // (the same reason runChecksAtom runs: App reads it).
+  useAtomMount(loadWorktreesAtom)
+  useAtomMount(copyAtom)
 
   const selectedFile = useAtomValue(selectedFileAtom)
   const showFileContent = useAtomValue(showFileContentAtom)
@@ -260,14 +264,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     [setSelectedPath, setFocusedNodeId, setFileView, setExpandedDirectories],
   )
 
-  useKeyboard(createKeyHandler(registry, { quit, selectFile, switchWorktree, viewerHeight, worktreeRequestRef }))
+  useKeyboard(createKeyHandler(registry, { quit, selectFile, switchWorktree, viewerHeight }))
 
   function quit() {
     renderer.destroy()
   }
 
   async function switchWorktree(worktree: Worktree) {
-    worktreeRequestRef.current += 1
     setWorktreeOpen(false)
     if (worktree.path === model.repoRoot) {
       return
@@ -279,7 +282,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     try {
-      const fresh = await loadGitModel(worktree.path, scope)
+      const fresh = await loadModel({ repoRoot: worktree.path, scope })
       // Prime the activity refs so the swap is not mistaken for agent edits;
       // ScopeKey matches across worktrees, so that effect will not re-run checks
       previousChangedRef.current = fresh.changed

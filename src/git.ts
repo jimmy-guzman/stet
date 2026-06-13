@@ -1,7 +1,6 @@
 import { statSync } from "node:fs"
 import type { DiffScope } from "./cli"
 import { loadFileContent } from "./file-view"
-import { runCommandAsync } from "./process"
 
 export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked"
 
@@ -48,11 +47,6 @@ export interface Worktree {
   bare: boolean
   locked: boolean
   prunable: boolean
-}
-
-export async function listWorktrees(repoRoot: string): Promise<Worktree[]> {
-  const result = await runCommandAsync(["git", "worktree", "list", "--porcelain", "-z"], repoRoot)
-  return parseWorktreeList(result.stdout)
 }
 
 export function parseWorktreeList(output: string): Worktree[] {
@@ -180,26 +174,6 @@ export function mergeChanged(prev: GitModel, next: Pick<GitModel, "changed" | "c
   }
 
   return { ...prev, changed, changedByPath: new Map(changed.map((file) => [file.path, file])), scopeKey: next.scopeKey }
-}
-
-export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<GitModel> {
-  const [tracked, untrackedFiles, nameStatusResult, numstatResult, porcelain] = await Promise.all([
-    runCommandAsync(["git", "ls-files", "-z"], repoRoot),
-    runCommandAsync(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
-    runCommandAsync(nameStatusArgs(scope), repoRoot),
-    runCommandAsync(numstatArgs(scope), repoRoot),
-    runCommandAsync(["git", "status", "--porcelain=v1", "-z"], repoRoot),
-  ])
-
-  return assembleModel(
-    repoRoot,
-    scope,
-    tracked.stdout,
-    untrackedFiles.stdout,
-    nameStatusResult.stdout,
-    numstatResult.stdout,
-    porcelain.stdout,
-  )
 }
 
 export function numstatArgs(scope: DiffScope) {

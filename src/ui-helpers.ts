@@ -32,8 +32,11 @@ export function worktreeLabel(worktree: Worktree) {
 }
 
 export function collapseHome(path: string) {
-  const home = process.env["HOME"]
-  return home !== undefined && home !== "" && path.startsWith(home) ? `~${path.slice(home.length)}` : path
+  const home = Bun.env.HOME
+  if (home === undefined || home === "") {
+    return path
+  }
+  return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path
 }
 
 export function truncateLeft(text: string, max: number) {

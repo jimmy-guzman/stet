@@ -6,6 +6,12 @@
       "sourceType": "well-known",
       "computedHash": "a35be3bbad9ba66bc962d0f29098cd2b7a582023976cdb3649a3b6dc171a26de"
     },
+    "effect-best-practices": {
+      "source": "makisuo/skills",
+      "sourceType": "github",
+      "skillPath": "effect-best-practices/SKILL.md",
+      "computedHash": "241513d240f805e1651f86311089b521592cdf298eafaa3ba5ccc089ea0c97c6"
+    },
     "opentui": {
       "source": "anomalyco/opentui",
       "sourceType": "github",

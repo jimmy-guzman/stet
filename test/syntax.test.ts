@@ -40,13 +40,13 @@ describe("diffFiletypeFor", () => {
 describe("expandCaptureStyles", () => {
   test("aliases an unknown dotted capture to its longest styled prefix", () => {
     const expanded = expandCaptureStyles(baseCaptureStyles, ["(import_statement) @keyword.import"])
-    expect(expanded["keyword.import"]).toEqual(baseCaptureStyles["keyword"])
+    expect(expanded["keyword.import"]).toEqual(baseCaptureStyles.keyword)
   })
 
   test("prefers a longer prefix over the first segment", () => {
     const expanded = expandCaptureStyles(baseCaptureStyles, ["(link) @markup.link.url"])
     expect(expanded["markup.link.url"]).toEqual(baseCaptureStyles["markup.link"])
-    expect(expanded["markup.link.url"]).not.toEqual(baseCaptureStyles["markup"])
+    expect(expanded["markup.link.url"]).not.toEqual(baseCaptureStyles.markup)
   })
 
   test("never overrides an explicit theme entry", () => {

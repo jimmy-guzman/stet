@@ -16,6 +16,10 @@ interface ScrollablePane {
   maxScrollY: number
 }
 
+function isScrollablePane(value: unknown): value is ScrollablePane {
+  return typeof value === "object" && value !== null && "scrollY" in value && typeof value.scrollY === "number"
+}
+
 interface UseDiffCursorArgs {
   navigableLines: ParsedDiffLine[]
   selectedPath: string | undefined
@@ -151,8 +155,8 @@ export function useDiffCursor({
     paint()
     queueMicrotask(paint)
 
-    const pane = diff.findDescendantById(`${DIFF_ID}-left-code`) as ScrollablePane | undefined
-    if (pane !== undefined) {
+    const pane = diff.findDescendantById(`${DIFF_ID}-left-code`)
+    if (isScrollablePane(pane)) {
       if (cursorIndex < pane.scrollY) {
         pane.scrollY = cursorIndex
       } else if (cursorIndex >= pane.scrollY + viewerHeight) {

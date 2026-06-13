@@ -90,7 +90,7 @@ export const ProcessLive = Layer.succeed(Process)({
         ),
       (child) =>
         Effect.sync(() => {
-          if (child.killed === false) {
+          if (!child.killed) {
             child.kill()
           }
         }),

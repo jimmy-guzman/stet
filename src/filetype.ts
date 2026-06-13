@@ -3,7 +3,7 @@ import { languages } from "./languages"
 const filetypeByExtension = new Map(languages.flatMap((language) => language.extensions.map((extension) => [extension, language.filetype])))
 
 export function supportedFiletypeFor(path: string) {
-  const match = path.match(/\.[^.]+$/)
+  const match = /\.[^.]+$/.exec(path)
   if (match === null) {
     return undefined
   }

@@ -342,9 +342,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const statusRight = truncate(
     cursorFindings?.[0] !== undefined
       ? `${cursorFindings[0].checker}: ${cursorFindings[0].message}`
-      : [activityText, truncated === true ? `${displayStatus} · truncated; f for full` : displayStatus]
-          .filter((part) => part !== "")
-          .join(" · "),
+      : [activityText, truncated ? `${displayStatus} · truncated; f for full` : displayStatus].filter((part) => part !== "").join(" · "),
     Math.max(10, Math.min(width - 50, width - hints.length - 4)),
   )
   const countsText = `${counts.errors > 0 ? `✖${counts.errors}` : ""}${counts.warnings > 0 ? ` ⚠${counts.warnings}` : ""}`.trim()

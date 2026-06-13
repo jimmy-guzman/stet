@@ -34,6 +34,15 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 - Conventional commit style for commits and PR titles: `type(scope): summary`, with types `feat`/`fix`/`docs`/`chore`/`refactor`/`test` and an optional scope.
 - No AI-generated sign-offs in commits, PR text, docs, or generated content.
 
+## Effect conventions
+
+State and async work use Effect v4 (beta). `effect` and `@effect/atom-react` are pinned to exact, matching beta versions and move together; `effect/unstable/*` can break on minor bumps.
+
+- Wrap existing pure functions in services; do not rewrite the pure logic, so its tests stay intact.
+- Define services with `Context.Service` plus a `Layer` (there is no `Effect.Service` in v4); define errors with `Data.TaggedError`, one tag per distinct failure.
+- Prefer the data-last pipe form for combinators (`x.pipe(Effect.flatMap(f))`) over the data-first form (`Effect.flatMap(x, f)`); the two-argument data-first form trips `unicorn/no-array-method-this-argument`.
+- UI, derived, and selection state live in atoms (`effect/unstable/reactivity`), read in components via `@effect/atom-react` hooks.
+
 ## Code design
 
 - **Extraction is a design decision, not a refactor.** When you see duplication, surface it and propose. Do not extract shared helpers, types, or components unprompted, regardless of usage count. Whether two similar blocks are one concept or two is a judgment you don't have the context to make alone.

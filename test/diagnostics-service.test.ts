@@ -1,10 +1,10 @@
 import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { expect, test } from "bun:test"
-import { Effect, Stream } from "effect"
-import { loadGitModel } from "../src/git"
+import { Effect, Layer, Stream } from "effect"
 import { Diagnostics, DiagnosticsLive } from "../src/services/diagnostics"
-import { createFixtureRepo } from "./helpers"
+import { ProcessLive } from "../src/services/process"
+import { createFixtureRepo, loadModel } from "./helpers"
 
 test("Diagnostics.run streams a state for each configured checker", async () => {
   const repo = createFixtureRepo("diag-service-", {
@@ -12,12 +12,12 @@ test("Diagnostics.run streams a state for each configured checker", async () => 
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
   })
   writeFileSync(join(repo, "a.ts"), "const a = 2\n")
-  const model = await loadGitModel(repo, { kind: "all", ref: "HEAD" })
+  const model = await loadModel(repo, { kind: "all", ref: "HEAD" })
 
   const updates = await Effect.runPromise(
     Diagnostics.pipe(
       Effect.flatMap((diagnostics) => Stream.runCollect(diagnostics.run(repo, model.changed))),
-      Effect.provide(DiagnosticsLive),
+      Effect.provide(DiagnosticsLive.pipe(Layer.provide(ProcessLive))),
     ),
   )
 

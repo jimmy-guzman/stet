@@ -3,10 +3,27 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { RegistryProvider } from "@effect/atom-react"
+import { Effect, Layer } from "effect"
 import { createElement, type ReactElement } from "react"
+import type { DiffScope } from "../src/cli"
+import { Git, GitLive } from "../src/services/git"
+import { ProcessLive } from "../src/services/process"
 import type { SyntaxConfig } from "../src/syntax"
 
 export const disabledSyntax: SyntaxConfig = { enabled: false, status: "syntax disabled for tests" }
+
+const GitTestLive = GitLive.pipe(Layer.provide(ProcessLive))
+
+// Seed a real GitModel from a fixture repo by running the Git service, the same
+// Path the app uses, so tests exercise the production load instead of a mock.
+export function loadModel(repoRoot: string, scope: DiffScope) {
+  return Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.loadModel(repoRoot, scope)),
+      Effect.provide(GitTestLive),
+    ),
+  )
+}
 
 // Each render test gets its own atom registry so module-global atoms (the git
 // Model, etc.) do not leak between tests sharing the default registry.

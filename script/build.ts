@@ -7,6 +7,7 @@
 import { $ } from "bun"
 import fs from "node:fs"
 import path from "node:path"
+import solidPlugin from "@opentui/solid/bun-plugin"
 import pkg from "../package.json"
 
 const dir = path.resolve(import.meta.dirname, "..")
@@ -72,6 +73,7 @@ for (const target of targets) {
     entrypoints: ["./src/main.tsx", parserWorker],
     format: "esm",
     minify: true,
+    plugins: [solidPlugin],
     sourcemap: "none",
     splitting: true,
     tsconfig: "./tsconfig.json",

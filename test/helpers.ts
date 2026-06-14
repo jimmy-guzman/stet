@@ -2,14 +2,16 @@ import { execFileSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { RegistryProvider } from "@effect/atom-react"
 import { Effect, Layer } from "effect"
-import { createElement, type ReactElement } from "react"
+import { batch } from "solid-js"
 import type { DiffScope } from "../src/cli"
-import type { ChangedFile } from "../src/git"
+import { initialCheckerState } from "../src/diagnostics"
+import type { ChangedFile, GitModel } from "../src/git"
 import { Git, GitLive } from "../src/services/git"
 import { ProcessLive } from "../src/services/process"
+import { state } from "../src/state"
 import type { SyntaxConfig } from "../src/syntax"
+import { defaultExpandedDirectories, expandAncestorsForPath, type FileTreeRow } from "../src/tree"
 
 export const disabledSyntax: SyntaxConfig = { enabled: false, status: "syntax disabled for tests" }
 
@@ -44,10 +46,44 @@ export function loadFileDiff(repoRoot: string, scope: DiffScope, changed: Change
   )
 }
 
-// Each render test gets its own atom registry so module-global atoms (the git
-// Model, etc.) do not leak between tests sharing the default registry.
-export function withRegistry(node: ReactElement) {
-  return createElement(RegistryProvider, null, node)
+// State is a global singleton, so render tests seed it fresh (and reset the UI
+// Signals that might bleed from a prior test) before rendering App. Mirrors the
+// Startup seeding in main.tsx with syntax disabled.
+export function seedState(model: GitModel, scope: DiffScope) {
+  const selected = model.changed[0]?.path ?? model.repoFiles[0]?.path
+  const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path))
+  const expanded = selected === undefined ? baseExpanded : expandAncestorsForPath(baseExpanded, selected)
+  batch(() => {
+    state.setSyntax(disabledSyntax)
+    state.setStatus(disabledSyntax.status)
+    state.setScope(scope)
+    state.setChangesOnly(false)
+    state.setGitModel(model)
+    state.setRepoRoot(model.repoRoot)
+    state.setLastChange(Date.now())
+    state.setSelectedPath(selected)
+    state.setFocusedNodeId(selected === undefined ? "" : `file:${selected}`)
+    state.setExpandedDirectories(expanded)
+    state.setCheckerState(initialCheckerState(model.changed))
+    state.setFileView(false)
+    state.setFullContentPaths(new Set<string>())
+    state.setFocusedPane("tree")
+    state.setProblemsOpen(false)
+    state.setProblemIndex(0)
+    state.setPaletteOpen(false)
+    state.setPaletteQuery("")
+    state.setPaletteIndex(0)
+    state.setWorktreeOpen(false)
+    state.setWorktreeIndex(0)
+    state.setWorktrees(undefined)
+    state.setHelpOpen(false)
+    state.setCursorIndex(0)
+    state.setJumpTarget(undefined)
+  })
+}
+
+export function focusedRow(): FileTreeRow | undefined {
+  return state.treeRows()[state.focusedRowIndex()]
 }
 
 export function runGit(repoRoot: string, args: string[]) {

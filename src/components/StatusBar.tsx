@@ -1,11 +1,7 @@
+import { state } from "../state"
 import { useTheme } from "../theme/context"
 
-interface StatusBarProps {
-  hints: string
-  statusRight: string
-}
-
-export function StatusBar({ hints, statusRight }: StatusBarProps) {
+export function StatusBar() {
   const theme = useTheme()
   return (
     <box
@@ -16,8 +12,8 @@ export function StatusBar({ hints, statusRight }: StatusBarProps) {
       paddingRight={1}
       backgroundColor={theme.colors.surface.panel}
     >
-      <text fg={theme.colors.text.muted}>{hints}</text>
-      <text fg={theme.colors.text.secondary}>{statusRight}</text>
+      <text fg={theme.colors.text.muted}>? keys · q quit</text>
+      <text fg={theme.colors.text.secondary}>{state.statusRight()}</text>
     </box>
   )
 }

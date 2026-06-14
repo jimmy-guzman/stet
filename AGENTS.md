@@ -8,7 +8,7 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 
 - Bun for runtime, scripts, dependencies, tests, and build.
 - TypeScript with `strict` enabled.
-- `@opentui/core` and `@opentui/react`; JSX configured with `jsxImportSource: "@opentui/react"`.
+- `@opentui/core` and `@opentui/solid` (SolidJS fine-grained reactivity); JSX configured with `jsxImportSource: "@opentui/solid"`, and `@opentui/solid/preload` in `bunfig.toml`. Solid is the rendering layer OpenTUI's own authors use; its surgical updates avoid the whole-tree re-render churn that a React reconciler submits to the native renderer.
 - Git output is the source of truth for the file map: the initial model loads at startup before the first render, and the poll keeps it current. The git-backed file map renders before any checker or diagnostic resolves; diagnostics are independent async decorations over the stable git file list, never blocking it.
 - v1 is macOS-first (clipboard via `pbcopy`).
 
@@ -34,18 +34,18 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 - Conventional commit style for commits and PR titles: `type(scope): summary`, with types `feat`/`fix`/`docs`/`chore`/`refactor`/`test` and an optional scope.
 - No AI-generated sign-offs in commits, PR text, docs, or generated content.
 
-## Effect conventions
+## State and Effect conventions
 
-State and async work use Effect v4 (beta). `effect` and `@effect/atom-react` are pinned to exact, matching beta versions and move together; `effect/unstable/*` can break on minor bumps.
+Reactive state is SolidJS-native (signals/memos); async IO is Effect v4 (beta). `effect` is pinned to an exact beta version; `effect/unstable/*` can break on minor bumps. The two layers meet only at one seam: the long-lived `ManagedRuntime` in `src/runtime.ts`.
 
 - Wrap existing pure functions in services; do not rewrite the pure logic, so its tests stay intact.
-- Define services with `Context.Service` plus a `Layer` (there is no `Effect.Service` in v4); define errors with `Data.TaggedError`, one tag per distinct failure. Domain IO lives in `src/services/`; effect-backed atoms run through the shared `runtime` in `src/atoms/runtime.ts`.
+- Define services with `Context.Service` plus a `Layer` (there is no `Effect.Service` in v4); define errors with `Data.TaggedError`, one tag per distinct failure. Domain IO lives in `src/services/`. The service `Layer` is assembled once into `ManagedRuntime.make(AppLayer)` in `src/runtime.ts`; run service effects through `runtime.runPromise`/`runtime.runFork`, never with a fresh `Effect.runPromise` + `Layer.provide` per call.
 - Prefer the data-last pipe form for combinators (`x.pipe(Effect.flatMap(f))`) over the data-first form (`Effect.flatMap(x, f)`); the two-argument data-first form trips `unicorn/no-array-method-this-argument`.
-- All app state lives in atoms under `src/atoms/` (writable, derived, and effect-backed); `App` holds no `useState` or `useMemo`, it reads atoms and owns only effects and refs. Components read atoms via `@effect/atom-react` hooks. Atoms initialized from props or startup are seeded with `useAtomInitialValues` in `App`.
-- The keymap dispatches through the atom registry: `createKeyHandler(registry, ctx)` reads and writes atoms via `registry.get`/`registry.set` (call them as methods, never destructured, to keep `this`), so a keypress sees the latest state, not a render-time snapshot. The `ctx` carries only non-atom dependencies.
-- Long-running effect work (the git poll, the diagnostics run) uses fiber interruption for cancellation: a `runtime.fn` atom's latest call interrupts the prior fiber. Do not reintroduce manual `AbortController` or generation-counter bookkeeping.
+- All app state lives in `src/state.ts`: one global `createRoot` exposing `createSignal` primitives, `createMemo` derivations, and `createEffect`-driven async flows, exported as the `state` object. Components and the keymap import `state` and read accessors directly (`state.selectedPath()`), so reactivity is fine-grained: only the renderables whose inputs changed update. `App` owns only the keyboard wiring and terminal-dimension sync. `main.tsx` seeds the signals (in one `batch`) before `render`.
+- Async data flows are Solid effects that run an Effect through the runtime and write a signal: the diff/content pipeline is the load-critical one. `createEffect` keyed on the selection forks the load via `runtime.runPromise(effect, { signal })` and commits ONE coherent snapshot (`diffView`) when it resolves, holding the previous snapshot until then. The `<diff>` therefore never receives empty/stale/partial content — feeding it incoherent intermediate content oscillates OpenTUI's gutter width and wedges the renderer (the freeze the Effect-atom pipeline caused). Keep diff updates coherent and one-per-selection.
+- Cancellation is via the `AbortController` passed to `runtime.runPromise`'s `signal` and `onCleanup` (Solid re-runs the effect on dependency change, aborting the prior — which interrupts the Process fiber and kills any in-flight git). Background fibers (the git poll, the quiet re-run) follow the same restart-on-rekey pattern.
+- The keymap is `createKeyHandler(ctx)` (`ctx` carries only `quit`/`switchWorktree`); it reads/writes `state` directly and wraps each dispatch in Solid `batch` so a keypress is one update. `quit` calls `renderer.destroy()` then `process.exit(0)` — the background poll keeps the event loop alive otherwise.
 - Every subprocess runs through the `Process` service (`src/services/process.ts`), an interruptible `Effect.acquireUseRelease` over `Bun.spawn` whose release kills the child; the git, file, and clipboard services and the startup load all compose it. There is no synchronous `Bun.spawnSync` path. Retry only transient git failures (the `index.lock` class), bounded, via `Effect.retry`; do not blanket-retry, a bad ref should fail fast.
-- A `runtime.fn` atom dispatched from the keymap through `registry.set` only runs while the atom is mounted, so `App` mounts each one with `useAtomMount` (e.g. `copyAtom`, `loadWorktreesAtom`). An unmounted dispatch silently no-ops.
 
 ## Code design
 

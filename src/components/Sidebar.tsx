@@ -1,63 +1,42 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
-import type { RefObject } from "react"
-import type { CheckerState } from "../diagnostics"
+import { createEffect, For, Show } from "solid-js"
+import { state } from "../state"
 import { useTheme } from "../theme/context"
-import type { FileTreeRow } from "../tree"
 import { TreeRow } from "./TreeRow"
 
-interface SidebarProps {
-  sidebarRef: RefObject<ScrollBoxRenderable | null>
-  sidebarWidth: number
-  paneHeight: number
-  focused: boolean
-  treeRows: FileTreeRow[]
-  focusedRowIndex: number
-  selectedPath: string | undefined
-  expandedDirectories: Set<string>
-  checkerState: CheckerState
-  recencyByPath: Map<string, number>
-  now: number
-}
-
-export function Sidebar({
-  sidebarRef,
-  sidebarWidth,
-  paneHeight,
-  focused,
-  treeRows,
-  focusedRowIndex,
-  selectedPath,
-  expandedDirectories,
-  checkerState,
-  recencyByPath,
-  now,
-}: SidebarProps) {
+export function Sidebar() {
   const theme = useTheme()
+  let sidebarRef: ScrollBoxRenderable | undefined
+
+  // Keep the focused row in view as the cursor moves.
+  createEffect(() => {
+    const rows = state.treeRows()
+    const focusedRow = rows[state.focusedRowIndex()]
+    if (focusedRow !== undefined) {
+      sidebarRef?.scrollChildIntoView(focusedRow.node.id)
+    }
+  })
+
+  const focused = () => state.focusedPane() === "tree"
+
   return (
     <box
-      width={sidebarWidth}
+      width={state.sidebarWidth()}
       height="100%"
       flexDirection="column"
       borderStyle="single"
-      borderColor={focused ? theme.colors.border.focused : theme.colors.border.unfocused}
+      borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
     >
-      <scrollbox ref={sidebarRef} width="100%" height={paneHeight} scrollY viewportCulling>
-        {treeRows.map((row) => (
-          <TreeRow
-            key={row.node.id}
-            row={row}
-            focused={focused && row.index === focusedRowIndex}
-            selectedPath={selectedPath}
-            expandedDirectories={expandedDirectories}
-            checkerState={checkerState}
-            recencyByPath={recencyByPath}
-            now={now}
-            treeWidth={sidebarWidth}
+      <scrollbox ref={(el) => (sidebarRef = el)} width="100%" height={state.paneHeight()} scrollY viewportCulling>
+        <For each={state.treeRows()}>{(row) => <TreeRow row={row} />}</For>
+        <Show when={state.treeRows().length < state.paneHeight()}>
+          <box
+            id="tree-filler"
+            width="100%"
+            height={state.paneHeight() - state.treeRows().length}
+            backgroundColor={theme.colors.surface.base}
           />
-        ))}
-        {treeRows.length < paneHeight && (
-          <box id="tree-filler" width="100%" height={paneHeight - treeRows.length} backgroundColor={theme.colors.surface.base} />
-        )}
+        </Show>
       </scrollbox>
     </box>
   )

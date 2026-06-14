@@ -1,71 +1,60 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
-import type { RefObject } from "react"
+import { createEffect, For, Show } from "solid-js"
 import { PROBLEMS_HEIGHT } from "../constants"
-import type { ProblemItem } from "../atoms/diagnostics"
+import { state } from "../state"
 import { useTheme } from "../theme/context"
 
-interface ProblemsPanelProps {
-  problemsRef: RefObject<ScrollBoxRenderable | null>
-  allProblemItems: ProblemItem[]
-  problemIndex: number
-  focused: boolean
-}
-
-export function ProblemsPanel({ problemsRef, allProblemItems, problemIndex, focused }: ProblemsPanelProps) {
+export function ProblemsPanel() {
   const theme = useTheme()
+  let problemsRef: ScrollBoxRenderable | undefined
+
+  createEffect(() => {
+    problemsRef?.scrollChildIntoView(state.allProblemItems()[state.problemIndex()]?.id ?? "")
+  })
+
+  const focused = () => state.focusedPane() === "problems"
+  const rowBg = (index: number) => (index === state.problemIndex() && focused() ? theme.colors.surface.cursor : theme.colors.surface.base)
+
   return (
     <box
       height={PROBLEMS_HEIGHT}
       width="100%"
       flexDirection="column"
       borderStyle="single"
-      borderColor={focused ? theme.colors.border.focused : theme.colors.border.unfocused}
+      borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
     >
-      <scrollbox ref={problemsRef} width="100%" height={PROBLEMS_HEIGHT - 2} scrollY viewportCulling>
-        {allProblemItems.length === 0 ? (
-          <box id="problem-empty" paddingLeft={1}>
-            <text fg={theme.colors.text.muted}>no problems</text>
-          </box>
-        ) : (
-          <>
-            {allProblemItems.map((item, index) =>
+      <scrollbox ref={(el) => (problemsRef = el)} width="100%" height={PROBLEMS_HEIGHT - 2} scrollY viewportCulling>
+        <Show
+          when={state.allProblemItems().length > 0}
+          fallback={
+            <box id="problem-empty" paddingLeft={1}>
+              <text fg={theme.colors.text.muted}>no problems</text>
+            </box>
+          }
+        >
+          <For each={state.allProblemItems()}>
+            {(item, index) =>
               item.kind === "failure" ? (
-                <box
-                  key={item.id}
-                  id={item.id}
-                  width="100%"
-                  flexDirection="row"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={index === problemIndex && focused ? theme.colors.surface.cursor : theme.colors.surface.base}
-                >
+                <box id={item.id} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1} backgroundColor={rowBg(index())}>
                   <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
                   <text fg={theme.colors.text.secondary}>{item.line}</text>
-                  {item.isFirst && <text fg={theme.colors.text.muted}>{`  [${item.checker}]`}</text>}
+                  {item.isFirst ? <text fg={theme.colors.text.muted}>{`  [${item.checker}]`}</text> : null}
                 </box>
               ) : (
-                <box
-                  key={item.id}
-                  id={item.id}
-                  width="100%"
-                  flexDirection="row"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={index === problemIndex && focused ? theme.colors.surface.cursor : theme.colors.surface.base}
-                >
+                <box id={item.id} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1} backgroundColor={rowBg(index())}>
                   <text fg={item.problem.severity === "error" ? theme.colors.severity.error : theme.colors.severity.warning}>
                     {item.problem.severity === "error" ? "✖ " : "⚠ "}
                   </text>
-                  <text
-                    fg={theme.colors.text.strong}
-                  >{`${item.problem.path}${item.problem.line === undefined ? "" : `:${item.problem.line}`} `}</text>
+                  <text fg={theme.colors.text.strong}>
+                    {`${item.problem.path}${item.problem.line === undefined ? "" : `:${item.problem.line}`} `}
+                  </text>
                   <text fg={theme.colors.text.secondary}>{item.problem.message}</text>
                   <text fg={theme.colors.text.muted}>{`  [${item.problem.checker}]`}</text>
                 </box>
-              ),
-            )}
-          </>
-        )}
+              )
+            }
+          </For>
+        </Show>
       </scrollbox>
     </box>
   )

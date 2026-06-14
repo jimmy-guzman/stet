@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "react-perf"],
+  "plugins": ["typescript", "unicorn", "oxc"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
@@ -9,11 +9,9 @@
   },
   "rules": {
     "eqeqeq": "error",
-    "react/react-in-jsx-scope": "off",
     "unicorn/no-null": "off",
     "unicorn/filename-case": "off",
     "unicorn/no-nested-ternary": "off",
-    "react/jsx-max-depth": "off",
     "sort-imports": "off",
     "no-ternary": "off",
     "no-nested-ternary": "off",
@@ -23,7 +21,8 @@
     "no-continue": "off",
     "max-params": "off",
     "id-length": "off",
-    "func-style": ["error", "declaration"],
+    "func-style": ["error", "declaration", { "allowArrowFunctions": true }],
+    "unicorn/consistent-function-scoping": "off",
     "new-cap": ["error", { "capIsNewExceptions": ["Data.TaggedError", "Context.Service"] }],
     "prefer-destructuring": "off",
     "init-declarations": "off"

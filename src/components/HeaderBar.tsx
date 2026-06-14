@@ -1,16 +1,10 @@
 import { basename } from "node:path"
-import { scopeLabel, type DiffScope } from "../cli"
+import packageJson from "../../package.json"
+import { scopeLabel } from "../cli"
+import { state } from "../state"
 import { useTheme } from "../theme/context"
 
-interface HeaderBarProps {
-  version: string
-  repoRoot: string
-  scope: DiffScope
-  changedCount: number
-  countsText: string
-}
-
-export function HeaderBar({ version, repoRoot, scope, changedCount, countsText }: HeaderBarProps) {
+export function HeaderBar() {
   const theme = useTheme()
   return (
     <box
@@ -23,10 +17,11 @@ export function HeaderBar({ version, repoRoot, scope, changedCount, countsText }
     >
       <box flexDirection="row">
         <text fg={theme.colors.accent.primary}>sideye</text>
-        <text fg={theme.colors.text.faint}>@{version}</text>
+        <text fg={theme.colors.text.faint}>@{packageJson.version}</text>
       </box>
       <text fg={theme.colors.text.secondary}>
-        {basename(repoRoot)} · {scopeLabel(scope)} · {changedCount} changed{countsText === "" ? "" : ` · ${countsText}`}
+        {basename(state.gitModel().repoRoot)} · {scopeLabel(state.scope())} · {state.gitModel().changed.length} changed
+        {state.countsText() === "" ? "" : ` · ${state.countsText()}`}
       </text>
     </box>
   )

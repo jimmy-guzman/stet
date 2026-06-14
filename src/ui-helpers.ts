@@ -65,7 +65,11 @@ export function truncateName(name: string, max: number) {
   return `${name.slice(0, keep)}…${ext}`
 }
 
-export function placeholderText(content: FileContent) {
+export function placeholderText(content: FileContent | undefined) {
+  if (content === undefined) {
+    return ""
+  }
+
   if (content.kind === "binary") {
     return "binary file"
   }

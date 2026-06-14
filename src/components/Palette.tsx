@@ -1,43 +1,39 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
-import type { RefObject } from "react"
+import { createEffect, Index, Show } from "solid-js"
 import { recencyLevel } from "../activity"
-import type { ChangedFile } from "../git"
+import { state } from "../state"
 import { useTheme } from "../theme/context"
 import { kindLetter } from "../ui-helpers"
 import { RecencyDot } from "./TreeRow"
 
-interface PaletteProps {
-  paletteRef: RefObject<ScrollBoxRenderable | null>
-  paletteLeft: number
-  paletteWidth: number
-  paletteResults: string[]
-  paletteIndex: number
-  changedByPath: Map<string, ChangedFile>
-  recencyByPath: Map<string, number>
-  now: number
-  onInput: (value: string) => void
-  onSubmit: () => void
-}
-
-export function Palette({
-  paletteRef,
-  paletteLeft,
-  paletteWidth,
-  paletteResults,
-  paletteIndex,
-  changedByPath,
-  recencyByPath,
-  now,
-  onInput,
-  onSubmit,
-}: PaletteProps) {
+export function Palette() {
   const theme = useTheme()
+  let paletteRef: ScrollBoxRenderable | undefined
+
+  createEffect(() => {
+    paletteRef?.scrollChildIntoView(`palette-${state.paletteIndex()}`)
+  })
+
+  function onSubmit() {
+    const path = state.paletteResults()[state.paletteIndex()]
+    if (path !== undefined) {
+      state.selectFile(path)
+      state.setFocusedPane("diff")
+    }
+    state.setPaletteOpen(false)
+  }
+
+  function onInput(value: string) {
+    state.setPaletteQuery(value)
+    state.setPaletteIndex(0)
+  }
+
   return (
     <box
       position="absolute"
-      left={paletteLeft}
+      left={state.paletteLeft()}
       top={1}
-      width={paletteWidth}
+      width={state.paletteWidth()}
       flexDirection="column"
       borderStyle="single"
       borderColor={theme.colors.border.focused}
@@ -55,49 +51,52 @@ export function Palette({
         onInput={onInput}
         onSubmit={onSubmit}
       />
-      <scrollbox ref={paletteRef} width="100%" height={Math.min(12, Math.max(1, paletteResults.length))} scrollY viewportCulling>
-        {paletteResults.length === 0 ? (
-          <box id="palette-empty" paddingLeft={1}>
-            <text fg={theme.colors.text.muted}>no matches</text>
-          </box>
-        ) : (
-          paletteResults.map((path, index) => {
-            const changed = changedByPath.get(path)
-            const recency = recencyLevel(recencyByPath.get(path), now)
-            // Key and id both by index: reordering results must never
-            // Change a live renderable's id or the scrollbox loses rows
-            // oxlint-disable react/no-array-index-key -- intentional: stable id-by-index required by scrollbox
-            return (
-              <box
-                key={`palette-${index}`}
-                id={`palette-${index}`}
-                width="100%"
-                flexDirection="row"
-                justifyContent="space-between"
-                paddingLeft={1}
-                paddingRight={1}
-                backgroundColor={index === paletteIndex ? theme.colors.surface.cursor : theme.colors.surface.panel}
-              >
-                <box flexDirection="row">
-                  <text
-                    fg={
-                      index === paletteIndex
-                        ? theme.colors.text.selected
-                        : changed === undefined
-                          ? theme.colors.text.secondary
-                          : theme.colors.kind[changed.kind]
-                    }
-                  >
-                    {path}
-                  </text>
-                  <RecencyDot level={recency} />
+      <scrollbox
+        ref={(el) => (paletteRef = el)}
+        width="100%"
+        height={Math.min(12, Math.max(1, state.paletteResults().length))}
+        scrollY
+        viewportCulling
+      >
+        <Show
+          when={state.paletteResults().length > 0}
+          fallback={
+            <box id="palette-empty" paddingLeft={1}>
+              <text fg={theme.colors.text.muted}>no matches</text>
+            </box>
+          }
+        >
+          {/* Id-by-index is required: reordering results must never change a live renderable's id */}
+          <Index each={state.paletteResults()}>
+            {(path, index) => {
+              const changed = () => state.gitModel().changedByPath.get(path())
+              const recency = () => recencyLevel(state.recencyByPath().get(path()), state.now())
+              const nameFg = () =>
+                index === state.paletteIndex()
+                  ? theme.colors.text.selected
+                  : changed() === undefined
+                    ? theme.colors.text.secondary
+                    : theme.colors.kind[changed()!.kind]
+              return (
+                <box
+                  id={`palette-${index}`}
+                  width="100%"
+                  flexDirection="row"
+                  justifyContent="space-between"
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={index === state.paletteIndex() ? theme.colors.surface.cursor : theme.colors.surface.panel}
+                >
+                  <box flexDirection="row">
+                    <text fg={nameFg()}>{path()}</text>
+                    <RecencyDot level={recency()} />
+                  </box>
+                  {changed() === undefined ? null : <text fg={theme.colors.stage[changed()!.stage]}>{kindLetter(changed()!.kind)}</text>}
                 </box>
-                {changed === undefined ? null : <text fg={theme.colors.stage[changed.stage]}>{kindLetter(changed.kind)}</text>}
-              </box>
-            )
-            // oxlint-enable react/no-array-index-key
-          })
-        )}
+              )
+            }}
+          </Index>
+        </Show>
       </scrollbox>
     </box>
   )

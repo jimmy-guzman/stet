@@ -1,14 +1,10 @@
-import { createContext, useContext, type ReactNode } from "react"
 import { darkTheme } from "./dark"
 import { resolveTheme, type ResolvedTheme } from "./resolve"
 
-// Defaulting to resolved dark lets tests render components without a provider
-const ThemeContext = createContext<ResolvedTheme>(resolveTheme(darkTheme))
-
-export function ThemeProvider({ children, theme }: { children: ReactNode; theme: ResolvedTheme }) {
-  return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>
-}
+// Theme is static in v1, so a resolved singleton is enough; `useTheme` keeps the
+// Call site stable for a future runtime theme switch (a signal would slot in here).
+const theme = resolveTheme(darkTheme)
 
 export function useTheme(): ResolvedTheme {
-  return useContext(ThemeContext)
+  return theme
 }

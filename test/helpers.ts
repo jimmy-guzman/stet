@@ -9,6 +9,7 @@ import { batch } from "solid-js";
 import type { DiffScope } from "../src/cli";
 import { initialCheckerState } from "../src/diagnostics";
 import type { ChangedFile, GitModel } from "../src/git";
+import { File, FileLive } from "../src/services/file";
 import { Git, GitLive } from "../src/services/git";
 import { ProcessLive } from "../src/services/process";
 import { state } from "../src/state";
@@ -18,6 +19,20 @@ import { defaultExpandedDirectories, expandAncestorsForPath, type FileTreeRow } 
 export const disabledSyntax: SyntaxConfig = { enabled: false, status: "syntax disabled for tests" };
 
 const GitTestLive = GitLive.pipe(Layer.provide(ProcessLive));
+const FileTestLive = FileLive.pipe(Layer.provide(ProcessLive));
+
+// Run the File service against a fixture repo's git-show path, the same path the
+// App uses for deleted files, so tests exercise the production classification.
+export function loadGitShowContent(repoRoot: string, path: string) {
+  return Effect.runPromise(
+    File.pipe(
+      Effect.flatMap((file) =>
+        file.content(repoRoot, path, { full: false, gitSpec: `HEAD:${path}` }),
+      ),
+      Effect.provide(FileTestLive),
+    ),
+  );
+}
 
 // Run the Git service against a fixture repo, the same path the app uses, so
 // Tests exercise the production load instead of a mock.

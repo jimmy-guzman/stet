@@ -44,11 +44,21 @@ export function loadFileContent(
     return { kind: "missing" };
   }
 
-  if (buffer.subarray(0, 8000).includes(0)) {
+  return classifyFileBytes(buffer, options);
+}
+
+// Byte-level binary/size classification shared by the local-read path and the
+// File service's git-show path, so deleted binaries are caught before decoding.
+export function classifyFileBytes(bytes: Uint8Array, options: { full: boolean }): FileContent {
+  if (bytes.byteLength > MAX_FILE_BYTES && !options.full) {
+    return { bytes: bytes.byteLength, kind: "too-large" };
+  }
+
+  if (bytes.subarray(0, 8000).includes(0)) {
     return { kind: "binary" };
   }
 
-  return textContent(buffer.toString("utf8"), options.full);
+  return textContent(new TextDecoder().decode(bytes), options.full);
 }
 
 export function textContent(content: string, full: boolean): FileContent {

@@ -3,6 +3,7 @@ import { Context, Data, Effect, Layer } from "effect";
 export interface CommandResult {
   exitCode: number;
   stdout: string;
+  stdoutBytes: Uint8Array;
   stderr: string;
 }
 
@@ -73,15 +74,18 @@ export const ProcessLive = Layer.succeed(Process)({
           try: (signal) => {
             signal.addEventListener("abort", () => child.kill(), { once: true });
             return Promise.all([
-              new Response(child.stdout).text(),
+              new Response(child.stdout).bytes(),
               new Response(child.stderr).text(),
               child.exited,
             ]);
           },
         }).pipe(
-          Effect.flatMap(([stdout, stderr, exitCode]) => {
+          // Decode stdout for string consumers, but keep the raw bytes so the File
+          // Service can run byte-level binary/size guards on git-show output.
+          Effect.flatMap(([stdoutBytes, stderr, exitCode]) => {
+            const stdout = new TextDecoder().decode(stdoutBytes);
             if ((options?.allowedExitCodes ?? [0]).includes(exitCode)) {
-              return Effect.succeed({ exitCode, stderr, stdout });
+              return Effect.succeed({ exitCode, stderr, stdout, stdoutBytes });
             }
 
             const detail = stderr.trim() || stdout.trim();

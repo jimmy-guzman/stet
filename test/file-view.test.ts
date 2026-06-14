@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  classifyFileBytes,
   contentToContextPatch,
   loadFileContent,
   MAX_FILE_LINES,
@@ -41,6 +42,32 @@ describe("textContent", () => {
       truncated: true,
     });
     expect(textContent(long, true)).toMatchObject({ truncated: false });
+  });
+});
+
+describe("classifyFileBytes", () => {
+  test("flags bytes with a NUL in the first 8000 as binary", () => {
+    expect(classifyFileBytes(new Uint8Array([0x89, 0x50, 0x00, 0x47]), { full: false })).toEqual({
+      kind: "binary",
+    });
+  });
+
+  test("decodes text bytes", () => {
+    expect(classifyFileBytes(new TextEncoder().encode("const a = 1\n"), { full: false })).toEqual({
+      content: "const a = 1",
+      kind: "text",
+      lineCount: 1,
+      truncated: false,
+    });
+  });
+
+  test("reports oversized bytes as too-large unless full is requested", () => {
+    const big = new Uint8Array(1_000_001);
+    expect(classifyFileBytes(big, { full: false })).toEqual({
+      bytes: 1_000_001,
+      kind: "too-large",
+    });
+    expect(classifyFileBytes(big, { full: true })).toMatchObject({ kind: "binary" });
   });
 });
 

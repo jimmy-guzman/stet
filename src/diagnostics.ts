@@ -260,19 +260,33 @@ function typecheckCommand(
     ];
   }
 
-  const tsc = existsSync(`${repoRoot}/tsconfig.json`) ? resolveBinary(repoRoot, "tsc") : undefined;
-  if (tsc !== undefined) {
+  const rootTsconfig = existsSync(`${repoRoot}/tsconfig.json`);
+  if (rootTsconfig) {
+    const tsc = resolveBinary(repoRoot, "tsc");
+    if (tsc !== undefined) {
+      return [
+        {
+          allowedExitCodes: [0, 1, 2],
+          checker: "typecheck",
+          command: [tsc, "--noEmit"],
+          parser: parseTypeScriptOutput,
+        },
+      ];
+    }
+  }
+
+  // A root tsconfig may be a base config; let workspaces resolve their own tsc first.
+  const workspace = discoverWorkspaceTypechecks(repoRoot, packageJson, changedPaths);
+  if (rootTsconfig && !workspace.some((command) => command.command !== undefined)) {
     return [
       {
-        allowedExitCodes: [0, 1, 2],
-        checker: "typecheck",
-        command: [tsc, "--noEmit"],
-        parser: parseTypeScriptOutput,
+        ...unconfiguredChecker("typecheck"),
+        unavailableMessage: "tsconfig.json found but the tsc binary could not be resolved",
       },
     ];
   }
 
-  return discoverWorkspaceTypechecks(repoRoot, packageJson, changedPaths);
+  return workspace;
 }
 
 function discoverWorkspaceTypechecks(
@@ -303,7 +317,8 @@ function discoverWorkspaceTypechecks(
       commands.push({
         allowedExitCodes: [0, 1, 2],
         checker: "typecheck",
-        command: scriptCommand(pkgDir, "typecheck"),
+        // Detect the PM at the repo root (where the lockfile lives), not in pkgDir.
+        command: scriptCommand(repoRoot, "typecheck"),
         cwd: pkgDir,
         parser: parseTypeScriptOutput,
       });

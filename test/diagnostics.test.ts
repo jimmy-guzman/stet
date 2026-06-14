@@ -385,3 +385,87 @@ describe("workspace typecheck discovery", () => {
     }
   });
 });
+
+describe("package-manager-aware commands", () => {
+  function bin(dir: string, name: string) {
+    mkdirSync(join(dir, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(dir, "node_modules", ".bin", name), "");
+  }
+
+  test("runs scripts through the pnpm runner detected from the lockfile", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sideye-pnpm-run-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { lint: "oxlint", typecheck: "tsc --noEmit" } }),
+      );
+      writeFileSync(join(dir, "pnpm-lock.yaml"), "");
+      const commands = discoverCheckerCommands(dir, [file]);
+      const lint = commands.find((c) => c.checker === "lint");
+      const typecheck = commands.find((c) => c.checker === "typecheck");
+      // Oxlint script gets --format json, separated by -- so npm-style runners forward it
+      expect(lint?.command).toEqual(["pnpm", "run", "lint", "--", "--format", "json"]);
+      expect(typecheck?.command).toEqual(["pnpm", "run", "typecheck"]);
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("the packageManager field wins over a lockfile", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sideye-pm-field-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ packageManager: "yarn@4.1.0", scripts: { typecheck: "tsc --noEmit" } }),
+      );
+      writeFileSync(join(dir, "pnpm-lock.yaml"), "");
+      const typecheck = discoverCheckerCommands(dir, [file]).find((c) => c.checker === "typecheck");
+      expect(typecheck?.command?.[0]).toBe("yarn");
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("defaults to bun when no package manager is signalled", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sideye-default-bun-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }),
+      );
+      const typecheck = discoverCheckerCommands(dir, [file]).find((c) => c.checker === "typecheck");
+      expect(typecheck?.command).toEqual(["bun", "run", "typecheck"]);
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("invokes fallback binaries from node_modules/.bin, never bunx", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sideye-local-bin-"));
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "myapp" }));
+      bin(dir, "oxlint");
+      const lint = discoverCheckerCommands(dir, [file]).find((c) => c.checker === "lint");
+      expect(lint?.command?.[0]).toBe(join(dir, "node_modules", ".bin", "oxlint"));
+      expect(lint?.command).toContain("src/a.ts");
+      expect(lint?.command).not.toContain("bunx");
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("passes prettier --ignore-unknown so unformattable changed files don't fail it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sideye-prettier-"));
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "myapp" }));
+      bin(dir, "prettier");
+      const snap: ChangedFile = { ...file, path: "src/a.spec.ts.snap" };
+      const prettier = discoverCheckerCommands(dir, [snap]).find((c) => c.checker === "prettier");
+      expect(prettier?.command?.[0]).toBe(join(dir, "node_modules", ".bin", "prettier"));
+      expect(prettier?.command).toContain("--ignore-unknown");
+      expect(prettier?.command).not.toContain("bunx");
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+});

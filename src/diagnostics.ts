@@ -27,6 +27,7 @@ export type CheckerState = Record<CheckerName, Map<string, CheckerFileState>>;
 interface PackageJson {
   scripts?: Record<string, string>;
   workspaces?: string[] | { packages: string[] };
+  packageManager?: string;
 }
 
 export interface CheckerCommand {
@@ -184,7 +185,7 @@ function lintCommand(
       {
         allowedExitCodes: [0, 1],
         checker: "lint",
-        command: ["bun", "run", "lint", ...jsonArgs],
+        command: scriptCommand(repoRoot, "lint", jsonArgs),
         parser: parseLintOutput,
       },
     ];
@@ -194,23 +195,25 @@ function lintCommand(
     return [unconfiguredChecker("lint")];
   }
 
-  if (hasBinary(repoRoot, "oxlint")) {
+  const oxlint = resolveBinary(repoRoot, "oxlint");
+  if (oxlint !== undefined) {
     return [
       {
         allowedExitCodes: [0, 1],
         checker: "lint",
-        command: ["bunx", "oxlint", "--format", "json", ...changedPaths],
+        command: [oxlint, "--format", "json", ...changedPaths],
         parser: parseLintOutput,
       },
     ];
   }
 
-  if (hasBinary(repoRoot, "eslint")) {
+  const eslint = resolveBinary(repoRoot, "eslint");
+  if (eslint !== undefined) {
     return [
       {
         allowedExitCodes: [0, 1],
         checker: "lint",
-        command: ["bunx", "eslint", "--format", "json", ...changedPaths],
+        command: [eslint, "--format", "json", ...changedPaths],
         parser: parseLintOutput,
       },
     ];
@@ -224,7 +227,8 @@ function prettierCommand(
   _packageJson: PackageJson | undefined,
   changedPaths: string[],
 ): CheckerCommand[] {
-  if (changedPaths.length === 0 || !hasBinary(repoRoot, "prettier")) {
+  const prettier = changedPaths.length === 0 ? undefined : resolveBinary(repoRoot, "prettier");
+  if (prettier === undefined) {
     return [unconfiguredChecker("prettier")];
   }
 
@@ -232,7 +236,9 @@ function prettierCommand(
     {
       allowedExitCodes: [0, 1],
       checker: "prettier",
-      command: ["bunx", "prettier", "--list-different", ...changedPaths],
+      // Skip changed files prettier cannot parse, such as .snap and lockfiles.
+      // Without this they exit 2 and the checker reads as failed.
+      command: [prettier, "--list-different", "--ignore-unknown", ...changedPaths],
       parser: parsePrettierList,
     },
   ];
@@ -248,24 +254,39 @@ function typecheckCommand(
       {
         allowedExitCodes: [0, 1, 2],
         checker: "typecheck",
-        command: ["bun", "run", "typecheck"],
+        command: scriptCommand(repoRoot, "typecheck"),
         parser: parseTypeScriptOutput,
       },
     ];
   }
 
-  if (existsSync(`${repoRoot}/tsconfig.json`) && hasBinary(repoRoot, "tsc")) {
+  const rootTsconfig = existsSync(`${repoRoot}/tsconfig.json`);
+  if (rootTsconfig) {
+    const tsc = resolveBinary(repoRoot, "tsc");
+    if (tsc !== undefined) {
+      return [
+        {
+          allowedExitCodes: [0, 1, 2],
+          checker: "typecheck",
+          command: [tsc, "--noEmit"],
+          parser: parseTypeScriptOutput,
+        },
+      ];
+    }
+  }
+
+  // A root tsconfig may be a base config; let workspaces resolve their own tsc first.
+  const workspace = discoverWorkspaceTypechecks(repoRoot, packageJson, changedPaths);
+  if (rootTsconfig && !workspace.some((command) => command.command !== undefined)) {
     return [
       {
-        allowedExitCodes: [0, 1, 2],
-        checker: "typecheck",
-        command: ["bunx", "tsc", "--noEmit"],
-        parser: parseTypeScriptOutput,
+        ...unconfiguredChecker("typecheck"),
+        unavailableMessage: "tsconfig.json found but the tsc binary could not be resolved",
       },
     ];
   }
 
-  return discoverWorkspaceTypechecks(repoRoot, packageJson, changedPaths);
+  return workspace;
 }
 
 function discoverWorkspaceTypechecks(
@@ -296,15 +317,22 @@ function discoverWorkspaceTypechecks(
       commands.push({
         allowedExitCodes: [0, 1, 2],
         checker: "typecheck",
-        command: ["bun", "run", "typecheck"],
+        // Detect the PM at the repo root (where the lockfile lives), not in pkgDir.
+        command: scriptCommand(repoRoot, "typecheck"),
         cwd: pkgDir,
         parser: parseTypeScriptOutput,
       });
-    } else if (existsSync(`${pkgDir}/tsconfig.json`) && hasBinary(repoRoot, "tsc")) {
+      continue;
+    }
+    // Pnpm/yarn keep tsc in the package's own .bin; npm/bun often hoist to root
+    const tsc = existsSync(`${pkgDir}/tsconfig.json`)
+      ? (resolveBinary(pkgDir, "tsc") ?? resolveBinary(repoRoot, "tsc"))
+      : undefined;
+    if (tsc !== undefined) {
       commands.push({
         allowedExitCodes: [0, 1, 2],
         checker: "typecheck",
-        command: ["bunx", "tsc", "--noEmit"],
+        command: [tsc, "--noEmit"],
         cwd: pkgDir,
         parser: parseTypeScriptOutput,
       });
@@ -597,13 +625,51 @@ function readPackageJson(repoRoot: string): PackageJson | undefined {
   }
 
   return {
+    packageManager: typeof parsed.packageManager === "string" ? parsed.packageManager : undefined,
     scripts: isStringRecord(parsed.scripts) ? parsed.scripts : undefined,
     workspaces: isWorkspaces(parsed.workspaces) ? parsed.workspaces : undefined,
   };
 }
 
-function hasBinary(repoRoot: string, binary: string) {
-  return existsSync(`${repoRoot}/node_modules/.bin/${binary}`) || Bun.which(binary) !== null;
+/**
+ * Picks the runner for a target repo's package.json scripts. The `packageManager` field is
+ * corepack-authoritative; lockfiles are the fallback signal. Defaults to bun, matching sideye's own
+ * runtime.
+ */
+function detectPackageManager(repoRoot: string) {
+  const field = readPackageJson(repoRoot)?.packageManager?.split("@")[0];
+  if (field === "pnpm" || field === "yarn" || field === "npm" || field === "bun") {
+    return field;
+  }
+  if (existsSync(`${repoRoot}/pnpm-lock.yaml`)) {
+    return "pnpm";
+  }
+  if (existsSync(`${repoRoot}/yarn.lock`)) {
+    return "yarn";
+  }
+  if (existsSync(`${repoRoot}/package-lock.json`)) {
+    return "npm";
+  }
+  return "bun";
+}
+
+function scriptCommand(repoRoot: string, script: string, extraArgs: string[] = []) {
+  // Npm requires `--` before forwarded args; pnpm/yarn/bun accept it too
+  const forwarded = extraArgs.length === 0 ? [] : ["--", ...extraArgs];
+  return [detectPackageManager(repoRoot), "run", script, ...forwarded];
+}
+
+/**
+ * Resolves a checker binary without a package-manager wrapper: prefer the repo-local
+ * `node_modules/.bin` path, else the bare name if on PATH. Avoids coupling the target repo to bunx
+ * and any registry re-resolution.
+ */
+function resolveBinary(dir: string, binary: string) {
+  const local = `${dir}/node_modules/.bin/${binary}`;
+  if (existsSync(local)) {
+    return local;
+  }
+  return Bun.which(binary) ?? undefined;
 }
 
 function relativize(path: string, repoRoot: string) {

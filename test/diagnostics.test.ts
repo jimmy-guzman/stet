@@ -119,7 +119,6 @@ describe("problem helpers", () => {
 
   test("checkerSummary tallies a single path and tracks pending", () => {
     const state = stateWith([diagnostic({}), diagnostic({ path: "/repo/src/other.ts" })]);
-    // Lint is still pending in stateWith; typecheck resolved
     expect(checkerSummary("src/a.ts", state)).toEqual({
       errors: 1,
       failed: false,
@@ -230,7 +229,6 @@ describe("the diagnostics service", () => {
   }
 
   test("unconfigured checkers resolve as unavailable instead of clean or failed", async () => {
-    // Deleted-only changes leave no paths to lint
     const deleted: ChangedFile = { ...file, kind: "deleted" };
     const dir = mkdtempSync(join(tmpdir(), "sideye-diagnostics-"));
     try {

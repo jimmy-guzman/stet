@@ -1,5 +1,9 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
+import { emptyActivityLog } from "../src/activity"
 import { state } from "../src/state"
+
+// State is a global singleton shared across test files; reset what this test mutates
+afterEach(() => state.setActivityLog(emptyActivityLog))
 
 test("recencyByPath maps each path to its last activity timestamp", () => {
   state.setActivityLog({

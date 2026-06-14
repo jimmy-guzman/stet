@@ -6,7 +6,7 @@
       "name": "sideye",
       "dependencies": {
         "@opentui/core": "0.4.1",
-        "@opentui/solid": "^0.4.1",
+        "@opentui/solid": "0.4.1",
         "effect": "4.0.0-beta.83",
         "solid-js": "1.9.12",
       },

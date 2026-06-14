@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import { batch } from "solid-js"
 import type { GitModel } from "../src/git"
 import { state } from "../src/state"
@@ -23,6 +23,16 @@ function seed(paths: string[]) {
     state.setSelectedPath(undefined)
   })
 }
+
+// State is a global singleton shared across test files; reset what seed() mutates
+afterEach(() => {
+  batch(() => {
+    state.setGitModel(modelWith([]))
+    state.setExpandedDirectories(new Set<string>())
+    state.setFocusedNodeId("")
+    state.setSelectedPath(undefined)
+  })
+})
 
 test("focusedRowIndex derives from the focused node and moving selects the file", () => {
   seed(["a.ts", "b.ts", "c.ts"])

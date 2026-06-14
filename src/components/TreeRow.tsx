@@ -1,3 +1,4 @@
+import { createMemo } from "solid-js"
 import { recencyLevel, type RecencyLevel } from "../activity"
 import { checkerSummary, directorySummary } from "../diagnostics"
 import { state } from "../state"
@@ -18,7 +19,7 @@ export function TreeRow(props: { row: FileTreeRow }) {
   if (node.type === "directory") {
     const isExpanded = () => state.expandedDirectories().has(node.id)
     const recency = () => directoryRecency(node, state.expandedDirectories(), state.recencyByPath(), state.now())
-    const summary = () => (isExpanded() ? null : directorySummary(node.path, state.checkerState()))
+    const summary = createMemo(() => (isExpanded() ? null : directorySummary(node.path, state.checkerState())))
     const nameFg = () =>
       focused() ? theme.colors.text.selected : node.changedCount > 0 ? theme.colors.text.primary : theme.colors.text.strong
     const hasBadges = () => {
@@ -70,7 +71,7 @@ export function TreeRow(props: { row: FileTreeRow }) {
 
   const changed = node.changed
   const recency = () => recencyLevel(state.recencyByPath().get(node.path), state.now())
-  const summary = () => checkerSummary(node.path, state.checkerState())
+  const summary = createMemo(() => checkerSummary(node.path, state.checkerState()))
   const selected = () => state.selectedPath() === node.path
   const nameFg = () =>
     focused() || selected()

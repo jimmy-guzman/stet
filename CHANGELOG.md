@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.0...sideye-v0.2.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **git:** 🐛 prevent index.lock conflicts with concurrent git processes ([#50](https://github.com/jimmy-guzman/sideye/issues/50)) ([b6ccf1a](https://github.com/jimmy-guzman/sideye/commit/b6ccf1a156de82e30968323ed29eca52320c9873))
+* **quit:** 🐛 exit instantly on ctrl-c ([#52](https://github.com/jimmy-guzman/sideye/issues/52)) ([303d089](https://github.com/jimmy-guzman/sideye/commit/303d0898e4b1e8cb9a3bfefe404cfbdb97225ce7))
+
 ## [0.2.0](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.7...sideye-v0.2.0) (2026-06-15)
 
 

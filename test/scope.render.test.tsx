@@ -40,7 +40,10 @@ describe("scope switching", () => {
       mockInput.pressKey("s");
       const after = await settleUntil(
         "staged scope drops the unstaged change",
-        (frame) => frame.includes("staged vs HEAD") && !frame.includes("+1 -1"),
+        (frame) =>
+          frame.includes("staged vs HEAD") &&
+          !frame.includes("+1 -1") &&
+          frame.includes("checks finished"),
       );
       expect(after).toContain("staged vs HEAD");
       expect(after).not.toContain("+1 -1");

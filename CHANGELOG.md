@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.7...sideye-v0.2.0) (2026-06-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **diagnostics:** 💥 Diagnostics are now powered by an LSP
+
+### Features
+
+* **diagnostics:** ✨ to an auto provisioning LSP client ([#46](https://github.com/jimmy-guzman/sideye/issues/46)) ([ef0024b](https://github.com/jimmy-guzman/sideye/commit/ef0024b50bc343f3221c90f7b5842c20c6006a3c))
+* **tree:** ✨ add Nerd Font file-type icons to the file tree ([#44](https://github.com/jimmy-guzman/sideye/issues/44)) ([c87bb13](https://github.com/jimmy-guzman/sideye/commit/c87bb13e7ddbfc62e8bf805d3e6e3cdfd391d00c))
+
+
+### Bug Fixes
+
+* **checker:** 🐛 run checkers via the repo's package manager ([#41](https://github.com/jimmy-guzman/sideye/issues/41)) ([ba6c0ab](https://github.com/jimmy-guzman/sideye/commit/ba6c0abcfb573e4105d85883c78d94833cfba8a4))
+
 ## [0.1.7](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.6...sideye-v0.1.7) (2026-06-14)
 
 

@@ -56,6 +56,10 @@ export const ProcessLive = Layer.succeed(Process)({
           Bun.spawn({
             cmd: [...command],
             cwd,
+            // GIT_OPTIONAL_LOCKS=0 stops git status/diff from refreshing the index
+            // (which takes .git/index.lock) and racing a concurrent agent commit.
+            // Non-git children ignore the unknown variable, so it is safe globally.
+            env: { ...Bun.env, GIT_OPTIONAL_LOCKS: "0" },
             stderr: "pipe",
             stdout: "pipe",
             ...(options?.stdin === undefined ? {} : { stdin: new Blob([options.stdin]) }),

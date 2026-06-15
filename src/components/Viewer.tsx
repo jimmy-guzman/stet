@@ -71,7 +71,8 @@ export function Viewer() {
   // The add/remove/diagnostic tints only change with content; a cursor move just
   // Copies this map and overlays the cursor row.
   const baseLineColors = createMemo(() => {
-    const { addedBg, errorGutterBg, removedBg, transparent, warningGutterBg } = theme.rgba;
+    const { addedBg, errorGutterBg, infoGutterBg, removedBg, transparent, warningGutterBg } =
+      theme.rgba;
     const colors = new Map<number, LineColorConfig>();
     const lineMap = state.lineMap();
     state.navigableLines().forEach((line, index) => {
@@ -86,7 +87,9 @@ export function Viewer() {
       if (findings !== undefined) {
         gutter = findings.some((finding) => finding.severity === "error")
           ? errorGutterBg
-          : warningGutterBg;
+          : findings.some((finding) => finding.severity === "warning")
+            ? warningGutterBg
+            : infoGutterBg;
       }
       if (gutter !== transparent || content !== transparent) {
         colors.set(index, { content, gutter });

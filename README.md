@@ -9,7 +9,7 @@ open an editor just to answer basic questions:
 - What files are in this repo?
 - What changed?
 - What did the agent touch most recently?
-- Did lint or typecheck break?
+- Are there errors or warnings in what changed?
 
 `sideye` is meant to sit in the next pane and answer those questions without
 becoming part of the agent loop. It does not review code, approve changes, talk
@@ -54,10 +54,13 @@ Press `ctrl-p` to fuzzy-search the whole repo and open any file.
 
 ### Problems
 
-Typecheck and lint findings stream into a problems panel as checks finish.
+Diagnostics from the repo's language server stream into a problems panel as checks finish.
 Press `p` to open it and `enter` to jump to a finding.
 
-![problems panel listing typecheck errors and lint warnings with file locations](assets/screenshots/problems.png)
+No language server installed? sideye fetches one on first use (preferring the repo's own, then your
+`PATH`), so diagnostics work out of the box. Pass `--no-lsp-download` to turn that off.
+
+![problems panel listing diagnostics with file locations](assets/screenshots/problems.png)
 
 ## Install
 

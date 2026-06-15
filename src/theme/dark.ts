@@ -26,6 +26,8 @@ export const darkTheme: Theme = {
   severity: {
     error: "#ff5c8a",
     errorGutterBg: "#52141f",
+    info: "#6aa9ff",
+    infoGutterBg: "#16263f",
     warning: "#fbbf24",
     warningGutterBg: "#4a3a10",
   },

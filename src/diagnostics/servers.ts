@@ -1,0 +1,278 @@
+/**
+ * Discovers and brings up language servers, pooled one per (language, repo root). Discovery is the
+ * hybrid path: a repo-local binary wins over one on PATH (reusing the checker's `resolveBinary`).
+ * The pool keeps a server warm across the many poll-driven pulls and releases it once the last
+ * reference drops, so a worktree switch transparently swaps to a fresh server for the new root.
+ */
+import { existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+import { Context, Data, Effect, Layer, RcMap, type Scope } from "effect";
+
+import { resolveBinary } from "./checker";
+import { LspProcess, type LspSpawnError } from "./lsp-process";
+import { cachedBinaryPath, Provisioner, type ProvisionSpec } from "./provision";
+import { LspRequestError, type LspConnection } from "./transport";
+
+export class ServerUnavailable extends Data.TaggedError("ServerUnavailable")<{
+  readonly language: string;
+  readonly message: string;
+}> {}
+
+/** The language's server is still downloading; its files render as pending, not unavailable. */
+export class ServerInstalling extends Data.TaggedError("ServerInstalling")<{
+  readonly language: string;
+}> {}
+
+interface ServerSpec {
+  readonly binary: string;
+  readonly args: readonly string[];
+  /** Npm packages sideye installs into its cache when the server is found neither in repo nor PATH. */
+  readonly provision?: { readonly packages: readonly string[] };
+}
+
+// Adding a language is one registry entry plus its file extensions; the transport, pool, and
+// Handshake are language-agnostic. typescript-language-server also serves JavaScript.
+const registry: Record<string, ServerSpec> = {
+  typescript: {
+    args: ["--stdio"],
+    binary: "typescript-language-server",
+    provision: { packages: ["typescript-language-server", "typescript"] },
+  },
+};
+
+const languageByExtension: Record<string, string> = {
+  cjs: "typescript",
+  cts: "typescript",
+  js: "typescript",
+  jsx: "typescript",
+  mjs: "typescript",
+  mts: "typescript",
+  ts: "typescript",
+  tsx: "typescript",
+};
+
+export function languageForPath(path: string): string | undefined {
+  const dot = path.lastIndexOf(".");
+  if (dot === -1) {
+    return undefined;
+  }
+  return languageByExtension[path.slice(dot + 1)];
+}
+
+// The LSP `languageId` for `didOpen`, finer-grained than the server key so the server applies the
+// Right grammar (tsx vs ts). typescript-language-server distinguishes these four.
+const lspLanguageIdByExtension: Record<string, string> = {
+  cjs: "javascript",
+  cts: "typescript",
+  js: "javascript",
+  jsx: "javascriptreact",
+  mjs: "javascript",
+  mts: "typescript",
+  ts: "typescript",
+  tsx: "typescriptreact",
+};
+
+export function lspLanguageId(path: string): string {
+  const dot = path.lastIndexOf(".");
+  return dot === -1 ? "plaintext" : (lspLanguageIdByExtension[path.slice(dot + 1)] ?? "plaintext");
+}
+
+// Discovery tiers: a repo-local binary or one on PATH wins; otherwise a server sideye has already
+// Provisioned into its cache. A not-yet-provisioned server returns undefined (acquire then installs).
+export function resolveServerCommand(language: string, repoRoot: string): string[] | undefined {
+  const spec = registry[language];
+  if (spec === undefined) {
+    return undefined;
+  }
+  const repoOrPath = resolveBinary(repoRoot, spec.binary);
+  if (repoOrPath !== undefined) {
+    return [repoOrPath, ...spec.args];
+  }
+  const cached = cachedBinaryPath(language, spec.binary);
+  if (existsSync(cached)) {
+    return [cached, ...spec.args];
+  }
+  return undefined;
+}
+
+function provisionSpecFor(language: string): ProvisionSpec | undefined {
+  const spec = registry[language];
+  if (spec?.provision === undefined) {
+    return undefined;
+  }
+  return { args: spec.args, binary: spec.binary, packages: spec.provision.packages };
+}
+
+export interface ServerHandle {
+  readonly connection: LspConnection;
+  readonly supportsPullDiagnostics: boolean;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function hasPullDiagnostics(initializeResult: unknown): boolean {
+  if (!isObject(initializeResult) || !isObject(initializeResult.capabilities)) {
+    return false;
+  }
+  const provider = initializeResult.capabilities.diagnosticProvider;
+  return provider !== undefined && provider !== false;
+}
+
+/**
+ * The LSP lifecycle handshake for a read-only client: `initialize` advertising only
+ * pull-diagnostics capabilities (no edit/format/rename), then `initialized`. The server's reported
+ * `diagnosticProvider` decides whether pulls are supported.
+ */
+export function performHandshake(connection: LspConnection, repoRoot: string) {
+  return Effect.gen(function* handshake() {
+    const result = yield* connection
+      .request("initialize", {
+        capabilities: {
+          // Push diagnostics require advertising publishDiagnostics + synchronization, or servers
+          // (e.g. typescript-language-server) stay silent. No edit/format/rename: read-only.
+          textDocument: {
+            publishDiagnostics: { relatedInformation: true, versionSupport: false },
+            synchronization: { didSave: false, dynamicRegistration: false },
+          },
+        },
+        processId: process.pid,
+        rootUri: pathToFileURL(repoRoot).href,
+        workspaceFolders: [{ name: "root", uri: pathToFileURL(repoRoot).href }],
+      })
+      .pipe(
+        // A server that spawns but never answers initialize must not wedge the run.
+        Effect.timeout("10 seconds"),
+        Effect.catchTag("TimeoutError", () =>
+          Effect.fail(
+            new LspRequestError({ message: "initialize timed out", method: "initialize" }),
+          ),
+        ),
+      );
+    yield* connection.notify("initialized", {});
+    return {
+      connection,
+      supportsPullDiagnostics: hasPullDiagnostics(result),
+    } satisfies ServerHandle;
+  });
+}
+
+function connectServer(command: readonly string[], repoRoot: string) {
+  return Effect.gen(function* connect() {
+    const lsp = yield* LspProcess;
+    const connection = yield* lsp.start(command, repoRoot);
+    const handle = yield* performHandshake(connection, repoRoot);
+    // Best-effort graceful teardown before the child is killed on scope close.
+    yield* Effect.addFinalizer(() =>
+      connection
+        .request("shutdown")
+        .pipe(Effect.andThen(connection.notify("exit")), Effect.timeout("1 second"), Effect.ignore),
+    );
+    return handle;
+  });
+}
+
+// The pool key is "<language> <repoRoot>"; the language never contains a space, so the first space
+// Is always the separator even when the repo path does. The explicit return type unifies the
+// Ternary's two distinct Effect types into the one shape RcMap's lookup expects.
+function lookupServer(
+  key: string,
+): Effect.Effect<
+  ServerHandle,
+  ServerUnavailable | LspSpawnError | LspRequestError,
+  LspProcess | Scope.Scope
+> {
+  const separator = key.indexOf(" ");
+  const language = key.slice(0, separator);
+  const repoRoot = key.slice(separator + 1);
+  const command = resolveServerCommand(language, repoRoot);
+  if (command === undefined) {
+    return Effect.fail(
+      new ServerUnavailable({ language, message: `no language server for ${language}` }),
+    );
+  }
+  return connectServer(command, repoRoot);
+}
+
+export class LanguageServers extends Context.Service<
+  LanguageServers,
+  {
+    readonly acquire: (
+      language: string,
+      repoRoot: string,
+    ) => Effect.Effect<
+      ServerHandle,
+      ServerUnavailable | ServerInstalling | LspSpawnError | LspRequestError,
+      Scope.Scope
+    >;
+  }
+>()("sideye/LanguageServers") {}
+
+type AcquireError = ServerUnavailable | ServerInstalling | LspSpawnError | LspRequestError;
+
+export const LanguageServersLive = Layer.effect(
+  LanguageServers,
+  Effect.gen(function* languageServers() {
+    const provisioner = yield* Provisioner;
+    const pool = yield* RcMap.make({ idleTimeToLive: "30 seconds", lookup: lookupServer });
+
+    // Connect through the warm pool; if the pooled server died (its stdout closed), evict it and
+    // Bring up a fresh one, so a crash mid-session recovers on the next run.
+    const fromPool = (language: string, repoRoot: string) => {
+      const key = `${language} ${repoRoot}`;
+      return RcMap.get(pool, key).pipe(
+        Effect.flatMap((handle) =>
+          handle.connection.closed.pipe(
+            Effect.flatMap((isClosed) =>
+              isClosed
+                ? RcMap.invalidate(pool, key).pipe(Effect.andThen(RcMap.get(pool, key)))
+                : Effect.succeed(handle),
+            ),
+          ),
+        ),
+      );
+    };
+
+    const acquire = (
+      language: string,
+      repoRoot: string,
+    ): Effect.Effect<ServerHandle, AcquireError, Scope.Scope> =>
+      Effect.suspend(() => {
+        // A server already in the repo, on PATH, or provisioned into the cache: use it.
+        if (resolveServerCommand(language, repoRoot) !== undefined) {
+          return fromPool(language, repoRoot);
+        }
+        // Otherwise provision it (third tier); files stay pending until the download lands.
+        const spec = provisionSpecFor(language);
+        if (spec === undefined) {
+          return Effect.fail(
+            new ServerUnavailable({ language, message: `no language server for ${language}` }),
+          );
+        }
+        return provisioner.ensure(language, spec).pipe(
+          Effect.flatMap((state): Effect.Effect<ServerHandle, AcquireError, Scope.Scope> => {
+            if (state.kind === "ready") {
+              return fromPool(language, repoRoot);
+            }
+            if (state.kind === "installing") {
+              return Effect.fail(new ServerInstalling({ language }));
+            }
+            if (state.kind === "failed") {
+              return Effect.fail(new ServerUnavailable({ language, message: state.message }));
+            }
+            // Disabled: a server was needed but auto-download is off.
+            return Effect.fail(
+              new ServerUnavailable({
+                language,
+                message: `${language} server not found; auto-download is disabled`,
+              }),
+            );
+          }),
+        );
+      });
+
+    return { acquire };
+  }),
+);

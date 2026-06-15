@@ -39,11 +39,12 @@ Recency markers come from an append-only in-memory activity event log (the seam 
 
 ## Diagnostics
 
-- Checkers are oxlint (lint) and tsc (typecheck); diagnostics parse each tool's output, and tsc runs project-wide.
-- Formatting is intentionally not a checker: it is an action, not a diagnostic, and sideye only inspects.
-- Checkers adapt to the target repo, never to sideye's own runtime. A `package.json` script runs through the detected package manager (`packageManager` field first, then lockfile, defaulting to bun); a fallback binary runs from the repo's `node_modules/.bin` (or `PATH`), never through `bunx`.
-- Retain findings for every reported path, not just changed files.
+- Diagnostics come from language servers (LSP) over stdio, collapsed into one source; each diagnostic keeps its LSP `source` label (e.g. `typescript`, `eslint`). The first cut ships `typescript-language-server` only; the registry is data-driven, so adding a language is one entry plus its file extensions.
+- Push is the retrieval baseline. After `didOpen`, the server pushes `textDocument/publishDiagnostics`; the run waits for every opened document to publish (a short settle, capped, then `didClose`), and the client must advertise `publishDiagnostics` and `synchronization` in `initialize` or servers stay silent. Pull diagnostics (`textDocument/diagnostic`) are a deferred enhancement for servers that advertise `diagnosticProvider`; the capability is detected but unused for now.
+- Discovery has three tiers, preferring the target repo: a repo-local binary (`node_modules/.bin`), then one on `PATH`, then a server sideye downloads into its own cache (`~/.cache/sideye/lsp/<language>`) if neither is present, never `bunx`. The download is a one-time background `npm install`, deduped per language, so diagnostics work out-of-the-box without a manual server install (the way Zed and opencode provision); opt out with `--no-lsp-download` or `SIDEYE_NO_LSP_DOWNLOAD`. Each server is pooled per `(language, repoRoot)` and kept warm across the many poll-driven runs; a worktree switch re-keys to a fresh server, and a server that crashes mid-session is rebuilt on the next run.
+- Formatting is intentionally not a diagnostic: it is an action, not a finding, and sideye only inspects.
+- Retain findings for every reported path, not just changed files (a change can surface errors elsewhere).
 - Surface in the problems panel (`p`), as inline line markers in the viewer, and as per-file markers in the tree. `n` jumps to the next file with findings.
 - Late diagnostics fill badges and markers in place and never reorder the tree.
-- Badge states are explicit: `pending`, `clean`, `findings`, `failed`. Missing or empty diagnostics never render as clean; a file that changes returns its badges to `pending` until checks re-run.
+- Badge states are explicit: `pending`, `clean`, `findings`, `failed`, `unavailable`. Missing or empty diagnostics never render as clean: a file the server has not published for yet (cold start) or whose server is still downloading stays `pending` (clean means the server published an empty set), a file whose language has no server or whose server cannot start (or download is disabled) is `unavailable`, and a file that changes returns its badges to `pending` until checks re-run.
 - Checks run at startup, on `r`, and automatically once the repo has been quiet for ~2s after activity. New-vs-baseline diagnostics are deferred.

@@ -20,7 +20,14 @@ export interface Theme {
   };
   kind: Record<ChangeKind, string>;
   scrollbar: { thumb: string; track: string };
-  severity: { error: string; errorGutterBg: string; warning: string; warningGutterBg: string };
+  severity: {
+    error: string;
+    errorGutterBg: string;
+    warning: string;
+    warningGutterBg: string;
+    info: string;
+    infoGutterBg: string;
+  };
   stage: Record<StageState, string>;
   success: string;
   surface: { base: string; cursor: string; panel: string };

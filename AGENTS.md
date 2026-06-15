@@ -99,7 +99,7 @@ This is a thinking-first rule, not a mandate to refactor on every fix: the root-
 
 ## Scope guardrails (v1)
 
-Do not implement an LSP client, web preview, PR workflow, accept/reject protocol, agent integration, or a database. The tool must work in any git repo, not only this one or agent-created worktrees.
+Do not implement a web preview, PR workflow, accept/reject protocol, agent integration, or a database. The tool must work in any git repo, not only this one or agent-created worktrees. Diagnostics are LSP-backed (read-only: `publishDiagnostics` is exactly what an IDE shows you), so a diagnostics-only LSP client is in scope; a full editing LSP client is not.
 
 ## Verification
 
@@ -107,4 +107,5 @@ Do not implement an LSP client, web preview, PR workflow, accept/reject protocol
 - `bun run build`: Bun compile smoke check.
 - `bun run src/main.tsx --help`: CLI smoke check.
 - `bun install` after package or lockfile changes.
-- Add focused tests for git parsing, CLI argument handling, diagnostic parsing, checker state transitions, and copy-reference formatting. Keep OpenTUI rendering tests separate from pure parsing/state tests where practical.
+- Add focused tests for git parsing, CLI argument handling, JSON-RPC framing, LSP-to-diagnostic mapping, diagnostic state transitions, and copy-reference formatting. Keep OpenTUI rendering tests separate from pure parsing/state tests where practical. Server-coupled paths (transport correlation, the diagnostics service) test against a fake in-process protocol peer, not a mock of our own code; reserve a real `typescript-language-server` for an end-to-end check.
+- Diagnostics auto-provision a missing language server (repo-local → PATH → a one-time download into `~/.cache/sideye/lsp`), so they work out-of-the-box; the `--no-lsp-download` flag / `SIDEYE_NO_LSP_DOWNLOAD` opts out. Tests must never trigger a real download: the `test/setup.ts` preload sets `SIDEYE_NO_LSP_DOWNLOAD`, and the provisioner's own tests drive a fake installer and restore that default.

@@ -1,6 +1,9 @@
 import { Layer, ManagedRuntime } from "effect";
 
 import { ClipboardLive } from "./clipboard/service";
+import { LspProcessLive } from "./diagnostics/lsp-process";
+import { ProvisionerLive } from "./diagnostics/provision";
+import { LanguageServersLive } from "./diagnostics/servers";
 import { DiagnosticsLive } from "./diagnostics/service";
 import { FileLive } from "./file/service";
 import { GitLive } from "./git/service";
@@ -10,8 +13,12 @@ import { ProcessLive } from "./process";
 // Effects run service effects through `runtime.runPromise` / `runtime.runFork`
 // Instead of the old effect-atom registry; this is the only Effect↔Solid seam.
 // ProvideMerge keeps Process in the runtime context (not just wired into the
-// Other services) so startup effects can spawn git directly.
+// Other services) so startup effects can spawn git directly. The LSP-backed
+// Diagnostics pool sits over its own long-lived LspProcess.
 const AppLayer = Layer.mergeAll(DiagnosticsLive, GitLive, FileLive, ClipboardLive).pipe(
+  Layer.provideMerge(LanguageServersLive),
+  Layer.provideMerge(LspProcessLive),
+  Layer.provideMerge(ProvisionerLive),
   Layer.provideMerge(ProcessLive),
 );
 

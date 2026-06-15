@@ -40,8 +40,10 @@ export function TreeRow(props: { row: FileTreeRow }) {
         (node.changedCount > 0 ||
           Boolean(s?.failed) ||
           Boolean(s?.pending) ||
+          Boolean(s?.unavailable) ||
           (s?.errors ?? 0) > 0 ||
-          (s?.warnings ?? 0) > 0)
+          (s?.warnings ?? 0) > 0 ||
+          (s?.info ?? 0) > 0)
       );
     };
     const maxNameLen = () => contentWidth() - indent.length - 2 - (hasBadges() ? 14 : 0);
@@ -77,14 +79,26 @@ export function TreeRow(props: { row: FileTreeRow }) {
           {summary() !== null && summary()?.errors === 0 && (summary()?.warnings ?? 0) > 0 ? (
             <text fg={theme.colors.severity.warning}>{`⚠${summary()?.warnings} `}</text>
           ) : null}
+          {summary()?.errors === 0 && summary()?.warnings === 0 && (summary()?.info ?? 0) > 0 ? (
+            <text fg={theme.colors.severity.info}>{`ℹ${summary()?.info} `}</text>
+          ) : null}
           {summary()?.pending ? <text fg={theme.colors.text.muted}>… </text> : null}
           {summary() !== null &&
           node.changedCount > 0 &&
           !summary()?.failed &&
           !summary()?.pending &&
+          !summary()?.unavailable &&
           summary()?.errors === 0 &&
-          summary()?.warnings === 0 ? (
+          summary()?.warnings === 0 &&
+          (summary()?.info ?? 0) === 0 ? (
             <text fg={theme.colors.success}>✓ </text>
+          ) : null}
+          {summary()?.unavailable &&
+          !summary()?.failed &&
+          !summary()?.pending &&
+          (summary()?.errors ?? 0) === 0 &&
+          (summary()?.warnings ?? 0) === 0 ? (
+            <text fg={theme.colors.text.muted}>○ </text>
           ) : null}
           {node.changedCount > 0 ? (
             <text
@@ -150,15 +164,28 @@ export function TreeRow(props: { row: FileTreeRow }) {
         {summary().errors === 0 && summary().warnings > 0 ? (
           <text fg={theme.colors.severity.warning}>{`⚠${summary().warnings} `}</text>
         ) : null}
+        {summary().errors === 0 && summary().warnings === 0 && summary().info > 0 ? (
+          <text fg={theme.colors.severity.info}>{`ℹ${summary().info} `}</text>
+        ) : null}
         {changed !== undefined && changed.warnings.length > 0 ? (
           <text fg={theme.colors.severity.warning}>! </text>
         ) : null}
         {changed !== undefined &&
         !pending() &&
         !summary().failed &&
+        !summary().unavailable &&
+        summary().errors === 0 &&
+        summary().warnings === 0 &&
+        summary().info === 0 ? (
+          <text fg={theme.colors.success}>✓ </text>
+        ) : null}
+        {changed !== undefined &&
+        !pending() &&
+        !summary().failed &&
+        summary().unavailable &&
         summary().errors === 0 &&
         summary().warnings === 0 ? (
-          <text fg={theme.colors.success}>✓ </text>
+          <text fg={theme.colors.text.muted}>○ </text>
         ) : null}
         {changed === undefined ? null : (
           <text fg={theme.colors.text.muted}>{`+${changed.additions} -${changed.deletions} `}</text>

@@ -78,16 +78,24 @@ export function ProblemsPanel() {
                     fg={
                       item.problem.severity === "error"
                         ? theme.colors.severity.error
-                        : theme.colors.severity.warning
+                        : item.problem.severity === "warning"
+                          ? theme.colors.severity.warning
+                          : theme.colors.severity.info
                     }
                   >
-                    {item.problem.severity === "error" ? "✖ " : "⚠ "}
+                    {item.problem.severity === "error"
+                      ? "✖ "
+                      : item.problem.severity === "warning"
+                        ? "⚠ "
+                        : "ℹ "}
                   </text>
                   <text fg={theme.colors.text.strong}>
                     {`${item.problem.path}${item.problem.line === undefined ? "" : `:${item.problem.line}`} `}
                   </text>
                   <text fg={theme.colors.text.secondary}>{item.problem.message}</text>
-                  <text fg={theme.colors.text.muted}>{`  [${item.problem.checker}]`}</text>
+                  <text
+                    fg={theme.colors.text.muted}
+                  >{`  [${item.problem.source ?? item.problem.checker}]`}</text>
                 </box>
               )
             }

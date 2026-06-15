@@ -12,6 +12,7 @@ export interface ResolvedTheme {
     addedBg: RGBA;
     cursorBg: RGBA;
     errorGutterBg: RGBA;
+    infoGutterBg: RGBA;
     removedBg: RGBA;
     transparent: RGBA;
     warningGutterBg: RGBA;
@@ -25,6 +26,7 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
       addedBg: RGBA.fromHex(theme.diff.addedBg),
       cursorBg: RGBA.fromHex(theme.surface.cursor),
       errorGutterBg: RGBA.fromHex(theme.severity.errorGutterBg),
+      infoGutterBg: RGBA.fromHex(theme.severity.infoGutterBg),
       removedBg: RGBA.fromHex(theme.diff.removedBg),
       transparent: RGBA.fromValues(0, 0, 0, 0),
       warningGutterBg: RGBA.fromHex(theme.severity.warningGutterBg),

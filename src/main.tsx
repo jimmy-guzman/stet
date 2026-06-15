@@ -31,6 +31,11 @@ try {
     process.exit(0);
   }
 
+  // The provisioner reads this env var; set it before any check runs the runtime.
+  if (!options.lspDownload) {
+    process.env.SIDEYE_NO_LSP_DOWNLOAD = "1";
+  }
+
   const theme = resolveTheme(darkTheme);
 
   // The startup model carries only the changed set (repoFiles fill in on the

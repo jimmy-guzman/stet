@@ -10,6 +10,7 @@ export interface CliOptions {
   help: boolean;
   version: boolean;
   icons: boolean;
+  lspDownload: boolean;
 }
 
 export function parseArgs(args: string[]): CliOptions {
@@ -17,11 +18,17 @@ export function parseArgs(args: string[]): CliOptions {
   let help = false;
   let version = false;
   let icons = true;
+  let lspDownload = true;
   let ref: string | undefined;
 
   for (const arg of args) {
     if (arg === "--no-icons") {
       icons = false;
+      continue;
+    }
+
+    if (arg === "--no-lsp-download") {
+      lspDownload = false;
       continue;
     }
 
@@ -59,6 +66,7 @@ export function parseArgs(args: string[]): CliOptions {
   return {
     help,
     icons,
+    lspDownload,
     scope: { kind, ref: ref ?? "HEAD" },
     version,
   };
@@ -96,7 +104,8 @@ Usage:
   sideye <ref>
   sideye --staged [ref]
   sideye --unstaged
-  sideye --no-icons   (disable Nerd Font file-type icons in the tree)
+  sideye --no-icons        (disable Nerd Font file-type icons in the tree)
+  sideye --no-lsp-download (do not auto-download a missing language server)
 
 Keys:
   tab        switch focus between the file tree and the viewer

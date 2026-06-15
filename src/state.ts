@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect";
+import { Effect, Queue, Stream } from "effect";
 import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup } from "solid-js";
 
 import type { DiffScope } from "./cli";
@@ -15,6 +15,7 @@ import {
   type CheckerState,
   type Diagnostic,
 } from "./diagnostics/checker";
+import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { contentToContextPatch, type FileContent } from "./file/content";
 import { File } from "./file/service";
@@ -353,9 +354,12 @@ function createState() {
     checksController?.abort();
     const controller = new AbortController();
     checksController = controller;
-    setCheckerState(initialCheckerState(model.changed));
+    // Keep prior diagnostics while re-checking (update in place); only files new to the set get a
+    // Pending placeholder. Changed files are already marked pending by the edit-detection effect.
+    setCheckerState((current) => markPending(current, model.changed, []));
     setChecksRunning(true);
     const failures: string[] = [];
+    let installing: string | undefined;
     try {
       await runtime.runPromise(
         Diagnostics.pipe(
@@ -371,6 +375,10 @@ function createState() {
                       );
                       break;
                     }
+                    // A pending file carrying a message is a server still downloading.
+                    if (fileState.status === "pending" && fileState.message !== undefined) {
+                      installing ??= fileState.message;
+                    }
                   }
                 }),
               ),
@@ -379,7 +387,7 @@ function createState() {
         ),
         { signal: controller.signal },
       );
-      setStatus(failures[0] ?? "checks finished");
+      setStatus(failures[0] ?? installing ?? "checks finished");
     } catch {
       // Interrupted by a newer run or a worktree switch
     } finally {
@@ -388,6 +396,18 @@ function createState() {
       }
     }
   }
+
+  // When a language server finishes downloading, re-run checks so its files resolve from pending.
+  runtime.runFork(
+    Provisioner.pipe(
+      Effect.flatMap((provisioner) =>
+        Queue.take(provisioner.completions).pipe(
+          Effect.flatMap(() => Effect.sync(() => void runChecks(gitModel()))),
+          Effect.forever,
+        ),
+      ),
+    ),
+  );
 
   function copy(text: string) {
     runtime

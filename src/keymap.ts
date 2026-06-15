@@ -23,6 +23,11 @@ interface KeyHandlerCtx {
 export function createKeyHandler(ctx: KeyHandlerCtx) {
   return (key: KeyEvent) => {
     batch(() => {
+      if (key.ctrl && key.name === "c") {
+        ctx.quit();
+        return;
+      }
+
       if (state.helpOpen()) {
         if (key.name === "escape" || key.name === "?" || key.name === "q") {
           state.setHelpOpen(false);

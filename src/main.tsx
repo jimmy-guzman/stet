@@ -80,7 +80,10 @@ try {
   });
   void state.runChecks(model);
 
-  void render(() => <App />, { exitOnCtrlC: true });
+  // OpenTUI's exitOnCtrlC only calls renderer.destroy(), never process.exit, so
+  // The background git poll keeps the event loop alive and the process lags
+  // Before exiting. Route ctrl-c through our own quit() (in the keymap) instead.
+  void render(() => <App />, { exitOnCtrlC: false });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

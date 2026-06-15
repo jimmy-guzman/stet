@@ -38,9 +38,19 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-/** A response carries an `id` and either a `result` or an `error`, but no `method`. */
+/**
+ * A response carries an `id` and either a `result` (any JSON value, including `null`) or a
+ * well-formed `error` object. A malformed `error` (e.g. `null`) is rejected so the router never
+ * dereferences `error.message` on it.
+ */
 export function isJsonRpcResponse(message: unknown): message is JsonRpcResponse {
-  return isObject(message) && "id" in message && ("result" in message || "error" in message);
+  if (!isObject(message) || !("id" in message)) {
+    return false;
+  }
+  if ("error" in message) {
+    return isObject(message.error) && typeof message.error.message === "string";
+  }
+  return "result" in message;
 }
 
 /** A server-to-client request carries both a `method` and an `id`. */
@@ -55,6 +65,10 @@ export function isJsonRpcNotification(message: unknown): message is JsonRpcNotif
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+
+// Bounds the decoder's buffer so a server that floods bytes without a frame separator, or declares a
+// Pathological `Content-Length`, cannot exhaust memory. Far above any real LSP message.
+const MAX_MESSAGE_BYTES = 64 * 1024 * 1024;
 
 export function encodeMessage(message: JsonRpcMessage): Uint8Array {
   const body = encoder.encode(JSON.stringify(message));
@@ -103,6 +117,10 @@ export function createFrameDecoder() {
 
   return function push(chunk: Uint8Array): unknown[] {
     append(chunk);
+    if (buffer.length > MAX_MESSAGE_BYTES) {
+      // Throws like a malformed-JSON body would: the read loop ends the channel and the pool rebuilds.
+      throw new Error(`LSP frame exceeds ${MAX_MESSAGE_BYTES} bytes`);
+    }
     const messages: unknown[] = [];
 
     let headerEnd = indexOfSeparator(buffer);

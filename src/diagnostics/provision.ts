@@ -59,7 +59,7 @@ export class Provisioner extends Context.Service<
 /** The cache root is injected so tests can point at a temp dir; the Live layer uses XDG/home. */
 export function makeProvisioner(root: string) {
   return Effect.gen(function* provisioner() {
-    const process = yield* Process;
+    const proc = yield* Process;
     const scope = yield* Effect.scope;
     const inFlight = new Set<string>();
     const failures = new Map<string, string>();
@@ -74,7 +74,7 @@ export function makeProvisioner(root: string) {
           writeFileSync(manifest, JSON.stringify({ private: true }));
         }
       }).pipe(
-        Effect.andThen(process.run(["npm", "install", "--no-save", ...spec.packages], dir)),
+        Effect.andThen(proc.run(["npm", "install", "--no-save", ...spec.packages], dir)),
         Effect.matchEffect({
           onFailure: (error) => Effect.sync(() => void failures.set(language, error.message)),
           onSuccess: () => Effect.void,

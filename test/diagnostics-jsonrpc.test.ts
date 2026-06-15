@@ -1,10 +1,23 @@
 import { expect, test } from "bun:test";
 
-import { createFrameDecoder, encodeMessage, type JsonRpcMessage } from "../src/diagnostics/jsonrpc";
+import {
+  createFrameDecoder,
+  encodeMessage,
+  isJsonRpcResponse,
+  type JsonRpcMessage,
+} from "../src/diagnostics/jsonrpc";
 
 function split(bytes: Uint8Array, at: number) {
   return [bytes.subarray(0, at), bytes.subarray(at)] as const;
 }
+
+test("isJsonRpcResponse accepts a null result and a well-formed error, rejects a malformed error", () => {
+  expect(isJsonRpcResponse({ id: 1, result: null })).toBe(true);
+  expect(isJsonRpcResponse({ error: { code: -1, message: "boom" }, id: 1 })).toBe(true);
+  // The router would dereference error.message; a null/structureless error must not pass.
+  expect(isJsonRpcResponse({ error: null, id: 1 })).toBe(false);
+  expect(isJsonRpcResponse({ error: { code: -1 }, id: 1 })).toBe(false);
+});
 
 test("encodeMessage prefixes a byte-counted Content-Length header", () => {
   const framed = encodeMessage({ id: 1, jsonrpc: "2.0", method: "initialize", params: {} });

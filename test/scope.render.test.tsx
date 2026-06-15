@@ -26,18 +26,24 @@ describe("scope switching", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      // Main runs the initial checks at startup; mirror that here.
+      // Main runs the initial checks at startup; mirror that here. The `all` scope sees the unstaged
+      // Edit, so a.ts shows a "+1 -1" change indicator.
       void state.runChecks(model);
-      await settleUntil("initial checks finish", (frame) => frame.includes("checks finished"), 5);
+      await settleUntil(
+        "all scope shows the unstaged change",
+        (frame) => frame.includes("+1 -1") && frame.includes("checks finished"),
+        5,
+      );
 
-      // Switching scope must re-point the changed set and re-run checks against it; the staged
-      // Scope label only appears once the switch (and its recheck) have taken effect.
+      // Switch to staged: nothing is staged, so the new changed set is empty and the recheck runs
+      // Against it. The change indicator must disappear, which a stale all-scope frame cannot satisfy.
       mockInput.pressKey("s");
       const after = await settleUntil(
-        "recheck after scope switch",
-        (frame) => frame.includes("staged vs HEAD") && frame.includes("checks finished"),
+        "staged scope drops the unstaged change",
+        (frame) => frame.includes("staged vs HEAD") && !frame.includes("+1 -1"),
       );
       expect(after).toContain("staged vs HEAD");
+      expect(after).not.toContain("+1 -1");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

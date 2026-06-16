@@ -16,7 +16,7 @@ becoming part of the agent loop. It does not review code, approve changes, talk
 to the agent, or manage a workflow. It shows you the repo, the diff, and the
 problems. You decide what to say next.
 
-![sideye showing the repo tree, a diff, and diagnostics streaming into the problems panel](assets/screenshots/sideye.png)
+![sideye showing the repo tree beside a diff of a changed file](assets/screenshots/sideye.png)
 
 ## What it does
 
@@ -26,6 +26,9 @@ problems. You decide what to say next.
   states.
 - Opens unchanged files read-only, with syntax highlighting.
 - Opens changed files as diffs, with a toggle for the full file.
+- Finds text within the open file and cycles through the matches.
+- Searches file contents across the repo, scoped to the changes or the whole
+  tree.
 - Switches between all changes, staged changes, and unstaged changes.
 - Switches between git worktrees in place, re-pointing the tree, diffs,
   polling, and checks at the chosen worktree.
@@ -38,30 +41,6 @@ problems. You decide what to say next.
 
 The git-backed file tree renders first. Diagnostics come in later as decorations.
 That keeps the basic view useful even when checks are still running.
-
-### Switch worktrees
-
-Press `w` to jump between git worktrees without leaving the view. The tree,
-diffs, polling, and checks all re-point at the chosen worktree.
-
-![worktree picker listing worktrees, including one marked prunable](assets/screenshots/worktree-picker.png)
-
-### Go to file
-
-Press `ctrl-p` to fuzzy-search the whole repo and open any file.
-
-![go-to-file overlay fuzzy-matching paths across the repo](assets/screenshots/go-to-file.png)
-
-### Problems
-
-Diagnostics from the repo's language servers stream into a problems panel as checks finish: type
-errors from TypeScript and lint findings from oxlint, each tagged with its source. Press `p` to open
-it and `enter` to jump to a finding.
-
-No language server installed? sideye fetches one on first use (preferring the repo's own, then your
-`PATH`), so diagnostics work out of the box. Pass `--no-lsp-download` to turn that off.
-
-![problems panel listing diagnostics with file locations](assets/screenshots/problems.png)
 
 ## Install
 
@@ -90,6 +69,48 @@ The tree shows a file-type icon next to each file and a folder glyph for each
 directory. These are [Nerd Font](https://www.nerdfonts.com/) glyphs and only
 render with a Nerd Font selected in your terminal; without one they appear as
 empty boxes, so pass `--no-icons` to fall back to a plain tree.
+
+## Features
+
+### Switch worktrees
+
+Press `w` to jump between git worktrees without leaving the view. The tree,
+diffs, polling, and checks all re-point at the chosen worktree.
+
+![worktree picker listing worktrees, including one marked prunable](assets/screenshots/worktree-picker.png)
+
+### Go to file
+
+Press `ctrl-p` to fuzzy-search the whole repo and open any file.
+
+![go-to-file overlay fuzzy-matching paths across the repo](assets/screenshots/go-to-file.png)
+
+### Find in the viewer
+
+Press `/` to search within the open file. `n` and `N` cycle through matches, a
+counter tracks your place, and `esc` clears the search.
+
+![find-in-viewer search highlighting matches in the open file with a match counter](assets/screenshots/find.png)
+
+### Search file contents
+
+Press `ctrl-f` to search file contents across the repo. Matches show up in the
+tree and the viewer, and `ctrl-a` toggles between the changed files and the
+whole tree.
+
+![project content search highlighting matches across files in the tree and the open buffer](assets/screenshots/search.png)
+
+### Problems
+
+Diagnostics from the repo's language servers stream into a problems panel as
+checks finish: type errors from TypeScript and lint findings from oxlint, each
+tagged with its source. Press `p` to open it and `enter` to jump to a finding.
+
+No language server installed? sideye fetches one on first use (preferring the
+repo's own, then your `PATH`), so diagnostics work out of the box. Pass
+`--no-lsp-download` to turn that off.
+
+![problems panel docked below a diff, listing diagnostics with their file locations](assets/screenshots/problems.png)
 
 ## Keys
 
@@ -125,7 +146,8 @@ Press `?` anytime to see the full list in the app:
 ## Requirements
 
 - git
-- macOS for clipboard copy (`pbcopy`) in v1
+- a clipboard tool for copy (`y`): `pbcopy` on macOS (built in), or `wl-copy`,
+  `xclip`, or `xsel` on Linux
 - a Nerd Font for the tree's file-type icons (optional; use `--no-icons` without one)
 
 ## Development

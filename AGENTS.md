@@ -10,7 +10,7 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 - TypeScript with `strict` enabled.
 - `@opentui/core` and `@opentui/solid` (SolidJS fine-grained reactivity); JSX configured with `jsxImportSource: "@opentui/solid"`, and `@opentui/solid/preload` in `bunfig.toml`. Solid is the rendering layer OpenTUI's own authors use; its surgical updates avoid the whole-tree re-render churn that a React reconciler submits to the native renderer.
 - Git output is the source of truth for the file map: the initial model loads at startup before the first render, and the poll keeps it current. The git-backed file map renders before any checker or diagnostic resolves; diagnostics are independent async decorations over the stable git file list, never blocking it.
-- v1 is macOS-first (clipboard via `pbcopy`).
+- Clipboard copy uses `pbcopy` on macOS and a Wayland/X11 tool (`wl-copy`, `xclip`, or `xsel`) on Linux.
 
 ## Conventions
 

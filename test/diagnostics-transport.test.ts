@@ -109,6 +109,31 @@ test("answers a server-to-client request with a null result", async () => {
   expect(echoed).toEqual({ id: 99, jsonrpc: "2.0", result: null });
 });
 
+test("answers a server-to-client request with the supplied handler's result", async () => {
+  const echoed = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* scenario() {
+        const inbound = yield* Queue.make<unknown, Cause.Done>();
+        const sent = yield* Queue.make<JsonRpcMessage, Cause.Done>();
+        // Oxlint answers `workspace/configuration` with its options, or it never publishes.
+        yield* makeTransport(
+          { inbound, send: (message) => Queue.offer(sent, message).pipe(Effect.asVoid) },
+          (method) =>
+            Effect.succeed(method === "workspace/configuration" ? [{ run: "onType" }] : null),
+        );
+        yield* Queue.offer(inbound, {
+          id: 7,
+          jsonrpc: "2.0",
+          method: "workspace/configuration",
+          params: { items: [{}] },
+        });
+        return yield* Queue.take(sent);
+      }),
+    ),
+  );
+  expect(echoed).toEqual({ id: 7, jsonrpc: "2.0", result: [{ run: "onType" }] });
+});
+
 test("a closed connection fails an in-flight request instead of hanging", async () => {
   const exit = await withPeer(({ close, connection, sent }) =>
     Effect.all(

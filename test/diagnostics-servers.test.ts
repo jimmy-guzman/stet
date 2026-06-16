@@ -2,18 +2,15 @@ import { expect, test } from "bun:test";
 
 import { Effect } from "effect";
 
-import {
-  languageForPath,
-  performHandshake,
-  resolveServerCommand,
-} from "../src/diagnostics/servers";
+import { performHandshake, resolveServerCommand, serversForPath } from "../src/diagnostics/servers";
 import type { LspConnection } from "../src/diagnostics/transport";
 
-test("maps source file extensions to their language server", () => {
-  expect(languageForPath("src/a.tsx")).toBe("typescript");
-  expect(languageForPath("src/a.mjs")).toBe("typescript");
-  expect(languageForPath("README.md")).toBeUndefined();
-  expect(languageForPath("Makefile")).toBeUndefined();
+test("resolves a source file to every server that handles its extension", () => {
+  // Typescript and oxlint both claim the JS/TS family, so a code file runs through both.
+  expect(serversForPath("src/a.tsx")).toEqual(["oxlint", "typescript"]);
+  expect(serversForPath("src/a.mjs")).toEqual(["oxlint", "typescript"]);
+  expect(serversForPath("README.md")).toEqual([]);
+  expect(serversForPath("Makefile")).toEqual([]);
 });
 
 test("resolveServerCommand returns undefined for a language with no registered server", () => {

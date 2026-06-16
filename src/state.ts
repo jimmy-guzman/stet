@@ -357,6 +357,9 @@ function createState() {
     // Keep prior diagnostics while re-checking (update in place); only files new to the set get a
     // Pending placeholder. Changed files are already marked pending by the edit-detection effect.
     setCheckerState((current) => markPending(current, model.changed, []));
+    // Hold each file's badge across the run: awaiting files render this prior until their servers
+    // Report, so stable files never flicker to pending (markPending already pendinged edited/new ones).
+    const prior = checkerState().diagnostics;
     setChecksRunning(true);
     const failures: string[] = [];
     let installing: string | undefined;
@@ -364,7 +367,7 @@ function createState() {
       await runtime.runPromise(
         Diagnostics.pipe(
           Effect.flatMap((diagnostics) =>
-            diagnostics.run(model.repoRoot, model.changed).pipe(
+            diagnostics.run(model.repoRoot, model.changed, prior).pipe(
               Stream.runForEach((update) =>
                 Effect.sync(() => {
                   setCheckerState((current) => ({ ...current, [update.checker]: update.state }));

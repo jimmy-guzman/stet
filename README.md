@@ -54,8 +54,9 @@ Press `ctrl-p` to fuzzy-search the whole repo and open any file.
 
 ### Problems
 
-Diagnostics from the repo's language server stream into a problems panel as checks finish.
-Press `p` to open it and `enter` to jump to a finding.
+Diagnostics from the repo's language servers stream into a problems panel as checks finish: type
+errors from TypeScript and lint findings from oxlint, each tagged with its source. Press `p` to open
+it and `enter` to jump to a finding.
 
 No language server installed? sideye fetches one on first use (preferring the repo's own, then your
 `PATH`), so diagnostics work out of the box. Pass `--no-lsp-download` to turn that off.

@@ -24,40 +24,81 @@ export class ServerInstalling extends Data.TaggedError("ServerInstalling")<{
   readonly language: string;
 }> {}
 
+/**
+ * The `initialize` shape and server-to-client request answers a server needs beyond the read-only
+ * baseline, parameterized by repo root. typescript needs none of this; oxlint advertises
+ * `workspace.configuration` and answers `workspace/configuration` with its lint options, or it
+ * stays silent.
+ */
+interface HandshakeConfig {
+  readonly workspaceCapabilities?: Record<string, unknown>;
+  readonly initializationOptions?: unknown;
+  readonly onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>;
+}
+
 interface ServerSpec {
   readonly binary: string;
   readonly args: readonly string[];
+  /** File extensions (no dot) this server handles; servers may overlap (oxlint lints what tsc owns). */
+  readonly extensions: readonly string[];
   /** Npm packages sideye installs into its cache when the server is found neither in repo nor PATH. */
   readonly provision?: { readonly packages: readonly string[] };
+  /** Per-server handshake extras (caps, initializationOptions, server-request answers). */
+  readonly handshake?: (repoRoot: string) => HandshakeConfig;
 }
 
+// The JS/TS family both servers handle; typescript type-checks it, oxlint lints it.
+const codeExtensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"] as const;
+
 // Adding a language is one registry entry plus its file extensions; the transport, pool, and
-// Handshake are language-agnostic. typescript-language-server also serves JavaScript.
+// Handshake are language-agnostic. typescript-language-server also serves JavaScript; oxlint lints
+// The same files, so a `.ts` file resolves to both servers and their findings merge.
 const registry: Record<string, ServerSpec> = {
+  oxlint: {
+    args: ["--lsp"],
+    binary: "oxlint",
+    extensions: codeExtensions,
+    handshake: (repoRoot) => {
+      // Oxlint validates only once it has workspace options; passing them inline (and answering
+      // Its `workspace/configuration` pull defensively) makes it publish on didOpen. `run: onType`
+      // Lints the open buffer; `configPath: null` finds `.oxlintrc.json` or uses defaults.
+      const workspaceUri = pathToFileURL(repoRoot).href;
+      const options = { configPath: null, run: "onType" };
+      return {
+        initializationOptions: [{ options, workspaceUri }],
+        onRequest: (method, params) =>
+          Effect.succeed(
+            method === "workspace/configuration"
+              ? configurationItems(params).map(() => options)
+              : null,
+          ),
+        workspaceCapabilities: { configuration: true, workspaceFolders: true },
+      };
+    },
+    provision: { packages: ["oxlint"] },
+  },
   typescript: {
     args: ["--stdio"],
     binary: "typescript-language-server",
+    extensions: codeExtensions,
     provision: { packages: ["typescript-language-server", "typescript"] },
   },
 };
 
-const languageByExtension: Record<string, string> = {
-  cjs: "typescript",
-  cts: "typescript",
-  js: "typescript",
-  jsx: "typescript",
-  mjs: "typescript",
-  mts: "typescript",
-  ts: "typescript",
-  tsx: "typescript",
-};
+function configurationItems(params: unknown): unknown[] {
+  return isObject(params) && Array.isArray(params.items) ? params.items : [];
+}
 
-export function languageForPath(path: string): string | undefined {
+/** Every language whose server handles this file's extension (typescript and oxlint overlap). */
+export function serversForPath(path: string): string[] {
   const dot = path.lastIndexOf(".");
   if (dot === -1) {
-    return undefined;
+    return [];
   }
-  return languageByExtension[path.slice(dot + 1)];
+  const extension = path.slice(dot + 1);
+  return Object.keys(registry).filter((language) =>
+    registry[language]?.extensions.includes(extension),
+  );
 }
 
 // The LSP `languageId` for `didOpen`, finer-grained than the server key so the server applies the
@@ -126,7 +167,11 @@ function hasPullDiagnostics(initializeResult: unknown): boolean {
  * pull-diagnostics capabilities (no edit/format/rename), then `initialized`. The server's reported
  * `diagnosticProvider` decides whether pulls are supported.
  */
-export function performHandshake(connection: LspConnection, repoRoot: string) {
+export function performHandshake(
+  connection: LspConnection,
+  repoRoot: string,
+  config?: HandshakeConfig,
+) {
   return Effect.gen(function* handshake() {
     const result = yield* connection
       .request("initialize", {
@@ -137,7 +182,12 @@ export function performHandshake(connection: LspConnection, repoRoot: string) {
             publishDiagnostics: { relatedInformation: true, versionSupport: false },
             synchronization: { didSave: false, dynamicRegistration: false },
           },
+          // A server that pulls its settings (oxlint) needs the workspace caps advertised here.
+          ...(config?.workspaceCapabilities === undefined
+            ? {}
+            : { workspace: config.workspaceCapabilities }),
         },
+        initializationOptions: config?.initializationOptions,
         processId: process.pid,
         rootUri: pathToFileURL(repoRoot).href,
         workspaceFolders: [{ name: "root", uri: pathToFileURL(repoRoot).href }],
@@ -159,11 +209,11 @@ export function performHandshake(connection: LspConnection, repoRoot: string) {
   });
 }
 
-function connectServer(command: readonly string[], repoRoot: string) {
+function connectServer(command: readonly string[], repoRoot: string, config?: HandshakeConfig) {
   return Effect.gen(function* connect() {
     const lsp = yield* LspProcess;
-    const connection = yield* lsp.start(command, repoRoot);
-    const handle = yield* performHandshake(connection, repoRoot);
+    const connection = yield* lsp.start(command, repoRoot, config?.onRequest);
+    const handle = yield* performHandshake(connection, repoRoot, config);
     // Best-effort graceful teardown before the child is killed on scope close.
     yield* Effect.addFinalizer(() =>
       connection
@@ -193,7 +243,7 @@ function lookupServer(
       new ServerUnavailable({ language, message: `no language server for ${language}` }),
     );
   }
-  return connectServer(command, repoRoot);
+  return connectServer(command, repoRoot, registry[language]?.handshake?.(repoRoot));
 }
 
 export class LanguageServers extends Context.Service<

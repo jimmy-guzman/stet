@@ -111,14 +111,15 @@ export class LspProcess extends Context.Service<
     readonly start: (
       command: readonly string[],
       cwd: string,
+      onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
     ) => Effect.Effect<LspConnection, LspSpawnError, Scope.Scope>;
   }
 >()("sideye/LspProcess") {}
 
 export const LspProcessLive = Layer.succeed(LspProcess)({
-  start: (command, cwd) =>
+  start: (command, cwd, onRequest) =>
     acquireChild(command, cwd).pipe(
       Effect.flatMap(createByteChannel),
-      Effect.flatMap(makeTransport),
+      Effect.flatMap((channel) => makeTransport(channel, onRequest)),
     ),
 });

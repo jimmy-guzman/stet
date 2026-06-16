@@ -43,8 +43,14 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-export function makeTransport(channel: LspTransportChannel) {
+export function makeTransport(
+  channel: LspTransportChannel,
+  onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
+) {
   return Effect.gen(function* makeTransportScope() {
+    // Default answer for a server-to-client request: a null result, so a server that asks for
+    // Something we do not model (typescript) never stalls. oxlint supplies a real handler.
+    const respond = onRequest ?? (() => Effect.succeed(null));
     const pending = new Map<number, Pending>();
     const published = new Map<string, unknown[]>();
     let nextId = 0;
@@ -68,8 +74,12 @@ export function makeTransport(channel: LspTransportChannel) {
             );
       }
       if (isJsonRpcRequest(message)) {
-        // Answer server-to-client requests minimally so the server does not stall waiting on us.
-        return channel.send({ id: message.id, jsonrpc: "2.0", result: null });
+        // Answer server-to-client requests so the server does not stall waiting on us; the handler
+        // (or the null default) decides the result.
+        const { id } = message;
+        return respond(message.method, message.params).pipe(
+          Effect.flatMap((result) => channel.send({ id, jsonrpc: "2.0", result })),
+        );
       }
       if (isJsonRpcNotification(message)) {
         if (message.method === "textDocument/publishDiagnostics" && isObject(message.params)) {

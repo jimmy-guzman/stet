@@ -98,7 +98,7 @@ Press `ctrl-f` to search file contents across the repo. Matches show up in the
 tree and the viewer, and `ctrl-a` toggles between the changed files and the
 whole tree.
 
-![project content search highlighting matches across files in the tree and the open buffer](assets/screenshots/search.png)
+![project content search listing matches for a term across several files in the repo](assets/screenshots/search.png)
 
 ### Problems
 

@@ -1,7 +1,7 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { batch, createEffect, createMemo, For, Show } from "solid-js";
 
-import { SEARCH_RESULT_CAP, state } from "../state";
+import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { truncate } from "../utils/text";
 
@@ -13,8 +13,6 @@ export function SearchPanel() {
     searchRef?.scrollChildIntoView(`search-${state.searchIndex()}`);
   });
 
-  // Enter routes the selected match through the shared jump pipeline to its file
-  // And line, then closes the panel.
   function onSubmit() {
     const match = state.searchResults()[state.searchIndex()];
     batch(() => {
@@ -35,9 +33,9 @@ export function SearchPanel() {
   const results = () => state.searchResults();
   const fileCount = createMemo(() => new Set(results().map((match) => match.path)).size);
   const scopeLabel = () => (state.searchScope() === "changed" ? "changes" : "repo");
-  // A "+" marks a result set clamped by SEARCH_RESULT_CAP, so the cap isn't silent.
+  // A "+" marks a result set clamped by the result cap, so the limit isn't silent.
   const summary = () => {
-    const more = results().length >= SEARCH_RESULT_CAP ? "+" : "";
+    const more = state.searchTruncated() ? "+" : "";
     return `${results().length}${more} match${results().length === 1 ? "" : "es"} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
   };
 

@@ -152,6 +152,7 @@ export const GitLive = Layer.effect(
       // Git grep exits 1 when nothing matches, which is a normal empty result.
       search: (repoRoot, query, paths) =>
         process.run(searchArgs(query, paths), repoRoot, { allowedExitCodes: [0, 1] }).pipe(
+          retryTransient,
           Effect.map((result) => parseSearchOutput(result.stdout)),
           Effect.mapError(toGitError),
         ),

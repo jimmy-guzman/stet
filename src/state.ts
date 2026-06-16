@@ -62,8 +62,8 @@ interface DiffView {
 }
 
 // Bounds the search result list so a broad query in a large repo can't flood the
-// Panel; the count hitting this cap is surfaced as "N+" so the limit isn't silent.
-export const SEARCH_RESULT_CAP = 500;
+// Panel; hitting the cap sets `searchTruncated`, surfaced as a trailing "+".
+const SEARCH_RESULT_CAP = 500;
 
 const emptyModel: GitModel = {
   changed: [],
@@ -157,6 +157,7 @@ function createState() {
   const [searchIndex, setSearchIndex] = createSignal(0);
   const [searchScope, setSearchScope] = createSignal<"changed" | "repo">("changed");
   const [searchResults, setSearchResults] = createSignal<SearchMatch[]>([]);
+  const [searchTruncated, setSearchTruncated] = createSignal(false);
   const [findOpen, setFindOpen] = createSignal(false);
   const [findActive, setFindActive] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal("");
@@ -294,7 +295,10 @@ function createState() {
       root === "" ||
       (paths !== undefined && paths.length === 0)
     ) {
-      setSearchResults([]);
+      batch(() => {
+        setSearchResults([]);
+        setSearchTruncated(false);
+      });
       return;
     }
     const controller = new AbortController();
@@ -303,8 +307,22 @@ function createState() {
         .runPromise(Git.pipe(Effect.flatMap((git) => git.search(root, query, paths))), {
           signal: controller.signal,
         })
-        .then((matches) => setSearchResults(matches.slice(0, SEARCH_RESULT_CAP)))
-        .catch(() => {});
+        .then((matches) =>
+          batch(() => {
+            setSearchResults(matches.slice(0, SEARCH_RESULT_CAP));
+            setSearchTruncated(matches.length > SEARCH_RESULT_CAP);
+          }),
+        )
+        // A genuine grep failure clears stale results; our own cancellation (the
+        // Aborted controller on re-query) must leave the prior results in place.
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            batch(() => {
+              setSearchResults([]);
+              setSearchTruncated(false);
+            });
+          }
+        });
     }, SEARCH_DEBOUNCE_MS);
     onCleanup(() => {
       clearTimeout(timer);
@@ -712,6 +730,7 @@ function createState() {
     searchQuery,
     searchResults,
     searchScope,
+    searchTruncated,
     selectFile,
     selectedFile,
     selectedPath,

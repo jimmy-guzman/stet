@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.2](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.1...sideye-v0.2.2) (2026-06-16)
+
+
+### Features
+
+* **diagnostics:** ✨ add oxlint findings alongside typescript ([#53](https://github.com/jimmy-guzman/sideye/issues/53)) ([4d2413b](https://github.com/jimmy-guzman/sideye/commit/4d2413b61cacd39ea2e852df651626e2190d48e3))
+* **find:** ✨ add in-buffer find (/) to the viewer ([#55](https://github.com/jimmy-guzman/sideye/issues/55)) ([b8149f1](https://github.com/jimmy-guzman/sideye/commit/b8149f1cf6d2f37a742e61a4ec1aa8dad24426dc))
+* **search:** ✨ add project content search (ctrl-f) ([#56](https://github.com/jimmy-guzman/sideye/issues/56)) ([117c797](https://github.com/jimmy-guzman/sideye/commit/117c797b38ee54dcee6590b0f2594f197df9b360))
+
 ## [0.2.1](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.0...sideye-v0.2.1) (2026-06-15)
 
 

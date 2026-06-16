@@ -122,6 +122,7 @@ Viewer:
   k/up       move cursor up a line
   ctrl-d/u   move cursor half a page
   g/G        jump to first / last line
+  /          find in the viewer (n/N cycle matches, escape clears)
   h/left     return focus to the file tree
 
 Problems:

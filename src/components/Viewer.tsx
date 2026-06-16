@@ -1,6 +1,6 @@
-import type { DiffRenderable, LineColorConfig } from "@opentui/core";
+import type { DiffRenderable, InputRenderable, LineColorConfig } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { createEffect, createMemo, on, Show } from "solid-js";
+import { batch, createEffect, createMemo, on, Show } from "solid-js";
 
 import { DIFF_ID } from "../constants";
 import { state } from "../state";
@@ -26,6 +26,7 @@ export function Viewer() {
   const theme = useTheme();
   const renderer = useRenderer();
   let diffRef: DiffRenderable | undefined;
+  let findInputRef: InputRenderable | undefined;
 
   // Reset the cursor to the first change only when the displayed file changes,
   // Not on live edits of the same file.
@@ -71,10 +72,18 @@ export function Viewer() {
   // The add/remove/diagnostic tints only change with content; a cursor move just
   // Copies this map and overlays the cursor row.
   const baseLineColors = createMemo(() => {
-    const { addedBg, errorGutterBg, infoGutterBg, removedBg, transparent, warningGutterBg } =
-      theme.rgba;
+    const {
+      addedBg,
+      errorGutterBg,
+      findMatchBg,
+      infoGutterBg,
+      removedBg,
+      transparent,
+      warningGutterBg,
+    } = theme.rgba;
     const colors = new Map<number, LineColorConfig>();
     const lineMap = state.lineMap();
+    const matches = new Set(state.findMatches());
     state.navigableLines().forEach((line, index) => {
       let gutter = transparent;
       let content = transparent;
@@ -82,6 +91,9 @@ export function Viewer() {
         content = addedBg;
       } else if (line.type === "remove") {
         content = removedBg;
+      }
+      if (matches.has(index)) {
+        content = findMatchBg;
       }
       const findings = line.newLine === undefined ? undefined : lineMap.get(line.newLine);
       if (findings !== undefined) {
@@ -157,6 +169,52 @@ export function Viewer() {
     return path === undefined ? "text" : diffFiletypeFor(path, state.syntax());
   };
 
+  // The input stays mounted whenever the bar shows so a committed (blurred) find
+  // Never captures the n/N cycle keys; `focused` follows findOpen. Each open
+  // Clears the element's own buffer to match the freshly-reset query.
+  createEffect(
+    on(
+      () => state.findOpen(),
+      (open) => {
+        if (open && findInputRef !== undefined) {
+          findInputRef.value = "";
+        }
+      },
+    ),
+  );
+
+  const findCounter = () => {
+    if (state.findQuery() === "") {
+      return "";
+    }
+    const count = state.findMatches().length;
+    if (count === 0) {
+      return "no matches";
+    }
+    // Clamp: a live edit during an active find can leave the position past the end.
+    return `${Math.min(state.findMatchPos(), count - 1) + 1}/${count}`;
+  };
+
+  function onFindInput(value: string) {
+    batch(() => {
+      state.setFindQuery(value);
+      state.setFindMatchPos(0);
+    });
+  }
+
+  function onFindSubmit() {
+    batch(() => {
+      const matches = state.findMatches();
+      const first = matches[0];
+      if (first !== undefined) {
+        state.setFindMatchPos(0);
+        state.setCursorIndex(first);
+        state.setFindActive(true);
+      }
+      state.setFindOpen(false);
+    });
+  }
+
   return (
     <box
       flexGrow={1}
@@ -165,26 +223,59 @@ export function Viewer() {
       borderStyle="single"
       borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
     >
-      <box
-        height={1}
-        flexDirection="row"
-        justifyContent="space-between"
-        paddingLeft={1}
-        paddingRight={1}
+      <Show
+        when={state.findOpen() || state.findActive()}
+        fallback={
+          <box
+            height={1}
+            flexDirection="row"
+            justifyContent="space-between"
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            <text fg={theme.colors.text.primary}>
+              {viewerTitle(
+                state.diffView()?.path,
+                displayedFile(),
+                state.diffView()?.showFileContent ?? false,
+                state.diffView()?.fileContent,
+              )}
+            </text>
+            <text fg={theme.colors.text.muted}>
+              {state.diffView()?.showFileContent ? "file" : "diff"}
+              {state.cursorLineNumber() === undefined ? "" : ` · ln ${state.cursorLineNumber()}`}
+            </text>
+          </box>
+        }
       >
-        <text fg={theme.colors.text.primary}>
-          {viewerTitle(
-            state.diffView()?.path,
-            displayedFile(),
-            state.diffView()?.showFileContent ?? false,
-            state.diffView()?.fileContent,
-          )}
-        </text>
-        <text fg={theme.colors.text.muted}>
-          {state.diffView()?.showFileContent ? "file" : "diff"}
-          {state.cursorLineNumber() === undefined ? "" : ` · ln ${state.cursorLineNumber()}`}
-        </text>
-      </box>
+        {/* While searching, the title row becomes a full-width find bar. */}
+        <box
+          height={1}
+          flexDirection="row"
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={theme.colors.surface.panel}
+        >
+          <text fg={theme.colors.accent.primary}>{"/ "}</text>
+          <box flexGrow={1}>
+            <input
+              ref={(el: InputRenderable) => (findInputRef = el)}
+              focused={state.findOpen()}
+              width="100%"
+              backgroundColor={theme.colors.surface.panel}
+              focusedBackgroundColor={theme.colors.surface.panel}
+              textColor={theme.colors.text.primary}
+              cursorColor={theme.colors.accent.primary}
+              onInput={onFindInput}
+              onSubmit={onFindSubmit}
+            />
+          </box>
+          <text fg={theme.colors.text.muted}>
+            {findCounter() === "" ? "" : `${findCounter()}  `}
+          </text>
+          <text fg={theme.colors.text.faint}>esc</text>
+        </box>
+      </Show>
       <Show
         when={!isPlaceholder()}
         fallback={

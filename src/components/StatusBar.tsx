@@ -3,6 +3,15 @@ import { useTheme } from "../theme/context";
 
 export function StatusBar() {
   const theme = useTheme();
+  const hint = () => {
+    if (state.findOpen()) {
+      return "type to find · enter confirm · esc cancel";
+    }
+    if (state.findActive()) {
+      return "n/N next/prev · esc clear find";
+    }
+    return "? keys · q quit";
+  };
   return (
     <box
       height={1}
@@ -12,7 +21,7 @@ export function StatusBar() {
       paddingRight={1}
       backgroundColor={theme.colors.surface.panel}
     >
-      <text fg={theme.colors.text.muted}>? keys · q quit</text>
+      <text fg={theme.colors.text.muted}>{hint()}</text>
       <text fg={theme.colors.text.secondary}>{state.statusRight()}</text>
     </box>
   );

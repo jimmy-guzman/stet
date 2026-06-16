@@ -32,6 +32,7 @@ Poll git and refresh the tree, diff, and file content while the user watches. Pr
 - Unchanged files render full content read-only. `v` toggles a changed file between diff and full content.
 - Full files render through the diff viewer as synthesized all-context patches.
 - Binary, missing, and oversized files render explicit placeholders, never raw bytes. `f` loads full content when truncated.
+- `/` opens an in-buffer find over the rendered lines: smart-case substring match (case-insensitive unless the query has an uppercase char), `n`/`N` cycle, `esc` clears, and a file switch ends it. Matches are highlighted at the line level; the diff renderable exposes only per-line colors, so substring-range highlighting is out of scope until OpenTUI offers it.
 
 ## Recency
 

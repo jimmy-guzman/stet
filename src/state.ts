@@ -1,5 +1,5 @@
 import { Effect, Queue, Stream } from "effect";
-import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup } from "solid-js";
+import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js";
 
 import type { DiffScope } from "./cli";
 import { Clipboard } from "./clipboard/service";
@@ -34,6 +34,7 @@ import { Git } from "./git/service";
 import { buildFileTree, expandAncestorsForPath, flattenTree } from "./git/tree";
 import { runtime } from "./runtime";
 import type { SyntaxConfig } from "./syntax/highlight";
+import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { truncate } from "./utils/text";
 
@@ -146,6 +147,10 @@ function createState() {
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [paletteQuery, setPaletteQuery] = createSignal("");
   const [paletteIndex, setPaletteIndex] = createSignal(0);
+  const [findOpen, setFindOpen] = createSignal(false);
+  const [findActive, setFindActive] = createSignal(false);
+  const [findQuery, setFindQuery] = createSignal("");
+  const [findMatchPos, setFindMatchPos] = createSignal(0);
   const [worktreeOpen, setWorktreeOpen] = createSignal(false);
   const [worktreeIndex, setWorktreeIndex] = createSignal(0);
   const [worktrees, setWorktrees] = createSignal<Worktree[] | undefined>(undefined);
@@ -280,6 +285,29 @@ function createState() {
     const content = diffView()?.fileContent;
     return renderedPatch().truncated || (content?.kind === "text" && content.truncated);
   });
+
+  // In-buffer find: row indices into navigableLines whose content matches the
+  // Query. Computed only while the bar is open or a search is committed, so the
+  // Viewer paints highlights live as you type and keeps them until esc/file switch.
+  const findMatches = createMemo(() =>
+    findOpen() || findActive()
+      ? findMatchIndices(
+          navigableLines().map((line) => line.content),
+          findQuery(),
+        )
+      : [],
+  );
+
+  // The one reset for find lifecycle (close, clear, file switch all share it).
+  function resetFind() {
+    setFindOpen(false);
+    setFindActive(false);
+    setFindQuery("");
+    setFindMatchPos(0);
+  }
+
+  // A file switch ends any active find so highlights never bleed across files.
+  createEffect(on(selectedPath, () => batch(resetFind)));
 
   // --- layout (derived from terminal dimensions) ---
   const problemsHeight = createMemo(() => (problemsOpen() ? PROBLEMS_HEIGHT : 0));
@@ -598,6 +626,11 @@ function createState() {
     diffView,
     expandedDirectories,
     fileView,
+    findActive,
+    findMatchPos,
+    findMatches,
+    findOpen,
+    findQuery,
     focusedNodeId,
     focusedPane,
     focusedRowIndex,
@@ -626,6 +659,7 @@ function createState() {
     recencyByPath,
     renderedPatch,
     repoRoot,
+    resetFind,
     runChecks,
     scope,
     selectFile,
@@ -637,6 +671,10 @@ function createState() {
     setCursorIndex,
     setExpandedDirectories,
     setFileView,
+    setFindActive,
+    setFindMatchPos,
+    setFindOpen,
+    setFindQuery,
     setFocusedNodeId,
     setFocusedPane,
     setFullContentPaths,

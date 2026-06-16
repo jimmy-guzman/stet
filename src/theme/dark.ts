@@ -15,6 +15,7 @@ export const darkTheme: Theme = {
     removedLineNumberBg: "#260f18",
     removedSign: "#ff5c8a",
   },
+  find: { matchBg: "#24304d" },
   kind: {
     added: "#3ddc84",
     deleted: "#ff5c8a",

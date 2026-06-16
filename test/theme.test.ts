@@ -40,6 +40,7 @@ describe("resolveTheme", () => {
     expect(resolved.rgba.addedBg).toEqual(RGBA.fromHex(darkTheme.diff.addedBg));
     expect(resolved.rgba.cursorBg).toEqual(RGBA.fromHex(darkTheme.surface.cursor));
     expect(resolved.rgba.errorGutterBg).toEqual(RGBA.fromHex(darkTheme.severity.errorGutterBg));
+    expect(resolved.rgba.findMatchBg).toEqual(RGBA.fromHex(darkTheme.find.matchBg));
     expect(resolved.rgba.removedBg).toEqual(RGBA.fromHex(darkTheme.diff.removedBg));
     expect(resolved.rgba.transparent).toEqual(RGBA.fromValues(0, 0, 0, 0));
     expect(resolved.rgba.warningGutterBg).toEqual(RGBA.fromHex(darkTheme.severity.warningGutterBg));

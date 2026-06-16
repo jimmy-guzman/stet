@@ -21,6 +21,19 @@ interface KeyHandlerCtx {
 // Branch can act on them. Reads use the live signal values (not a render
 // Snapshot); writes are wrapped in one `batch` so a keypress is one update.
 export function createKeyHandler(ctx: KeyHandlerCtx) {
+  const cycleFind = (direction: number) => {
+    const matches = state.findMatches();
+    if (matches.length === 0) {
+      return;
+    }
+    const pos = (state.findMatchPos() + direction + matches.length) % matches.length;
+    const target = matches[pos];
+    if (target !== undefined) {
+      state.setFindMatchPos(pos);
+      state.setCursorIndex(target);
+    }
+  };
+
   return (key: KeyEvent) => {
     batch(() => {
       if (key.ctrl && key.name === "c") {
@@ -66,10 +79,46 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
         return;
       }
 
+      // The find bar owns the keyboard while open: only escape cancels it; text
+      // And submit are the input element's job (same split as the palette).
+      if (state.findOpen()) {
+        if (key.name === "escape") {
+          state.resetFind();
+        }
+        return;
+      }
+
+      // A committed find rebinds n/N to cycle matches and esc to clear it; every
+      // Other key falls through so diff navigation still works over the highlights.
+      if (state.findActive()) {
+        if (key.name === "escape") {
+          state.resetFind();
+          return;
+        }
+        if (key.name === "n" && !key.shift) {
+          cycleFind(1);
+          return;
+        }
+        if (key.name === "N" || (key.name === "n" && key.shift)) {
+          cycleFind(-1);
+          return;
+        }
+      }
+
       if (key.ctrl && key.name === "p") {
         state.setPaletteOpen(true);
         state.setPaletteQuery("");
         state.setPaletteIndex(0);
+        return;
+      }
+
+      if (key.name === "/" && state.diffView() !== undefined) {
+        // Solid mounts and focuses the find input within this same key event, so
+        // Without preventDefault the triggering "/" would be typed into it.
+        key.preventDefault();
+        state.resetFind();
+        state.setFindOpen(true);
+        state.setFocusedPane("diff");
         return;
       }
 

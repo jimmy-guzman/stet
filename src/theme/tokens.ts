@@ -18,6 +18,7 @@ export interface Theme {
     removedLineNumberBg: string;
     removedSign: string;
   };
+  find: { matchBg: string };
   kind: Record<ChangeKind, string>;
   scrollbar: { thumb: string; track: string };
   severity: {

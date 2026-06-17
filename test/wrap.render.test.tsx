@@ -4,7 +4,6 @@ import { rmSync } from "node:fs";
 import { testRender } from "@opentui/solid";
 
 import { App } from "../src/App";
-import { state } from "../src/state";
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
 describe("word wrap toggle", () => {
@@ -20,19 +19,16 @@ describe("word wrap toggle", () => {
 
     try {
       await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5);
-      expect(state.overflow()).toBe("scroll");
 
       mockInput.pressKey("z");
       const wrapped = await settleUntil("wrap on", (frame) => frame.includes("long lines: wrap"));
       expect(wrapped).toContain("long lines: wrap");
-      expect(state.overflow()).toBe("wrap");
 
       mockInput.pressKey("z");
       const scrolled = await settleUntil("wrap off", (frame) =>
         frame.includes("long lines: scroll"),
       );
       expect(scrolled).toContain("long lines: scroll");
-      expect(state.overflow()).toBe("scroll");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

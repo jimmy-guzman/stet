@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.2...sideye-v0.2.3) (2026-06-17)
+
+
+### Features
+
+* **git:** ✨ refresh from a filesystem watcher ([#68](https://github.com/jimmy-guzman/sideye/issues/68)) ([245b315](https://github.com/jimmy-guzman/sideye/commit/245b3158bd4f89d03911c0a342e9cd3bb70e6e79))
+* **sidebar:** ✨ resize the sidebar width with [ / ] / \ ([#66](https://github.com/jimmy-guzman/sideye/issues/66)) ([bf0f62e](https://github.com/jimmy-guzman/sideye/commit/bf0f62ef4a9ea893adebc230cb891ae396f8eb45))
+
 ## [0.2.2](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.1...sideye-v0.2.2) (2026-06-16)
 
 

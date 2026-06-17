@@ -597,18 +597,21 @@ function createState() {
       ),
       Effect.ignore,
     );
-    const watched = Stream.unwrap(
+    // Three refresh sources, merged through ONE serializing mapEffect so two
+    // ChangedFiles reads can never overlap and write each other's stale result:
+    // An immediate tick on (re)key, a debounced fs-watch tick per change, and a
+    // 2s safety poll that is the floor whenever the watcher misses a change.
+    const watchTicks = Stream.unwrap(
       Effect.gen(function* watchStream() {
         const watcher = yield* Watcher;
         return watcher.changes(root);
       }),
+    );
+    const safetyTicks = Stream.fromEffect(Effect.sleep("2 seconds")).pipe(Stream.forever);
+    const changedRefresh = Stream.merge(
+      Stream.make(undefined),
+      Stream.merge(watchTicks, safetyTicks),
     ).pipe(Stream.mapEffect(() => refreshChanged));
-    const safety = Stream.fromEffect(
-      Effect.gen(function* safetyPoll() {
-        yield* refreshChanged;
-        yield* Effect.sleep("2 seconds");
-      }),
-    ).pipe(Stream.forever);
     const repoFilesPoll = Stream.fromEffect(
       Effect.gen(function* repoFilesLoop() {
         yield* Git.use((git) => git.repoFiles(root)).pipe(
@@ -630,10 +633,9 @@ function createState() {
       }),
     ).pipe(Stream.forever);
     runtime
-      .runPromise(
-        Stream.merge(watched, Stream.merge(safety, repoFilesPoll)).pipe(Stream.runDrain),
-        { signal: controller.signal },
-      )
+      .runPromise(Stream.merge(changedRefresh, repoFilesPoll).pipe(Stream.runDrain), {
+        signal: controller.signal,
+      })
       .catch(() => {});
     onCleanup(() => controller.abort());
   });

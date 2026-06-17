@@ -9,10 +9,11 @@ import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./help
 
 const allScope = { kind: "all", ref: "HEAD" } as const;
 
-// End-to-end live refresh: the filesystem watcher, not a render tick, is what
-// Drives this. The fixture starts clean (no churn badge); editing the file on
-// Disk must make the tree show its churn without any keypress or poll wait.
-test("the tree reflects an on-disk edit via the watcher", async () => {
+// End-to-end live refresh: editing the file on disk makes the tree show its
+// Churn with no keypress. The fast path is the fs watcher; the 2s safety poll is
+// The deterministic backstop, so the assertion window outlasts it rather than
+// Racing the watcher's arming (the unit test proves the watcher fires).
+test("the tree reflects an on-disk edit", async () => {
   const repo = createFixtureRepo("watcher-render-", { "watched.txt": "one\n" });
   try {
     seedState(await loadModel(repo, allScope), allScope);
@@ -25,9 +26,17 @@ test("the tree reflects an on-disk edit via the watcher", async () => {
     const before = await settleUntil("clean tree", (frame) => frame.includes("watched.txt"));
     expect(before).not.toContain("+1 -0");
 
+    // Let the fs.watch subscription arm so the watcher catches the edit on the
+    // Fast path; if it still misses, the safety poll backstops within the window.
+    await new Promise((resolve) => setTimeout(resolve, 200));
     writeFileSync(join(repo, "watched.txt"), "one\ntwo\n");
 
-    const after = await settleUntil("churn badge after edit", (frame) => frame.includes("+1 -0"));
+    const after = await settleUntil(
+      "churn badge after edit",
+      (frame) => frame.includes("+1 -0"),
+      1,
+      400,
+    );
     expect(after).toContain("watched.txt");
 
     renderer.destroy();

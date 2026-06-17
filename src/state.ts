@@ -89,10 +89,9 @@ function loadDiffView(src: {
           ? `:${src.path}`
           : `${src.scope.ref}:${src.path}`
         : undefined;
-    return File.pipe(
-      Effect.flatMap((file) =>
-        file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec }),
-      ),
+    return File.use((file) =>
+      file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec }),
+    ).pipe(
       Effect.map(
         (content): DiffView => ({
           diff: content.kind === "text" ? contentToContextPatch(src.path, content.content) : "",
@@ -114,8 +113,7 @@ function loadDiffView(src: {
     });
   }
 
-  return Git.pipe(
-    Effect.flatMap((git) => git.fileDiff(src.model.repoRoot, src.scope, file)),
+  return Git.use((git) => git.fileDiff(src.model.repoRoot, src.scope, file)).pipe(
     Effect.map(
       (diff): DiffView => ({
         diff,
@@ -304,9 +302,12 @@ function createState() {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       runtime
-        .runPromise(Git.pipe(Effect.flatMap((git) => git.search(root, query, paths))), {
-          signal: controller.signal,
-        })
+        .runPromise(
+          Git.use((git) => git.search(root, query, paths)),
+          {
+            signal: controller.signal,
+          },
+        )
         // Drop a superseded query's results: a search can resolve just as a newer
         // Keystroke aborts its controller, so guard the write the same way.
         .then((matches) => {
@@ -461,26 +462,24 @@ function createState() {
     let installing: string | undefined;
     try {
       await runtime.runPromise(
-        Diagnostics.pipe(
-          Effect.flatMap((diagnostics) =>
-            diagnostics.run(model.repoRoot, model.changed, prior).pipe(
-              Stream.runForEach((update) =>
-                Effect.sync(() => {
-                  setCheckerState((current) => ({ ...current, [update.checker]: update.state }));
-                  for (const fileState of update.state.values()) {
-                    if (fileState.status === "failed") {
-                      failures.push(
-                        `${update.checker} failed: ${fileState.message?.split("\n")[0] ?? ""}`,
-                      );
-                      break;
-                    }
-                    // A pending file carrying a message is a server still downloading.
-                    if (fileState.status === "pending" && fileState.message !== undefined) {
-                      installing ??= fileState.message;
-                    }
+        Diagnostics.use((diagnostics) =>
+          diagnostics.run(model.repoRoot, model.changed, prior).pipe(
+            Stream.runForEach((update) =>
+              Effect.sync(() => {
+                setCheckerState((current) => ({ ...current, [update.checker]: update.state }));
+                for (const fileState of update.state.values()) {
+                  if (fileState.status === "failed") {
+                    failures.push(
+                      `${update.checker} failed: ${fileState.message?.split("\n")[0] ?? ""}`,
+                    );
+                    break;
                   }
-                }),
-              ),
+                  // A pending file carrying a message is a server still downloading.
+                  if (fileState.status === "pending" && fileState.message !== undefined) {
+                    installing ??= fileState.message;
+                  }
+                }
+              }),
             ),
           ),
         ),
@@ -498,26 +497,24 @@ function createState() {
 
   // When a language server finishes downloading, re-run checks so its files resolve from pending.
   runtime.runFork(
-    Provisioner.pipe(
-      Effect.flatMap((provisioner) =>
-        Queue.take(provisioner.completions).pipe(
-          Effect.flatMap(() => Effect.sync(() => void runChecks(gitModel()))),
-          Effect.forever,
-        ),
+    Provisioner.use((provisioner) =>
+      Queue.take(provisioner.completions).pipe(
+        Effect.flatMap(() => Effect.sync(() => void runChecks(gitModel()))),
+        Effect.forever,
       ),
     ),
   );
 
   function copy(text: string) {
     runtime
-      .runPromise(Clipboard.pipe(Effect.flatMap((clipboard) => clipboard.copy(text))))
+      .runPromise(Clipboard.use((clipboard) => clipboard.copy(text)))
       .then(() => setStatus(`copied ${text.split("\n")[0]}`))
       .catch((error: unknown) => setStatus(error instanceof Error ? error.message : String(error)));
   }
 
   function loadWorktrees(root: string) {
     runtime
-      .runPromise(Git.pipe(Effect.flatMap((git) => git.worktrees(root))))
+      .runPromise(Git.use((git) => git.worktrees(root)))
       .then((list) => {
         const selectable = list.filter((worktree) => !worktree.bare);
         batch(() => {
@@ -539,9 +536,7 @@ function createState() {
   }
 
   function loadModel(input: { repoRoot: string; scope: DiffScope }) {
-    return runtime.runPromise(
-      Git.pipe(Effect.flatMap((git) => git.loadModel(input.repoRoot, input.scope))),
-    );
+    return runtime.runPromise(Git.use((git) => git.loadModel(input.repoRoot, input.scope)));
   }
 
   // --- background fibers (re-key/restart reactively, interrupt the prior fiber

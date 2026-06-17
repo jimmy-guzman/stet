@@ -51,7 +51,6 @@ export function App() {
     try {
       const fresh = await state.loadModel({ repoRoot: worktree.path, scope: state.scope() });
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
-      state.setLastChange(Date.now());
       state.setRepoRoot(fresh.repoRoot);
       state.setGitModel(fresh);
       state.setSelectedPath(selected);

@@ -44,6 +44,7 @@ export class Git extends Context.Service<
       scope: DiffScope,
       file: ChangedFile,
     ) => Effect.Effect<string, GitError>;
+    readonly gitDir: (repoRoot: string) => Effect.Effect<string, GitError>;
     readonly loadModel: (repoRoot: string, scope: DiffScope) => Effect.Effect<GitModel, GitError>;
     readonly repoFiles: (
       repoRoot: string,
@@ -104,6 +105,15 @@ export const GitLive = Layer.effect(
             )
         ).pipe(
           Effect.map((result) => result.stdout),
+          Effect.mapError(toGitError),
+        ),
+      // The per-worktree git dir, absolute. In a linked worktree this resolves
+      // Outside the worktree tree (to <main>/.git/worktrees/<name>), so the watcher
+      // Watches it as a second root to catch staging/commit/checkout there.
+      gitDir: (repoRoot) =>
+        process.run(["git", "rev-parse", "--absolute-git-dir"], repoRoot).pipe(
+          retryTransient,
+          Effect.map((result) => result.stdout.trim()),
           Effect.mapError(toGitError),
         ),
       loadModel: (repoRoot, scope) =>

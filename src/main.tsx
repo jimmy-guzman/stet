@@ -72,7 +72,6 @@ try {
     state.setIconsEnabled(options.icons);
     state.setGitModel(model);
     state.setRepoRoot(model.repoRoot);
-    state.setLastChange(Date.now());
     state.setSelectedPath(initialSelectedPath);
     state.setFocusedNodeId(initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`);
     state.setExpandedDirectories(initialExpanded);

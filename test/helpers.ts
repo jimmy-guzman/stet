@@ -83,7 +83,6 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setChangesOnly(false);
     state.setGitModel(model);
     state.setRepoRoot(model.repoRoot);
-    state.setLastChange(Date.now());
     state.setSelectedPath(selected);
     state.setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
     state.setExpandedDirectories(expanded);

@@ -21,11 +21,11 @@ Git output is the synchronous source of truth. The git-backed file tree renders 
 
 ## Worktrees
 
-`w` switches the active worktree in place and re-points the tree, diffs, polling, and checks at it, with no restart. The picker lists worktrees and marks prunable ones. [confirm: source command for the list, and how a removed or pruned worktree is handled mid-session]
+`w` switches the active worktree in place and re-points the tree, diffs, refresh (watcher and poll), and checks at it, with no restart. The picker lists worktrees and marks prunable ones. [confirm: source command for the list, and how a removed or pruned worktree is handled mid-session]
 
 ## Live view
 
-Poll git and refresh the tree, diff, and file content while the user watches. Preserve selection by path and the cursor across refreshes; reset the cursor only on a file switch.
+Refresh the tree, diff, and file content while the user watches. A debounced filesystem watcher (the worktree tree plus the resolved git dir, so staging in a linked worktree is seen) re-derives git state the instant a change lands; a slow safety poll is the floor that covers anything the watcher misses, so the worst case is poll-speed, never stale. Preserve selection by path and the cursor across refreshes; reset the cursor only on a file switch.
 
 ## Viewer
 

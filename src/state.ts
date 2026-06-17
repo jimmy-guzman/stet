@@ -37,7 +37,9 @@ import { runtime } from "./runtime";
 import type { SyntaxConfig } from "./syntax/highlight";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
+import { refreshDelay } from "./utils/refresh-cadence";
 import { truncate } from "./utils/text";
+import { Watcher } from "./watcher/service";
 
 interface JumpTarget {
   path: string;
@@ -167,7 +169,10 @@ function createState() {
   const [helpOpen, setHelpOpen] = createSignal(false);
   const [gitModel, setGitModel] = createSignal<GitModel>(emptyModel);
   const [repoRoot, setRepoRoot] = createSignal("");
+  // Two timestamps that drive the adaptive safety-poll cadence: when git state
+  // Last changed, and when the fs watcher last ticked (0 = never, i.e. unproven).
   const [lastChange, setLastChange] = createSignal(0);
+  const [lastWatcherTick, setLastWatcherTick] = createSignal(0);
   const [cursorIndex, setCursorIndex] = createSignal(0);
   const [jumpTarget, setJumpTarget] = createSignal<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
@@ -573,8 +578,12 @@ function createState() {
   // --- background fibers (re-key/restart reactively, interrupt the prior fiber
   // On cleanup so an in-flight git is killed) ---
 
-  // Adaptive git poll: 750ms while active, 2s after 10s quiet; a slow 5s loop
-  // Refreshes the repo file list. Re-keys only on repoRoot/scope.
+  // Event-driven git refresh. A debounced fs-watch tick re-derives the changed
+  // Set the instant a real change lands; a slow safety poll is the floor that
+  // Covers anything the watcher misses (a platform without recursive watch, a
+  // Gitignored boundary), so the worst case is poll-speed, never stale. The repo
+  // File list keeps its own slow poll. Re-keys only on repoRoot/scope; cleanup
+  // Aborts the controller, closing the watcher and any in-flight git.
   createEffect(() => {
     const root = repoRoot();
     const scopeNow = scope();
@@ -582,28 +591,48 @@ function createState() {
       return;
     }
     const controller = new AbortController();
-    const fast = Stream.fromEffect(
-      Effect.gen(function* fastPoll() {
-        const git = yield* Git;
-        yield* git.changedFiles(root, scopeNow).pipe(
-          Effect.tap((next) =>
-            Effect.sync(() => {
-              const prev = gitModel();
-              if (prev.repoRoot === root) {
-                setGitModel(mergeChanged(prev, next));
-              }
-            }),
-          ),
-          Effect.ignore,
-        );
-        const quiet = Date.now() - lastChange() > 10_000;
-        yield* Effect.sleep(quiet ? "2 seconds" : "750 millis");
+    // A fresh worktree re-proves the watcher from scratch (its fs.watch is new).
+    setLastWatcherTick(0);
+    const refreshChanged = Git.use((git) => git.changedFiles(root, scopeNow)).pipe(
+      Effect.tap((next) =>
+        Effect.sync(() => {
+          const prev = gitModel();
+          if (prev.repoRoot === root) {
+            setGitModel(mergeChanged(prev, next));
+          }
+        }),
+      ),
+      Effect.ignore,
+    );
+    // Three refresh sources, merged through ONE serializing mapEffect so two
+    // ChangedFiles reads can never overlap and write each other's stale result:
+    // An immediate tick on (re)key, a debounced fs-watch tick per change (which
+    // Also records watcher health), and a safety poll whose cadence adapts to
+    // That health — fast where the watcher is unproven or has missed a change,
+    // Slow once it has earned trust. See `refreshDelay`.
+    const watchTicks = Stream.unwrap(
+      Effect.gen(function* watchStream() {
+        const watcher = yield* Watcher;
+        return watcher.changes(root);
       }),
+    ).pipe(Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))));
+    const safetyTicks = Stream.fromEffect(
+      Effect.suspend(() =>
+        Effect.sleep(
+          refreshDelay({
+            lastChangeAt: lastChange(),
+            lastWatcherTickAt: lastWatcherTick(),
+            now: Date.now(),
+          }),
+        ),
+      ),
     ).pipe(Stream.forever);
-    const slow = Stream.fromEffect(
-      Effect.gen(function* slowPoll() {
-        const git = yield* Git;
-        yield* git.repoFiles(root).pipe(
+    const changedRefresh = Stream.mergeAll([Stream.make(undefined), watchTicks, safetyTicks], {
+      concurrency: "unbounded",
+    }).pipe(Stream.mapEffect(() => refreshChanged));
+    const repoFilesPoll = Stream.fromEffect(
+      Effect.gen(function* repoFilesLoop() {
+        yield* Git.use((git) => git.repoFiles(root)).pipe(
           Effect.tap((next) =>
             Effect.sync(() => {
               const prev = gitModel();
@@ -622,7 +651,9 @@ function createState() {
       }),
     ).pipe(Stream.forever);
     runtime
-      .runPromise(Stream.merge(fast, slow).pipe(Stream.runDrain), { signal: controller.signal })
+      .runPromise(Stream.merge(changedRefresh, repoFilesPoll).pipe(Stream.runDrain), {
+        signal: controller.signal,
+      })
       .catch(() => {});
     onCleanup(() => controller.abort());
   });
@@ -734,7 +765,6 @@ function createState() {
     helpOpen,
     iconsEnabled,
     jumpTarget,
-    lastChange,
     lineMap,
     loadModel,
     loadWorktrees,

@@ -31,9 +31,9 @@ problems. You decide what to say next.
   tree.
 - Switches between all changes, staged changes, and unstaged changes.
 - Switches between git worktrees in place, re-pointing the tree, diffs,
-  polling, and checks at the chosen worktree.
-- Polls git while the agent works, then keeps the current file and selection
-  stable as the view refreshes.
+  refresh, and checks at the chosen worktree.
+- Watches the filesystem and refreshes the moment the agent changes something,
+  then keeps the current file and selection stable as the view refreshes.
 - Marks recent activity and lets you jump to the latest touched file.
 - Shows diagnostics in the tree, in the viewer, and in a problems panel.
 - Copies a `path:line` reference and snippet so you can paste it back into the

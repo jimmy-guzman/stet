@@ -45,6 +45,22 @@ test("Process.run fails with CommandError when the executable is missing", async
   expect(error).toBeInstanceOf(CommandError);
 });
 
+test("Process.run fails with a clear message when the cwd no longer exists", async () => {
+  // A deleted worktree leaves repoRoot pointing at a missing dir. The guard fails
+  // With a readable cause instead of the raw "ENOENT ... posix_spawn" syscall text.
+  const error = await Effect.runPromise(
+    Process.pipe(
+      Effect.flatMap((process) => process.run(["git", "status"], "/no/such/sideye/dir")),
+      Effect.flip,
+      Effect.provide(ProcessLive),
+    ),
+  );
+
+  expect(error).toBeInstanceOf(CommandError);
+  expect(error.message).toBe("working directory no longer exists: /no/such/sideye/dir");
+  expect(error.message).not.toContain("posix_spawn");
+});
+
 test("Process.run kills the child when the fiber is interrupted", async () => {
   const start = Date.now();
   const fiber = Effect.runFork(

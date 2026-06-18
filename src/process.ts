@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { Context, Data, Effect, Layer } from "effect";
 
 export interface CommandResult {
@@ -52,8 +54,14 @@ export const ProcessLive = Layer.succeed(Process)({
             stderr: "",
             stdout: "",
           }),
-        try: () =>
-          Bun.spawn({
+        try: () => {
+          // A deleted worktree leaves repoRoot pointing at a missing dir; Bun.spawn
+          // Would surface a raw "ENOENT ... posix_spawn". Fail with a clear message
+          // So callers (and the deletion detector) see the cause, not the syscall.
+          if (!existsSync(cwd)) {
+            throw new Error(`working directory no longer exists: ${cwd}`);
+          }
+          return Bun.spawn({
             cmd: [...command],
             cwd,
             // GIT_OPTIONAL_LOCKS=0 stops git status/diff from refreshing the index
@@ -63,7 +71,8 @@ export const ProcessLive = Layer.succeed(Process)({
             stderr: "pipe",
             stdout: "pipe",
             ...(options?.stdin === undefined ? {} : { stdin: new Blob([options.stdin]) }),
-          }),
+          });
+        },
       }),
       (child) =>
         Effect.tryPromise({

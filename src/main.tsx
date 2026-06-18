@@ -43,15 +43,28 @@ try {
   const startup = Effect.gen(function* startupModel() {
     const subprocess = yield* Process;
     const git = yield* Git;
-    const repoRoot = (yield* subprocess.run(
-      ["git", "rev-parse", "--show-toplevel"],
+    // One rev-parse yields both the repo root and the common dir. The common dir
+    // Is <main>/.git for any worktree, so stripping /.git gives the main worktree
+    // — the recovery target if this worktree is later deleted. It lives outside a
+    // Linked worktree's tree, so it survives that deletion.
+    const lines = (yield* subprocess.run(
+      ["git", "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"],
       process.cwd(),
-    )).stdout.trim();
+    )).stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+    const repoRoot = lines[0] ?? "";
+    const commonDir = lines[1] ?? "";
+    const suffix = "/.git";
+    const mainWorktreePath = commonDir.endsWith(suffix)
+      ? commonDir.slice(0, -suffix.length)
+      : repoRoot;
     const changed = yield* git.changedFiles(repoRoot, options.scope);
-    return { changed, repoRoot };
+    return { changed, mainWorktreePath, repoRoot };
   });
 
-  const [{ changed, repoRoot }, syntax] = await Promise.all([
+  const [{ changed, mainWorktreePath, repoRoot }, syntax] = await Promise.all([
     runtime.runPromise(startup),
     createSyntaxConfig(theme.colors.syntax),
   ]);
@@ -73,6 +86,7 @@ try {
     state.setOverflow(options.overflow);
     state.setGitModel(model);
     state.setRepoRoot(model.repoRoot);
+    state.setMainWorktreePath(mainWorktreePath);
     state.setLastChange(Date.now());
     state.setSelectedPath(initialSelectedPath);
     state.setFocusedNodeId(initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`);

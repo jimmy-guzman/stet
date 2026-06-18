@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { Effect, Queue, Stream } from "effect";
 import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js";
 
@@ -170,6 +172,13 @@ function createState() {
   const [helpOpen, setHelpOpen] = createSignal(false);
   const [gitModel, setGitModel] = createSignal<GitModel>(emptyModel);
   const [repoRoot, setRepoRoot] = createSignal("");
+  // The repository's main worktree, resolved once at startup (repository-wide
+  // Constant). It outlives a deleted linked worktree, so it is the recovery
+  // Target; if it too is gone, the repository is gone and there is no survivor.
+  const [mainWorktreePath, setMainWorktreePath] = createSignal("");
+  // Flips when the heartbeat finds the worktree deleted (its root or the main
+  // Worktree gone); App reacts by switching to the main worktree or exiting.
+  const [currentWorktreeDeleted, setCurrentWorktreeDeleted] = createSignal(false);
   // Two timestamps that drive the adaptive safety-poll cadence: when git state
   // Last changed, and when the fs watcher last ticked (0 = never, i.e. unproven).
   const [lastChange, setLastChange] = createSignal(0);
@@ -603,7 +612,18 @@ function createState() {
           }
         }),
       ),
-      Effect.ignore,
+      // The heartbeat is the always-on detector: a failure means this worktree
+      // Was deleted when its root is gone, or when the main worktree is gone (a
+      // Linked worktree's git breaks once main's .git is deleted, even if its own
+      // Dir lingers). Flag it (App recovers); any other failure is transient.
+      Effect.catch(() =>
+        Effect.sync(() => {
+          const main = mainWorktreePath();
+          if (!existsSync(root) || (main !== "" && !existsSync(main))) {
+            setCurrentWorktreeDeleted(true);
+          }
+        }),
+      ),
     );
     // Three refresh sources, merged through ONE serializing mapEffect so two
     // ChangedFiles reads can never overlap and write each other's stale result:
@@ -748,6 +768,7 @@ function createState() {
     copy,
     counts,
     countsText,
+    currentWorktreeDeleted,
     cursorIndex,
     cursorLineNumber,
     diffView,
@@ -769,6 +790,7 @@ function createState() {
     lineMap,
     loadModel,
     loadWorktrees,
+    mainWorktreePath,
     moveFocus,
     navigableLines,
     now,
@@ -803,6 +825,7 @@ function createState() {
     setActivityLog,
     setChangesOnly,
     setCheckerState,
+    setCurrentWorktreeDeleted,
     setCursorIndex,
     setExpandedDirectories,
     setFileView,
@@ -818,6 +841,7 @@ function createState() {
     setIconsEnabled,
     setJumpTarget,
     setLastChange,
+    setMainWorktreePath,
     setNow,
     setOverflow,
     setPaletteIndex,

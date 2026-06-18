@@ -38,7 +38,7 @@ export function App() {
     process.exit(0);
   }
 
-  async function switchWorktree(worktree: Worktree) {
+  async function switchWorktree(worktree: Worktree, reason?: string) {
     state.setWorktreeOpen(false);
     if (worktree.path === state.gitModel().repoRoot) {
       return;
@@ -50,6 +50,7 @@ export function App() {
 
     try {
       const fresh = await state.loadModel({ repoRoot: worktree.path, scope: state.scope() });
+      state.setCurrentWorktreeDeleted(false);
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
       state.setLastChange(Date.now());
       state.setRepoRoot(fresh.repoRoot);
@@ -66,7 +67,7 @@ export function App() {
       state.setProblemIndex(0);
       state.setActivityLog(emptyActivityLog);
       state.setFocusedPane("tree");
-      state.setStatus(`worktree: ${worktreeLabel(worktree)}`);
+      state.setStatus(reason ?? `worktree: ${worktreeLabel(worktree)}`);
       void state.runChecks(fresh);
     } catch (error) {
       state.setStatus(
@@ -74,6 +75,41 @@ export function App() {
       );
     }
   }
+
+  // The heartbeat flags a deleted current worktree; recover by switching to the
+  // Main worktree (the parent repo), or exit cleanly when it too is gone.
+  createEffect(() => {
+    if (!state.currentWorktreeDeleted()) {
+      return;
+    }
+    const main = state.mainWorktreePath();
+    const root = state.gitModel().repoRoot;
+    // The flag can outlive its cause (a fresh model was seeded, or we already
+    // Switched away). Act only while something is genuinely gone.
+    if (existsSync(root) && (main === "" || existsSync(main))) {
+      state.setCurrentWorktreeDeleted(false);
+      return;
+    }
+    // The main worktree survives and isn't where we already are: switch to it.
+    if (main !== "" && main !== root && existsSync(main)) {
+      const cached = state.worktrees()?.find((worktree) => worktree.path === main);
+      const label = cached === undefined ? (main.split("/").pop() ?? main) : worktreeLabel(cached);
+      const target: Worktree = cached ?? {
+        bare: false,
+        detached: false,
+        head: "",
+        locked: false,
+        path: main,
+        prunable: false,
+      };
+      void switchWorktree(target, `worktree deleted, switched to ${label}`);
+      return;
+    }
+    // Nothing recoverable: the repository itself is gone.
+    renderer.destroy();
+    console.log("sideye: worktree deleted, nothing left to inspect");
+    process.exit(0);
+  });
 
   useKeyboard(createKeyHandler({ quit, switchWorktree }));
 

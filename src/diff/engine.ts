@@ -123,32 +123,34 @@ export function structureDiff(input: RenderInput): DiffRender {
 // Grammars not in LANGS are attached on demand: the file's language is inferred
 // From its name (and its pre-rename name) and loaded into the shared highlighter
 // Before the synchronous render below, so any language Shiki bundles highlights
-// Without preloading every grammar. `attempted` short-circuits names whose
-// Grammar is plain text or failed to resolve, so a bogus extension is not
-// Re-resolved on every render (a successfully attached grammar is skipped by
-// `areLanguagesAttached`).
-const attempted = new Set<string>();
+// Without preloading every grammar. Each language's attachment is memoized by
+// `attaching` so concurrent renders of the same new language await one shared
+// Promise instead of racing it (a render that skipped the wait would cache
+// Plain-text spans before the grammar finished attaching); a settled promise is
+// Reused, so a bogus extension is not re-resolved on every render.
+const attaching = new Map<string, Promise<unknown>>();
+
+function attach(lang: string) {
+  const existing = attaching.get(lang);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const promise = getSharedHighlighter({
+    langs: [lang],
+    preferredHighlighter: "shiki-wasm",
+    themes: [THEME],
+  }).catch(() => {
+    // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
+  });
+  attaching.set(lang, promise);
+  return promise;
+}
 
 async function ensureLanguages(meta: { name: string; prevName?: string }) {
   const names = meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
-  const pending = new Set(names.map(getFiletypeFromFileName))
-    .difference(attempted)
-    .difference(new Set(["text"]));
+  const pending = new Set(names.map(getFiletypeFromFileName)).difference(new Set(["text"]));
 
-  await Promise.all(
-    [...pending]
-      .filter((lang) => !areLanguagesAttached(lang))
-      .map((lang) => {
-        attempted.add(lang);
-        return getSharedHighlighter({
-          langs: [lang],
-          preferredHighlighter: "shiki-wasm",
-          themes: [THEME],
-        }).catch(() => {
-          // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
-        });
-      }),
-  );
+  await Promise.all([...pending].filter((lang) => !areLanguagesAttached(lang)).map(attach));
 }
 
 async function compute(input: RenderInput): Promise<DiffRender> {

@@ -45,4 +45,43 @@ describe("renderDiff", () => {
       truncated: false,
     });
   });
+
+  test("highlights a language not in the warm preload set by attaching its grammar on demand", async () => {
+    // Rust is not preloaded; its grammar must be resolved and attached before the diff highlights.
+    const rustPatch = `diff --git a/main.rs b/main.rs
+index 1111111..2222222 100644
+--- a/main.rs
++++ b/main.rs
+@@ -1,1 +1,1 @@
+-let total: u32 = 0;
++let total: u32 = sum(items);
+`;
+    const render = await renderDiff({ full: false, maxLines: 1600, patch: rustPatch });
+
+    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    if (added === undefined) {
+      throw new Error("expected an addition row");
+    }
+    expect(added.spans.map((span) => span.text).join("")).toBe("let total: u32 = sum(items);");
+    expect(added.spans.length).toBeGreaterThan(1);
+    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+  });
+
+  test("renders an unknown extension as plain text without throwing", async () => {
+    const unknownPatch = `diff --git a/notes.zzzz b/notes.zzzz
+index 1111111..2222222 100644
+--- a/notes.zzzz
++++ b/notes.zzzz
+@@ -1,1 +1,1 @@
+-old line
++new line here
+`;
+    const render = await renderDiff({ full: false, maxLines: 1600, patch: unknownPatch });
+
+    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    if (added === undefined) {
+      throw new Error("expected an addition row");
+    }
+    expect(added.spans.map((span) => span.text).join("")).toBe("new line here");
+  });
 });

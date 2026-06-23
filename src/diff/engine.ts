@@ -1,4 +1,6 @@
 import {
+  areLanguagesAttached,
+  getFiletypeFromFileName,
   getSharedHighlighter,
   parsePatchFiles,
   registerCustomTheme,
@@ -30,9 +32,9 @@ export interface RenderInput {
 registerCustomTheme(SIDEYE_SHIKI_THEME_NAME, () => Promise.resolve(SIDEYE_SHIKI_THEME));
 const THEME = SIDEYE_SHIKI_THEME_NAME;
 
-// Languages preloaded into the shared highlighter; an unlisted language falls
-// Back to plain text via the try/catch below, so this set just covers the
-// Common cases without paying to load every Shiki grammar at startup.
+// Languages warmed into the shared highlighter at startup so the common cases
+// Render without paying the one-time grammar compile. Anything outside this set
+// Is still highlighted: `ensureLanguages` attaches its grammar on demand below.
 const LANGS = [
   "typescript",
   "tsx",
@@ -118,16 +120,50 @@ export function structureDiff(input: RenderInput): DiffRender {
   return { navigable: navigableLinesFromRows(rows), rows, truncated };
 }
 
+// Grammars not in LANGS are attached on demand: the file's language is inferred
+// From its name (and its pre-rename name) and loaded into the shared highlighter
+// Before the synchronous render below, so any language Shiki bundles highlights
+// Without preloading every grammar. `attempted` short-circuits names whose
+// Grammar is plain text or failed to resolve, so a bogus extension is not
+// Re-resolved on every render (a successfully attached grammar is skipped by
+// `areLanguagesAttached`).
+const attempted = new Set<string>();
+
+async function ensureLanguages(meta: { name: string; prevName?: string }) {
+  const names = meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
+  const pending = new Set(names.map(getFiletypeFromFileName))
+    .difference(attempted)
+    .difference(new Set(["text"]));
+
+  await Promise.all(
+    [...pending]
+      .filter((lang) => !areLanguagesAttached(lang))
+      .map((lang) => {
+        attempted.add(lang);
+        return getSharedHighlighter({
+          langs: [lang],
+          preferredHighlighter: "shiki-wasm",
+          themes: [THEME],
+        }).catch(() => {
+          // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
+        });
+      }),
+  );
+}
+
 async function compute(input: RenderInput): Promise<DiffRender> {
   const meta = parsePatchFiles(input.patch)[0]?.files[0];
   if (meta === undefined) {
     return EMPTY;
   }
 
+  const hl = await highlighter();
+  await ensureLanguages(meta);
+
   let addSpans: RenderSpan[][] = [];
   let delSpans: RenderSpan[][] = [];
   try {
-    const themed = renderDiffWithHighlighter(meta, await highlighter(), RENDER_OPTIONS);
+    const themed = renderDiffWithHighlighter(meta, hl, RENDER_OPTIONS);
     addSpans = themed.code.additionLines.map(flattenLineSpans);
     delSpans = themed.code.deletionLines.map(flattenLineSpans);
   } catch {

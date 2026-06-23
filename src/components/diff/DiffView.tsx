@@ -100,11 +100,15 @@ export function DiffView() {
       return rows().map(() => 1);
     }
     const width = contentWidth();
-    return rows().map((row) =>
-      row.kind === "line"
-        ? measurer.measure(row.spans.map((span) => span.text).join(""), width)
-        : 1,
-    );
+    return rows().map((row) => {
+      if (row.kind !== "line") {
+        return 1;
+      }
+      // Include the +/-/space sign StyledLine prepends, so the measured wrap
+      // Width matches what actually renders (the sign only shifts the first row).
+      const sign = row.type === "add" ? "+" : row.type === "remove" ? "-" : " ";
+      return measurer.measure(sign + row.spans.map((span) => span.text).join(""), width);
+    });
   });
 
   // Widest line in the file (display columns), so horizontal scroll has a stable

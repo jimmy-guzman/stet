@@ -91,12 +91,11 @@ export async function preloadDiffHighlighter() {
   }
 }
 
-// Content fingerprint (length + sampled slices) so unchanged diffs keep a cache
-// Hit across reloads without serializing the whole patch into the key.
+// Content fingerprint: a hash of the full patch (not sampled slices, which could
+// Collide for a same-length edit outside the sampled windows and return a stale
+// Render) plus the render options that change output.
 function fingerprint(input: RenderInput) {
-  const { patch } = input;
-  const mid = Math.floor(patch.length / 2);
-  return `${input.full ? 1 : 0}:${input.maxLines}:${patch.length}:${patch.slice(0, 64)}:${patch.slice(mid, mid + 64)}:${patch.slice(-64)}`;
+  return `${input.full ? 1 : 0}:${input.maxLines}:${Bun.hash(input.patch)}`;
 }
 
 /**

@@ -315,16 +315,21 @@ function createState() {
       .then(({ highlight, view }) => {
         setDiffView(view);
         // Phase 2: highlight off the critical path, then swap in colored rows
-        // (structure-identical) only if this selection is still showing. The
-        // Abort signal drops the result when the selection changes mid-flight.
+        // (structure-identical) only if this exact phase-1 snapshot is still
+        // Showing. Reference identity (not path equality) is required so a stale
+        // Highlight never lands on a newer same-path snapshot (scope/full toggle,
+        // Live edit); the abort guard drops it when the selection changed.
         runtime
           .runPromise(
             DiffEngine.use((engine) => engine.render(highlight)),
             { signal },
           )
           .then((render) => {
+            if (signal.aborted) {
+              return;
+            }
             setDiffView((current) =>
-              current !== undefined && current.path === view.path && !current.highlighted
+              current === view
                 ? {
                     ...current,
                     highlighted: true,

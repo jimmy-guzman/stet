@@ -14,9 +14,6 @@ import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
 import { Process } from "./process";
 import { runtime } from "./runtime";
 import { state } from "./state";
-import { createSyntaxConfig } from "./syntax/highlight";
-import { darkTheme } from "./theme/dark";
-import { resolveTheme } from "./theme/resolve";
 
 try {
   const options = parseArgs(Bun.argv.slice(2));
@@ -35,8 +32,6 @@ try {
   if (!options.lspDownload) {
     process.env.SIDEYE_NO_LSP_DOWNLOAD = "1";
   }
-
-  const theme = resolveTheme(darkTheme);
 
   // The startup model carries only the changed set (repoFiles fill in on the
   // Slow poll once mounted), the same shape the running app uses.
@@ -64,10 +59,7 @@ try {
     return { changed, mainWorktreePath, repoRoot };
   });
 
-  const [{ changed, mainWorktreePath, repoRoot }, syntax] = await Promise.all([
-    runtime.runPromise(startup),
-    createSyntaxConfig(theme.colors.syntax),
-  ]);
+  const { changed, mainWorktreePath, repoRoot } = await runtime.runPromise(startup);
 
   // oxlint-disable-next-line no-magic-numbers -- one-time startup model assembly
   const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
@@ -79,8 +71,6 @@ try {
       : expandAncestorsForPath(baseExpanded, initialSelectedPath);
 
   batch(() => {
-    state.setSyntax(syntax);
-    state.setStatus(syntax.status);
     state.setScope(options.scope);
     state.setIconsEnabled(options.icons);
     state.setOverflow(options.overflow);

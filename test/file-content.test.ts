@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { structureDiff } from "../src/diff/engine";
 import {
   classifyFileBytes,
   contentToContextPatch,
@@ -10,7 +11,6 @@ import {
   MAX_FILE_LINES,
   textContent,
 } from "../src/file/content";
-import { parsePatch } from "../src/git/patch";
 
 describe("textContent", () => {
   test("normalizes the trailing newline and counts lines", () => {
@@ -72,18 +72,18 @@ describe("classifyFileBytes", () => {
 });
 
 describe("contentToContextPatch", () => {
-  test("produces a parseable all-context patch with correct line numbers", () => {
+  test("produces an all-context patch the diff engine renders with correct line numbers", () => {
     const patch = contentToContextPatch("src/a.ts", "const a = 1\nconst b = 2");
-    const parsed = parsePatch(patch);
+    const { navigable } = structureDiff({ full: true, maxLines: 100, patch });
 
-    expect(parsed.hunks.length).toBe(1);
-    expect(parsed.hunks[0]?.lines.map((line) => line.type)).toEqual(["context", "context"]);
-    expect(parsed.hunks[0]?.lines.map((line) => line.newLine)).toEqual([1, 2]);
-    expect(parsed.hunks[0]?.lines[1]?.content).toBe("const b = 2");
+    expect(navigable.map((line) => line.type)).toEqual(["context", "context"]);
+    expect(navigable.map((line) => line.newLine)).toEqual([1, 2]);
+    expect(navigable[1]?.content).toBe("const b = 2");
   });
 
-  test("renders empty content as a patch with no hunks", () => {
-    expect(parsePatch(contentToContextPatch("src/a.ts", "")).hunks).toEqual([]);
+  test("renders empty content as a patch with no navigable lines", () => {
+    const patch = contentToContextPatch("src/a.ts", "");
+    expect(structureDiff({ full: true, maxLines: 100, patch }).navigable).toEqual([]);
   });
 });
 

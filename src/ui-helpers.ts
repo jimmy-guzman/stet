@@ -1,7 +1,6 @@
 import type { Diagnostic } from "./diagnostics/checker";
 import type { FileContent } from "./file/content";
 import type { ChangedFile, Worktree } from "./git/model";
-import type { ParsedDiffLine } from "./git/patch";
 
 export function viewerTitle(
   selectedPath: string | undefined,
@@ -69,7 +68,10 @@ export function kindLetter(kind: ChangedFile["kind"]) {
   return "M";
 }
 
-export function nearestNavigableIndex(lines: ParsedDiffLine[], target: number) {
+export function nearestNavigableIndex(
+  lines: { newLine?: number; oldLine?: number }[],
+  target: number,
+) {
   let best = -1;
   let bestDistance = Number.POSITIVE_INFINITY;
   lines.forEach((line, index) => {

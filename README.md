@@ -63,7 +63,7 @@ sideye main       # compare against another ref
 sideye --staged   # start in the staged scope
 sideye --unstaged # start in the unstaged scope
 sideye --no-icons # plain tree without Nerd Font file-type icons
-sideye --wrap     # wrap long lines in the viewer instead of overflowing
+sideye --wrap     # wrap long lines in the viewer instead of scrolling them horizontally
 ```
 
 The tree shows a file-type icon next to each file and a folder glyph for each

@@ -1,8 +1,4 @@
-import type { SyntaxStyle } from "@opentui/core";
-
 import type { ChangeKind, StageState } from "../git/model";
-
-export type SyntaxCaptureStyles = Parameters<typeof SyntaxStyle.fromStyles>[0];
 
 // Every value is a plain hex string so a user-supplied theme (e.g. parsed from
 // JSON) can satisfy this type directly; RGBA precomputation happens in resolve.ts
@@ -32,7 +28,18 @@ export interface Theme {
   stage: Record<StageState, string>;
   success: string;
   surface: { base: string; cursor: string; panel: string };
-  syntax: SyntaxCaptureStyles;
+  syntax: {
+    comment: string;
+    keyword: string;
+    operator: string;
+    string: string;
+    number: string;
+    function: string;
+    type: string;
+    member: string;
+    tag: string;
+    punctuation: string;
+  };
   text: {
     faint: string;
     muted: string;

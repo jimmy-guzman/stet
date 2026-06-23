@@ -18,9 +18,6 @@ import {
 } from "../src/git/tree";
 import { ProcessLive } from "../src/process";
 import { state } from "../src/state";
-import type { SyntaxConfig } from "../src/syntax/highlight";
-
-export const disabledSyntax: SyntaxConfig = { enabled: false, status: "syntax disabled for tests" };
 
 const GitTestLive = GitLive.pipe(Layer.provide(ProcessLive));
 const FileTestLive = FileLive.pipe(Layer.provide(ProcessLive));
@@ -69,15 +66,13 @@ export function loadFileDiff(repoRoot: string, scope: DiffScope, changed: Change
 
 // State is a global singleton, so render tests seed it fresh (and reset the UI
 // Signals that might bleed from a prior test) before rendering App. Mirrors the
-// Startup seeding in main.tsx with syntax disabled.
+// Startup seeding in main.tsx.
 export function seedState(model: GitModel, scope: DiffScope) {
   const selected = model.changed[0]?.path ?? model.repoFiles[0]?.path;
   const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));
   const expanded =
     selected === undefined ? baseExpanded : expandAncestorsForPath(baseExpanded, selected);
   batch(() => {
-    state.setSyntax(disabledSyntax);
-    state.setStatus(disabledSyntax.status);
     state.setScope(scope);
     state.setIconsEnabled(true);
     state.setChangesOnly(false);

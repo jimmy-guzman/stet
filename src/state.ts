@@ -19,6 +19,7 @@ import {
 } from "./diagnostics/checker";
 import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
+import { DiffEngine, structureDiff, type DiffRender, type RenderInput } from "./diff/engine";
 import { contentToContextPatch, type FileContent } from "./file/content";
 import { File } from "./file/service";
 import {
@@ -31,12 +32,10 @@ import {
   type ActivityLog,
 } from "./git/activity";
 import { mergeChanged, type ChangedFile, type GitModel, type Worktree } from "./git/model";
-import { renderPatch } from "./git/patch";
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
 import { buildFileTree, expandAncestorsForPath, flattenTree } from "./git/tree";
 import { runtime } from "./runtime";
-import type { SyntaxConfig } from "./syntax/highlight";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
@@ -53,17 +52,26 @@ type ProblemItem =
   | { kind: "failure"; id: string; checker: CheckerName; line: string; isFirst: boolean }
   | { kind: "problem"; id: string; problem: Diagnostic };
 
-// The coherent diff-pane snapshot. One async load per selection produces a
-// Complete value; the signal holds the previous complete snapshot until the new
-// One resolves, so `<diff>` never receives empty/stale/partial content. That
-// Incoherent intermediate content is what oscillated OpenTUI's gutter width and
-// Wedged the renderer under the old async atom pipeline.
+// The coherent diff-pane snapshot. A selection commits in two structure-identical
+// Phases: first plain rows (parse only, instant), then a rows upgrade once the
+// Async highlight resolves. The signal holds the previous snapshot until phase 1
+// Resolves, so the renderer never receives empty/stale/partial content; the
+// Phase-2 swap keeps the same row count and gutter width, so it never thrashes.
 interface DiffView {
   path: string;
   showFileContent: boolean;
   fileContent: FileContent | undefined;
-  diff: string;
+  render: DiffRender;
+  highlighted: boolean;
 }
+
+interface DiffBase {
+  diff: string;
+  fileContent: FileContent | undefined;
+  showFileContent: boolean;
+}
+
+const DIFF_MAX_LINES = 1600;
 
 // Bounds the search result list so a broad query in a large repo can't flood the
 // Panel; hitting the cap sets `searchTruncated`, surfaced as a trailing "+".
@@ -78,6 +86,11 @@ const emptyModel: GitModel = {
   scopeKey: "",
 };
 
+interface LoadedDiff {
+  view: DiffView;
+  highlight: RenderInput;
+}
+
 function loadDiffView(src: {
   path: string;
   scope: DiffScope;
@@ -85,7 +98,31 @@ function loadDiffView(src: {
   full: boolean;
   file: ChangedFile | undefined;
   model: GitModel;
-}): Effect.Effect<DiffView, never, File | Git> {
+}): Effect.Effect<LoadedDiff, never, File | Git> {
+  // Phase 1: after the git/file I/O, build the plain row structure synchronously
+  // And commit it. The patch + render options travel out as `highlight` so the
+  // Caller can run the async highlight pass and swap in colored rows.
+  const toView = (base: Effect.Effect<DiffBase, never, File | Git>) =>
+    base.pipe(
+      Effect.map((result): LoadedDiff => {
+        const highlight: RenderInput = {
+          full: result.showFileContent || src.full,
+          maxLines: DIFF_MAX_LINES,
+          patch: result.diff,
+        };
+        return {
+          highlight,
+          view: {
+            fileContent: result.fileContent,
+            highlighted: false,
+            path: src.path,
+            render: structureDiff(highlight),
+            showFileContent: result.showFileContent,
+          },
+        };
+      }),
+    );
+
   if (src.showFile) {
     const gitSpec =
       src.file?.kind === "deleted"
@@ -93,46 +130,34 @@ function loadDiffView(src: {
           ? `:${src.path}`
           : `${src.scope.ref}:${src.path}`
         : undefined;
-    return File.use((file) =>
-      file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec }),
-    ).pipe(
-      Effect.map(
-        (content): DiffView => ({
-          diff: content.kind === "text" ? contentToContextPatch(src.path, content.content) : "",
-          fileContent: content,
-          path: src.path,
-          showFileContent: true,
-        }),
+    return toView(
+      File.use((file) =>
+        file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec }),
+      ).pipe(
+        Effect.map(
+          (content): DiffBase => ({
+            diff: content.kind === "text" ? contentToContextPatch(src.path, content.content) : "",
+            fileContent: content,
+            showFileContent: true,
+          }),
+        ),
       ),
     );
   }
 
   const file = src.file;
   if (file === undefined) {
-    return Effect.succeed<DiffView>({
-      diff: "",
-      fileContent: undefined,
-      path: src.path,
-      showFileContent: false,
-    });
+    return toView(
+      Effect.succeed<DiffBase>({ diff: "", fileContent: undefined, showFileContent: false }),
+    );
   }
 
-  return Git.use((git) => git.fileDiff(src.model.repoRoot, src.scope, file)).pipe(
-    Effect.map(
-      (diff): DiffView => ({
-        diff,
-        fileContent: undefined,
-        path: src.path,
-        showFileContent: false,
-      }),
-    ),
-    Effect.catch(() =>
-      Effect.succeed<DiffView>({
-        diff: "",
-        fileContent: undefined,
-        path: src.path,
-        showFileContent: false,
-      }),
+  return toView(
+    Git.use((git) => git.fileDiff(src.model.repoRoot, src.scope, file)).pipe(
+      Effect.map((diff): DiffBase => ({ diff, fileContent: undefined, showFileContent: false })),
+      Effect.catch(() =>
+        Effect.succeed<DiffBase>({ diff: "", fileContent: undefined, showFileContent: false }),
+      ),
     ),
   );
 }
@@ -192,7 +217,6 @@ function createState() {
   const [now, setNow] = createSignal(Date.now());
   const [terminalWidth, setTerminalWidth] = createSignal(80);
   const [terminalHeight, setTerminalHeight] = createSignal(24);
-  const [syntax, setSyntax] = createSignal<SyntaxConfig>({ enabled: false, status: "" });
 
   // --- synchronous derived ---
   const selectedFile = createMemo(() => {
@@ -285,9 +309,37 @@ function createState() {
       return;
     }
     const controller = new AbortController();
+    const { signal } = controller;
     runtime
-      .runPromise(loadDiffView(src), { signal: controller.signal })
-      .then(setDiffView)
+      .runPromise(loadDiffView(src), { signal })
+      .then(({ highlight, view }) => {
+        setDiffView(view);
+        // Phase 2: highlight off the critical path, then swap in colored rows
+        // (structure-identical) only if this exact phase-1 snapshot is still
+        // Showing. Reference identity (not path equality) is required so a stale
+        // Highlight never lands on a newer same-path snapshot (scope/full toggle,
+        // Live edit); the abort guard drops it when the selection changed.
+        runtime
+          .runPromise(
+            DiffEngine.use((engine) => engine.render(highlight)),
+            { signal },
+          )
+          .then((render) => {
+            if (signal.aborted) {
+              return;
+            }
+            setDiffView((current) =>
+              current === view
+                ? {
+                    ...current,
+                    highlighted: true,
+                    render: { ...current.render, rows: render.rows },
+                  }
+                : current,
+            );
+          })
+          .catch(() => {});
+      })
       .catch(() => {});
     onCleanup(() => controller.abort());
   });
@@ -352,23 +404,12 @@ function createState() {
     });
   });
 
-  const renderedPatch = createMemo(() => {
-    const view = diffView();
-    if (view === undefined) {
-      return renderPatch("", { full: false, maxLines: 1600 });
-    }
-    return renderPatch(view.diff, {
-      full: view.showFileContent || fullContentPaths().has(view.path),
-      maxLines: 1600,
-    });
-  });
-  const navigableLines = createMemo(() => {
-    const patch = renderedPatch();
-    return patch.parsed.hunks.flatMap((hunk) => hunk.lines).slice(0, patch.bodyLineCount);
-  });
+  const navigableLines = createMemo(() => diffView()?.render.navigable ?? []);
   const truncated = createMemo(() => {
     const content = diffView()?.fileContent;
-    return renderedPatch().truncated || (content?.kind === "text" && content.truncated);
+    return (
+      (diffView()?.render.truncated ?? false) || (content?.kind === "text" && content.truncated)
+    );
   });
 
   // In-buffer find: row indices into navigableLines whose content matches the
@@ -807,7 +848,6 @@ function createState() {
     problems,
     problemsOpen,
     recencyByPath,
-    renderedPatch,
     repoRoot,
     resetFind,
     resetSidebarWidth,
@@ -858,7 +898,6 @@ function createState() {
     setSelectedPath,
     setSidebarOpen,
     setStatus,
-    setSyntax,
     setTerminalHeight,
     setTerminalWidth,
     setWorktreeIndex,
@@ -869,7 +908,6 @@ function createState() {
     sidebarWidth,
     status,
     statusRight,
-    syntax,
     terminalHeight,
     terminalWidth,
     treeRows,

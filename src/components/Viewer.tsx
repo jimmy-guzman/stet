@@ -1,44 +1,34 @@
-import type { DiffRenderable, InputRenderable, LineColorConfig } from "@opentui/core";
-import { useRenderer } from "@opentui/solid";
+import type { InputRenderable } from "@opentui/core";
 import { batch, createEffect, createMemo, on, Show } from "solid-js";
 
-import { DIFF_ID } from "../constants";
 import { state } from "../state";
-import { diffFiletypeFor } from "../syntax/highlight";
 import { useTheme } from "../theme/context";
 import { nearestNavigableIndex, placeholderText, viewerTitle } from "../ui-helpers";
-
-interface ScrollablePane {
-  scrollY: number;
-  maxScrollY: number;
-}
-
-function isScrollablePane(value: unknown): value is ScrollablePane {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "scrollY" in value &&
-    typeof value.scrollY === "number"
-  );
-}
+import { DiffView } from "./diff/DiffView";
 
 export function Viewer() {
   const theme = useTheme();
-  const renderer = useRenderer();
-  let diffRef: DiffRenderable | undefined;
   let findInputRef: InputRenderable | undefined;
 
   // Reset the cursor to the first change only when the displayed file changes,
-  // Not on live edits of the same file.
+  // Not on live edits of the same file. Keyed through a memo so it fires once per
+  // Path change, not on every diffView commit (the plain->highlighted upgrade
+  // Commits twice for the same path, and Solid's `on` does not value-dedupe).
+  const loadedPath = createMemo(() => state.diffView()?.path);
   createEffect(
-    on(
-      () => state.diffView()?.path,
-      () => {
-        const first = state.navigableLines().findIndex((line) => line.type !== "context");
-        state.setCursorIndex(first === -1 ? 0 : first);
-      },
-    ),
+    on(loadedPath, () => {
+      const first = state.navigableLines().findIndex((line) => line.type !== "context");
+      state.setCursorIndex(first === -1 ? 0 : first);
+    }),
   );
+
+  // Clamp the cursor when a refresh shrinks the content under it.
+  createEffect(() => {
+    const last = state.navigableLines().length - 1;
+    if (state.cursorIndex() > last) {
+      state.setCursorIndex(Math.max(0, last));
+    }
+  });
 
   // Deferred jumps (problem/recency navigation): land on the line, un-truncate,
   // Or escalate to file view to find it.
@@ -80,82 +70,6 @@ export function Viewer() {
     state.setJumpTarget(undefined);
   });
 
-  // The add/remove/diagnostic tints only change with content; a cursor move just
-  // Copies this map and overlays the cursor row.
-  const baseLineColors = createMemo(() => {
-    const {
-      addedBg,
-      errorGutterBg,
-      findMatchBg,
-      infoGutterBg,
-      removedBg,
-      transparent,
-      warningGutterBg,
-    } = theme.rgba;
-    const colors = new Map<number, LineColorConfig>();
-    const lineMap = state.lineMap();
-    const matches = new Set(state.findMatches());
-    state.navigableLines().forEach((line, index) => {
-      let gutter = transparent;
-      let content = transparent;
-      if (line.type === "add") {
-        content = addedBg;
-      } else if (line.type === "remove") {
-        content = removedBg;
-      }
-      if (matches.has(index)) {
-        content = findMatchBg;
-      }
-      const findings = line.newLine === undefined ? undefined : lineMap.get(line.newLine);
-      if (findings !== undefined) {
-        gutter = findings.some((finding) => finding.severity === "error")
-          ? errorGutterBg
-          : findings.some((finding) => finding.severity === "warning")
-            ? warningGutterBg
-            : infoGutterBg;
-      }
-      if (gutter !== transparent || content !== transparent) {
-        colors.set(index, { content, gutter });
-      }
-    });
-    return colors;
-  });
-
-  // Paint the cursor row + diagnostic tints and keep the cursor in view.
-  createEffect(() => {
-    const lines = state.navigableLines();
-    const cursor = state.cursorIndex();
-    const base = baseLineColors();
-    const height = state.viewerHeight();
-    const diff = diffRef;
-    if (diff === undefined || lines.length === 0) {
-      return;
-    }
-    const last = lines.length - 1;
-    if (cursor > last) {
-      state.setCursorIndex(last);
-      return;
-    }
-    const paint = () => {
-      const colors = new Map<number, LineColorConfig>(base);
-      colors.set(cursor, { content: theme.rgba.cursorBg, gutter: theme.rgba.cursorBg });
-      diff.setLineColors(colors);
-    };
-    // The diff renderable repaints its own line colors when content settles;
-    // Painting again in a microtask keeps the cursor/diagnostic tints on top.
-    paint();
-    queueMicrotask(paint);
-    const pane = diff.findDescendantById(`${DIFF_ID}-left-code`);
-    if (isScrollablePane(pane)) {
-      if (cursor < pane.scrollY) {
-        pane.scrollY = cursor;
-      } else if (cursor >= pane.scrollY + height) {
-        pane.scrollY = cursor - height + 1;
-      }
-    }
-    renderer.requestRender();
-  });
-
   const focused = () => state.focusedPane() === "diff";
   const displayedFile = () => {
     const view = state.diffView();
@@ -166,18 +80,6 @@ export function Viewer() {
     return (
       state.diffView()?.showFileContent === true && content !== undefined && content.kind !== "text"
     );
-  };
-  const syntaxStyle = () => {
-    const syntax = state.syntax();
-    return syntax.enabled ? syntax.style : undefined;
-  };
-  const treeSitterClient = () => {
-    const syntax = state.syntax();
-    return syntax.enabled ? syntax.treeSitterClient : undefined;
-  };
-  const filetype = () => {
-    const path = state.diffView()?.path;
-    return path === undefined ? "text" : diffFiletypeFor(path, state.syntax());
   };
 
   // The input stays mounted whenever the bar shows so a committed (blurred) find
@@ -297,26 +199,7 @@ export function Viewer() {
           </box>
         }
       >
-        <diff
-          id={DIFF_ID}
-          ref={(el: DiffRenderable) => (diffRef = el)}
-          width="100%"
-          height={state.viewerHeight()}
-          diff={state.renderedPatch().diff}
-          view="unified"
-          filetype={filetype()}
-          syntaxStyle={syntaxStyle()}
-          treeSitterClient={treeSitterClient()}
-          showLineNumbers
-          wrapMode={state.overflow() === "wrap" ? "word" : "none"}
-          addedBg={theme.colors.diff.addedBg}
-          removedBg={theme.colors.diff.removedBg}
-          addedLineNumberBg={theme.colors.diff.addedLineNumberBg}
-          removedLineNumberBg={theme.colors.diff.removedLineNumberBg}
-          addedSignColor={theme.colors.diff.addedSign}
-          removedSignColor={theme.colors.diff.removedSign}
-          lineNumberFg={theme.colors.diff.lineNumberFg}
-        />
+        <DiffView />
       </Show>
     </box>
   );

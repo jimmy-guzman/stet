@@ -5,6 +5,7 @@ import { LspProcessLive } from "./diagnostics/lsp-process";
 import { ProvisionerLive } from "./diagnostics/provision";
 import { LanguageServersLive } from "./diagnostics/servers";
 import { DiagnosticsLive } from "./diagnostics/service";
+import { DiffEngineLive } from "./diff/engine";
 import { FileLive } from "./file/service";
 import { GitLive } from "./git/service";
 import { ProcessLive } from "./process";
@@ -16,7 +17,13 @@ import { WatcherLive } from "./watcher/service";
 // ProvideMerge keeps Process in the runtime context (not just wired into the
 // Other services) so startup effects can spawn git directly. The LSP-backed
 // Diagnostics pool sits over its own long-lived LspProcess.
-const AppLayer = Layer.mergeAll(DiagnosticsLive, FileLive, ClipboardLive, WatcherLive).pipe(
+const AppLayer = Layer.mergeAll(
+  DiagnosticsLive,
+  DiffEngineLive,
+  FileLive,
+  ClipboardLive,
+  WatcherLive,
+).pipe(
   Layer.provideMerge(LanguageServersLive),
   Layer.provideMerge(LspProcessLive),
   Layer.provideMerge(ProvisionerLive),

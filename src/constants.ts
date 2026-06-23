@@ -1,4 +1,3 @@
-export const DIFF_ID = "sideye-diff";
 export const PROBLEMS_HEIGHT = 10;
 /** Narrowest a manually-resized sidebar may become. */
 export const SIDEBAR_MIN_WIDTH = 24;

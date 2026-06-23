@@ -1,0 +1,48 @@
+import { describe, expect, test } from "bun:test";
+
+import { renderDiff } from "../src/diff/engine";
+import { isLineRow } from "../src/diff/rows";
+
+const patch = `diff --git a/foo.ts b/foo.ts
+index 1111111..2222222 100644
+--- a/foo.ts
++++ b/foo.ts
+@@ -1,4 +1,4 @@
+ const a = 1;
+-const b = "two";
++const b = "three";
+ const c = 4;
+ const d = 5;
+`;
+
+describe("renderDiff", () => {
+  test("parses, highlights, and builds the unified row model from a real patch", async () => {
+    const render = await renderDiff({ full: false, maxLines: 1600, patch });
+
+    expect(render.truncated).toBe(false);
+    expect(render.navigable).toHaveLength(5);
+    expect(render.navigable[1]).toMatchObject({
+      content: 'const b = "two";',
+      oldLine: 2,
+      type: "remove",
+    });
+
+    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    if (added === undefined) {
+      throw new Error("expected an addition row");
+    }
+    // The reconstructed text is exact, and Shiki produced multiple colored tokens.
+    expect(added.spans.map((span) => span.text).join("")).toBe('const b = "three";');
+    expect(added.spans.length).toBeGreaterThan(1);
+    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+    expect(added.newLine).toBe(2);
+  });
+
+  test("resolves an empty render for an empty patch", async () => {
+    expect(await renderDiff({ full: false, maxLines: 1600, patch: "" })).toEqual({
+      navigable: [],
+      rows: [],
+      truncated: false,
+    });
+  });
+});

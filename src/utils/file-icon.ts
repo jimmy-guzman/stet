@@ -14,13 +14,14 @@
  * dev-go, sh cod-terminal_bash, toml custom-toml, yaml dev-yaml, lock fa-lock, image
  * fa-file_image_o, node dev-nodejs_small, tsconfig seti-tsconfig, bun dev-bun (also bunfig.toml),
  * docker dev-docker, make seti-makefile, license seti-license, git dev-git, config/env seti-config
- * (also the dotfile fallback), book fa-book.
+ * (also the dotfile fallback), book fa-book, symlink oct-file_symlink_file.
  */
 
 const DEFAULT_FILE = "\u{ea7b}";
 const CONFIG = "\u{e615}";
 const FOLDER = "\u{f07b}";
 const FOLDER_OPEN = "\u{f07c}";
+const SYMLINK = "\u{f481}";
 
 /** Exact-filename matches, checked before the extension table. */
 const BY_STEM = new Map([
@@ -94,4 +95,10 @@ export function fileIcon(name: string) {
 
 export function folderIcon(expanded: boolean) {
   return expanded ? FOLDER_OPEN : FOLDER;
+}
+
+// A symlink's icon is driven by its link-ness, not its name, so it reads the same
+// Whether it points at a .ts file or a directory.
+export function symlinkIcon() {
+  return SYMLINK;
 }

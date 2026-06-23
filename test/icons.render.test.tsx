@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import { symlinkSync } from "node:fs";
+import { join } from "node:path";
 
 import { testRender } from "@opentui/solid";
 
 import { App } from "../src/App";
 import { state } from "../src/state";
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
 
 const FOLDER = "\u{f07b}";
 const FOLDER_OPEN = "\u{f07c}";
+const SYMLINK = "\u{f481}";
 const CHEVRONS = /[▸▾]/u;
 
 describe("file-type icons", () => {
@@ -42,6 +45,27 @@ describe("file-type icons", () => {
 
     expect(CHEVRONS.test(frame)).toBe(true);
     expect(frame.includes(FOLDER) || frame.includes(FOLDER_OPEN)).toBe(false);
+
+    renderer.destroy();
+  });
+
+  test("renders the symlink glyph for a tracked symlink, not its target's type icon", async () => {
+    const repo = createFixtureRepo("icon-symlink-", { "target.ts": "export const a = 1;\n" });
+    symlinkSync("target.ts", join(repo, "shortcut.ts"));
+    runGit(repo, ["add", "shortcut.ts"]);
+    runGit(repo, ["commit", "-m", "add link"]);
+    const model = await loadModel(repo, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 16,
+      width: 60,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    const frame = await settleUntil("tree", (current) => current.includes("shortcut.ts"));
+    const linkLine = frame.split("\n").find((line) => line.includes("shortcut.ts")) ?? "";
+
+    expect(linkLine).toContain(SYMLINK);
 
     renderer.destroy();
   });

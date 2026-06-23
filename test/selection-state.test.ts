@@ -9,7 +9,7 @@ function modelWith(paths: string[]): GitModel {
   return {
     changed: [],
     changedByPath: new Map(),
-    repoFiles: paths.map((path) => ({ path, tracked: true })),
+    repoFiles: paths.map((path) => ({ path, symlink: false, tracked: true })),
     repoFilesKey: "k",
     repoRoot: "/x",
     scopeKey: "all:HEAD",

@@ -6,6 +6,7 @@ export interface FileNode {
   name: string;
   path: string;
   tracked: boolean;
+  symlink: boolean;
   changed: ChangedFile | undefined;
 }
 
@@ -44,7 +45,7 @@ export function buildFileTree(
   const directories = new Map<string, DirectoryNode>([["", root]]);
   const seen = new Set<string>();
 
-  function insert(path: string, tracked: boolean) {
+  function insert(path: string, tracked: boolean, symlink: boolean) {
     const changed = changedByPath.get(path);
     if (options.changesOnly && changed === undefined) {
       return;
@@ -72,6 +73,7 @@ export function buildFileTree(
       id: `file:${path}`,
       name: parts.at(-1) ?? path,
       path,
+      symlink,
       tracked,
       type: "file",
     });
@@ -79,13 +81,13 @@ export function buildFileTree(
 
   for (const file of repoFiles) {
     seen.add(file.path);
-    insert(file.path, file.tracked);
+    insert(file.path, file.tracked, file.symlink);
   }
 
   // Staged deletions vanish from ls-files; keep them visible via the changed set
   for (const path of changedByPath.keys()) {
     if (!seen.has(path)) {
-      insert(path, true);
+      insert(path, true, false);
     }
   }
 

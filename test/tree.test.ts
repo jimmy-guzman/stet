@@ -25,11 +25,11 @@ function changed(path: string, overrides: Partial<ChangedFile> = {}): ChangedFil
 }
 
 const repoFiles: RepoFile[] = [
-  { path: "README.md", tracked: true },
-  { path: "src/App.tsx", tracked: true },
-  { path: "src/git.ts", tracked: true },
-  { path: "src/components/ui/Button.tsx", tracked: true },
-  { path: "notes.md", tracked: false },
+  { path: "README.md", symlink: false, tracked: true },
+  { path: "src/App.tsx", symlink: false, tracked: true },
+  { path: "src/git.ts", symlink: false, tracked: true },
+  { path: "src/components/ui/Button.tsx", symlink: false, tracked: true },
+  { path: "notes.md", symlink: false, tracked: false },
 ];
 
 const changedByPath = new Map([
@@ -110,6 +110,20 @@ describe("buildFileTree", () => {
     const button = rows.find((row) => row.node.path === "src/components/ui/Button.tsx");
 
     expect(button?.depth).toBe(2);
+  });
+
+  test("carries the symlink flag onto the file node", () => {
+    const tree = buildFileTree(
+      [
+        { path: "link.ts", symlink: true, tracked: true },
+        { path: "real.ts", symlink: false, tracked: true },
+      ],
+      new Map(),
+      { changesOnly: false },
+    );
+
+    expect(tree.find((node) => node.path === "link.ts")).toMatchObject({ symlink: true });
+    expect(tree.find((node) => node.path === "real.ts")).toMatchObject({ symlink: false });
   });
 });
 

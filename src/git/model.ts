@@ -1,4 +1,4 @@
-import { statSync } from "node:fs";
+import { lstatSync } from "node:fs";
 
 import type { DiffScope } from "../cli";
 import { loadFileContent } from "../file/content";
@@ -23,6 +23,7 @@ export interface ChangedFile {
 export interface RepoFile {
   path: string;
   tracked: boolean;
+  symlink: boolean;
 }
 
 export interface GitModel {
@@ -154,7 +155,7 @@ export function assembleModel(
   numstatOutput: string,
   porcelainOutput: string,
 ): GitModel {
-  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`;
+  const repoFilesKey = repoFilesKeyOf(trackedOutput, untrackedOutput);
   return {
     ...assembleChanged(
       repoRoot,
@@ -164,7 +165,7 @@ export function assembleModel(
       numstatOutput,
       porcelainOutput,
     ),
-    repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey),
+    repoFiles: parseRepoFiles(repoRoot, trackedOutput, untrackedOutput, repoFilesKey),
     repoFilesKey,
     repoRoot,
   };
@@ -329,8 +330,33 @@ function changedSignature(files: ChangedFile[]) {
 
 let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined;
 
+const SYMLINK_MODE = "120000";
+
+// `git ls-files --stage -z` emits "<mode> <sha> <stage>\t<path>" per entry; the
+// Mode is the git source of truth for symlink-ness (120000), free in the listing call.
+function parseTrackedStage(output: string) {
+  return output
+    .split("\0")
+    .filter((entry) => entry !== "")
+    .map((entry) => {
+      const tab = entry.indexOf("\t");
+      const mode = entry.slice(0, entry.indexOf(" "));
+      return { path: entry.slice(tab + 1), symlink: mode === SYMLINK_MODE };
+    });
+}
+
+// Key off mode+path, never the blob sha: a content edit must not churn the repo-file
+// List (and force a full tree rebuild), only a changed file set or symlink-ness does.
+export function repoFilesKeyOf(trackedStageOutput: string, untrackedOutput: string) {
+  const tracked = parseTrackedStage(trackedStageOutput)
+    .map((entry) => `${entry.symlink ? SYMLINK_MODE : ""}${entry.path}`)
+    .join("\0");
+  return `${tracked}\x01${untrackedOutput}`;
+}
+
 export function parseRepoFiles(
-  trackedOutput: string,
+  repoRoot: string,
+  trackedStageOutput: string,
   untrackedOutput: string,
   key: string,
 ): RepoFile[] {
@@ -341,22 +367,32 @@ export function parseRepoFiles(
   const seen = new Set<string>();
   const repoFiles: RepoFile[] = [];
 
-  for (const path of trackedOutput.split("\0")) {
-    if (path !== "" && !seen.has(path)) {
+  for (const { path, symlink } of parseTrackedStage(trackedStageOutput)) {
+    if (!seen.has(path)) {
       seen.add(path);
-      repoFiles.push({ path, tracked: true });
+      repoFiles.push({ path, symlink, tracked: true });
     }
   }
 
   for (const path of untrackedOutput.split("\0")) {
     if (path !== "" && !seen.has(path)) {
       seen.add(path);
-      repoFiles.push({ path, tracked: false });
+      repoFiles.push({ path, symlink: isSymlink(repoRoot, path), tracked: false });
     }
   }
 
   repoFilesCache = { key, repoFiles };
   return repoFiles;
+}
+
+// Untracked files carry no git mode, so the worktree is the only source; the set is
+// Bounded by --exclude-standard, and this module already stats per file (fileMtime).
+function isSymlink(repoRoot: string, path: string) {
+  try {
+    return lstatSync(`${repoRoot}/${path}`).isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 export function parseUntrackedFiles(output: string): StatusEntry[] {
@@ -447,7 +483,9 @@ function inferKind(path: string, deletions: number, additions: number): ChangeKi
 
 function fileMtime(repoRoot: string, path: string) {
   try {
-    return statSync(`${repoRoot}/${path}`).mtimeMs;
+    // Lstat, not stat: a symlink's own mtime drives change detection, and a dangling
+    // Link reports a real mtime instead of throwing into the 0 fallback.
+    return lstatSync(`${repoRoot}/${path}`).mtimeMs;
   } catch {
     return 0;
   }

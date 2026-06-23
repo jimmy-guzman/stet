@@ -11,6 +11,7 @@ import {
   numstatArgs,
   parseRepoFiles,
   parseWorktreeList,
+  repoFilesKeyOf,
   untrackedDiffArgs,
   type ChangedFile,
   type GitModel,
@@ -120,7 +121,7 @@ export const GitLive = Layer.effect(
       loadModel: (repoRoot, scope) =>
         Effect.all(
           [
-            process.run(["git", "ls-files", "-z"], repoRoot),
+            process.run(["git", "ls-files", "--stage", "-z"], repoRoot),
             process.run(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
             process.run(nameStatusArgs(scope), repoRoot),
             process.run(numstatArgs(scope), repoRoot),
@@ -145,16 +146,16 @@ export const GitLive = Layer.effect(
       repoFiles: (repoRoot) =>
         Effect.all(
           [
-            process.run(["git", "ls-files", "-z"], repoRoot),
+            process.run(["git", "ls-files", "--stage", "-z"], repoRoot),
             process.run(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
           ],
           { concurrency: "unbounded" },
         ).pipe(
           retryTransient,
           Effect.map(([tracked, untracked]) => {
-            const repoFilesKey = `${tracked.stdout}\x01${untracked.stdout}`;
+            const repoFilesKey = repoFilesKeyOf(tracked.stdout, untracked.stdout);
             return {
-              repoFiles: parseRepoFiles(tracked.stdout, untracked.stdout, repoFilesKey),
+              repoFiles: parseRepoFiles(repoRoot, tracked.stdout, untracked.stdout, repoFilesKey),
               repoFilesKey,
             };
           }),

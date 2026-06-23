@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -107,5 +107,33 @@ describe("loadFileContent", () => {
 
   test("reports missing files", () => {
     expect(loadFileContent(dir, "nope.ts", { full: false })).toEqual({ kind: "missing" });
+  });
+
+  test("reads a symlink as its target path text, matching git", () => {
+    writeFileSync(join(dir, "target.ts"), "const real = 1\n");
+    symlinkSync("target.ts", join(dir, "to-file"));
+    expect(loadFileContent(dir, "to-file", { full: false })).toEqual({
+      content: "target.ts",
+      kind: "text",
+      lineCount: 1,
+      truncated: false,
+    });
+  });
+
+  test("reads a directory symlink as text, not binary", () => {
+    mkdirSync(join(dir, "pkg"));
+    symlinkSync("pkg", join(dir, "to-dir"));
+    expect(loadFileContent(dir, "to-dir", { full: false })).toMatchObject({
+      content: "pkg",
+      kind: "text",
+    });
+  });
+
+  test("reads a dangling symlink as its target path, not missing", () => {
+    symlinkSync("../nowhere", join(dir, "broken"));
+    expect(loadFileContent(dir, "broken", { full: false })).toMatchObject({
+      content: "../nowhere",
+      kind: "text",
+    });
   });
 });

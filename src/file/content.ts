@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 
 export type FileContent =
   | { kind: "text"; content: string; lineCount: number; truncated: boolean }
@@ -24,7 +24,12 @@ export function loadFileContent(
   const absolutePath = `${repoRoot}/${path}`;
   let size: number;
   try {
-    const stat = statSync(absolutePath);
+    const stat = lstatSync(absolutePath);
+    // Git stores a symlink's content as its target path text, never the dereferenced
+    // File, so a link to a dir/binary/missing target still reads as its one-line path.
+    if (stat.isSymbolicLink()) {
+      return textContent(readlinkSync(absolutePath), options.full);
+    }
     if (!stat.isFile()) {
       return { kind: "binary" };
     }

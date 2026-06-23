@@ -7,7 +7,7 @@ import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { kindLetter } from "../ui-helpers";
 import { lerpHex } from "../utils/color";
-import { fileIcon, folderIcon } from "../utils/file-icon";
+import { fileIcon, folderIcon, symlinkIcon } from "../utils/file-icon";
 import { truncate, truncateName } from "../utils/text";
 
 // Fine-grained reactivity replaces React.memo: only the rows whose focus,
@@ -149,7 +149,9 @@ export function TreeRow(props: { row: FileTreeRow }) {
           <text fg={theme.colors.text.muted}>{indent}</text>
           {state.iconsEnabled() ? (
             <box width={2} overflow="hidden">
-              <text fg={theme.colors.text.muted}>{fileIcon(node.name)}</text>
+              <text fg={theme.colors.text.muted}>
+                {node.symlink ? symlinkIcon() : fileIcon(node.name)}
+              </text>
             </box>
           ) : null}
         </box>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { fileIcon, folderIcon } from "../src/utils/file-icon";
+import { fileIcon, folderIcon, symlinkIcon } from "../src/utils/file-icon";
 
 describe("fileIcon", () => {
   test("matches by extension", () => {
@@ -57,5 +57,12 @@ describe("folderIcon", () => {
     expect(folderIcon(true)).toBe("\u{f07c}");
     expect(folderIcon(false)).toBe("\u{f07b}");
     expect(folderIcon(true)).not.toBe(folderIcon(false));
+  });
+});
+
+describe("symlinkIcon", () => {
+  test("is the symlink glyph, independent of the target name", () => {
+    expect(symlinkIcon()).toBe("\u{f481}");
+    expect(symlinkIcon()).not.toBe(fileIcon("link.ts"));
   });
 });

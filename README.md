@@ -67,9 +67,11 @@ sideye --wrap     # wrap long lines in the viewer instead of scrolling them hori
 ```
 
 The tree shows a file-type icon next to each file and a folder glyph for each
-directory. These are [Nerd Font](https://www.nerdfonts.com/) glyphs and only
-render with a Nerd Font selected in your terminal; without one they appear as
-empty boxes, so pass `--no-icons` to fall back to a plain tree.
+directory; symlinks get a distinct symlink icon and show their target path as
+content (the same thing git stores), not the file they point at. These are
+[Nerd Font](https://www.nerdfonts.com/) glyphs and only render with a Nerd Font
+selected in your terminal; without one they appear as empty boxes, so pass
+`--no-icons` to fall back to a plain tree.
 
 ## Features
 

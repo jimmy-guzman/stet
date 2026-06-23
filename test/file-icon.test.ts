@@ -9,10 +9,32 @@ describe("fileIcon", () => {
     expect(fileIcon("readme.css")).toBe("\u{e749}");
   });
 
+  test("treats .mts and .cts as TypeScript", () => {
+    expect(fileIcon("config.mts")).toBe("\u{e8ca}");
+    expect(fileIcon("config.cts")).toBe("\u{e8ca}");
+  });
+
+  test("shares one image glyph across image formats", () => {
+    expect(fileIcon("photo.jpeg")).toBe("\u{f1c5}");
+    expect(fileIcon("anim.gif")).toBe("\u{f1c5}");
+    expect(fileIcon("hero.webp")).toBe("\u{f1c5}");
+    expect(fileIcon("favicon.ico")).toBe("\u{f1c5}");
+  });
+
   test("prefers an exact filename over its extension", () => {
     // Package.json is a json file, but the stem entry beats the .json extension glyph.
     expect(fileIcon("package.json")).toBe("\u{e718}");
     expect(fileIcon("package.json")).not.toBe(fileIcon("generic.json"));
+    // Bunfig.toml gets the bun glyph, not the generic toml glyph.
+    expect(fileIcon("bunfig.toml")).toBe("\u{e76f}");
+    expect(fileIcon("bunfig.toml")).not.toBe(fileIcon("generic.toml"));
+  });
+
+  test("falls back to a config glyph for unmatched dotfiles", () => {
+    expect(fileIcon(".editorconfig")).toBe("\u{e615}");
+    expect(fileIcon(".npmrc")).toBe("\u{e615}");
+    // A recognized suffix still wins over the dotfile fallback.
+    expect(fileIcon(".prettierrc.json")).toBe("\u{eb0f}");
   });
 
   test("matches dotfiles by full name", () => {

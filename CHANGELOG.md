@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.5...sideye-v0.2.6) (2026-06-23)
+
+
+### Features
+
+* **viewer:** ✨ own the diff renderer on @pierre/diffs and Shiki ([#75](https://github.com/jimmy-guzman/sideye/issues/75)) ([96524b7](https://github.com/jimmy-guzman/sideye/commit/96524b7bed5ec7a0a646b460d4c86945cd3fe5fe))
+
 ## [0.2.5](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.4...sideye-v0.2.5) (2026-06-20)
 
 

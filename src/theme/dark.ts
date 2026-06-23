@@ -1,67 +1,71 @@
 import type { Theme } from "./tokens";
 
-// Shared hexes are intentionally repeated across tokens (e.g. the green in
-// Diff.addedSign / stage.staged / kind.added / success): each role may diverge
-// In another theme, so call sites must not assume they match
+// Catppuccin Mocha as the foundation (soft base, pastel discipline) with a Ghost in
+// The Shell lean: the cool Teal/Sky/Sapphire/Blue family leads the syntax field while
+// Pink stays at the forefront for sideye's identity (keyword, focus border, accent,
+// Recency). Shared hexes are intentionally repeated across tokens (e.g. Green in
+// Diff.addedSign / stage.staged / kind.added / success): each role may diverge in
+// Another theme, so call sites must not assume they match.
 export const darkTheme: Theme = {
-  accent: { primary: "#ff4fb8" },
-  // Focus border is a whole-pane perimeter, so a muted magenta still reads
-  // Unmistakably against the gray unfocused border without shouting; the small
-  // Active accents (input cursor, find prefix) keep the saturated accent.primary.
-  border: { focused: "#b86089", unfocused: "#27272a" },
+  accent: { primary: "#f5c2e7" },
+  // Focus border is a whole-pane perimeter painted in the Pink identity accent; the
+  // Small active accents (input cursor, find prefix) share accent.primary.
+  border: { focused: "#f5c2e7", unfocused: "#313244" },
   diff: {
-    addedBg: "#102a1c",
-    addedLineNumberBg: "#0d2117",
-    addedSign: "#5cc88f",
-    lineNumberFg: "#52525b",
-    removedBg: "#32131f",
-    removedLineNumberBg: "#260f18",
-    removedSign: "#e07089",
+    addedBg: "#253b2d",
+    addedLineNumberBg: "#2a4a2d",
+    addedSign: "#a6e3a1",
+    lineNumberFg: "#585b70",
+    removedBg: "#421b30",
+    removedLineNumberBg: "#581932",
+    removedSign: "#f38ba8",
   },
-  find: { matchBg: "#24304d" },
+  find: { matchBg: "#364d63" },
   kind: {
-    added: "#5cc88f",
-    deleted: "#e07089",
-    modified: "#e0b34f",
-    renamed: "#b48fd6",
-    untracked: "#5cc88f",
+    added: "#a6e3a1",
+    deleted: "#f38ba8",
+    modified: "#f9e2af",
+    renamed: "#cba6f7",
+    untracked: "#a6e3a1",
   },
-  recency: { aged: "#6a4a5b", fresh: "#d96fa6" },
-  scrollbar: { thumb: "#3f3f46", track: "#09090b" },
+  recency: { aged: "#6c7086", fresh: "#f5c2e7" },
+  scrollbar: { thumb: "#585b70", track: "#181825" },
   severity: {
-    error: "#ff5c8a",
-    errorGutterBg: "#52141f",
-    info: "#6aa9ff",
-    infoGutterBg: "#16263f",
-    warning: "#fbbf24",
-    warningGutterBg: "#4a3a10",
+    error: "#f38ba8",
+    errorGutterBg: "#5a3d50",
+    info: "#89dceb",
+    infoGutterBg: "#3a4f5f",
+    warning: "#f9e2af",
+    warningGutterBg: "#575150",
   },
   stage: {
-    mixed: "#d98c54",
-    staged: "#5cc88f",
-    unstaged: "#e0b34f",
-    untracked: "#a1a1aa",
+    mixed: "#fab387",
+    staged: "#a6e3a1",
+    unstaged: "#f9e2af",
+    untracked: "#9399b2",
   },
-  success: "#5cc88f",
-  surface: { base: "#09090b", cursor: "#3a1530", panel: "#111113" },
+  success: "#a6e3a1",
+  surface: { base: "#1e1e2e", cursor: "#45475a", panel: "#181825" },
   syntax: {
-    comment: "#71717a",
-    function: "#82c4d4",
-    keyword: "#a78bfa",
-    member: "#9fbfe0",
-    number: "#e0b34f",
-    operator: "#d3a6c4",
-    punctuation: "#a1a1aa",
-    string: "#9ed1ac",
-    tag: "#dca6ad",
-    type: "#d4a8d8",
+    comment: "#7f849c",
+    function: "#74c7ec",
+    keyword: "#f5c2e7",
+    keywordControl: "#fab387",
+    keywordImport: "#cba6f7",
+    member: "#89b4fa",
+    number: "#f9e2af",
+    operator: "#89dceb",
+    punctuation: "#9399b2",
+    string: "#a6e3a1",
+    tag: "#b4befe",
+    type: "#94e2d5",
   },
   text: {
-    faint: "#52525b",
-    muted: "#71717a",
-    primary: "#e4e4e7",
-    secondary: "#a1a1aa",
-    selected: "#ffffff",
-    strong: "#d4d4d8",
+    faint: "#6c7086",
+    muted: "#7f849c",
+    primary: "#cdd6f4",
+    secondary: "#a6adc8",
+    selected: "#cdd6f4",
+    strong: "#bac2de",
   },
 };

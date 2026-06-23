@@ -33,6 +33,8 @@ export interface Theme {
   syntax: {
     comment: string;
     keyword: string;
+    keywordControl: string;
+    keywordImport: string;
     operator: string;
     string: string;
     number: string;

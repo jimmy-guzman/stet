@@ -14,6 +14,8 @@ export function shikiTheme(theme: Theme, type: "dark" | "light"): ThemeRegistrat
     comment,
     function: fn,
     keyword,
+    keywordControl,
+    keywordImport,
     member,
     number,
     operator,
@@ -32,6 +34,23 @@ export function shikiTheme(theme: Theme, type: "dark" | "light"): ThemeRegistrat
       {
         scope: ["keyword", "storage", "storage.type", "storage.modifier", "keyword.control"],
         settings: { fontStyle: "bold", foreground: keyword },
+      },
+      // More specific than the broad keyword rule above, so TextMate matching picks
+      // These: module keywords (import/export/from/default) and the control-flow
+      // Family (async via storage.modifier.async; await/return/throw/yield/break via
+      // Keyword.control.flow, which the grammar does not split per-word).
+      {
+        scope: [
+          "keyword.control.import",
+          "keyword.control.export",
+          "keyword.control.from",
+          "keyword.control.default",
+        ],
+        settings: { fontStyle: "bold", foreground: keywordImport },
+      },
+      {
+        scope: ["keyword.control.flow", "storage.modifier.async"],
+        settings: { fontStyle: "bold", foreground: keywordControl },
       },
       {
         scope: ["keyword.operator", "punctuation.accessor", "operator"],

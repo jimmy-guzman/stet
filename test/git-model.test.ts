@@ -284,6 +284,28 @@ describe("loadModel in a fixture repo", () => {
     }
   });
 
+  test("re-resolves an untracked file's symlink flag when its type flips", async () => {
+    const repoRoot = createFixtureRepo("sideye-git-symlink-flip-", { "a.ts": "const a = 1\n" });
+    try {
+      // Same path and identical git output both times, so only the on-disk type
+      // Changes: the repo-file cache must not mask the flip behind a stale flag.
+      writeFileSync(join(repoRoot, "link"), "plain\n");
+      const before = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+      expect(before.repoFiles.find((repoFile) => repoFile.path === "link")).toMatchObject({
+        symlink: false,
+      });
+
+      rmSync(join(repoRoot, "link"));
+      symlinkSync("a.ts", join(repoRoot, "link"));
+      const after = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+      expect(after.repoFiles.find((repoFile) => repoFile.path === "link")).toMatchObject({
+        symlink: true,
+      });
+    } finally {
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
   test("keeps non-ascii filenames literal end to end", async () => {
     const repoRoot = createFixtureRepo("sideye-git-unicode-", { "src/café.ts": "const a = 1\n" });
     try {

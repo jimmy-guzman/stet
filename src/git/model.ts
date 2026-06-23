@@ -155,7 +155,6 @@ export function assembleModel(
   numstatOutput: string,
   porcelainOutput: string,
 ): GitModel {
-  const repoFilesKey = repoFilesKeyOf(trackedOutput, untrackedOutput);
   return {
     ...assembleChanged(
       repoRoot,
@@ -165,8 +164,7 @@ export function assembleModel(
       numstatOutput,
       porcelainOutput,
     ),
-    repoFiles: parseRepoFiles(repoRoot, trackedOutput, untrackedOutput, repoFilesKey),
-    repoFilesKey,
+    ...parseRepoFiles(repoRoot, trackedOutput, untrackedOutput),
     repoRoot,
   };
 }
@@ -345,44 +343,50 @@ function parseTrackedStage(output: string) {
     });
 }
 
-// Key off mode+path, never the blob sha: a content edit must not churn the repo-file
-// List (and force a full tree rebuild), only a changed file set or symlink-ness does.
-export function repoFilesKeyOf(trackedStageOutput: string, untrackedOutput: string) {
-  const tracked = parseTrackedStage(trackedStageOutput)
-    .map((entry) => `${entry.symlink ? SYMLINK_MODE : ""}${entry.path}`)
-    .join("\0");
-  return `${tracked}\x01${untrackedOutput}`;
-}
-
 export function parseRepoFiles(
   repoRoot: string,
   trackedStageOutput: string,
   untrackedOutput: string,
-  key: string,
-): RepoFile[] {
-  if (repoFilesCache?.key === key) {
-    return repoFilesCache.repoFiles;
+): Pick<GitModel, "repoFiles" | "repoFilesKey"> {
+  const tracked = parseTrackedStage(trackedStageOutput);
+  const untracked = untrackedOutput
+    .split("\0")
+    .filter((path) => path !== "")
+    .map((path) => ({ path, symlink: isSymlink(repoRoot, path) }));
+
+  // Key off symlink-ness + path, never the blob sha: a content edit must not churn
+  // The repo-file list (and force a full tree rebuild), only a changed file set or a
+  // Type flip does. The NUL between flag and path keeps a file named like the flag
+  // Unambiguous, and the repoRoot prevents two worktrees from sharing a cache slot.
+  const repoFilesKey = [
+    repoRoot,
+    ...tracked.map((entry) => `t${entry.symlink ? "1" : "0"}\0${entry.path}`),
+    ...untracked.map((entry) => `u${entry.symlink ? "1" : "0"}\0${entry.path}`),
+  ].join("\x01");
+
+  if (repoFilesCache?.key === repoFilesKey) {
+    return { repoFiles: repoFilesCache.repoFiles, repoFilesKey };
   }
 
   const seen = new Set<string>();
   const repoFiles: RepoFile[] = [];
 
-  for (const { path, symlink } of parseTrackedStage(trackedStageOutput)) {
+  for (const { path, symlink } of tracked) {
     if (!seen.has(path)) {
       seen.add(path);
       repoFiles.push({ path, symlink, tracked: true });
     }
   }
 
-  for (const path of untrackedOutput.split("\0")) {
-    if (path !== "" && !seen.has(path)) {
+  for (const { path, symlink } of untracked) {
+    if (!seen.has(path)) {
       seen.add(path);
-      repoFiles.push({ path, symlink: isSymlink(repoRoot, path), tracked: false });
+      repoFiles.push({ path, symlink, tracked: false });
     }
   }
 
-  repoFilesCache = { key, repoFiles };
-  return repoFiles;
+  repoFilesCache = { key: repoFilesKey, repoFiles };
+  return { repoFiles, repoFilesKey };
 }
 
 // Untracked files carry no git mode, so the worktree is the only source; the set is

@@ -11,7 +11,6 @@ import {
   numstatArgs,
   parseRepoFiles,
   parseWorktreeList,
-  repoFilesKeyOf,
   untrackedDiffArgs,
   type ChangedFile,
   type GitModel,
@@ -152,13 +151,9 @@ export const GitLive = Layer.effect(
           { concurrency: "unbounded" },
         ).pipe(
           retryTransient,
-          Effect.map(([tracked, untracked]) => {
-            const repoFilesKey = repoFilesKeyOf(tracked.stdout, untracked.stdout);
-            return {
-              repoFiles: parseRepoFiles(repoRoot, tracked.stdout, untracked.stdout, repoFilesKey),
-              repoFilesKey,
-            };
-          }),
+          Effect.map(([tracked, untracked]) =>
+            parseRepoFiles(repoRoot, tracked.stdout, untracked.stdout),
+          ),
           Effect.mapError(toGitError),
         ),
       // Git grep exits 1 when nothing matches, which is a normal empty result.

@@ -76,6 +76,7 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setScope(scope);
     state.setIconsEnabled(true);
     state.setChangesOnly(false);
+    state.setNotice(undefined);
     state.setGitModel(model);
     state.setRepoRoot(model.repoRoot);
     state.setLastChange(Date.now());

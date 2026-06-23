@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { createCliRenderer } from "@opentui/core";
 import { render } from "@opentui/solid";
 import { Effect } from "effect";
 import { batch } from "solid-js";
@@ -14,6 +15,7 @@ import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
 import { Process } from "./process";
 import { runtime } from "./runtime";
 import { state } from "./state";
+import { setThemeMode } from "./theme/mode";
 
 try {
   const options = parseArgs(Bun.argv.slice(2));
@@ -59,6 +61,14 @@ try {
     return { changed, mainWorktreePath, repoRoot };
   });
 
+  // Create the renderer up front and detect the terminal's dark/light appearance
+  // Before the first runtime use (which warms the diff highlighter), so the whole
+  // App themes to match. Detection is a bounded terminal query; a terminal that
+  // Does not answer within the timeout falls back to dark. The same renderer is
+  // Reused for the first paint below, so detection costs no extra frame.
+  const renderer = await createCliRenderer({ exitOnCtrlC: false });
+  setThemeMode((await renderer.waitForThemeMode(100)) ?? "dark");
+
   const { changed, mainWorktreePath, repoRoot } = await runtime.runPromise(startup);
 
   // oxlint-disable-next-line no-magic-numbers -- one-time startup model assembly
@@ -88,7 +98,7 @@ try {
   // OpenTUI's exitOnCtrlC only calls renderer.destroy(), never process.exit, so
   // The background git poll keeps the event loop alive and the process lags
   // Before exiting. Route ctrl-c through our own quit() (in the keymap) instead.
-  void render(() => <App />, { exitOnCtrlC: false });
+  void render(() => <App />, renderer);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

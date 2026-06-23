@@ -17,7 +17,7 @@ export function HeaderBar() {
       backgroundColor={theme.colors.surface.panel}
     >
       <box flexDirection="row">
-        <text fg={theme.colors.accent.primary}>sideye</text>
+        <text fg={theme.colors.text.strong}>sideye</text>
         <text fg={theme.colors.text.faint}>@{packageJson.version}</text>
       </box>
       <text fg={theme.colors.text.secondary}>

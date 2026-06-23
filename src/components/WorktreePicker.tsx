@@ -29,7 +29,7 @@ export function WorktreePicker() {
       zIndex={100}
     >
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.accent.primary}>worktrees</text>
+        <text fg={theme.colors.text.strong}>worktrees</text>
       </box>
       <scrollbox
         ref={(el) => (worktreeRef = el)}
@@ -71,9 +71,7 @@ export function WorktreePicker() {
                 const nameFg = () =>
                   index === state.worktreeIndex()
                     ? theme.colors.text.selected
-                    : current()
-                      ? theme.colors.accent.primary
-                      : theme.colors.text.strong;
+                    : theme.colors.text.strong;
                 return (
                   <box
                     id={`worktree-${index}`}

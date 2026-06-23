@@ -1,7 +1,6 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { createEffect, Index, Show } from "solid-js";
 
-import { recencyLevel } from "../git/activity";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { kindLetter } from "../ui-helpers";
@@ -77,7 +76,6 @@ export function Palette() {
           <Index each={state.paletteResults()}>
             {(path, index) => {
               const changed = () => state.gitModel().changedByPath.get(path());
-              const recency = () => recencyLevel(state.recencyByPath().get(path()), state.now());
               const nameFg = () =>
                 index === state.paletteIndex()
                   ? theme.colors.text.selected
@@ -100,7 +98,7 @@ export function Palette() {
                 >
                   <box flexDirection="row">
                     <text fg={nameFg()}>{path()}</text>
-                    <RecencyDot level={recency()} />
+                    <RecencyDot at={state.recencyByPath().get(path())} />
                   </box>
                   {changed() === undefined ? null : (
                     <text fg={theme.colors.stage[changed()!.stage]}>

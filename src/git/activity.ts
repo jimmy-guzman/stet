@@ -50,3 +50,17 @@ export function recencyLevel(at: number | undefined, now: number): RecencyLevel 
 
   return now - at < FRESH_MS ? "fresh" : "recent";
 }
+
+/**
+ * Position of an activity within its decay window, 0 (just now) to 1 (about to Age out), or
+ * undefined once it has aged past RECENT_MS (no dot). Drives the Recency dot's continuous color
+ * ramp.
+ */
+export function recencyFraction(at: number | undefined, now: number) {
+  if (at === undefined) {
+    return undefined;
+  }
+
+  const elapsed = now - at;
+  return elapsed >= RECENT_MS ? undefined : Math.max(0, elapsed / RECENT_MS);
+}

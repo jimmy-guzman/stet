@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { batch } from "solid-js";
 
-import { nextScope, scopeLabel } from "./cli";
+import { nextScope } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { latestActivity } from "./git/activity";
 import type { Worktree } from "./git/model";
@@ -211,23 +211,23 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
 
       if (key.name === "s") {
         const current = state.scope();
-        const next = { ...current, kind: nextScope(current.kind) };
-        state.setScope(next);
-        state.setStatus(`scope: ${scopeLabel(next)}`);
+        // No transient acknowledgment: the scope is now persistently legible in
+        // The header and at the viewer title, so a status message would be noise.
+        state.setScope({ ...current, kind: nextScope(current.kind) });
         return;
       }
 
       if (key.name === "c") {
         const current = state.changesOnly();
         state.setChangesOnly(!current);
-        state.setStatus(current ? "showing all files" : "showing changes only");
+        state.notify(current ? "showing all files" : "showing changes only");
         return;
       }
 
       if (key.name === "z") {
         const wrapping = state.overflow() === "wrap";
         state.setOverflow(wrapping ? "scroll" : "wrap");
-        state.setStatus(wrapping ? "long lines: scroll" : "long lines: wrap");
+        state.notify(wrapping ? "long lines: scroll" : "long lines: wrap");
         return;
       }
 
@@ -266,7 +266,7 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
 
       if (key.name === "f" && selectedPath !== undefined) {
         state.setFullContentPaths(new Set(state.fullContentPaths()).add(selectedPath));
-        state.setStatus(`loaded full content for ${selectedPath}`);
+        state.notify(`loaded full content for ${selectedPath}`);
         return;
       }
 

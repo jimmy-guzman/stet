@@ -154,10 +154,25 @@ export function Viewer() {
                 state.diffView()?.fileContent,
               )}
             </text>
-            <text fg={theme.colors.text.muted}>
-              {state.diffView()?.showFileContent ? "file" : "diff"}
-              {state.cursorLineNumber() === undefined ? "" : ` · ln ${state.cursorLineNumber()}`}
-            </text>
+            <box flexDirection="row">
+              {/* Keep the active scope legible at the diff, so a staged/unstaged
+                  view is never misread as the whole change. */}
+              <Show when={state.scope().kind !== "all"}>
+                <text
+                  fg={
+                    state.scope().kind === "staged"
+                      ? theme.colors.stage.staged
+                      : theme.colors.stage.unstaged
+                  }
+                >
+                  {`${state.scope().kind} · `}
+                </text>
+              </Show>
+              <text fg={theme.colors.text.muted}>
+                {state.diffView()?.showFileContent ? "file" : "diff"}
+                {state.cursorLineNumber() === undefined ? "" : ` · ln ${state.cursorLineNumber()}`}
+              </text>
+            </box>
           </box>
         }
       >
@@ -189,17 +204,40 @@ export function Viewer() {
           <text fg={theme.colors.text.faint}>esc</text>
         </box>
       </Show>
+      {/* Nothing is selectable (an empty repository, or selection cleared):
+          author that void instead of a blank pane. A selected-but-not-yet-loaded
+          file keeps rendering the diff surface below, so a load never flashes
+          this; that is why the guard is selectedPath, not the async diffView. */}
       <Show
-        when={!isPlaceholder()}
+        when={state.selectedPath() !== undefined}
         fallback={
-          <box height={state.viewerHeight()} paddingLeft={1}>
-            <text fg={theme.colors.text.muted}>
-              {placeholderText(state.diffView()?.fileContent)}
+          <box
+            height={state.viewerHeight()}
+            flexDirection="column"
+            justifyContent="center"
+            alignItems="center"
+          >
+            <text fg={theme.colors.text.muted}>nothing to inspect</text>
+            <text fg={theme.colors.text.faint}>
+              {state.gitModel().repoFiles.length === 0
+                ? "this repository has no files yet"
+                : "select a file to inspect"}
             </text>
           </box>
         }
       >
-        <DiffView />
+        <Show
+          when={!isPlaceholder()}
+          fallback={
+            <box height={state.viewerHeight()} paddingLeft={1}>
+              <text fg={theme.colors.text.muted}>
+                {placeholderText(state.diffView()?.fileContent)}
+              </text>
+            </box>
+          }
+        >
+          <DiffView />
+        </Show>
       </Show>
     </box>
   );

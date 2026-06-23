@@ -46,7 +46,7 @@ export function HelpOverlay() {
       zIndex={100}
     >
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.accent.primary}>keys</text>
+        <text fg={theme.colors.text.strong}>keys</text>
       </box>
       <scrollbox
         width="100%"
@@ -70,7 +70,7 @@ export function HelpOverlay() {
               paddingRight={1}
               backgroundColor={theme.colors.surface.panel}
             >
-              <text fg={theme.colors.accent.primary}>{combo.padEnd(11)}</text>
+              <text fg={theme.colors.text.strong}>{combo.padEnd(11)}</text>
               <text fg={theme.colors.text.secondary}>{action}</text>
             </box>
           )}

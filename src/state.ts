@@ -212,6 +212,9 @@ function createState() {
   const [jumpTarget, setJumpTarget] = createSignal<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
   const [status, setStatus] = createSignal("");
+  // An ephemeral acknowledgment of a user action (copied, scope changed, …),
+  // Held for a fixed dwell so it outlives the keystroke that triggered it.
+  const [notice, setNotice] = createSignal<string | undefined>(undefined);
   const [activityLog, setActivityLog] = createSignal<ActivityLog>(emptyActivityLog);
   const [checksRunning, setChecksRunning] = createSignal(false);
   const [now, setNow] = createSignal(Date.now());
@@ -492,6 +495,14 @@ function createState() {
     return `${value.errors > 0 ? `✖${value.errors}` : ""}${value.warnings > 0 ? ` ⚠${value.warnings}` : ""}`.trim();
   });
   const statusRight = createMemo(() => {
+    const hints = "? keys · q quit";
+    const width = Math.max(10, Math.min(terminalWidth() - 50, terminalWidth() - hints.length - 4));
+    // A held acknowledgment wins over ambient status for its dwell, so the user
+    // Sees their action confirmed even as checks/activity churn underneath.
+    const held = notice();
+    if (held !== undefined) {
+      return truncate(held, width);
+    }
     const findings = cursorFindings();
     const latest = latestActivity(activityLog());
     const activityText =
@@ -499,14 +510,13 @@ function createState() {
         ? ""
         : `${Math.max(0, Math.round((now() - latest.at) / 1000))}s ago ${latest.path}`;
     const displayStatus = checksRunning() ? "running checks…" : status();
-    const hints = "? keys · q quit";
     return truncate(
       findings?.[0] !== undefined
         ? `${findings[0].checker}: ${findings[0].message}`
         : [activityText, truncated() ? `${displayStatus} · truncated; f for full` : displayStatus]
             .filter((part) => part !== "")
             .join(" · "),
-      Math.max(10, Math.min(terminalWidth() - 50, terminalWidth() - hints.length - 4)),
+      width,
     );
   });
 
@@ -592,11 +602,20 @@ function createState() {
     ),
   );
 
+  // Hold a user-action acknowledgment for a fixed dwell (~1.5s) so an ambient
+  // Status event or the next keystroke can't overwrite it before it's read.
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  function notify(text: string) {
+    setNotice(text);
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => setNotice(undefined), 1500);
+  }
+
   function copy(text: string) {
     runtime
       .runPromise(Clipboard.use((clipboard) => clipboard.copy(text)))
-      .then(() => setStatus(`copied ${text.split("\n")[0]}`))
-      .catch((error: unknown) => setStatus(error instanceof Error ? error.message : String(error)));
+      .then(() => notify(`copied ${text.split("\n")[0]}`))
+      .catch((error: unknown) => notify(error instanceof Error ? error.message : String(error)));
   }
 
   function loadWorktrees(root: string) {
@@ -834,6 +853,7 @@ function createState() {
     mainWorktreePath,
     moveFocus,
     navigableLines,
+    notify,
     now,
     nudgeSidebarWidth,
     overflow,
@@ -882,6 +902,7 @@ function createState() {
     setJumpTarget,
     setLastChange,
     setMainWorktreePath,
+    setNotice,
     setNow,
     setOverflow,
     setPaletteIndex,

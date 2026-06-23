@@ -92,7 +92,7 @@ export function SearchPanel() {
               <box width="100%" flexDirection="column">
                 <Show when={index() === 0 || results()[index() - 1]?.path !== match.path}>
                   <box paddingLeft={1} paddingRight={1}>
-                    <text fg={theme.colors.accent.primary}>{match.path}</text>
+                    <text fg={theme.colors.text.strong}>{match.path}</text>
                   </box>
                 </Show>
                 <box

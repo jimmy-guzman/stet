@@ -10,7 +10,9 @@ import {
 } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
 
-import { SIDEYE_SHIKI_THEME, SIDEYE_SHIKI_THEME_NAME } from "../theme/shiki";
+import { themeMode } from "../theme/mode";
+import { themeForMode } from "../theme/resolve";
+import { shikiTheme, SIDEYE_SHIKI_THEME_NAME } from "../theme/shiki";
 import { flattenLineSpans, type RenderSpan } from "./hast";
 import { buildDiffRows, navigableLinesFromRows, type DiffRow, type NavigableLine } from "./rows";
 
@@ -28,8 +30,12 @@ export interface RenderInput {
 
 // Syntax foreground comes from sideye's own palette, registered as a Shiki theme
 // Before the highlighter loads. Diff/cursor/find/gutter backgrounds are layered
-// Over it at render time.
-registerCustomTheme(SIDEYE_SHIKI_THEME_NAME, () => Promise.resolve(SIDEYE_SHIKI_THEME));
+// Over it at render time. The loader reads the active mode (theme/mode.ts) when
+// The highlighter first resolves the theme (at warm-up), which is after startup
+// Detection has applied it, so the diff highlights match the UI and the terminal.
+registerCustomTheme(SIDEYE_SHIKI_THEME_NAME, () =>
+  Promise.resolve(shikiTheme(themeForMode(themeMode()), themeMode())),
+);
 const THEME = SIDEYE_SHIKI_THEME_NAME;
 
 // Languages warmed into the shared highlighter at startup so the common cases

@@ -1,11 +1,12 @@
-import { createMemo } from "solid-js";
+import { createMemo, Show } from "solid-js";
 
 import { checkerSummary, directorySummary } from "../diagnostics/checker";
-import { recencyLevel, type RecencyLevel } from "../git/activity";
+import { recencyFraction } from "../git/activity";
 import type { DirectoryNode, FileTreeRow } from "../git/tree";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { kindLetter } from "../ui-helpers";
+import { lerpHex } from "../utils/color";
 import { fileIcon, folderIcon } from "../utils/file-icon";
 import { truncate, truncateName } from "../utils/text";
 
@@ -22,8 +23,8 @@ export function TreeRow(props: { row: FileTreeRow }) {
 
   if (node.type === "directory") {
     const isExpanded = () => state.expandedDirectories().has(node.id);
-    const recency = () =>
-      directoryRecency(node, state.expandedDirectories(), state.recencyByPath(), state.now());
+    const recencyAt = () =>
+      directoryRecencyAt(node, state.expandedDirectories(), state.recencyByPath());
     const summary = createMemo(() =>
       isExpanded() ? null : directorySummary(node.path, state.checkerState()),
     );
@@ -69,7 +70,7 @@ export function TreeRow(props: { row: FileTreeRow }) {
             </box>
           </box>
           <text fg={nameFg()}>{truncateName(`${node.name}/`, maxNameLen())}</text>
-          <RecencyDot level={recency()} />
+          <RecencyDot at={recencyAt()} />
         </box>
         <box flexDirection="row">
           {summary()?.failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
@@ -115,7 +116,6 @@ export function TreeRow(props: { row: FileTreeRow }) {
   }
 
   const changed = node.changed;
-  const recency = () => recencyLevel(state.recencyByPath().get(node.path), state.now());
   const summary = createMemo(() => checkerSummary(node.path, state.checkerState()));
   const selected = () => state.selectedPath() === node.path;
   const nameFg = () =>
@@ -154,7 +154,7 @@ export function TreeRow(props: { row: FileTreeRow }) {
           ) : null}
         </box>
         <text fg={nameFg()}>{truncate(node.name, maxNameLen())}</text>
-        <RecencyDot level={recency()} />
+        <RecencyDot at={state.recencyByPath().get(node.path)} />
       </box>
       <box flexDirection="row">
         {summary().failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
@@ -199,42 +199,40 @@ export function TreeRow(props: { row: FileTreeRow }) {
   );
 }
 
-export function RecencyDot(props: { level: RecencyLevel }) {
+// The dot fades from recency.fresh toward recency.aged across an activity's
+// Lifetime, then disappears once it ages out. Reads state.now() (the 1s tick
+// That already re-renders these dots), so the ramp is free of new reactivity.
+export function RecencyDot(props: { at: number | undefined }) {
   const theme = useTheme();
-  return props.level === "none" ? null : (
-    <text fg={props.level === "fresh" ? theme.colors.accent.primary : theme.colors.accent.dim}>
-      {" "}
-      ●
-    </text>
-  );
+  // `recencyFraction` is 0 at its freshest, so the dot must key on the resolved
+  // Color (string | undefined), never on the fraction's truthiness.
+  const color = () => {
+    const fraction = recencyFraction(props.at, state.now());
+    return fraction === undefined
+      ? undefined
+      : lerpHex(theme.colors.recency.fresh, theme.colors.recency.aged, fraction);
+  };
+  return <Show when={color()}>{(fg) => <text fg={fg()}> ●</text>}</Show>;
 }
 
-function directoryRecency(
+// The directory dot tracks its most recently changed descendant; the dot itself
+// Decides freshness from the timestamp, so an aged-out value simply yields no dot.
+function directoryRecencyAt(
   node: DirectoryNode,
   expandedDirectories: Set<string>,
   recencyByPath: Map<string, number>,
-  now: number,
-): RecencyLevel {
+): number | undefined {
   if (expandedDirectories.has(node.id)) {
-    return "none";
+    return undefined;
   }
 
   const prefix = `${node.path}/`;
-  let level: RecencyLevel = "none";
+  let latest: number | undefined;
   for (const [path, at] of recencyByPath) {
-    if (!path.startsWith(prefix)) {
-      continue;
-    }
-
-    const pathLevel = recencyLevel(at, now);
-    if (pathLevel === "fresh") {
-      return "fresh";
-    }
-
-    if (pathLevel === "recent") {
-      level = "recent";
+    if (path.startsWith(prefix) && (latest === undefined || at > latest)) {
+      latest = at;
     }
   }
 
-  return level;
+  return latest;
 }

@@ -3,7 +3,7 @@ import type { ChangeKind, StageState } from "../git/model";
 // Every value is a plain hex string so a user-supplied theme (e.g. parsed from
 // JSON) can satisfy this type directly; RGBA precomputation happens in resolve.ts
 export interface Theme {
-  accent: { dim: string; primary: string };
+  accent: { primary: string };
   border: { focused: string; unfocused: string };
   diff: {
     addedBg: string;
@@ -16,6 +16,8 @@ export interface Theme {
   };
   find: { matchBg: string };
   kind: Record<ChangeKind, string>;
+  // Recency dot ramps fresh -> aged across an activity's lifetime, then vanishes.
+  recency: { fresh: string; aged: string };
   scrollbar: { thumb: string; track: string };
   severity: {
     error: string;

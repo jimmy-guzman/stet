@@ -5,6 +5,7 @@ import {
   FRESH_MS,
   lastChangedAt,
   latestActivity,
+  recencyFraction,
   recencyLevel,
   recordActivity,
   RECENT_MS,
@@ -63,5 +64,15 @@ describe("recencyLevel", () => {
     expect(recencyLevel(1000, 1000 + RECENT_MS - 1)).toBe("recent");
     expect(recencyLevel(1000, 1000 + RECENT_MS)).toBe("none");
     expect(recencyLevel(undefined, 1000)).toBe("none");
+  });
+});
+
+describe("recencyFraction", () => {
+  test("runs 0 at the change to just under 1, then undefined once aged out", () => {
+    expect(recencyFraction(1000, 1000)).toBe(0);
+    expect(recencyFraction(1000, 1000 + RECENT_MS / 2)).toBeCloseTo(0.5);
+    expect(recencyFraction(1000, 1000 + RECENT_MS - 1)).toBeCloseTo((RECENT_MS - 1) / RECENT_MS);
+    expect(recencyFraction(1000, 1000 + RECENT_MS)).toBeUndefined();
+    expect(recencyFraction(undefined, 1000)).toBeUndefined();
   });
 });

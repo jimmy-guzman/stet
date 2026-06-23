@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.7](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.6...sideye-v0.2.7) (2026-06-23)
+
+
+### Features
+
+* **diff:** ✨ highlight any Shiki language on demand ([#77](https://github.com/jimmy-guzman/sideye/issues/77)) ([4bc180f](https://github.com/jimmy-guzman/sideye/commit/4bc180fc131f4733c96802db11d39a2ac7c9a508))
+* **ui:** ✨ quiet the visual language & follow the terminal theme ([#79](https://github.com/jimmy-guzman/sideye/issues/79)) ([667b604](https://github.com/jimmy-guzman/sideye/commit/667b604b76f185a6c2210219f6aaf91b903554eb))
+
 ## [0.2.6](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.5...sideye-v0.2.6) (2026-06-23)
 
 

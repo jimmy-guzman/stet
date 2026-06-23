@@ -62,12 +62,14 @@ describe("file-type icons", () => {
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-    const frame = await settleUntil("tree", (current) => current.includes("shortcut.ts"));
-    const linkLine = frame.split("\n").find((line) => line.includes("shortcut.ts")) ?? "";
+    try {
+      const frame = await settleUntil("tree", (current) => current.includes("shortcut.ts"));
+      const linkLine = frame.split("\n").find((line) => line.includes("shortcut.ts")) ?? "";
 
-    expect(linkLine).toContain(SYMLINK);
-
-    renderer.destroy();
+      expect(linkLine).toContain(SYMLINK);
+    } finally {
+      renderer.destroy();
+    }
   });
 
   test("a truncated row stays one line and keeps the icon column stable", async () => {

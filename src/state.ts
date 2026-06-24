@@ -634,10 +634,6 @@ function createState() {
       });
   }
 
-  function loadModel(input: { repoRoot: string; scope: DiffScope }) {
-    return runtime.runPromise(Git.use((git) => git.loadModel(input.repoRoot, input.scope)));
-  }
-
   // A monotonic token guards the async last-commit resolution: a newer pick (of
   // Any kind) bumps it, so a late parentRef result can't overwrite the newer scope.
   let scopeSelection = 0;
@@ -702,7 +698,7 @@ function createState() {
   // Without a restart. Lives in state, not App, so the keymap, the picker's
   // Mouse click, and App's deleted-worktree recovery all reach the one action
   // Directly. It only writes state and reloads the model (no `renderer`), so it
-  // Belongs here next to `loadModel`/`runChecks`; `reason` overrides the status.
+  // Belongs here next to `runChecks`; `reason` overrides the status.
   let switchRequest = 0;
   async function switchWorktree(worktree: Worktree, reason?: string) {
     setWorktreeOpen(false);
@@ -713,7 +709,7 @@ function createState() {
       setStatus(`worktree missing: ${worktree.path}`);
       return;
     }
-    // `loadModel` is async, so a second switch started before the first resolves
+    // The load is async, so a second switch started before the first resolves
     // Could land out of order and overwrite the newer worktree. Stamp each call
     // And bail if a later one superseded it, mirroring the diff/search pipelines'
     // Restart-on-rekey guard, so only the latest request commits or reports.
@@ -723,10 +719,22 @@ function createState() {
       const { sessionBase: nextSessionBase, scope: nextScope } = await rebaselineScope(
         worktree.path,
       );
-      const fresh = await loadModel({ repoRoot: worktree.path, scope: nextScope });
+      // Load only the changed set (the same shape startup seeds, repoFiles empty),
+      // So the tree repoints the instant the cheap diff commands resolve instead of
+      // Blocking on `git ls-files --stage` over the whole worktree. The repoFilesPoll
+      // In the refresh effect re-keys on the new repoRoot and fills the full tree.
+      const changed = await runtime.runPromise(
+        Git.use((git) => git.changedFiles(worktree.path, nextScope)),
+      );
       if (request !== switchRequest) {
         return;
       }
+      const fresh: GitModel = {
+        repoRoot: worktree.path,
+        ...changed,
+        repoFiles: [],
+        repoFilesKey: "",
+      };
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
       const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path));
       batch(() => {
@@ -981,7 +989,6 @@ function createState() {
     iconsEnabled,
     jumpTarget,
     lineMap,
-    loadModel,
     loadWorktrees,
     mainWorktreePath,
     moveFocus,

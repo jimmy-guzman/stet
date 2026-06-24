@@ -213,7 +213,7 @@ export function DiffView() {
   renderer.setFrameCallback(syncScroll);
   onCleanup(() => renderer.removeFrameCallback(syncScroll));
 
-  // Wheel: left/right scroll long lines horizontally (shared across all lines —
+  // Wheel: left/right scroll long lines horizontally (shared across all lines, so
   // The whole view shifts); up/down drive scrollTop directly (the reconciler above
   // Projects it onto the scrollbox). Both axes own the scroll and zero the native
   // Delta so the scrollbox never also acts on it: scrollTop must stay the single

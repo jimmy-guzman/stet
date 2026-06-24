@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.9](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.8...sideye-v0.2.9) (2026-06-24)
+
+
+### Features
+
+* **problems:** ✨ group diagnostics by file w/ aligned columns ([#92](https://github.com/jimmy-guzman/sideye/issues/92)) ([ed927ae](https://github.com/jimmy-guzman/sideye/commit/ed927ae848d9f5559d676ffd811fa1d5acb02685))
+* **theme:** ✨ new palette, fix diff current-line/diagnostic cues ([#87](https://github.com/jimmy-guzman/sideye/issues/87)) ([73e29de](https://github.com/jimmy-guzman/sideye/commit/73e29dec4d1c27ba09fa6a833f3f3e79e02eac84))
+* **tree:** ✨ highlight Gradle files and add JVM file-type icons ([#91](https://github.com/jimmy-guzman/sideye/issues/91)) ([1331cc8](https://github.com/jimmy-guzman/sideye/commit/1331cc8daa5185f0fd4b980e8234d87b9cca5658))
+
+
+### Bug Fixes
+
+* **viewer:** 🐛 follow the cursor with a scroll-off margin ([#89](https://github.com/jimmy-guzman/sideye/issues/89)) ([e8e0000](https://github.com/jimmy-guzman/sideye/commit/e8e000082d2e00a75fce6416966621babca83628))
+
 ## [0.2.8](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.7...sideye-v0.2.8) (2026-06-24)
 
 

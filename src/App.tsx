@@ -13,9 +13,7 @@ import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { Viewer } from "./components/Viewer";
 import { WorktreePicker } from "./components/WorktreePicker";
-import { emptyActivityLog } from "./git/activity";
 import type { Worktree } from "./git/model";
-import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
 import { createKeyHandler } from "./keymap";
 import { state } from "./state";
 import { useTheme } from "./theme/context";
@@ -55,44 +53,6 @@ export function App() {
     process.exit(0);
   }
 
-  async function switchWorktree(worktree: Worktree, reason?: string) {
-    state.setWorktreeOpen(false);
-    if (worktree.path === state.gitModel().repoRoot) {
-      return;
-    }
-    if (!existsSync(worktree.path)) {
-      state.setStatus(`worktree missing: ${worktree.path}`);
-      return;
-    }
-
-    try {
-      const fresh = await state.loadModel({ repoRoot: worktree.path, scope: state.scope() });
-      state.setCurrentWorktreeDeleted(false);
-      const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
-      state.setLastChange(Date.now());
-      state.setRepoRoot(fresh.repoRoot);
-      state.setGitModel(fresh);
-      state.setSelectedPath(selected);
-      state.setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
-      const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path));
-      const nextExpanded =
-        selected === undefined ? expanded : expandAncestorsForPath(expanded, selected);
-      state.setExpandedDirectories(nextExpanded);
-      state.setFullContentPaths(new Set<string>());
-      state.setFileView(false);
-      state.setJumpTarget(undefined);
-      state.setProblemIndex(0);
-      state.setActivityLog(emptyActivityLog);
-      state.setFocusedPane("tree");
-      state.setStatus(reason ?? `worktree: ${worktreeLabel(worktree)}`);
-      void state.runChecks(fresh);
-    } catch (error) {
-      state.setStatus(
-        error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error),
-      );
-    }
-  }
-
   // The heartbeat flags a deleted current worktree; recover by switching to the
   // Main worktree (the parent repo), or exit cleanly when it too is gone.
   createEffect(() => {
@@ -119,14 +79,14 @@ export function App() {
         path: main,
         prunable: false,
       };
-      void switchWorktree(target, `worktree deleted, switched to ${label}`);
+      void state.switchWorktree(target, `worktree deleted, switched to ${label}`);
       return;
     }
     // Nothing recoverable: the repository itself is gone.
     quit("sideye: worktree deleted, nothing left to inspect");
   });
 
-  useKeyboard(createKeyHandler({ quit, switchWorktree }));
+  useKeyboard(createKeyHandler({ quit }));
 
   return (
     <box

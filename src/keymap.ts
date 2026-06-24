@@ -5,15 +5,20 @@ import { nextScope } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { isNavigableProblemItem } from "./diagnostics/problems";
 import { latestActivity } from "./git/activity";
-import type { Worktree } from "./git/model";
 import { lineReference } from "./git/patch";
 import { firstFileInNode } from "./git/tree";
 import { state } from "./state";
 import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
 
-interface KeyHandlerCtx {
+/**
+ * The injection seam for the keymap's irreversible host side-effects (today just `quit`, which
+ * tears down the renderer and exits the process). Injected rather than reached through `state`
+ * because it needs the `renderer` (a render-tree resource that must not leak into the global
+ * `state` singleton) and because injection keeps the otherwise-pure keymap testable without a real
+ * renderer or `process.exit`. Data actions never belong here; they live in `state`.
+ */
+interface HostEffects {
   quit: () => void;
-  switchWorktree: (worktree: Worktree) => void;
 }
 
 // One handler routes every key through the modal-precedence chain
@@ -21,7 +26,7 @@ interface KeyHandlerCtx {
 // Returns is load-bearing: an open overlay must swallow keys before any later
 // Branch can act on them. Reads use the live signal values (not a render
 // Snapshot); writes are wrapped in one `batch` so a keypress is one update.
-export function createKeyHandler(ctx: KeyHandlerCtx) {
+export function createKeyHandler(host: HostEffects) {
   const cycleFind = (direction: number) => {
     const matches = state.findMatches();
     if (matches.length === 0) {
@@ -38,7 +43,7 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
   return (key: KeyEvent) => {
     batch(() => {
       if (key.ctrl && key.name === "c") {
-        ctx.quit();
+        host.quit();
         return;
       }
 
@@ -61,7 +66,7 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
         } else if (key.name === "return") {
           const worktree = worktrees?.[state.worktreeIndex()];
           if (worktree !== undefined) {
-            ctx.switchWorktree(worktree);
+            void state.switchWorktree(worktree);
           }
         }
         return;
@@ -149,7 +154,7 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
       }
 
       if (key.name === "q") {
-        ctx.quit();
+        host.quit();
         return;
       }
 
@@ -160,7 +165,7 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
             state.setFocusedPane("tree");
           }
         } else {
-          ctx.quit();
+          host.quit();
         }
         return;
       }

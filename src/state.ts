@@ -33,8 +33,14 @@ import {
 import { mergeChanged, type ChangedFile, type GitModel, type Worktree } from "./git/model";
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
-import { buildFileTree, expandAncestorsForPath, flattenTree } from "./git/tree";
+import {
+  buildFileTree,
+  defaultExpandedDirectories,
+  expandAncestorsForPath,
+  flattenTree,
+} from "./git/tree";
 import { runtime } from "./runtime";
+import { worktreeLabel } from "./ui-helpers";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
@@ -620,6 +626,60 @@ function createState() {
     return runtime.runPromise(Git.use((git) => git.loadModel(input.repoRoot, input.scope)));
   }
 
+  // Repoint the whole app (tree, diffs, polling, checks) at another worktree
+  // Without a restart. Lives in state, not App, so the keymap, the picker's
+  // Mouse click, and App's deleted-worktree recovery all reach the one action
+  // Directly. It only writes state and reloads the model (no `renderer`), so it
+  // Belongs here next to `loadModel`/`runChecks`; `reason` overrides the status.
+  let switchRequest = 0;
+  async function switchWorktree(worktree: Worktree, reason?: string) {
+    setWorktreeOpen(false);
+    if (worktree.path === gitModel().repoRoot) {
+      return;
+    }
+    if (!existsSync(worktree.path)) {
+      setStatus(`worktree missing: ${worktree.path}`);
+      return;
+    }
+    // `loadModel` is async, so a second switch started before the first resolves
+    // Could land out of order and overwrite the newer worktree. Stamp each call
+    // And bail if a later one superseded it, mirroring the diff/search pipelines'
+    // Restart-on-rekey guard, so only the latest request commits or reports.
+    const request = ++switchRequest;
+    try {
+      const fresh = await loadModel({ repoRoot: worktree.path, scope: scope() });
+      if (request !== switchRequest) {
+        return;
+      }
+      const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
+      const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path));
+      batch(() => {
+        setCurrentWorktreeDeleted(false);
+        setLastChange(Date.now());
+        setRepoRoot(fresh.repoRoot);
+        setGitModel(fresh);
+        setSelectedPath(selected);
+        setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
+        setExpandedDirectories(
+          selected === undefined ? expanded : expandAncestorsForPath(expanded, selected),
+        );
+        setFullContentPaths(new Set<string>());
+        setFileView(false);
+        setJumpTarget(undefined);
+        setProblemIndex(0);
+        setActivityLog(emptyActivityLog);
+        setFocusedPane("tree");
+        setStatus(reason ?? `worktree: ${worktreeLabel(worktree)}`);
+      });
+      void runChecks(fresh);
+    } catch (error) {
+      if (request !== switchRequest) {
+        return;
+      }
+      setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error));
+    }
+  }
+
   // --- background fibers (re-key/restart reactively, interrupt the prior fiber
   // On cleanup so an in-flight git is killed) ---
 
@@ -905,6 +965,7 @@ function createState() {
     sidebarWidth,
     status,
     statusRight,
+    switchWorktree,
     terminalHeight,
     terminalWidth,
     treeRows,

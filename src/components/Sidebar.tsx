@@ -27,6 +27,7 @@ export function Sidebar() {
       flexDirection="column"
       borderStyle="single"
       borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
+      onMouseDown={() => state.setFocusedPane("tree")}
     >
       <scrollbox
         ref={(el) => {

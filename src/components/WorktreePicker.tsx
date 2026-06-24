@@ -1,5 +1,5 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
-import { createEffect, Index, Show } from "solid-js";
+import { batch, createEffect, Index, Show } from "solid-js";
 
 import { state } from "../state";
 import { useTheme } from "../theme/context";
@@ -85,6 +85,7 @@ export function WorktreePicker() {
                         ? theme.colors.surface.cursor
                         : theme.colors.surface.panel
                     }
+                    onMouseDown={() => batch(() => void state.switchWorktree(worktree()))}
                   >
                     <text
                       fg={nameFg()}

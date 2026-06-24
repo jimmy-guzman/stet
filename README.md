@@ -156,6 +156,14 @@ Press `?` anytime to see the full list in the app:
 
 ![keybindings help overlay showing all shortcuts](assets/screenshots/keys.png)
 
+## Mouse
+
+The keyboard drives everything, but the mouse works too. Click a file to open
+it, a folder to expand or collapse it, a diff line to move the cursor there, or
+a problem to jump to it. Clicks also work in the overlays: a go-to-file or
+search result, or a worktree to switch to. Clicking a pane focuses it, and the
+wheel scrolls whichever pane the pointer is over.
+
 ## Requirements
 
 - git

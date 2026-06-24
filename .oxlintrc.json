@@ -12,6 +12,7 @@
     "unicorn/no-null": "off",
     "unicorn/filename-case": "off",
     "unicorn/no-nested-ternary": "off",
+    "unicorn/max-nested-calls": "off",
     "sort-imports": "off",
     "no-ternary": "off",
     "no-nested-ternary": "off",

@@ -15,9 +15,9 @@
  * fa-file_image_o, java/jar/class dev-java, kt/kts seti-kotlin, groovy/gvy dev-groovy, scala/sc
  * dev-scala, gradle dev-gradle (also build/settings.gradle(.kts), gradlew(.bat),
  * gradle.properties), maven seti-maven (pom.xml), node dev-nodejs_small, tsconfig seti-tsconfig,
- * bun dev-bun (also bunfig.toml), docker dev-docker, make seti-makefile, license seti-license, git
- * dev-git, config/env seti-config (also the dotfile fallback), book fa-book, symlink
- * oct-file_symlink_file.
+ * bun dev-bun (also bunfig.toml), docker dev-docker, make seti-makefile, license seti-license (also
+ * NOTICE), git dev-git, config/env seti-config (also the dotfile fallback), book fa-book, csv
+ * seti-csv, http fa-paper_plane, symlink oct-file_symlink_file.
  */
 
 const DEFAULT_FILE = "\u{ea7b}";
@@ -27,6 +27,7 @@ const FOLDER_OPEN = "\u{f07c}";
 const SYMLINK = "\u{f481}";
 const JAVA = "\u{e738}";
 const GRADLE = "\u{e7f2}";
+const LICENSE = "\u{e60a}";
 
 /** Exact-filename matches, checked before the extension table. */
 const BY_STEM = new Map([
@@ -36,7 +37,8 @@ const BY_STEM = new Map([
   ["bunfig.toml", "\u{e76f}"],
   ["dockerfile", "\u{e7b0}"],
   ["makefile", "\u{e673}"],
-  ["license", "\u{e60a}"],
+  ["license", LICENSE],
+  ["notice", LICENSE],
   [".gitignore", "\u{e702}"],
   [".env", CONFIG],
   ["readme.md", "\u{f02d}"],
@@ -66,7 +68,9 @@ const BY_SUFFIX = new Map([
   ["md", "\u{e73e}"],
   ["mdx", "\u{e73e}"],
   ["css", "\u{e749}"],
+  ["csv", "\u{e64a}"],
   ["html", "\u{e736}"],
+  ["http", "\u{f1d8}"],
   ["rs", "\u{e7a8}"],
   ["py", "\u{e73c}"],
   ["go", "\u{e724}"],

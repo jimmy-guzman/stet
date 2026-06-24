@@ -14,6 +14,16 @@ describe("fileIcon", () => {
     expect(fileIcon("config.cts")).toBe("\u{e8ca}");
   });
 
+  test("matches csv and http by extension", () => {
+    expect(fileIcon("data.csv")).toBe("\u{e64a}");
+    expect(fileIcon("requests.http")).toBe("\u{f1d8}");
+  });
+
+  test("marks NOTICE with the license glyph, like LICENSE", () => {
+    expect(fileIcon("NOTICE")).toBe("\u{e60a}");
+    expect(fileIcon("NOTICE")).toBe(fileIcon("LICENSE"));
+  });
+
   test("shares one image glyph across image formats", () => {
     expect(fileIcon("photo.jpeg")).toBe("\u{f1c5}");
     expect(fileIcon("anim.gif")).toBe("\u{f1c5}");

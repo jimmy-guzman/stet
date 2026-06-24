@@ -5,6 +5,7 @@ import {
   parsePatchFiles,
   registerCustomTheme,
   renderDiffWithHighlighter,
+  setLanguageOverride,
   type DiffsHighlighter,
   type RenderDiffOptions,
 } from "@pierre/diffs";
@@ -152,9 +153,16 @@ function attach(lang: string) {
   return promise;
 }
 
+// `.gradle` is the Groovy build DSL; @pierre/diffs doesn't map it, so it would
+// Fall back to plain text. `.gradle.kts` already resolves to kts via its
+// Extension, so only the bare `.gradle` case needs the override.
+function filetypeFor(name: string) {
+  return name.endsWith(".gradle") ? "groovy" : getFiletypeFromFileName(name);
+}
+
 async function ensureLanguages(meta: { name: string; prevName?: string }) {
   const names = meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
-  const pending = new Set(names.map(getFiletypeFromFileName)).difference(new Set(["text"]));
+  const pending = new Set(names.map(filetypeFor)).difference(new Set(["text"]));
 
   await Promise.all([...pending].filter((lang) => !areLanguagesAttached(lang)).map(attach));
 }
@@ -171,7 +179,8 @@ async function compute(input: RenderInput): Promise<DiffRender> {
   let addSpans: RenderSpan[][] = [];
   let delSpans: RenderSpan[][] = [];
   try {
-    const themed = renderDiffWithHighlighter(meta, hl, RENDER_OPTIONS);
+    const target = meta.name.endsWith(".gradle") ? setLanguageOverride(meta, "groovy") : meta;
+    const themed = renderDiffWithHighlighter(target, hl, RENDER_OPTIONS);
     addSpans = themed.code.additionLines.map(flattenLineSpans);
     delSpans = themed.code.deletionLines.map(flattenLineSpans);
   } catch {

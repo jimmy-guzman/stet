@@ -30,6 +30,31 @@ describe("fileIcon", () => {
     expect(fileIcon("bunfig.toml")).not.toBe(fileIcon("generic.toml"));
   });
 
+  test("matches JVM source extensions", () => {
+    expect(fileIcon("Main.java")).toBe("\u{e738}");
+    expect(fileIcon("App.kt")).toBe("\u{e634}");
+    expect(fileIcon("script.kts")).toBe("\u{e634}");
+    expect(fileIcon("Build.groovy")).toBe("\u{e775}");
+    expect(fileIcon("Spec.gvy")).toBe("\u{e775}");
+    expect(fileIcon("App.scala")).toBe("\u{e737}");
+    expect(fileIcon("worksheet.sc")).toBe("\u{e737}");
+  });
+
+  test("shares the Java glyph across compiled artifacts", () => {
+    expect(fileIcon("lib.jar")).toBe(fileIcon("Main.java"));
+    expect(fileIcon("Main.class")).toBe(fileIcon("Main.java"));
+  });
+
+  test("marks Gradle/Maven build files with the build glyph, beating their extension", () => {
+    expect(fileIcon("build.gradle")).toBe("\u{e7f2}");
+    expect(fileIcon("settings.gradle")).toBe("\u{e7f2}");
+    expect(fileIcon("gradlew")).toBe("\u{e7f2}");
+    expect(fileIcon("pom.xml")).toBe("\u{e674}");
+    // Build.gradle.kts gets the Gradle glyph, not the .kts kotlin glyph.
+    expect(fileIcon("build.gradle.kts")).toBe("\u{e7f2}");
+    expect(fileIcon("build.gradle.kts")).not.toBe(fileIcon("script.kts"));
+  });
+
   test("falls back to a config glyph for unmatched dotfiles", () => {
     expect(fileIcon(".editorconfig")).toBe("\u{e615}");
     expect(fileIcon(".npmrc")).toBe("\u{e615}");

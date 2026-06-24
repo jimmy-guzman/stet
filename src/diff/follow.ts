@@ -27,9 +27,17 @@ export function followScrollTop({
   maxScroll,
   margin,
 }: FollowScroll) {
-  // A margin wider than half the viewport can't be honored on both edges at
-  // Once, so cap it; this also keeps tiny viewports from oscillating.
-  const safeMargin = Math.max(0, Math.min(margin, Math.floor((viewport - 1) / 2)));
+  // A row taller than the viewport can't be framed with any margin; anchor its
+  // Top so repeated runs settle on one offset instead of flipping top/bottom.
+  if (height >= viewport) {
+    return Math.max(0, Math.min(top, maxScroll));
+  }
+  // Cap the margin to the space the row actually leaves on each side, not just to
+  // The viewport: with `height + 2*margin > viewport` the requested margin can't
+  // Hold on both edges, and a margin clamped only to the viewport would alternate
+  // Between top- and bottom-alignment across runs. `floor((viewport - height) / 2)`
+  // Guarantees a non-empty no-op band, so the offset converges.
+  const safeMargin = Math.min(Math.max(0, margin), Math.floor((viewport - height) / 2));
   const next =
     top - safeMargin < current
       ? top - safeMargin

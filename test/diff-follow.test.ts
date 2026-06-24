@@ -29,6 +29,19 @@ describe("followScrollTop", () => {
     expect(followScrollTop({ ...base, current: 20, height: 4, top: 27 })).toBe(24);
   });
 
+  test("converges instead of oscillating when the row can't host both margins", () => {
+    // Height 6 in a 10-row viewport: 6 + 2*margin(3) > 10, so the margin can't
+    // Hold on both sides. The offset must reach a fixed point, not flip anchors.
+    const settled = followScrollTop({ ...base, current: 0, height: 6, top: 20 });
+    expect(followScrollTop({ ...base, current: settled, height: 6, top: 20 })).toBe(settled);
+  });
+
+  test("anchors a row taller than the viewport to its top, stably", () => {
+    // A row taller than the viewport can't be framed; anchor its top every run.
+    expect(followScrollTop({ ...base, current: 0, height: 14, top: 20 })).toBe(20);
+    expect(followScrollTop({ ...base, current: 50, height: 14, top: 20 })).toBe(20);
+  });
+
   test("clamps to the top of the content", () => {
     expect(followScrollTop({ ...base, current: 5, top: 0 })).toBe(0);
     expect(followScrollTop({ ...base, current: 5, top: 2 })).toBe(0);

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { Effect, Queue, Stream } from "effect";
 import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js";
 
-import type { DiffScope } from "./cli";
+import type { DiffScope, ScopeKind } from "./cli";
 import { Clipboard } from "./clipboard/service";
 import { PROBLEMS_HEIGHT, SIDEBAR_MIN_WIDTH, SIDEBAR_VIEWER_MIN } from "./constants";
 import {
@@ -30,7 +30,13 @@ import {
   type ActivityEventKind,
   type ActivityLog,
 } from "./git/activity";
-import { mergeChanged, type ChangedFile, type GitModel, type Worktree } from "./git/model";
+import {
+  EMPTY_TREE_SHA,
+  mergeChanged,
+  type ChangedFile,
+  type GitModel,
+  type Worktree,
+} from "./git/model";
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
 import {
@@ -166,6 +172,12 @@ function loadDiffView(src: {
 function createState() {
   // --- writable primitives ---
   const [scope, setScope] = createSignal<DiffScope>({ kind: "all", ref: "HEAD" });
+  // The CLI ref (default HEAD), the base for the all/staged scopes.
+  const [cliBaseRef, setCliBaseRef] = createSignal("HEAD");
+  // The SHA HEAD pointed at when sideye launched, pinned for the session scope.
+  const [sessionBase, setSessionBase] = createSignal("HEAD");
+  const [scopeOpen, setScopeOpen] = createSignal(false);
+  const [scopeIndex, setScopeIndex] = createSignal(0);
   const [iconsEnabled, setIconsEnabled] = createSignal(true);
   const [overflow, setOverflow] = createSignal<"scroll" | "wrap">("scroll");
   const [changesOnly, setChangesOnly] = createSignal(false);
@@ -626,6 +638,66 @@ function createState() {
     return runtime.runPromise(Git.use((git) => git.loadModel(input.repoRoot, input.scope)));
   }
 
+  // A monotonic token guards the async last-commit resolution: a newer pick (of
+  // Any kind) bumps it, so a late parentRef result can't overwrite the newer scope.
+  let scopeSelection = 0;
+
+  // Resolve a picked scope kind to a fully-formed DiffScope. last-commit needs its
+  // Parent ref resolved (async), so it sets the scope once that lands, guarded
+  // Against a newer pick and against an unborn HEAD (no commits yet, where a
+  // `git diff <parent> HEAD` has no right side to diff). The others are synchronous.
+  function selectScope(kind: ScopeKind) {
+    const token = (scopeSelection += 1);
+
+    if (kind === "session") {
+      setScope({ kind, ref: sessionBase() });
+      return;
+    }
+
+    if (kind === "last-commit") {
+      const root = repoRoot();
+      runtime
+        .runPromise(Git.use((git) => Effect.all([git.headRef(root), git.parentRef(root)])))
+        .then(([head, parent]) => {
+          if (token !== scopeSelection) {
+            return;
+          }
+          if (head === EMPTY_TREE_SHA) {
+            notify("no commits yet");
+            return;
+          }
+          setScope({ headRef: "HEAD", kind, ref: parent });
+        })
+        .catch(() => {});
+      return;
+    }
+
+    setScope({ kind, ref: cliBaseRef() });
+  }
+
+  // A worktree switch is a new inspection context: the session base re-pins to the
+  // New worktree's HEAD and session/last-commit (whose refs pointed into the old
+  // Worktree's history) re-resolve against it. We return the resolved base and
+  // Scope rather than committing them, so `switchWorktree` applies them only after
+  // The model load succeeds and only for the latest request (a failed or superseded
+  // Switch must not leave future session picks pointed at the wrong HEAD).
+  // CLI-ref kinds (all/staged/unstaged) are valid in any worktree, so they carry over.
+  async function rebaselineScope(root: string) {
+    const head = await runtime.runPromise(Git.use((git) => git.headRef(root)));
+    const active = scope();
+    if (active.kind === "session") {
+      return { scope: { kind: "session", ref: head } satisfies DiffScope, sessionBase: head };
+    }
+    if (active.kind === "last-commit") {
+      const parent = await runtime.runPromise(Git.use((git) => git.parentRef(root)));
+      return {
+        scope: { headRef: "HEAD", kind: "last-commit", ref: parent } satisfies DiffScope,
+        sessionBase: head,
+      };
+    }
+    return { scope: active, sessionBase: head };
+  }
+
   // Repoint the whole app (tree, diffs, polling, checks) at another worktree
   // Without a restart. Lives in state, not App, so the keymap, the picker's
   // Mouse click, and App's deleted-worktree recovery all reach the one action
@@ -647,13 +719,19 @@ function createState() {
     // Restart-on-rekey guard, so only the latest request commits or reports.
     const request = ++switchRequest;
     try {
-      const fresh = await loadModel({ repoRoot: worktree.path, scope: scope() });
+      // Re-pin session/last-commit to the target worktree's history before loading.
+      const { sessionBase: nextSessionBase, scope: nextScope } = await rebaselineScope(
+        worktree.path,
+      );
+      const fresh = await loadModel({ repoRoot: worktree.path, scope: nextScope });
       if (request !== switchRequest) {
         return;
       }
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
       const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path));
       batch(() => {
+        setSessionBase(nextSessionBase);
+        setScope(nextScope);
         setCurrentWorktreeDeleted(false);
         setLastChange(Date.now());
         setRepoRoot(fresh.repoRoot);
@@ -706,6 +784,25 @@ function createState() {
             setGitModel(mergeChanged(prev, next));
           }
         }),
+      ),
+      // Last-commit's right side is the literal HEAD (it always follows the
+      // Newest commit), but its parent must re-resolve as HEAD moves so a new
+      // Commit advances the window and re-keys checks. Guarded so we only re-key
+      // When the parent actually changed; session/all/staged need no resolution.
+      Effect.tap(() =>
+        scopeNow.kind === "last-commit"
+          ? Git.use((git) => git.parentRef(root)).pipe(
+              Effect.tap((parent) =>
+                Effect.sync(() => {
+                  const current = scope();
+                  if (current.kind === "last-commit" && current.ref !== parent) {
+                    setScope({ headRef: "HEAD", kind: "last-commit", ref: parent });
+                  }
+                }),
+              ),
+              Effect.ignore,
+            )
+          : Effect.void,
       ),
       // The heartbeat is the always-on detector: a failure means this worktree
       // Was deleted when its root is gone, or when the main worktree is gone (a
@@ -909,6 +1006,8 @@ function createState() {
     resetSidebarWidth,
     runChecks,
     scope,
+    scopeIndex,
+    scopeOpen,
     searchIndex,
     searchOpen,
     searchQuery,
@@ -916,11 +1015,13 @@ function createState() {
     searchScope,
     searchTruncated,
     selectFile,
+    selectScope,
     selectedFile,
     selectedPath,
     setActivityLog,
     setChangesOnly,
     setCheckerState,
+    setCliBaseRef,
     setCurrentWorktreeDeleted,
     setCursorIndex,
     setExpandedDirectories,
@@ -948,11 +1049,14 @@ function createState() {
     setProblemsOpen,
     setRepoRoot,
     setScope,
+    setScopeIndex,
+    setScopeOpen,
     setSearchIndex,
     setSearchOpen,
     setSearchQuery,
     setSearchScope,
     setSelectedPath,
+    setSessionBase,
     setSidebarOpen,
     setStatus,
     setTerminalHeight,

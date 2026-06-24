@@ -74,6 +74,10 @@ export function seedState(model: GitModel, scope: DiffScope) {
     selected === undefined ? baseExpanded : expandAncestorsForPath(baseExpanded, selected);
   batch(() => {
     state.setScope(scope);
+    state.setCliBaseRef(scope.ref);
+    state.setSessionBase("HEAD");
+    state.setScopeOpen(false);
+    state.setScopeIndex(0);
     state.setIconsEnabled(true);
     state.setChangesOnly(false);
     state.setNotice(undefined);

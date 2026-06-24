@@ -1,8 +1,13 @@
-export type ScopeKind = "all" | "staged" | "unstaged";
+export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit";
+
+// Picker order, also the single source of truth for the scope list.
+export const scopeKinds = ["unstaged", "staged", "all", "session", "last-commit"] as const;
 
 export interface DiffScope {
   kind: ScopeKind;
   ref: string;
+  /** The right-hand ref, set only for `last-commit` (the one range scope). */
+  headRef?: string;
 }
 
 export interface CliOptions {
@@ -81,18 +86,6 @@ export function parseArgs(args: string[]): CliOptions {
   };
 }
 
-export function nextScope(kind: ScopeKind): ScopeKind {
-  if (kind === "all") {
-    return "staged";
-  }
-
-  if (kind === "staged") {
-    return "unstaged";
-  }
-
-  return "all";
-}
-
 export function scopeLabel(scope: DiffScope) {
   if (scope.kind === "staged") {
     return `staged vs ${scope.ref}`;
@@ -102,7 +95,37 @@ export function scopeLabel(scope: DiffScope) {
     return "unstaged";
   }
 
+  if (scope.kind === "session") {
+    return "since session start";
+  }
+
+  if (scope.kind === "last-commit") {
+    return "last commit";
+  }
+
   return `worktree vs ${scope.ref}`;
+}
+
+// Ref-agnostic row labels for the scope picker (the active scope's full,
+// Ref-bearing label still shows in the header via scopeLabel).
+export function scopePickerLabel(kind: ScopeKind) {
+  if (kind === "staged") {
+    return "staged";
+  }
+
+  if (kind === "all") {
+    return "all changes";
+  }
+
+  if (kind === "session") {
+    return "since session start";
+  }
+
+  if (kind === "last-commit") {
+    return "last commit";
+  }
+
+  return "unstaged";
 }
 
 export function helpText() {
@@ -144,7 +167,7 @@ Problems:
 Anywhere:
   ctrl-p     open the go-to-file palette (type to fuzzy-search, enter jumps)
   ctrl-f     search file contents (ctrl-a toggles changes/repo, enter jumps)
-  s          cycle scope: all changes -> staged -> unstaged
+  s          open the scope picker (unstaged/staged/all/session/last commit)
   c          toggle changes-only filter for the tree
   v          toggle diff <-> full file view
   z          toggle long-line wrap in the viewer

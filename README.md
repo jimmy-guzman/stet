@@ -29,7 +29,8 @@ problems. You decide what to say next.
 - Finds text within the open file and cycles through the matches.
 - Searches file contents across the repo, scoped to the changes or the whole
   tree.
-- Switches between all changes, staged changes, and unstaged changes.
+- Switches scope from a picker: all changes, staged, unstaged, everything since
+  sideye launched, or just the last commit.
 - Switches between git worktrees in place, re-pointing the tree, diffs,
   refresh, and checks at the chosen worktree.
 - Watches the filesystem and refreshes the moment the agent changes something,
@@ -133,7 +134,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `ctrl-p`    | go to file: fuzzy-search the whole repo           |
 | `/`         | find in the viewer; `n`/`N` cycle, `esc` clears   |
 | `ctrl-f`    | search files; `ctrl-a` toggles changes/repo scope |
-| `s`         | cycle scope: all changes -> staged -> unstaged    |
+| `s`         | scope picker: unstaged/staged/all/session/last    |
 | `w`         | switch to another git worktree                    |
 | `c`         | toggle changes-only filter for the tree           |
 | `v`         | toggle diff <-> full file view for a changed file |

@@ -7,6 +7,7 @@ import {
   assembleChanged,
   assembleModel,
   diffArgs,
+  EMPTY_TREE_SHA,
   nameStatusArgs,
   numstatArgs,
   parseRepoFiles,
@@ -46,7 +47,11 @@ export class Git extends Context.Service<
       file: ChangedFile,
     ) => Effect.Effect<string, GitError>;
     readonly gitDir: (repoRoot: string) => Effect.Effect<string, GitError>;
+    /** The SHA HEAD points at, or the empty tree on a commitless repo. */
+    readonly headRef: (repoRoot: string) => Effect.Effect<string, GitError>;
     readonly loadModel: (repoRoot: string, scope: DiffScope) => Effect.Effect<GitModel, GitError>;
+    /** HEAD's parent SHA, or the empty tree on a root commit. */
+    readonly parentRef: (repoRoot: string) => Effect.Effect<string, GitError>;
     readonly repoFiles: (
       repoRoot: string,
     ) => Effect.Effect<Pick<GitModel, "repoFiles" | "repoFilesKey">, GitError>;
@@ -117,6 +122,16 @@ export const GitLive = Layer.effect(
           Effect.map((result) => result.stdout.trim()),
           Effect.mapError(toGitError),
         ),
+      // Exit 128 is a commitless repo (no HEAD); fall back to the empty tree so
+      // The session base is still a valid diff endpoint.
+      headRef: (repoRoot) =>
+        process
+          .run(["git", "rev-parse", "--verify", "HEAD"], repoRoot, { allowedExitCodes: [0, 128] })
+          .pipe(
+            retryTransient,
+            Effect.map((result) => result.stdout.trim() || EMPTY_TREE_SHA),
+            Effect.mapError(toGitError),
+          ),
       loadModel: (repoRoot, scope) =>
         Effect.all(
           [
@@ -142,6 +157,16 @@ export const GitLive = Layer.effect(
           ),
           Effect.mapError(toGitError),
         ),
+      // Exit 128 is a root commit (no HEAD~1); fall back to the empty tree so the
+      // Whole first commit renders as all-added.
+      parentRef: (repoRoot) =>
+        process
+          .run(["git", "rev-parse", "--verify", "HEAD~1"], repoRoot, { allowedExitCodes: [0, 128] })
+          .pipe(
+            retryTransient,
+            Effect.map((result) => result.stdout.trim() || EMPTY_TREE_SHA),
+            Effect.mapError(toGitError),
+          ),
       repoFiles: (repoRoot) =>
         Effect.all(
           [

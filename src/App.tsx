@@ -8,6 +8,7 @@ import { HeaderBar } from "./components/HeaderBar";
 import { HelpOverlay } from "./components/HelpOverlay";
 import { Palette } from "./components/Palette";
 import { ProblemsPanel } from "./components/ProblemsPanel";
+import { ScopePicker } from "./components/ScopePicker";
 import { SearchPanel } from "./components/SearchPanel";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
@@ -114,6 +115,9 @@ export function App() {
       </Show>
       <Show when={state.worktreeOpen()}>
         <WorktreePicker />
+      </Show>
+      <Show when={state.scopeOpen()}>
+        <ScopePicker />
       </Show>
       <Show when={state.helpOpen()}>
         <HelpOverlay />

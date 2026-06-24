@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { helpText, nextScope, parseArgs, scopeLabel } from "../src/cli";
+import { helpText, parseArgs, scopeKinds, scopeLabel, scopePickerLabel } from "../src/cli";
 
 describe("parseArgs", () => {
   test("defaults to all changes vs HEAD", () => {
@@ -40,11 +40,9 @@ describe("parseArgs", () => {
   });
 });
 
-describe("nextScope", () => {
-  test("cycles all -> staged -> unstaged -> all", () => {
-    expect(nextScope("all")).toBe("staged");
-    expect(nextScope("staged")).toBe("unstaged");
-    expect(nextScope("unstaged")).toBe("all");
+describe("scopeKinds", () => {
+  test("lists the scopes in picker order", () => {
+    expect(scopeKinds).toEqual(["unstaged", "staged", "all", "session", "last-commit"]);
   });
 });
 
@@ -53,12 +51,26 @@ describe("scopeLabel", () => {
     expect(scopeLabel({ kind: "all", ref: "HEAD" })).toBe("worktree vs HEAD");
     expect(scopeLabel({ kind: "staged", ref: "main" })).toBe("staged vs main");
     expect(scopeLabel({ kind: "unstaged", ref: "HEAD" })).toBe("unstaged");
+    expect(scopeLabel({ kind: "session", ref: "abc123" })).toBe("since session start");
+    expect(scopeLabel({ headRef: "HEAD", kind: "last-commit", ref: "abc123" })).toBe("last commit");
+  });
+});
+
+describe("scopePickerLabel", () => {
+  test("gives a ref-agnostic label per kind", () => {
+    expect(scopePickerLabel("unstaged")).toBe("unstaged");
+    expect(scopePickerLabel("staged")).toBe("staged");
+    expect(scopePickerLabel("all")).toBe("all changes");
+    expect(scopePickerLabel("session")).toBe("since session start");
+    expect(scopePickerLabel("last-commit")).toBe("last commit");
   });
 });
 
 describe("helpText", () => {
   test("describes the companion keys clearly", () => {
-    expect(helpText()).toContain("s          cycle scope: all changes -> staged -> unstaged");
+    expect(helpText()).toContain(
+      "s          open the scope picker (unstaged/staged/all/session/last commit)",
+    );
     expect(helpText()).toContain("c          toggle changes-only filter for the tree");
     expect(helpText()).toContain("v          toggle diff <-> full file view");
     expect(helpText()).toContain("p          toggle the problems panel");

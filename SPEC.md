@@ -18,7 +18,9 @@ Git output is the synchronous source of truth. The git-backed file tree renders 
 
 ## Scopes
 
-`sideye [ref]` defaults to `all` (worktree vs `HEAD`). `--staged` / `--unstaged` set the initial scope; `s` cycles. `unstaged` is plain `git diff` and ignores the ref.
+`sideye [ref]` defaults to `all` (worktree vs `HEAD`). `--staged` / `--unstaged` set the initial scope. `s` opens a scope picker (a static-list overlay like the worktree picker: `j`/`k` navigate, `enter` selects, `esc`/`s` close, opening on the active scope) over five scopes, in order: `unstaged` (plain `git diff`, ignores the ref), `staged` (`git diff --cached <ref>`), `all` (worktree vs `<ref>`), `session`, `last-commit`. The picker's explicit labels are what make `unstaged`'s ref-drop legible.
+
+`session` ("since session start") diffs the worktree against the SHA `HEAD` pointed at when sideye launched, captured once at startup and re-pinned on a worktree switch. Its base stays fixed as the agent commits, so it spans intervening commits plus uncommitted and untracked work: the full delta since you started watching. `last-commit` ("last commit") is the newest commit's own diff, `git diff <parent> HEAD`, with untracked excluded; on a root commit (no parent) it falls back to the empty-tree SHA so the whole first commit renders as all-added. Its right side is the literal `HEAD`, so it always follows the newest commit, and its parent re-resolves as `HEAD` moves so a new commit advances the window and re-keys the checks; a scope switch never registers as recency activity.
 
 ## Worktrees
 

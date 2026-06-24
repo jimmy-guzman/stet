@@ -58,7 +58,10 @@ try {
       ? commonDir.slice(0, -suffix.length)
       : repoRoot;
     const changed = yield* git.changedFiles(repoRoot, options.scope);
-    return { changed, mainWorktreePath, repoRoot };
+    // The SHA HEAD points at now, pinned as the base for the `session` scope so
+    // It keeps meaning "since sideye launched" as the agent commits.
+    const sessionBase = yield* git.headRef(repoRoot);
+    return { changed, mainWorktreePath, repoRoot, sessionBase };
   });
 
   // Create the renderer up front and detect the terminal's dark/light appearance
@@ -69,7 +72,7 @@ try {
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   setThemeMode((await renderer.waitForThemeMode(100)) ?? "dark");
 
-  const { changed, mainWorktreePath, repoRoot } = await runtime.runPromise(startup);
+  const { changed, mainWorktreePath, repoRoot, sessionBase } = await runtime.runPromise(startup);
 
   // oxlint-disable-next-line no-magic-numbers -- one-time startup model assembly
   const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
@@ -82,6 +85,8 @@ try {
 
   batch(() => {
     state.setScope(options.scope);
+    state.setCliBaseRef(options.scope.ref);
+    state.setSessionBase(sessionBase);
     state.setIconsEnabled(options.icons);
     state.setOverflow(options.overflow);
     state.setGitModel(model);

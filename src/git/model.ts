@@ -103,7 +103,12 @@ export function assembleChanged(
   numstatOutput: string,
   porcelainOutput: string,
 ): Pick<GitModel, "changed" | "changedByPath" | "scopeKey"> {
-  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedOutput);
+  // Last-commit is a committed-tree-to-committed-tree range, so working-tree
+  // Untracked files have no place in it (same reasoning as staged).
+  const untracked =
+    scope.kind === "staged" || scope.kind === "last-commit"
+      ? []
+      : parseUntrackedFiles(untrackedOutput);
   const nameStatus = parseNameStatus(nameStatusOutput);
   const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]));
   const numstat = parseNumstat(numstatOutput);
@@ -141,7 +146,7 @@ export function assembleChanged(
   return {
     changed,
     changedByPath: new Map(changed.map((file) => [file.path, file])),
-    scopeKey: `${scope.kind}:${scope.ref}`,
+    scopeKey: `${scope.kind}:${scope.ref}:${scope.headRef ?? ""}`,
   };
 }
 
@@ -224,6 +229,10 @@ export function nameStatusArgs(scope: DiffScope) {
 // The command-line form wins.
 const diffFlags = ["--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"];
 
+// The empty tree object, used as last-commit's parent on a root commit (which
+// Has no HEAD~1) so the whole first commit still renders as all-added.
+export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
 export function diffArgs(scope: DiffScope) {
   const base = ["git", "diff", ...diffFlags];
 
@@ -235,6 +244,11 @@ export function diffArgs(scope: DiffScope) {
     return base;
   }
 
+  if (scope.kind === "last-commit") {
+    return [...base, scope.ref, scope.headRef ?? "HEAD"];
+  }
+
+  // All and session: worktree vs a single base ref (HEAD / session SHA).
   return [...base, scope.ref];
 }
 

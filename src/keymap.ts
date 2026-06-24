@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { batch } from "solid-js";
 
-import { nextScope } from "./cli";
+import { scopeKinds } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { isNavigableProblemItem } from "./diagnostics/problems";
 import { latestActivity } from "./git/activity";
@@ -68,6 +68,24 @@ export function createKeyHandler(host: HostEffects) {
           if (worktree !== undefined) {
             void state.switchWorktree(worktree);
           }
+        }
+        return;
+      }
+
+      if (state.scopeOpen()) {
+        const lastIndex = scopeKinds.length - 1;
+        if (key.name === "escape" || key.name === "s") {
+          state.setScopeOpen(false);
+        } else if (key.name === "j" || key.name === "down") {
+          state.setScopeIndex(Math.min(state.scopeIndex() + 1, lastIndex));
+        } else if (key.name === "k" || key.name === "up") {
+          state.setScopeIndex(Math.max(state.scopeIndex() - 1, 0));
+        } else if (key.name === "return") {
+          const kind = scopeKinds[state.scopeIndex()];
+          if (kind !== undefined) {
+            state.selectScope(kind);
+          }
+          state.setScopeOpen(false);
         }
         return;
       }
@@ -219,10 +237,9 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "s") {
-        const current = state.scope();
-        // No transient acknowledgment: the scope is now persistently legible in
-        // The header and at the viewer title, so a status message would be noise.
-        state.setScope({ ...current, kind: nextScope(current.kind) });
+        // Open the picker on the active scope so it reads as "where am I now".
+        state.setScopeIndex(Math.max(0, scopeKinds.indexOf(state.scope().kind)));
+        state.setScopeOpen(true);
         return;
       }
 

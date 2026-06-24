@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   diffArgs,
+  EMPTY_TREE_SHA,
   mergeModel,
   nameStatusArgs,
   numstatArgs,
@@ -77,6 +78,39 @@ describe("scope arguments", () => {
       ...head,
       "--name-status",
       "-z",
+    ]);
+  });
+
+  test("session compares the worktree against the pinned base ref, like all", () => {
+    expect(diffArgs({ kind: "session", ref: "abc123" })).toEqual([...head, "abc123"]);
+    expect(numstatArgs({ kind: "session", ref: "abc123" })).toEqual([
+      ...head,
+      "abc123",
+      "--numstat",
+      "-z",
+    ]);
+  });
+
+  test("last-commit diffs the resolved parent against HEAD", () => {
+    expect(diffArgs({ headRef: "HEAD", kind: "last-commit", ref: "parentsha" })).toEqual([
+      ...head,
+      "parentsha",
+      "HEAD",
+    ]);
+    expect(nameStatusArgs({ headRef: "HEAD", kind: "last-commit", ref: "parentsha" })).toEqual([
+      ...head,
+      "parentsha",
+      "HEAD",
+      "--name-status",
+      "-z",
+    ]);
+  });
+
+  test("last-commit falls back to the empty tree on a root commit", () => {
+    expect(diffArgs({ headRef: "HEAD", kind: "last-commit", ref: EMPTY_TREE_SHA })).toEqual([
+      ...head,
+      EMPTY_TREE_SHA,
+      "HEAD",
     ]);
   });
 

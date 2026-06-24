@@ -75,6 +75,13 @@ selected in your terminal; without one they appear as empty boxes, so pass
 
 ## Features
 
+### Read any file
+
+Open any file and read it with syntax highlighting for any language Shiki
+supports. Unchanged files open read-only with no diff gutters, just the source.
+
+![read-only file view showing a source file with syntax highlighting and no diff gutters](assets/screenshots/read-only.png)
+
 ### Switch worktrees
 
 Press `w` to jump between git worktrees without leaving the view. The tree,
@@ -114,6 +121,12 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 `--no-lsp-download` to turn that off.
 
 ![problems panel docked below a diff, listing diagnostics with their file locations](assets/screenshots/problems.png)
+
+Diagnostics also surface inline in the viewer: gutter line numbers pick up each
+finding's severity color, and the status bar shows the message for the line at
+the cursor.
+
+![viewer showing a source file with severity-colored gutter line numbers and a diagnostic message in the status bar](assets/screenshots/viewer-diagnostics.png)
 
 ## Keys
 

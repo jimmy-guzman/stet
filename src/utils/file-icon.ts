@@ -12,9 +12,12 @@
  * fa-folder(_open), and per entry below: ts dev-typescript, tsx/jsx dev-react, js dev-javascript,
  * json cod-json, md dev-markdown, css dev-css3, html dev-html5, rs dev-rust, py dev-python, go
  * dev-go, sh cod-terminal_bash, toml custom-toml, yaml dev-yaml, lock fa-lock, image
- * fa-file_image_o, node dev-nodejs_small, tsconfig seti-tsconfig, bun dev-bun (also bunfig.toml),
- * docker dev-docker, make seti-makefile, license seti-license, git dev-git, config/env seti-config
- * (also the dotfile fallback), book fa-book, symlink oct-file_symlink_file.
+ * fa-file_image_o, java/jar/class dev-java, kt/kts seti-kotlin, groovy/gvy dev-groovy, scala/sc
+ * dev-scala, gradle dev-gradle (also build/settings.gradle(.kts), gradlew(.bat),
+ * gradle.properties), maven seti-maven (pom.xml), node dev-nodejs_small, tsconfig seti-tsconfig,
+ * bun dev-bun (also bunfig.toml), docker dev-docker, make seti-makefile, license seti-license, git
+ * dev-git, config/env seti-config (also the dotfile fallback), book fa-book, symlink
+ * oct-file_symlink_file.
  */
 
 const DEFAULT_FILE = "\u{ea7b}";
@@ -22,6 +25,8 @@ const CONFIG = "\u{e615}";
 const FOLDER = "\u{f07b}";
 const FOLDER_OPEN = "\u{f07c}";
 const SYMLINK = "\u{f481}";
+const JAVA = "\u{e738}";
+const GRADLE = "\u{e7f2}";
 
 /** Exact-filename matches, checked before the extension table. */
 const BY_STEM = new Map([
@@ -35,6 +40,16 @@ const BY_STEM = new Map([
   [".gitignore", "\u{e702}"],
   [".env", CONFIG],
   ["readme.md", "\u{f02d}"],
+  // JVM build files: the Gradle/Maven glyph beats the kotlin/groovy extension glyph,
+  // The way an IDE marks a build script over an ordinary source file.
+  ["build.gradle", GRADLE],
+  ["settings.gradle", GRADLE],
+  ["build.gradle.kts", GRADLE],
+  ["settings.gradle.kts", GRADLE],
+  ["gradle.properties", GRADLE],
+  ["gradlew", GRADLE],
+  ["gradlew.bat", GRADLE],
+  ["pom.xml", "\u{e674}"],
 ]);
 
 /** Extension matches, checked when no stem matches. */
@@ -69,6 +84,16 @@ const BY_SUFFIX = new Map([
   ["webp", "\u{f1c5}"],
   ["ico", "\u{f1c5}"],
   ["svg", "\u{f1c5}"],
+  ["java", JAVA],
+  ["jar", JAVA],
+  ["class", JAVA],
+  ["kt", "\u{e634}"],
+  ["kts", "\u{e634}"],
+  ["groovy", "\u{e775}"],
+  ["gvy", "\u{e775}"],
+  ["scala", "\u{e737}"],
+  ["sc", "\u{e737}"],
+  ["gradle", GRADLE],
 ]);
 
 export function fileIcon(name: string) {

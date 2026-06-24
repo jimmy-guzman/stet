@@ -29,7 +29,15 @@ export function Sidebar() {
       borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
     >
       <scrollbox
-        ref={(el) => (sidebarRef = el)}
+        ref={(el) => {
+          // The scrollbox is focusable by default and, once a mouse click or
+          // Wheel gives it keyboard focus, its own handler scrolls by 1/5 of a
+          // Viewport on each arrow/j/k press, fighting the tree's cursor-follow
+          // And leaving the highlight offscreen. Sideye drives all navigation
+          // Through its own keymap, so the viewport must never capture keys.
+          el.focusable = false;
+          sidebarRef = el;
+        }}
         width="100%"
         height={state.paneHeight()}
         scrollY

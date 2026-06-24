@@ -1,5 +1,5 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
-import { createEffect, Index, Show } from "solid-js";
+import { batch, createEffect, Index, Show } from "solid-js";
 
 import { state } from "../state";
 import { useTheme } from "../theme/context";
@@ -14,13 +14,23 @@ export function Palette() {
     paletteRef?.scrollChildIntoView(`palette-${state.paletteIndex()}`);
   });
 
+  // Opening a result is the same whether it comes from the input's submit (the
+  // Highlighted row) or a click on a specific row.
+  function openPath(path: string) {
+    batch(() => {
+      state.selectFile(path);
+      state.setFocusedPane("diff");
+      state.setPaletteOpen(false);
+    });
+  }
+
   function onSubmit() {
     const path = state.paletteResults()[state.paletteIndex()];
     if (path !== undefined) {
-      state.selectFile(path);
-      state.setFocusedPane("diff");
+      openPath(path);
+    } else {
+      state.setPaletteOpen(false);
     }
-    state.setPaletteOpen(false);
   }
 
   function onInput(value: string) {
@@ -95,6 +105,7 @@ export function Palette() {
                       ? theme.colors.surface.cursor
                       : theme.colors.surface.panel
                   }
+                  onMouseDown={() => openPath(path())}
                 >
                   <box flexDirection="row">
                     <text fg={nameFg()}>{path()}</text>

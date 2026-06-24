@@ -13,16 +13,24 @@ export function SearchPanel() {
     searchRef?.scrollChildIntoView(`search-${state.searchIndex()}`);
   });
 
-  function onSubmit() {
-    const match = state.searchResults()[state.searchIndex()];
+  // Jumping to a match is the same whether it comes from the input's submit (the
+  // Highlighted row) or a click on a specific row.
+  function openMatch(match: { path: string; line: number }) {
     batch(() => {
-      if (match !== undefined) {
-        state.selectFile(match.path);
-        state.setFocusedPane("diff");
-        state.setJumpTarget({ escalate: true, line: match.line, path: match.path });
-      }
+      state.selectFile(match.path);
+      state.setFocusedPane("diff");
+      state.setJumpTarget({ escalate: true, line: match.line, path: match.path });
       state.setSearchOpen(false);
     });
+  }
+
+  function onSubmit() {
+    const match = state.searchResults()[state.searchIndex()];
+    if (match !== undefined) {
+      openMatch(match);
+    } else {
+      state.setSearchOpen(false);
+    }
   }
 
   function onInput(value: string) {
@@ -106,6 +114,7 @@ export function SearchPanel() {
                       ? theme.colors.surface.cursor
                       : theme.colors.surface.panel
                   }
+                  onMouseDown={() => openMatch(match)}
                 >
                   <text fg={theme.colors.text.muted}>{`${match.line}  `}</text>
                   <text

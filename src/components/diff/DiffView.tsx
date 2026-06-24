@@ -8,6 +8,7 @@ import {
 } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
 import {
+  batch,
   createEffect,
   createMemo,
   createSignal,
@@ -360,7 +361,17 @@ export function DiffView() {
             }
           >
             {(line) => (
-              <box width="100%" flexDirection="row">
+              <box
+                width="100%"
+                flexDirection="row"
+                onMouseDown={(event: MouseEvent) => {
+                  event.stopPropagation();
+                  batch(() => {
+                    state.setFocusedPane("diff");
+                    state.setCursorIndex(line().navIndex);
+                  });
+                }}
+              >
                 <text fg={gutterNumberColor(line())} bg={gutterBackground(line())}>
                   {`${lineLabel(line())} `}
                 </text>

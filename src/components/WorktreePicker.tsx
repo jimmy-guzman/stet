@@ -85,6 +85,7 @@ export function WorktreePicker() {
                         ? theme.colors.surface.cursor
                         : theme.colors.surface.panel
                     }
+                    onMouseDown={() => void state.switchWorktree(worktree())}
                   >
                     <text
                       fg={nameFg()}

@@ -1,4 +1,5 @@
-import { createMemo, Show } from "solid-js";
+import type { MouseEvent } from "@opentui/core";
+import { batch, createMemo, Show } from "solid-js";
 
 import { checkerSummary, directorySummary } from "../diagnostics/checker";
 import { recencyFraction } from "../git/activity";
@@ -20,6 +21,29 @@ export function TreeRow(props: { row: FileTreeRow }) {
     state.focusedPane() === "tree" && props.row.index === state.focusedRowIndex();
   const background = () => (focused() ? theme.colors.surface.cursor : theme.colors.surface.base);
   const contentWidth = () => state.sidebarWidth() - 4;
+
+  // Clicking a row reproduces the keyboard outcome for that row: a file selects
+  // And opens (like `enter`); a directory moves the cursor there and toggles its
+  // Expansion (collapsing `l`/`h` into one click). stopPropagation keeps the
+  // Sidebar's focus-only handler from also firing for a row click.
+  const onMouseDown = (event: MouseEvent) => {
+    event.stopPropagation();
+    batch(() => {
+      state.setFocusedPane("tree");
+      if (node.type === "file") {
+        state.selectFile(node.path);
+        return;
+      }
+      state.setFocusedNodeId(node.id);
+      const next = new Set(state.expandedDirectories());
+      if (next.has(node.id)) {
+        next.delete(node.id);
+      } else {
+        next.add(node.id);
+      }
+      state.setExpandedDirectories(next);
+    });
+  };
 
   if (node.type === "directory") {
     const isExpanded = () => state.expandedDirectories().has(node.id);
@@ -59,6 +83,7 @@ export function TreeRow(props: { row: FileTreeRow }) {
         paddingLeft={1}
         paddingRight={1}
         backgroundColor={background()}
+        onMouseDown={onMouseDown}
       >
         <box flexDirection="row">
           <box flexDirection="row" flexShrink={0}>
@@ -143,6 +168,7 @@ export function TreeRow(props: { row: FileTreeRow }) {
       paddingLeft={1}
       paddingRight={1}
       backgroundColor={background()}
+      onMouseDown={onMouseDown}
     >
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>

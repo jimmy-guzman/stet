@@ -5,7 +5,6 @@ import { nextScope } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { isNavigableProblemItem } from "./diagnostics/problems";
 import { latestActivity } from "./git/activity";
-import type { Worktree } from "./git/model";
 import { lineReference } from "./git/patch";
 import { firstFileInNode } from "./git/tree";
 import { state } from "./state";
@@ -13,7 +12,6 @@ import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
 
 interface KeyHandlerCtx {
   quit: () => void;
-  switchWorktree: (worktree: Worktree) => void;
 }
 
 // One handler routes every key through the modal-precedence chain
@@ -61,7 +59,7 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
         } else if (key.name === "return") {
           const worktree = worktrees?.[state.worktreeIndex()];
           if (worktree !== undefined) {
-            ctx.switchWorktree(worktree);
+            void state.switchWorktree(worktree);
           }
         }
         return;

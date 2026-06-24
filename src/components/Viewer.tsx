@@ -135,6 +135,7 @@ export function Viewer() {
       flexDirection="column"
       borderStyle="single"
       borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
+      onMouseDown={() => state.setFocusedPane("diff")}
     >
       <Show
         when={state.findOpen() || state.findActive()}

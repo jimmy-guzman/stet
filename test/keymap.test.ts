@@ -21,7 +21,7 @@ const keyEvent = (overrides: { ctrl?: boolean; name: string }) =>
 describe("createKeyHandler", () => {
   test("ctrl-c quits", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ quit: () => quitCount++, switchWorktree: () => {} });
+    const handle = createKeyHandler({ quit: () => quitCount++ });
 
     handle(keyEvent({ ctrl: true, name: "c" }));
 
@@ -30,7 +30,7 @@ describe("createKeyHandler", () => {
 
   test("a plain c does not quit", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ quit: () => quitCount++, switchWorktree: () => {} });
+    const handle = createKeyHandler({ quit: () => quitCount++ });
 
     handle(keyEvent({ name: "c" }));
 

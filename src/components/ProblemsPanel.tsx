@@ -1,5 +1,5 @@
-import type { ScrollBoxRenderable } from "@opentui/core";
-import { createEffect, For, Show } from "solid-js";
+import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core";
+import { batch, createEffect, For, Show } from "solid-js";
 
 import { PROBLEMS_HEIGHT } from "../constants";
 import { sourceLabel, type ProblemItem } from "../diagnostics/problems";
@@ -89,6 +89,10 @@ export function ProblemsPanel() {
                     paddingLeft={1 + INDENT}
                     paddingRight={1}
                     backgroundColor={rowBg(index(), item)}
+                    onMouseDown={(event: MouseEvent) => {
+                      event.stopPropagation();
+                      state.setProblemIndex(index());
+                    }}
                   >
                     <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
                     <text fg={theme.colors.text.secondary}>{item.line}</text>
@@ -161,6 +165,21 @@ export function ProblemsPanel() {
                   paddingLeft={1 + INDENT}
                   paddingRight={1}
                   backgroundColor={rowBg(index(), item)}
+                  onMouseDown={(event: MouseEvent) => {
+                    event.stopPropagation();
+                    batch(() => {
+                      state.setProblemIndex(index());
+                      state.selectFile(problem.path);
+                      if (problem.line !== undefined) {
+                        state.setJumpTarget({
+                          escalate: true,
+                          line: problem.line,
+                          path: problem.path,
+                        });
+                      }
+                      state.setFocusedPane("diff");
+                    });
+                  }}
                 >
                   <box flexDirection="row">
                     <text

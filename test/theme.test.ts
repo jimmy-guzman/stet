@@ -56,12 +56,25 @@ describe("resolveTheme", () => {
     expect(resolved.rgba.transparent).toEqual(RGBA.fromValues(0, 0, 0, 0));
   });
 
-  test("active variants brighten their base diff token without overflowing", () => {
+  test("each active variant brightens its base token and stays clamped", () => {
     const resolved = resolveTheme(darkTheme);
-    const base = RGBA.fromHex(darkTheme.diff.removedBg);
+    const variants = [
+      [resolved.rgba.addedBgActive, darkTheme.diff.addedBg],
+      [resolved.rgba.addedLineNumberBgActive, darkTheme.diff.addedLineNumberBg],
+      [resolved.rgba.removedBgActive, darkTheme.diff.removedBg],
+      [resolved.rgba.removedLineNumberBgActive, darkTheme.diff.removedLineNumberBg],
+      [resolved.rgba.findMatchBgActive, darkTheme.find.matchBg],
+    ] as const;
 
-    // The dominant (red) channel lifts above the base and stays clamped to 1.
-    expect(resolved.rgba.removedBgActive.r).toBeGreaterThan(base.r);
-    expect(resolved.rgba.removedBgActive.r).toBeLessThanOrEqual(1);
+    for (const [active, baseHex] of variants) {
+      const base = RGBA.fromHex(baseHex);
+      // No channel darkens or overflows...
+      for (const channel of ["r", "g", "b"] as const) {
+        expect(active[channel]).toBeGreaterThanOrEqual(base[channel]);
+        expect(active[channel]).toBeLessThanOrEqual(1);
+      }
+      // ...and the variant is genuinely brighter than its base, not a no-op.
+      expect(active.r + active.g + active.b).toBeGreaterThan(base.r + base.g + base.b);
+    }
   });
 });

@@ -631,6 +631,7 @@ function createState() {
   // Mouse click, and App's deleted-worktree recovery all reach the one action
   // Directly. It only writes state and reloads the model (no `renderer`), so it
   // Belongs here next to `loadModel`/`runChecks`; `reason` overrides the status.
+  let switchRequest = 0;
   async function switchWorktree(worktree: Worktree, reason?: string) {
     setWorktreeOpen(false);
     if (worktree.path === gitModel().repoRoot) {
@@ -640,28 +641,41 @@ function createState() {
       setStatus(`worktree missing: ${worktree.path}`);
       return;
     }
+    // `loadModel` is async, so a second switch started before the first resolves
+    // Could land out of order and overwrite the newer worktree. Stamp each call
+    // And bail if a later one superseded it, mirroring the diff/search pipelines'
+    // Restart-on-rekey guard, so only the latest request commits or reports.
+    const request = ++switchRequest;
     try {
       const fresh = await loadModel({ repoRoot: worktree.path, scope: scope() });
-      setCurrentWorktreeDeleted(false);
+      if (request !== switchRequest) {
+        return;
+      }
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
-      setLastChange(Date.now());
-      setRepoRoot(fresh.repoRoot);
-      setGitModel(fresh);
-      setSelectedPath(selected);
-      setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
       const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path));
-      setExpandedDirectories(
-        selected === undefined ? expanded : expandAncestorsForPath(expanded, selected),
-      );
-      setFullContentPaths(new Set<string>());
-      setFileView(false);
-      setJumpTarget(undefined);
-      setProblemIndex(0);
-      setActivityLog(emptyActivityLog);
-      setFocusedPane("tree");
-      setStatus(reason ?? `worktree: ${worktreeLabel(worktree)}`);
+      batch(() => {
+        setCurrentWorktreeDeleted(false);
+        setLastChange(Date.now());
+        setRepoRoot(fresh.repoRoot);
+        setGitModel(fresh);
+        setSelectedPath(selected);
+        setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
+        setExpandedDirectories(
+          selected === undefined ? expanded : expandAncestorsForPath(expanded, selected),
+        );
+        setFullContentPaths(new Set<string>());
+        setFileView(false);
+        setJumpTarget(undefined);
+        setProblemIndex(0);
+        setActivityLog(emptyActivityLog);
+        setFocusedPane("tree");
+        setStatus(reason ?? `worktree: ${worktreeLabel(worktree)}`);
+      });
       void runChecks(fresh);
     } catch (error) {
+      if (request !== switchRequest) {
+        return;
+      }
       setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error));
     }
   }

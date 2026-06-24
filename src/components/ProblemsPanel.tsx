@@ -91,7 +91,10 @@ export function ProblemsPanel() {
                     backgroundColor={rowBg(index(), item)}
                     onMouseDown={(event: MouseEvent) => {
                       event.stopPropagation();
-                      state.setProblemIndex(index());
+                      batch(() => {
+                        state.setFocusedPane("problems");
+                        state.setProblemIndex(index());
+                      });
                     }}
                   >
                     <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>

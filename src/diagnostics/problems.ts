@@ -28,14 +28,31 @@ export type ProblemItem =
   | { kind: "help"; id: string; owner: number; text: string };
 
 /**
- * Splits an LSP message into its first line and the trailing hint lines a linter tacks on (oxlint
- * sends `"<message>\nhelp: <fix>"`). Blank lines are dropped and the hints are flattened, so the
- * panel renders one faint sub-line.
+ * The rows the panel cursor can land on: located diagnostics and checker-failure lines (so long
+ * failure output can be scrolled through), but not the headers or the help sub-lines. The state
+ * memo, keymap, and panel highlight all share this so selection stays consistent.
+ */
+export function isNavigableProblemItem(item: ProblemItem) {
+  return item.kind === "problem" || item.kind === "failure";
+}
+
+const isHelpLine = (line: string) => /^(?:help|hint):/i.test(line);
+
+/**
+ * Splits an LSP message into its primary text and the hint lines a linter tacks on (oxlint sends
+ * `"<message>\nhelp: <fix>"`). Only explicit `help:`/`hint:` lines become help; every other line,
+ * including continuation lines of a multi-line diagnostic (e.g. tsc's "not assignable" detail),
+ * stays in the summary so no primary text is lost. Blank lines are dropped.
  */
 export function splitDiagnosticMessage(message: string) {
-  const [summary, ...rest] = message.split("\n");
-  const help = rest.map((line) => line.trim()).filter((line) => line !== "");
-  return { help, summary: (summary ?? "").trimEnd() };
+  const lines = message
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return {
+    help: lines.filter(isHelpLine),
+    summary: lines.filter((line) => !isHelpLine(line)).join(" "),
+  };
 }
 
 const sourceLabels: Record<string, string> = { typescript: "tsc" };

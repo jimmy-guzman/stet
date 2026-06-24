@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { CheckerState, Diagnostic } from "../src/diagnostics/checker";
 import {
   buildProblemItems,
+  isNavigableProblemItem,
   sourceLabel,
   splitDiagnosticMessage,
 } from "../src/diagnostics/problems";
@@ -53,6 +54,44 @@ describe("splitDiagnosticMessage", () => {
       help: ["help: do it"],
       summary: "summary",
     });
+  });
+
+  test("recognizes a hint: prefix too", () => {
+    expect(splitDiagnosticMessage("do this\nhint: try that")).toEqual({
+      help: ["hint: try that"],
+      summary: "do this",
+    });
+  });
+
+  test("keeps multi-line non-help continuation in the summary", () => {
+    expect(
+      splitDiagnosticMessage("Type 'A' is not assignable to type 'B'.\n  Property 'x' is missing."),
+    ).toEqual({
+      help: [],
+      summary: "Type 'A' is not assignable to type 'B'. Property 'x' is missing.",
+    });
+  });
+});
+
+describe("isNavigableProblemItem", () => {
+  test("located diagnostics and failure lines are navigable; headers and help are not", () => {
+    const items = buildProblemItems({
+      diagnostics: new Map([
+        ["src/a.ts", { count: 0, diagnostics: [], message: "boom\ndetail", status: "failed" }],
+      ]),
+    });
+    // The failed file yields only a failure-header + failure lines, plus none of the
+    // Navigable located diagnostics; the failure lines must still be reachable.
+    const navigableKinds = items.filter(isNavigableProblemItem).map((item) => item.kind);
+    expect(new Set(navigableKinds)).toEqual(new Set(["failure"]));
+
+    const withDiagnostic = buildProblemItems(
+      stateWith([diagnostic({ message: "summary\nhelp: fix" })]),
+    );
+    expect(withDiagnostic.filter(isNavigableProblemItem).map((item) => item.kind)).toEqual([
+      "problem",
+    ]);
+    expect(withDiagnostic.some((item) => item.kind === "help")).toBe(true);
   });
 });
 

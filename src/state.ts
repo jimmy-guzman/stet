@@ -15,7 +15,7 @@ import {
   type CheckerState,
   type Diagnostic,
 } from "./diagnostics/checker";
-import { buildProblemItems } from "./diagnostics/problems";
+import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, structureDiff, type DiffRender, type RenderInput } from "./diff/engine";
@@ -246,7 +246,7 @@ function createState() {
   // The first row the problems cursor can land on; headers and help sub-lines are
   // Skipped so opening the panel never parks the cursor on a non-navigable row.
   const firstNavigableProblemIndex = createMemo(() => {
-    const index = allProblemItems().findIndex((item) => item.kind === "problem");
+    const index = allProblemItems().findIndex(isNavigableProblemItem);
     return index === -1 ? 0 : index;
   });
   const paletteResults = createMemo(() => {

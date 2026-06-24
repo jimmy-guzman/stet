@@ -20,11 +20,11 @@ export function ProblemsPanel() {
   });
 
   const focused = () => state.focusedPane() === "problems";
-  // The cursor lives on a `problem`; its `help` sub-line shares the highlight so a
-  // Selected entry reads as one block, and a stray index on a header never lights up.
+  // The cursor lives on a `problem` or `failure` row; a `problem`'s `help` sub-line
+  // Shares the highlight so the entry reads as one block, and a header never lights up.
   const selected = (index: number, item: ProblemItem) =>
     focused() &&
-    ((item.kind === "problem" && index === state.problemIndex()) ||
+    (((item.kind === "problem" || item.kind === "failure") && index === state.problemIndex()) ||
       (item.kind === "help" && item.owner === state.problemIndex()));
   const rowBg = (index: number, item: ProblemItem) =>
     selected(index, item) ? theme.colors.surface.cursor : theme.colors.surface.base;
@@ -88,6 +88,7 @@ export function ProblemsPanel() {
                     flexDirection="row"
                     paddingLeft={1 + INDENT}
                     paddingRight={1}
+                    backgroundColor={rowBg(index(), item)}
                   >
                     <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
                     <text fg={theme.colors.text.secondary}>{item.line}</text>

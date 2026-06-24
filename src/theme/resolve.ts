@@ -9,9 +9,11 @@ import type { Theme } from "./tokens";
 // Rgba.transparent keep working and renders never re-convert
 export interface ResolvedTheme {
   colors: Theme;
-  // "...Active" variants are the diff backgrounds brightened for the current
-  // (cursor) line, so a selected add/remove line reads as a brighter version of
-  // Its own state instead of being flattened to grey.
+  // "...Active" variants emphasize the diff backgrounds for the current (cursor)
+  // Line, so a selected add/remove line reads as a stronger version of its own
+  // State instead of being flattened to grey. The emphasis direction follows the
+  // Surface luminance: lift toward white on dark surfaces, darken toward the
+  // Line's own hue on light surfaces (where a brighten would clamp to white).
   rgba: {
     addedBgActive: RGBA;
     addedLineNumberBgActive: RGBA;
@@ -22,18 +24,30 @@ export interface ResolvedTheme {
   };
 }
 
-// Multiplicative RGB scale: lifts lightness while preserving hue (channel ratios),
-// So a dark red stays red as it brightens rather than washing toward neutral grey.
+// Multiplicative RGB scale: moves lightness while preserving hue (channel ratios),
+// So a dark red stays red as it brightens and a light green stays green as it
+// Darkens, rather than washing toward neutral grey. factor > 1 brightens toward
+// White (clamped); factor < 1 darkens toward black.
 function scaleRgba(hex: string, factor: number) {
   const base = RGBA.fromHex(hex);
   const lift = (channel: number) => Math.min(1, channel * factor);
   return RGBA.fromValues(lift(base.r), lift(base.g), lift(base.b), base.a);
 }
 
-const ACTIVE_FACTOR = 1.6;
+// Perceptual luminance (Rec. 601) of surface.base decides the emphasis direction.
+function surfaceIsLight(hex: string) {
+  const { r, g, b } = RGBA.fromHex(hex);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 0.5;
+}
+
+// Brighten dark diff backgrounds toward white; darken light ones toward their own
+// Hue (a brighten would clamp the already near-white light palette to pure white).
+const DARK_ACTIVE_FACTOR = 1.6;
+const LIGHT_ACTIVE_FACTOR = 0.82;
 
 export function resolveTheme(theme: Theme): ResolvedTheme {
-  const active = (hex: string) => scaleRgba(hex, ACTIVE_FACTOR);
+  const factor = surfaceIsLight(theme.surface.base) ? LIGHT_ACTIVE_FACTOR : DARK_ACTIVE_FACTOR;
+  const active = (hex: string) => scaleRgba(hex, factor);
   return {
     colors: theme,
     rgba: {

@@ -11,8 +11,8 @@ import {
 } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
 
-import { themeMode } from "../theme/mode";
-import { themeForMode } from "../theme/resolve";
+import { activeThemeName, themeMode } from "../theme/mode";
+import { themeForName } from "../theme/registry";
 import { shikiTheme, SIDEYE_SHIKI_THEME_NAME } from "../theme/shiki";
 import { flattenLineSpans, type RenderSpan } from "./hast";
 import { buildDiffRows, navigableLinesFromRows, type DiffRow, type NavigableLine } from "./rows";
@@ -35,7 +35,7 @@ export interface RenderInput {
 // The highlighter first resolves the theme (at warm-up), which is after startup
 // Detection has applied it, so the diff highlights match the UI and the terminal.
 registerCustomTheme(SIDEYE_SHIKI_THEME_NAME, () =>
-  Promise.resolve(shikiTheme(themeForMode(themeMode()), themeMode())),
+  Promise.resolve(shikiTheme(themeForName(activeThemeName()), themeMode())),
 );
 const THEME = SIDEYE_SHIKI_THEME_NAME;
 

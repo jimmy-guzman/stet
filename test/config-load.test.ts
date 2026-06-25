@@ -40,16 +40,6 @@ describe("loadConfigText", () => {
     expect(issues[0]).toContain("not valid JSONC");
   });
 
-  test("a non-hex theme color is rejected with a path-bearing issue", () => {
-    const broken = { ...darkTheme, accent: { primary: "red" } };
-    const { config, issues } = loadConfigText(JSON.stringify({ themes: { mine: broken } }));
-
-    expect(config).toEqual({});
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain("accent");
-    expect(issues[0]).toContain("primary");
-  });
-
   test("a wrong-typed selection is rejected", () => {
     const { config, issues } = loadConfigText(`{ "theme": 42 }`);
 

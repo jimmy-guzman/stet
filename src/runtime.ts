@@ -1,7 +1,6 @@
 import { Layer, ManagedRuntime } from "effect";
 
 import { ClipboardLive } from "./clipboard/service";
-import { ConfigLive } from "./config/service";
 import { LspProcessLive } from "./diagnostics/lsp-process";
 import { ProvisionerLive } from "./diagnostics/provision";
 import { LanguageServersLive } from "./diagnostics/servers";
@@ -19,7 +18,6 @@ import { WatcherLive } from "./watcher/service";
 // Other services) so startup effects can spawn git directly. The LSP-backed
 // Diagnostics pool sits over its own long-lived LspProcess.
 const AppLayer = Layer.mergeAll(
-  ConfigLive,
   DiagnosticsLive,
   DiffEngineLive,
   FileLive,

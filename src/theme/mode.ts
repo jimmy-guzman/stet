@@ -13,3 +13,17 @@ export function themeMode() {
 export function setThemeMode(mode: "dark" | "light") {
   active = mode;
 }
+
+// The resolved active theme name (a registry key), set once at startup from the
+// Config selection and the detected appearance. Falls back to the appearance so
+// The built-in dark/light still applies when no theme is configured. Static for
+// The session in v1; the reactive runtime switch is a follow-up (see #101).
+let activeName: string | undefined;
+
+export function activeThemeName() {
+  return activeName ?? active;
+}
+
+export function setActiveThemeName(name: string) {
+  activeName = name;
+}

@@ -1,7 +1,5 @@
 import { RGBA } from "@opentui/core";
 
-import { darkTheme } from "./dark";
-import { lightTheme } from "./light";
 import type { Theme } from "./tokens";
 
 // Call sites that paint line colors need RGBA objects; resolving once per
@@ -45,12 +43,4 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
       transparent: RGBA.fromValues(0, 0, 0, 0),
     },
   };
-}
-
-/**
- * Resolves a theme mode to its token set. The seam for a future runtime switch
- * (renderer.waitForThemeMode / THEME_MODE event); today the mode is fixed in `theme/mode.ts`.
- */
-export function themeForMode(mode: "dark" | "light"): Theme {
-  return mode === "light" ? lightTheme : darkTheme;
 }

@@ -165,6 +165,32 @@ a problem to jump to it. Clicks also work in the overlays: a go-to-file or
 search result, or a worktree to switch to. Clicking a pane focuses it, and the
 wheel scrolls whichever pane the pointer is over.
 
+## Configuration
+
+`sideye` reads an optional config from `~/.config/sideye/config.json`
+(`$XDG_CONFIG_HOME` is honored). It is JSONC, so comments and trailing commas are
+fine. There is no config without it: a missing file is the default, and a
+malformed or invalid one never blocks startup, it falls back to defaults and
+shows a notice.
+
+Today it themes the UI. Define named themes under `themes` and pick one with
+`theme`, either a single name (pinned) or a `{ "dark": ..., "light": ... }` pair
+that follows the terminal's appearance. A theme is a full set of color tokens, or
+`{ "base": <name>, ... }` that inherits another theme (a built-in `dark`/`light`,
+or another of your themes) and overrides only the tokens you name. Every color is
+a 6-digit lowercase hex string.
+
+```jsonc
+{
+  // Follow the terminal, with a custom theme on each side.
+  "theme": { "dark": "my-dark", "light": "my-light" },
+  "themes": {
+    "my-dark": { "base": "dark", "accent": { "primary": "#ffa7d9" } },
+    "my-light": { "base": "light", "accent": { "primary": "#b4267a" } },
+  },
+}
+```
+
 ## Requirements
 
 - git

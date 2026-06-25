@@ -8,6 +8,7 @@ import { batch } from "solid-js";
 import packageJson from "../package.json";
 import { App } from "./App";
 import { helpText, parseArgs } from "./cli";
+import { Config } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
 import type { GitModel } from "./git/model";
 import { Git } from "./git/service";
@@ -40,6 +41,10 @@ try {
   const startup = Effect.gen(function* startupModel() {
     const subprocess = yield* Process;
     const git = yield* Git;
+    // The config load is independent of git but shares the one startup runPromise
+    // So the whole model is ready before the first paint. Part 1 only surfaces
+    // Any issues; theme selection consumes the config in Part 2.
+    const { issues: configIssues } = yield* (yield* Config).load();
     // One rev-parse yields both the repo root and the common dir. The common dir
     // Is <main>/.git for any worktree, so stripping /.git gives the main worktree
     // — the recovery target if this worktree is later deleted. It lives outside a
@@ -61,7 +66,7 @@ try {
     // The SHA HEAD points at now, pinned as the base for the `session` scope so
     // It keeps meaning "since sideye launched" as the agent commits.
     const sessionBase = yield* git.headRef(repoRoot);
-    return { changed, mainWorktreePath, repoRoot, sessionBase };
+    return { changed, configIssues, mainWorktreePath, repoRoot, sessionBase };
   });
 
   // Create the renderer up front and detect the terminal's dark/light appearance
@@ -72,7 +77,8 @@ try {
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   setThemeMode((await renderer.waitForThemeMode(100)) ?? "dark");
 
-  const { changed, mainWorktreePath, repoRoot, sessionBase } = await runtime.runPromise(startup);
+  const { changed, configIssues, mainWorktreePath, repoRoot, sessionBase } =
+    await runtime.runPromise(startup);
 
   // oxlint-disable-next-line no-magic-numbers -- one-time startup model assembly
   const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
@@ -99,6 +105,11 @@ try {
     state.setCheckerState(initialCheckerState(model.changed));
   });
   void state.runChecks(model);
+
+  // A bad config never blocks startup; the first issue surfaces as a notice.
+  if (configIssues.length > 0) {
+    state.notify(configIssues[0] ?? "config has issues");
+  }
 
   // OpenTUI's exitOnCtrlC only calls renderer.destroy(), never process.exit, so
   // The background git poll keeps the event loop alive and the process lags

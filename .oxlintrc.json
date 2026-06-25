@@ -24,7 +24,18 @@
     "id-length": "off",
     "func-style": ["error", "declaration", { "allowArrowFunctions": true }],
     "unicorn/consistent-function-scoping": "off",
-    "new-cap": ["error", { "capIsNewExceptions": ["Data.TaggedError", "Context.Service"] }],
+    "new-cap": [
+      "error",
+      {
+        "capIsNewExceptions": [
+          "Data.TaggedError",
+          "Context.Service",
+          "Schema.Struct",
+          "Schema.Union",
+          "Schema.Record"
+        ]
+      }
+    ],
     "prefer-destructuring": "off",
     "init-declarations": "off"
   },

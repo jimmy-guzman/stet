@@ -4,7 +4,9 @@ import { darkTheme } from "../src/theme/dark";
 import {
   registerThemes,
   resolveThemes,
+  restoreRegistry,
   selectThemeName,
+  snapshotRegistry,
   themeForName,
   themeNames,
 } from "../src/theme/registry";
@@ -41,11 +43,16 @@ describe("themeNames", () => {
   });
 
   test("lists registered themes after the built-ins", () => {
-    registerThemes(resolveThemes({ "registry-probe": { base: "dark" } }).themes);
-    const names = themeNames();
+    const snapshot = snapshotRegistry();
+    try {
+      registerThemes(resolveThemes({ "registry-probe": { base: "dark" } }).themes);
+      const names = themeNames();
 
-    expect(names).toContain("registry-probe");
-    expect(names.indexOf("dark")).toBeLessThan(names.indexOf("registry-probe"));
+      expect(names).toContain("registry-probe");
+      expect(names.indexOf("dark")).toBeLessThan(names.indexOf("registry-probe"));
+    } finally {
+      restoreRegistry(snapshot);
+    }
   });
 });
 

@@ -7,7 +7,12 @@ import { App } from "../src/App";
 import { state } from "../src/state";
 import { setAppearance, setSelection } from "../src/theme/active";
 import { darkTheme } from "../src/theme/dark";
-import { registerThemes, resolveThemes } from "../src/theme/registry";
+import {
+  registerThemes,
+  resolveThemes,
+  restoreRegistry,
+  snapshotRegistry,
+} from "../src/theme/registry";
 import { loadModel, makeSettleUntil, seedState } from "./helpers";
 
 // Unique, easy-to-spot surface backgrounds: the App root paints `surface.base`, so
@@ -34,11 +39,16 @@ const locate = (frame: string, needle: string) => {
   return { x: y === -1 ? 0 : lines[y].indexOf(needle), y };
 };
 
+// Captured before any test registers, so afterEach can drop this file's themes from
+// The process-global registry and keep later tests isolated.
+const registryBaseline = snapshotRegistry();
+
 afterEach(() => {
   // Reset the global theme + picker state so other render tests see the default.
   state.closeThemePicker(false);
   setSelection(undefined);
   setAppearance("dark");
+  restoreRegistry(registryBaseline);
 });
 
 describe("theme switcher", () => {

@@ -11,7 +11,7 @@
  * repo's assets. Requires `vhs` on PATH (brew install vhs) and a Nerd Font installed for the
  * file-type icons. Pass screen names to shoot a subset, e.g. `bun run screenshots find problems`.
  */
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -100,7 +100,7 @@ const screens = [
     /**
      * Open a diff so a real code hunk sits behind the overlay, open the switcher, then arrow down
      * to a vivid theme (auto, dark, light, then the planted palettes) so the shot shows the full
-     * themed list — accent swatches, the ✓ on the active `auto`, the highlighted preview row — with
+     * themed list (accent swatches, the ✓ on the active `auto`, the highlighted preview row) with
      * the UI and diff live-re-themed to it. `Down` reaches the keymap's picker branch even with the
      * filter input focused, same as the palette/find tapes. Needs the planted demo config.
      */
@@ -188,7 +188,15 @@ async function shoot(screen: (typeof screens)[number]) {
  * findings, plain gutter) so the flagged lines' severity-colored gutter numbers stand out, then tsc
  * type errors (number = string) and oxc unused-symbol findings.
  */
+// Refuse to clobber a pre-existing FIXTURE: that path is script-owned, so anything
+// There wasn't put by us, and `plantedFixture` makes removeFixture delete only what
+// This run created rather than blindly rm-ing the path.
+let plantedFixture = false;
 function writeFixture() {
+  if (existsSync(FIXTURE)) {
+    throw new Error(`refusing to overwrite existing ${FIXTURE} (not created by this script)`);
+  }
+  plantedFixture = true;
   return Bun.write(
     FIXTURE,
     [
@@ -207,7 +215,11 @@ function writeFixture() {
 
 // Removers are sync so a signal handler can run them before exit, not just the finally path.
 function removeFixture() {
+  if (!plantedFixture) {
+    return;
+  }
   rmSync(FIXTURE, { force: true });
+  plantedFixture = false;
 }
 
 function writeThemeConfig() {

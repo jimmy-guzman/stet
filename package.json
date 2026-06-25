@@ -28,7 +28,6 @@
     "@opentui/solid": "0.4.2",
     "@pierre/diffs": "^1.2.11",
     "effect": "4.0.0-beta.88",
-    "jsonc-parser": "^3.3.1",
     "shiki": "4.2.0",
     "solid-js": "1.9.13"
   },

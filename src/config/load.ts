@@ -1,5 +1,4 @@
 import { Result, Schema } from "effect";
-import { parse, printParseErrorCode, type ParseError } from "jsonc-parser";
 
 import { emptyConfig, UserConfigSchema, type UserConfig } from "./schema";
 
@@ -14,18 +13,20 @@ export interface LoadedConfig {
 
 const decode = Schema.decodeUnknownResult(UserConfigSchema);
 
-const describeParseError = (error: ParseError) =>
-  `${printParseErrorCode(error.error)} at offset ${error.offset}`;
-
-/** Pure: config text -> parsed/validated config + issues. No IO. */
+/**
+ * Pure: config text -> parsed/validated config + issues. No IO (Bun.JSONC.parse is the native JSONC
+ * reader).
+ */
 export function loadConfigText(text: string): LoadedConfig {
-  const errors: ParseError[] = [];
-  const parsed = parse(text, errors, { allowTrailingComma: true });
-
-  if (errors.length > 0) {
+  let parsed: unknown;
+  try {
+    parsed = Bun.JSONC.parse(text);
+  } catch (error) {
     return {
       config: emptyConfig,
-      issues: [`config is not valid JSONC: ${errors.map(describeParseError).join(", ")}`],
+      issues: [
+        `config is not valid JSONC: ${error instanceof Error ? error.message : String(error)}`,
+      ],
     };
   }
 

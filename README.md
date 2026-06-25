@@ -167,36 +167,27 @@ wheel scrolls whichever pane the pointer is over.
 
 ## Configuration
 
-`sideye` reads an optional config from `~/.config/sideye/config.jsonc`
-(`$XDG_CONFIG_HOME` is honored; `config.json` also works). It is JSONC, so
-comments and trailing commas are fine. There is no config without it: a missing file is the default, and a
-malformed or invalid one never blocks startup, it falls back to defaults and
+Optional, at `~/.config/sideye/config.jsonc` (`$XDG_CONFIG_HOME` is honored;
+`config.json` also works). Without it, sideye follows your terminal's light/dark.
+A malformed or invalid config never blocks startup: it falls back to defaults and
 shows a notice.
 
-Today it themes the UI. Define named themes under `themes` and pick one with
-`theme`, either a single name (pinned) or a `{ "dark": ..., "light": ... }` pair
-that follows the terminal's appearance, live: flip your terminal (or OS) between
-dark and light mid-session and sideye re-themes to match. A theme is a full set of color tokens, or
-`{ "base": <name>, ... }` that inherits another theme (a built-in `dark`/`light`,
-or another of your themes) and overrides only the tokens you name. Every color is
-a 6-digit lowercase hex string.
-
-A theme's `"syntax"` decides how code is colored: a **string** names any bundled
-Shiki theme (e.g. `"catppuccin-mocha"`, `"gruvbox-dark-hard"`) to draw code colors
-from it while the rest of the UI stays on your tokens, or an **object** overrides
-individual syntax tokens (`keyword`, `string`, `comment`, …) on your own palette.
+Define themes under `themes` and pick one with `theme`: a single name, or a
+`{ "dark": ..., "light": ... }` pair that follows the terminal live (flip your OS
+appearance and sideye re-themes). A theme is a full set of `#rrggbb` tokens, or
+`{ "base": <name>, ... }` that inherits another theme and overrides only the
+tokens you name. Its `"syntax"` is a bundled Shiki theme name, or an object
+overriding individual tokens (`keyword`, `string`, ...).
 
 ```jsonc
 {
-  // Follow the terminal, with a custom theme on each side.
+  // follow the terminal, with a custom theme on each side
   "theme": { "dark": "my-dark", "light": "my-light" },
   "themes": {
     "my-dark": { "base": "dark", "accent": { "primary": "#ffa7d9" } },
     "my-light": { "base": "light", "accent": { "primary": "#b4267a" } },
-    // sideye chrome, Catppuccin syntax.
-    "mocha": { "base": "dark", "syntax": "catppuccin-mocha" },
-    // sideye theme, just a different keyword color.
-    "tweaked": { "base": "dark", "syntax": { "keyword": "#ff8800" } },
+    "mocha": { "base": "dark", "syntax": "catppuccin-mocha" }, // sideye chrome, Catppuccin code
+    "tweaked": { "base": "dark", "syntax": { "keyword": "#ff8800" } }, // one token changed
   },
 }
 ```

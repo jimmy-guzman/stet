@@ -178,7 +178,9 @@ Today it themes the UI. Define named themes under `themes` and pick one with
 that follows the terminal's appearance. A theme is a full set of color tokens, or
 `{ "base": <name>, ... }` that inherits another theme (a built-in `dark`/`light`,
 or another of your themes) and overrides only the tokens you name. Every color is
-a 6-digit lowercase hex string.
+a 6-digit lowercase hex string. A theme may also set `"syntaxTheme"` to any
+bundled Shiki theme (e.g. `"catppuccin-mocha"`, `"gruvbox-dark-hard"`) to draw
+code colors from it while the rest of the UI stays on your tokens.
 
 ```jsonc
 {
@@ -187,6 +189,8 @@ a 6-digit lowercase hex string.
   "themes": {
     "my-dark": { "base": "dark", "accent": { "primary": "#ffa7d9" } },
     "my-light": { "base": "light", "accent": { "primary": "#b4267a" } },
+    // sideye chrome, Catppuccin syntax.
+    "mocha": { "base": "dark", "syntaxTheme": "catppuccin-mocha" },
   },
 }
 ```

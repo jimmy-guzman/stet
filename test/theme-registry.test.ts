@@ -33,7 +33,7 @@ describe("resolveThemes", () => {
     const { issues, themes } = resolveThemes({ mine: darkTheme });
 
     expect(issues).toEqual([]);
-    expect(themes.get("mine")).toEqual(darkTheme);
+    expect(themes.get("mine")?.tokens).toEqual(darkTheme);
   });
 
   test("merges a base override, inheriting unspecified tokens", () => {
@@ -42,8 +42,8 @@ describe("resolveThemes", () => {
     });
 
     expect(issues).toEqual([]);
-    expect(themes.get("soft")?.accent.primary).toBe("#abcdef");
-    expect(themes.get("soft")?.surface.base).toBe(darkTheme.surface.base);
+    expect(themes.get("soft")?.tokens.accent.primary).toBe("#abcdef");
+    expect(themes.get("soft")?.tokens.surface.base).toBe(darkTheme.surface.base);
   });
 
   test("resolves a base that is another custom theme", () => {
@@ -53,8 +53,27 @@ describe("resolveThemes", () => {
     });
 
     expect(issues).toEqual([]);
-    expect(themes.get("child")?.accent.primary).toBe("#abcdef");
-    expect(themes.get("child")?.surface.base).toBe("#0a0a0a");
+    expect(themes.get("child")?.tokens.accent.primary).toBe("#abcdef");
+    expect(themes.get("child")?.tokens.surface.base).toBe("#0a0a0a");
+  });
+
+  test("keeps a valid bundled syntaxTheme and inherits it through a base", () => {
+    const { issues, themes } = resolveThemes({
+      child: { base: "parent" },
+      parent: { base: "dark", syntaxTheme: "catppuccin-mocha" },
+    });
+
+    expect(issues).toEqual([]);
+    expect(themes.get("parent")?.syntaxTheme).toBe("catppuccin-mocha");
+    expect(themes.get("child")?.syntaxTheme).toBe("catppuccin-mocha");
+  });
+
+  test("reports an unknown syntaxTheme but still resolves the tokens", () => {
+    const { issues, themes } = resolveThemes({ mine: { base: "dark", syntaxTheme: "nope" } });
+
+    expect(themes.get("mine")?.syntaxTheme).toBeUndefined();
+    expect(themes.get("mine")?.tokens).toBeDefined();
+    expect(issues.some((issue) => issue.includes("syntaxTheme"))).toBe(true);
   });
 
   test("reports an unknown base and skips the theme", () => {

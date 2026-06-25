@@ -1,5 +1,6 @@
 import {
   areLanguagesAttached,
+  areThemesAttached,
   getFiletypeFromFileName,
   getSharedHighlighter,
   parsePatchFiles,
@@ -12,7 +13,7 @@ import {
 import { Context, Effect, Layer } from "effect";
 
 import { activeThemeName, themeMode } from "../theme/mode";
-import { themeForName } from "../theme/registry";
+import { syntaxThemeForName, themeForName } from "../theme/registry";
 import { shikiTheme, SIDEYE_SHIKI_THEME_NAME } from "../theme/shiki";
 import { flattenLineSpans, type RenderSpan } from "./hast";
 import { buildDiffRows, navigableLinesFromRows, type DiffRow, type NavigableLine } from "./rows";
@@ -29,15 +30,44 @@ export interface RenderInput {
   maxLines: number;
 }
 
-// Syntax foreground comes from sideye's own palette, registered as a Shiki theme
-// Before the highlighter loads. Diff/cursor/find/gutter backgrounds are layered
-// Over it at render time. The loader reads the active mode (theme/mode.ts) when
-// The highlighter first resolves the theme (at warm-up), which is after startup
-// Detection has applied it, so the diff highlights match the UI and the terminal.
-registerCustomTheme(SIDEYE_SHIKI_THEME_NAME, () =>
-  Promise.resolve(shikiTheme(themeForName(activeThemeName()), themeMode())),
-);
-const THEME = SIDEYE_SHIKI_THEME_NAME;
+// The render theme for the active sideye theme: a bundled Shiki id when the theme
+// Opted into one (`syntaxTheme`), else a per-name custom theme built from the
+// Theme's own `syntax` tokens. Per-name (not one shared "sideye") so switching
+// Themes attaches another theme rather than mutating the attached one, which is
+// What lets the highlight cache key on it and re-theme cleanly. Diff/cursor/find
+// Backgrounds are still layered from sideye tokens at render time.
+function diffThemeName() {
+  const name = activeThemeName();
+  return syntaxThemeForName(name) ?? `${SIDEYE_SHIKI_THEME_NAME}:${name}`;
+}
+
+const registered = new Set<string>();
+
+// Register (token themes) and attach the active render theme to the shared
+// Highlighter, returning its name. Bundled syntaxThemes are known to Shiki and
+// Only need attaching; an attach failure leaves the render to fall back to plain
+// Text. Called before every render so a theme switch attaches on demand.
+async function ensureDiffTheme() {
+  const name = activeThemeName();
+  const themeName = diffThemeName();
+  if (syntaxThemeForName(name) === undefined && !registered.has(themeName)) {
+    registerCustomTheme(themeName, () =>
+      Promise.resolve({ ...shikiTheme(themeForName(name), themeMode()), name: themeName }),
+    );
+    registered.add(themeName);
+  }
+  await highlighter(themeName);
+  if (!areThemesAttached(themeName)) {
+    await getSharedHighlighter({
+      langs: [],
+      preferredHighlighter: "shiki-wasm",
+      themes: [themeName],
+    }).catch(() => {
+      // Attach failed; the render falls back to plain text.
+    });
+  }
+  return themeName;
+}
 
 // Languages warmed into the shared highlighter at startup so the common cases
 // Render without paying the one-time grammar compile. Anything outside this set
@@ -55,10 +85,11 @@ const LANGS = [
   "zig",
 ];
 
-const RENDER_OPTIONS: RenderDiffOptions = {
+// `theme` is supplied per render (the active theme can change), so it is omitted
+// Here and spread in at the call site.
+const RENDER_OPTIONS: Omit<RenderDiffOptions, "theme"> = {
   lineDiffType: "none",
   maxLineDiffLength: 5000,
-  theme: THEME,
   tokenizeMaxLineLength: 5000,
   useTokenTransformer: false,
 };
@@ -70,14 +101,16 @@ const cache = new Map<string, DiffRender>();
 const inflight = new Map<string, Promise<DiffRender>>();
 
 let highlighterPromise: Promise<DiffsHighlighter> | undefined;
-function highlighter() {
+function highlighter(themeName: string) {
   // The WASM (oniguruma) engine is ~10x faster than the default JS regex engine
   // For TypeScript-family grammars (cold ~125ms vs ~1300ms, warm ~5ms vs ~30ms).
   // The highlight call is synchronous and would otherwise jank the event loop.
+  // Created once with the initial active theme; later themes attach via
+  // EnsureDiffTheme.
   highlighterPromise ??= getSharedHighlighter({
     langs: LANGS,
     preferredHighlighter: "shiki-wasm",
-    themes: [THEME],
+    themes: [themeName],
   });
   return highlighterPromise;
 }
@@ -93,7 +126,7 @@ const WARM_PATCH =
  */
 export async function preloadDiffHighlighter() {
   try {
-    await highlighter();
+    await ensureDiffTheme();
     await renderDiff({ full: false, maxLines: 10, patch: WARM_PATCH });
   } catch {
     // Best-effort warm-up.
@@ -102,9 +135,10 @@ export async function preloadDiffHighlighter() {
 
 // Content fingerprint: a hash of the full patch (not sampled slices, which could
 // Collide for a same-length edit outside the sampled windows and return a stale
-// Render) plus the render options that change output.
+// Render) plus the render options that change output. The active render theme is
+// Part of the key so a theme switch never serves a stale-colored render.
 function fingerprint(input: RenderInput) {
-  return `${input.full ? 1 : 0}:${input.maxLines}:${Bun.hash(input.patch)}`;
+  return `${diffThemeName()}:${input.full ? 1 : 0}:${input.maxLines}:${Bun.hash(input.patch)}`;
 }
 
 /**
@@ -145,7 +179,7 @@ function attach(lang: string) {
   const promise = getSharedHighlighter({
     langs: [lang],
     preferredHighlighter: "shiki-wasm",
-    themes: [THEME],
+    themes: [diffThemeName()],
   }).catch(() => {
     // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
   });
@@ -173,14 +207,15 @@ async function compute(input: RenderInput): Promise<DiffRender> {
     return EMPTY;
   }
 
-  const hl = await highlighter();
+  const themeName = await ensureDiffTheme();
+  const hl = await highlighter(themeName);
   await ensureLanguages(meta);
 
   let addSpans: RenderSpan[][] = [];
   let delSpans: RenderSpan[][] = [];
   try {
     const target = meta.name.endsWith(".gradle") ? setLanguageOverride(meta, "groovy") : meta;
-    const themed = renderDiffWithHighlighter(target, hl, RENDER_OPTIONS);
+    const themed = renderDiffWithHighlighter(target, hl, { ...RENDER_OPTIONS, theme: themeName });
     addSpans = themed.code.additionLines.map(flattenLineSpans);
     delSpans = themed.code.deletionLines.map(flattenLineSpans);
   } catch {

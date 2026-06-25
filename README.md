@@ -167,9 +167,9 @@ wheel scrolls whichever pane the pointer is over.
 
 ## Configuration
 
-`sideye` reads an optional config from `~/.config/sideye/config.json`
-(`$XDG_CONFIG_HOME` is honored). It is JSONC, so comments and trailing commas are
-fine. There is no config without it: a missing file is the default, and a
+`sideye` reads an optional config from `~/.config/sideye/config.jsonc`
+(`$XDG_CONFIG_HOME` is honored; `config.json` also works). It is JSONC, so
+comments and trailing commas are fine. There is no config without it: a missing file is the default, and a
 malformed or invalid one never blocks startup, it falls back to defaults and
 shows a notice.
 

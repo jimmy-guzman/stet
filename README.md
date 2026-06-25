@@ -179,9 +179,12 @@ that follows the terminal's appearance, live: flip your terminal (or OS) between
 dark and light mid-session and sideye re-themes to match. A theme is a full set of color tokens, or
 `{ "base": <name>, ... }` that inherits another theme (a built-in `dark`/`light`,
 or another of your themes) and overrides only the tokens you name. Every color is
-a 6-digit lowercase hex string. A theme may also set `"syntaxTheme"` to any
-bundled Shiki theme (e.g. `"catppuccin-mocha"`, `"gruvbox-dark-hard"`) to draw
-code colors from it while the rest of the UI stays on your tokens.
+a 6-digit lowercase hex string.
+
+A theme's `"syntax"` decides how code is colored: a **string** names any bundled
+Shiki theme (e.g. `"catppuccin-mocha"`, `"gruvbox-dark-hard"`) to draw code colors
+from it while the rest of the UI stays on your tokens, or an **object** overrides
+individual syntax tokens (`keyword`, `string`, `comment`, …) on your own palette.
 
 ```jsonc
 {
@@ -191,7 +194,9 @@ code colors from it while the rest of the UI stays on your tokens.
     "my-dark": { "base": "dark", "accent": { "primary": "#ffa7d9" } },
     "my-light": { "base": "light", "accent": { "primary": "#b4267a" } },
     // sideye chrome, Catppuccin syntax.
-    "mocha": { "base": "dark", "syntaxTheme": "catppuccin-mocha" },
+    "mocha": { "base": "dark", "syntax": "catppuccin-mocha" },
+    // sideye theme, just a different keyword color.
+    "tweaked": { "base": "dark", "syntax": { "keyword": "#ff8800" } },
   },
 }
 ```

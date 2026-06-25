@@ -12,8 +12,9 @@ import { ThemeSchema, type Theme } from "./tokens";
 export type ThemeSelection = string | { dark: string; light: string } | undefined;
 
 // A registered theme: the UI/diff tokens, plus an optional bundled Shiki theme id
-// For syntax highlighting. When `syntaxTheme` is set, code colors come from that
-// Bundled theme while sideye still layers diff backgrounds from `tokens`.
+// For syntax highlighting (set when a theme's `syntax` is a bundled name). When it
+// Is set, code colors come from that bundled theme while sideye still layers diff
+// Backgrounds from `tokens`; otherwise `tokens.syntax` colors the code.
 interface RegisteredTheme {
   tokens: Theme;
   syntaxTheme?: string;
@@ -26,7 +27,7 @@ const builtins: Record<string, RegisteredTheme> = {
 
 const registry = new Map<string, RegisteredTheme>(Object.entries(builtins));
 
-// The set of valid bundled Shiki theme ids a `syntaxTheme` may name.
+// The set of valid bundled Shiki theme ids a string `syntax` may name.
 const bundledThemeIds = new Set(bundledThemesInfo.map((theme) => theme.id));
 
 /** The active theme's tokens, or the dark built-in if the name is unknown. */
@@ -64,10 +65,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * Resolve raw config theme entries into validated themes. An entry is either a full theme or `{
- * base, ...overrides }` merged over another theme (a built-in or another custom theme), optionally
- * with a `syntaxTheme` (a bundled Shiki id, or inherited from the base). Bases resolve lazily with
- * cycle detection; an invalid entry, unknown base, unknown syntaxTheme, or cycle is reported rather
- * than crashing (the syntaxTheme is dropped, the rest still resolves).
+ * base, ...overrides }` merged over another theme (a built-in or another custom theme). Its
+ * `syntax` is a bundled Shiki theme name (string), per-token overrides (object), or absent (inherit
+ * the base's). Bases resolve lazily with cycle detection; an invalid entry, unknown base, unknown
+ * syntax theme, or cycle is reported rather than crashing.
  */
 export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
   const resolved = new Map<string, RegisteredTheme>();
@@ -82,15 +83,11 @@ export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
       onSuccess: (theme) => theme,
     });
 
-  const ownSyntaxTheme = (name: string, entry: Record<string, unknown>) => {
-    if (!("syntaxTheme" in entry)) {
-      return undefined;
-    }
-    const value = entry.syntaxTheme;
-    if (typeof value === "string" && bundledThemeIds.has(value)) {
+  const bundledOr = (name: string, value: string) => {
+    if (bundledThemeIds.has(value)) {
       return value;
     }
-    issues.push(`theme "${name}": unknown syntaxTheme ${JSON.stringify(value)}`);
+    issues.push(`theme "${name}": unknown syntax theme ${JSON.stringify(value)}`);
     return undefined;
   };
 
@@ -113,32 +110,40 @@ export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
       return undefined;
     }
 
-    const syntaxTheme = ownSyntaxTheme(name, entry);
-    const rest = { ...entry };
-    delete rest.base;
-    delete rest.syntaxTheme;
+    const base = typeof entry.base === "string" ? resolve(entry.base, [...stack, name]) : undefined;
+    if (typeof entry.base === "string" && base === undefined) {
+      issues.push(`theme "${name}": base "${entry.base}" not found`);
+      return undefined;
+    }
 
-    let record: RegisteredTheme | undefined;
-    if (typeof entry.base === "string") {
-      const base = resolve(entry.base, [...stack, name]);
-      if (base === undefined) {
-        issues.push(`theme "${name}": base "${entry.base}" not found`);
-      } else {
-        const tokens = tokensOf(name, mergeDeep(base.tokens, rest));
-        if (tokens !== undefined) {
-          record = { syntaxTheme: syntaxTheme ?? base.syntaxTheme, tokens };
-        }
-      }
+    // `syntax` is a bundled Shiki theme name (string), per-token overrides (object,
+    // Token mode), or absent (inherit the base's syntax, bundled or tokens).
+    const value = entry.syntax;
+    let syntaxTheme: string | undefined;
+    let overrides: Record<string, unknown> = {};
+    if (typeof value === "string") {
+      syntaxTheme = bundledOr(name, value);
+    } else if (isPlainObject(value)) {
+      overrides = value;
+    } else if (value === undefined) {
+      syntaxTheme = base?.syntaxTheme;
     } else {
-      const tokens = tokensOf(name, rest);
-      if (tokens !== undefined) {
-        record = { syntaxTheme, tokens };
-      }
+      issues.push(`theme "${name}": syntax must be a bundled theme name or a token map`);
     }
 
-    if (record !== undefined) {
-      resolved.set(name, record);
+    const uiTokens = { ...entry };
+    delete uiTokens.base;
+    delete uiTokens.syntax;
+    const mergedUi = base === undefined ? uiTokens : mergeDeep(base.tokens, uiTokens);
+    const syntax = mergeDeep(base?.tokens.syntax ?? darkTheme.syntax, overrides);
+    const candidate = isPlainObject(mergedUi) ? { ...mergedUi, syntax } : mergedUi;
+
+    const tokens = tokensOf(name, candidate);
+    if (tokens === undefined) {
+      return undefined;
     }
+    const record: RegisteredTheme = { syntaxTheme, tokens };
+    resolved.set(name, record);
     return record;
   };
 

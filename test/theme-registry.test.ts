@@ -57,10 +57,10 @@ describe("resolveThemes", () => {
     expect(themes.get("child")?.tokens.surface.base).toBe("#0a0a0a");
   });
 
-  test("keeps a valid bundled syntaxTheme and inherits it through a base", () => {
+  test("a string syntax names a bundled theme and inherits through a base", () => {
     const { issues, themes } = resolveThemes({
       child: { base: "parent" },
-      parent: { base: "dark", syntaxTheme: "catppuccin-mocha" },
+      parent: { base: "dark", syntax: "catppuccin-mocha" },
     });
 
     expect(issues).toEqual([]);
@@ -68,12 +68,23 @@ describe("resolveThemes", () => {
     expect(themes.get("child")?.syntaxTheme).toBe("catppuccin-mocha");
   });
 
-  test("reports an unknown syntaxTheme but still resolves the tokens", () => {
-    const { issues, themes } = resolveThemes({ mine: { base: "dark", syntaxTheme: "nope" } });
+  test("an object syntax overrides token colors (no bundled theme)", () => {
+    const { issues, themes } = resolveThemes({
+      mine: { base: "dark", syntax: { keyword: "#abcdef" } },
+    });
+
+    expect(issues).toEqual([]);
+    expect(themes.get("mine")?.syntaxTheme).toBeUndefined();
+    expect(themes.get("mine")?.tokens.syntax.keyword).toBe("#abcdef");
+    expect(themes.get("mine")?.tokens.syntax.string).toBe(darkTheme.syntax.string);
+  });
+
+  test("reports an unknown bundled syntax theme but still resolves the tokens", () => {
+    const { issues, themes } = resolveThemes({ mine: { base: "dark", syntax: "nope" } });
 
     expect(themes.get("mine")?.syntaxTheme).toBeUndefined();
     expect(themes.get("mine")?.tokens).toBeDefined();
-    expect(issues.some((issue) => issue.includes("syntaxTheme"))).toBe(true);
+    expect(issues.some((issue) => issue.includes("syntax theme"))).toBe(true);
   });
 
   test("reports an unknown base and skips the theme", () => {

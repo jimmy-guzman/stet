@@ -40,6 +40,45 @@ describe("loadConfigText", () => {
     expect(issues[0]).toContain("not valid JSONC");
   });
 
+  test("accepts editor and ide templates", () => {
+    const { config, issues } = loadConfigText(`{
+      "editor": "nvim +{line} {file}",
+      "ide": "code --goto {file}:{line}"
+    }`);
+
+    expect(issues).toEqual([]);
+    expect(config.editor).toBe("nvim +{line} {file}");
+    expect(config.ide).toBe("code --goto {file}:{line}");
+  });
+
+  test("a wrong-typed editor is rejected", () => {
+    const { config, issues } = loadConfigText(`{ "editor": 42 }`);
+
+    expect(config).toEqual({});
+    expect(issues).toHaveLength(1);
+  });
+
+  test("an empty editor string is rejected", () => {
+    const { config, issues } = loadConfigText(`{ "editor": "" }`);
+
+    expect(config).toEqual({});
+    expect(issues).toHaveLength(1);
+  });
+
+  test("a wrong-typed ide is rejected", () => {
+    const { config, issues } = loadConfigText(`{ "ide": true }`);
+
+    expect(config).toEqual({});
+    expect(issues).toHaveLength(1);
+  });
+
+  test("an empty ide string is rejected", () => {
+    const { config, issues } = loadConfigText(`{ "ide": "" }`);
+
+    expect(config).toEqual({});
+    expect(issues).toHaveLength(1);
+  });
+
   test("a wrong-typed selection is rejected", () => {
     const { config, issues } = loadConfigText(`{ "theme": 42 }`);
 

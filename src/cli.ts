@@ -323,7 +323,7 @@ Anywhere:
   ctrl-f     search file contents (ctrl-a toggles changes/repo, enter jumps)
   s          open the scope picker (unstaged/staged/all/session/last commit)
   e          open in terminal editor (suspends TUI, --editor template)
-  E          open in GUI / IDE (renderer stays live, --ide template)
+  o          open in GUI / IDE (renderer stays live, --ide template)
   c          toggle changes-only filter for the tree
   v          toggle diff <-> full file view
   z          toggle long-line wrap in the viewer

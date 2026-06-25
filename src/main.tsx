@@ -115,8 +115,8 @@ try {
     state.setSessionBase(sessionBase);
     state.setIconsEnabled(options.icons);
     state.setOverflow(options.overflow);
-    state.setEditorTemplate(resolveEditorTemplate(options.editor));
-    state.setIdeTemplate(resolveIdeTemplate(options.ide));
+    state.setEditorTemplate(resolveEditorTemplate(options.editor ?? config.editor));
+    state.setIdeTemplate(resolveIdeTemplate(options.ide ?? config.ide));
     state.setGitModel(model);
     state.setRepoRoot(model.repoRoot);
     state.setMainWorktreePath(mainWorktreePath);

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   buildEditorCommand,
   helpText,
@@ -9,6 +10,7 @@ import {
   scopeLabel,
   scopePickerLabel,
 } from "../src/cli";
+
 describe("parseArgs", () => {
   test("defaults to all changes vs HEAD", () => {
     expect(parseArgs([]).scope).toEqual({ kind: "all", ref: "HEAD" });
@@ -147,9 +149,9 @@ describe("helpText", () => {
     expect(helpText()).toContain("{line}");
   });
 
-  test("documents the e and E keybindings", () => {
+  test("documents the e and o keybindings", () => {
     expect(helpText()).toContain("e          open in terminal editor");
-    expect(helpText()).toContain("E          open in GUI / IDE");
+    expect(helpText()).toContain("o          open in GUI / IDE");
   });
 });
 
@@ -210,6 +212,41 @@ describe("resolveEditorTemplate", () => {
 
   test("returns a template containing {file} when nothing is configured", () => {
     expect(resolveEditorTemplate(undefined)).toContain("{file}");
+  });
+
+  test("explicit value (CLI flag or config) beats SIDEYE_EDITOR", () => {
+    const saved = process.env["SIDEYE_EDITOR"];
+    process.env["SIDEYE_EDITOR"] = "nano +{line} {file}";
+    try {
+      expect(resolveEditorTemplate("nvim +{line} {file}")).toBe("nvim +{line} {file}");
+    } finally {
+      if (saved !== undefined) {
+        process.env["SIDEYE_EDITOR"] = saved;
+      } else {
+        delete process.env["SIDEYE_EDITOR"];
+      }
+    }
+  });
+
+  test("SIDEYE_EDITOR beats $EDITOR", () => {
+    const savedSideye = process.env["SIDEYE_EDITOR"];
+    const savedEditor = process.env["EDITOR"];
+    process.env["SIDEYE_EDITOR"] = "hx {file}:{line}";
+    process.env["EDITOR"] = "vim";
+    try {
+      expect(resolveEditorTemplate(undefined)).toBe("hx {file}:{line}");
+    } finally {
+      if (savedSideye !== undefined) {
+        process.env["SIDEYE_EDITOR"] = savedSideye;
+      } else {
+        delete process.env["SIDEYE_EDITOR"];
+      }
+      if (savedEditor !== undefined) {
+        process.env["EDITOR"] = savedEditor;
+      } else {
+        delete process.env["EDITOR"];
+      }
+    }
   });
 });
 

@@ -304,7 +304,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "E" && selectedPath !== undefined) {
+      if (key.name === "o" && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "ide");

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.10](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.9...sideye-v0.2.10) (2026-06-25)
+
+
+### Features
+
+* **config:** ✨ user config w/ custom themes & live following ([#106](https://github.com/jimmy-guzman/sideye/issues/106)) ([8f69b90](https://github.com/jimmy-guzman/sideye/commit/8f69b9007788207ee2869f10ba1dfff4a0bb72d8))
+* **icons:** ✨ add icons for .csv, .http & NOTICE ([#105](https://github.com/jimmy-guzman/sideye/issues/105)) ([d30d93a](https://github.com/jimmy-guzman/sideye/commit/d30d93a22d6fc6e2d566d57a3cf92adc485e0839)), closes [#95](https://github.com/jimmy-guzman/sideye/issues/95)
+* **input:** ✨ add mouse navigation across panes & overlays ([#99](https://github.com/jimmy-guzman/sideye/issues/99)) ([616596c](https://github.com/jimmy-guzman/sideye/commit/616596cd0ce2c79b0f72bbdbf0aa3dba12382c04))
+* **scopes:** ✨ add session & last-commit scopes behind a picker ([#102](https://github.com/jimmy-guzman/sideye/issues/102)) ([35e987a](https://github.com/jimmy-guzman/sideye/commit/35e987acf166bc9903bc20b3a520a45b8ea3a11a))
+* **title:** ✨ set terminal title for tab bars ([#98](https://github.com/jimmy-guzman/sideye/issues/98)) ([a0c8439](https://github.com/jimmy-guzman/sideye/commit/a0c8439dcc6fae8947152f3e376801461296e204))
+
+
+### Bug Fixes
+
+* **theme:** 🐛 darken active diff line in light mode ([#104](https://github.com/jimmy-guzman/sideye/issues/104)) ([5436999](https://github.com/jimmy-guzman/sideye/commit/5436999cb739f1b315f4e85bebbe58c12e26712e))
+* **viewer:** 🐛 keep whole-file view scrolled to the change after toggling ([#93](https://github.com/jimmy-guzman/sideye/issues/93)) ([ffd19ef](https://github.com/jimmy-guzman/sideye/commit/ffd19ef4aaaaf61601271972975e22efc6c8f18d))
+* **worktree:** 🐛 defer full-tree load when switching worktrees ([#103](https://github.com/jimmy-guzman/sideye/issues/103)) ([843d4e9](https://github.com/jimmy-guzman/sideye/commit/843d4e91517f163150b26c9820f90bde375823dd))
+
 ## [0.2.9](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.8...sideye-v0.2.9) (2026-06-24)
 
 

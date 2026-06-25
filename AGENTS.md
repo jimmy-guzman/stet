@@ -18,6 +18,7 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 - Read the relevant `SKILL.md` under `.agents/skills` before related work: `bun` before any dependency/script/build change, `opentui` before any OpenTUI code.
 - Prefer `bun run`, `bun test`, `bun install`, `bun add`, `bun add -d`, `bun remove`, `bun build`. No Node/npm/Jest/esbuild wrappers unless explicitly requested. Runtime flags go before `run` (e.g. `bun --watch run <script>`).
 - Keep `bun.lock` changes paired with dependency changes. Declare direct dependencies in `package.json`; don't rely on transitive ones.
+- Pin every `dependencies` and `devDependencies` entry to an exact version (no `^`/`~`). sideye ships as a compiled binary (`private: true`, `bun build --compile`), so the manifest mirrors the lock and every bump is an explicit, reviewable edit; caret ranges only help library consumers dedupe, which never applies here.
 - Lint and format are oxlint and oxfmt (`bun run lint`, `bun run format`); do not add ESLint or Prettier.
 - Dead exports are caught by knip (`bun run knip`, also part of `bun run check`). Remove the `export` keyword rather than suppressing.
 - Use `===` and `!==`; never `== null` or `!= null`.

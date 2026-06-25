@@ -14,8 +14,6 @@ export class Config extends Context.Service<
   }
 >()("sideye/Config") {}
 
-// The first config candidate (config.jsonc, then config.json) that exists, or
-// Undefined when none do.
 const firstExistingConfig = Effect.gen(function* findConfig() {
   for (const candidate of configPaths()) {
     const exists = yield* Effect.promise(() => Bun.file(candidate).exists());

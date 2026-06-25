@@ -6,15 +6,12 @@ import { lightTheme } from "./light";
 import { mergeDeep } from "./merge";
 import { ThemeSchema, type Theme } from "./tokens";
 
-// A selection is a single pinned name, or an appearance-keyed pair that follows
-// The terminal. Kept here (not imported from config) so theme/ stays free of a
-// Config dependency; the config schema validates the matching shape.
+// Kept here, not imported from config, so theme/ stays free of a config
+// Dependency; the config schema validates the matching shape.
 export type ThemeSelection = string | { dark: string; light: string } | undefined;
 
-// A registered theme: the UI/diff tokens, plus an optional bundled Shiki theme id
-// For syntax highlighting (set when a theme's `syntax` is a bundled name). When it
-// Is set, code colors come from that bundled theme while sideye still layers diff
-// Backgrounds from `tokens`; otherwise `tokens.syntax` colors the code.
+// `syntaxTheme` (set when a theme's `syntax` is a bundled name) sources code colors
+// From that theme; otherwise `tokens.syntax` does. `tokens` always drive the UI.
 interface RegisteredTheme {
   tokens: Theme;
   syntaxTheme?: string;
@@ -27,15 +24,12 @@ const builtins: Record<string, RegisteredTheme> = {
 
 const registry = new Map<string, RegisteredTheme>(Object.entries(builtins));
 
-// The set of valid bundled Shiki theme ids a string `syntax` may name.
 const bundledThemeIds = new Set(bundledThemesInfo.map((theme) => theme.id));
 
-/** The active theme's tokens, or the dark built-in if the name is unknown. */
 export function themeForName(name: string): Theme {
   return registry.get(name)?.tokens ?? darkTheme;
 }
 
-/** The bundled Shiki theme id for a theme, if it opted into one for syntax. */
 export function syntaxThemeForName(name: string) {
   return registry.get(name)?.syntaxTheme;
 }
@@ -44,7 +38,6 @@ export function hasTheme(name: string) {
   return registry.has(name);
 }
 
-/** The built-in name for an appearance; pinned/paired selections override it. */
 export function selectThemeName(selection: ThemeSelection, appearance: "dark" | "light") {
   if (selection === undefined) {
     return appearance;
@@ -64,11 +57,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Resolve raw config theme entries into validated themes. An entry is either a full theme or `{
- * base, ...overrides }` merged over another theme (a built-in or another custom theme). Its
- * `syntax` is a bundled Shiki theme name (string), per-token overrides (object), or absent (inherit
- * the base's). Bases resolve lazily with cycle detection; an invalid entry, unknown base, unknown
- * syntax theme, or cycle is reported rather than crashing.
+ * Resolve raw config theme entries into validated themes, applying `base` merges with cycle
+ * detection. Anything wrong (invalid entry, unknown base or syntax theme, cycle) is reported in
+ * `issues` rather than thrown, so one bad theme never sinks the rest.
  */
 export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
   const resolved = new Map<string, RegisteredTheme>();
@@ -116,8 +107,6 @@ export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
       return undefined;
     }
 
-    // `syntax` is a bundled Shiki theme name (string), per-token overrides (object,
-    // Token mode), or absent (inherit the base's syntax, bundled or tokens).
     const value = entry.syntax;
     let syntaxTheme: string | undefined;
     let overrides: Record<string, unknown> = {};

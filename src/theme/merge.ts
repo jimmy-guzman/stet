@@ -3,10 +3,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Recursively merge `overrides` onto `base`, returning a new value. Nested plain objects merge
- * key-by-key; every other value (hex strings included) replaces. Used to layer a partial theme
- * override onto a resolved base theme; the merged result is validated against `ThemeSchema` by the
- * caller, so extra or wrong keys surface there rather than here.
+ * Deep-merge: nested plain objects merge key-by-key, every other value (hex strings included)
+ * replaces. Returns a new value, never mutates `base`. The caller validates the merged theme
+ * against `ThemeSchema`, so wrong or extra keys surface there, not here.
  */
 export function mergeDeep(base: unknown, overrides: unknown): unknown {
   if (!isPlainObject(base) || !isPlainObject(overrides)) {

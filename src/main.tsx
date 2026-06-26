@@ -140,7 +140,6 @@ try {
   runtime
     .runPromise(startup)
     .then(({ changed, mainWorktreePath, repoRoot, sessionBase }) => {
-      // oxlint-disable-next-line no-magic-numbers -- one-time startup model assembly
       const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
       const initialSelectedPath = model.changed[0]?.path ?? model.repoFiles[0]?.path;
       const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));

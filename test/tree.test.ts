@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import type { ChangedFile, RepoFile } from "../src/git/model";
 import {
   buildFileTree,
+  buildTreeStructure,
+  decorateTree,
   defaultExpandedDirectories,
   expandAncestorsForPath,
   findRowIndexForPath,
@@ -124,6 +126,52 @@ describe("buildFileTree", () => {
 
     expect(tree.find((node) => node.path === "link.ts")).toMatchObject({ symlink: true });
     expect(tree.find((node) => node.path === "real.ts")).toMatchObject({ symlink: false });
+  });
+});
+
+describe("structure and decoration split", () => {
+  test("structure depends only on the path set, not on changed values", () => {
+    const paths = new Set(["src/App.tsx", "src/git.ts"]);
+    const lean = buildTreeStructure(repoFiles, paths, { changesOnly: false });
+    const churned = buildTreeStructure(repoFiles, paths, { changesOnly: false });
+
+    // Same file set in, structurally identical tree out (no change overlay yet).
+    expect(lean).toEqual(churned);
+    const appRow = flattenTree(lean, new Set(["dir:src"])).find(
+      (row) => row.node.path === "src/App.tsx",
+    );
+    expect(appRow?.node.type === "file" && appRow.node.changed).toBe(undefined);
+    const src = lean.find((node) => node.type === "directory" && node.path === "src");
+    expect(src?.type === "directory" && src.changedCount).toBe(0);
+  });
+
+  test("decorateTree overlays the changed set and aggregates without mutating the structure", () => {
+    const structure = buildTreeStructure(repoFiles, new Set(changedByPath.keys()), {
+      changesOnly: false,
+    });
+    const decorated = decorateTree(structure, changedByPath);
+
+    expect(decorated.find((node) => node.path === "src")).toMatchObject({
+      additions: 13,
+      changedCount: 2,
+      deletions: 1,
+      fileCount: 3,
+      type: "directory",
+    });
+    // The cached structure stays pristine, so the reactive layer can reuse it.
+    expect(structure.find((node) => node.path === "src")).toMatchObject({
+      additions: 0,
+      changedCount: 0,
+    });
+  });
+
+  test("buildFileTree equals structure-then-decorate", () => {
+    const composed = buildFileTree(repoFiles, changedByPath, { changesOnly: false });
+    const split = decorateTree(
+      buildTreeStructure(repoFiles, new Set(changedByPath.keys()), { changesOnly: false }),
+      changedByPath,
+    );
+    expect(composed).toEqual(split);
   });
 });
 

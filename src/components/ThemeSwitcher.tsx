@@ -57,9 +57,6 @@ export function ThemeSwitcher() {
       backgroundColor={theme.colors.surface.panel}
       zIndex={100}
     >
-      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.strong}>theme</text>
-      </box>
       <input
         focused
         width="100%"
@@ -67,6 +64,7 @@ export function ThemeSwitcher() {
         backgroundColor={theme.colors.surface.panel}
         focusedBackgroundColor={theme.colors.surface.panel}
         textColor={theme.colors.text.primary}
+        focusedTextColor={theme.colors.text.primary}
         cursorColor={theme.colors.accent.primary}
         onInput={onInput}
         onSubmit={() => state.closeThemePicker(true)}

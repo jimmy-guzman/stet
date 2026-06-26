@@ -46,6 +46,12 @@ export function SearchPanel() {
     const more = state.searchTruncated() ? "+" : "";
     return `${results().length}${more} match${results().length === 1 ? "" : "es"} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
   };
+  const statusLabel = () => {
+    if (results().length > 0) {
+      return summary();
+    }
+    return state.searchQuery() === "" ? "type to search…" : "no matches";
+  };
 
   return (
     <box
@@ -66,32 +72,24 @@ export function SearchPanel() {
         backgroundColor={theme.colors.surface.panel}
         focusedBackgroundColor={theme.colors.surface.panel}
         textColor={theme.colors.text.primary}
+        focusedTextColor={theme.colors.text.primary}
         cursorColor={theme.colors.accent.primary}
         onInput={onInput}
         onSubmit={onSubmit}
       />
-      <scrollbox
-        ref={(el) => (searchRef = el)}
-        width="100%"
-        height={Math.min(14, Math.max(1, results().length + fileCount()))}
-        scrollY
-        viewportCulling
-        scrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.rgba.transparent,
-            foregroundColor: theme.colors.scrollbar.thumb,
-          },
-        }}
-      >
-        <Show
-          when={results().length > 0}
-          fallback={
-            <box id="search-empty" paddingLeft={1}>
-              <text fg={theme.colors.text.muted}>
-                {state.searchQuery() === "" ? "type to search…" : "no matches"}
-              </text>
-            </box>
-          }
+      <Show when={results().length > 0}>
+        <scrollbox
+          ref={(el) => (searchRef = el)}
+          width="100%"
+          height={Math.min(14, Math.max(1, results().length + fileCount()))}
+          scrollY
+          viewportCulling
+          scrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.rgba.transparent,
+              foregroundColor: theme.colors.scrollbar.thumb,
+            },
+          }}
         >
           {/* Match index is the cursor space; a file header renders above the first
               match of each file. Ids by index so reordering never moves a live id. */}
@@ -130,8 +128,8 @@ export function SearchPanel() {
               </box>
             )}
           </For>
-        </Show>
-      </scrollbox>
+        </scrollbox>
+      </Show>
       <box
         height={1}
         flexDirection="row"
@@ -139,8 +137,11 @@ export function SearchPanel() {
         paddingLeft={1}
         paddingRight={1}
       >
-        <text fg={theme.colors.text.muted}>{results().length === 0 ? "" : summary()}</text>
-        <text fg={theme.colors.text.faint}>{`${scopeLabel()} · ctrl-a scope`}</text>
+        <text fg={theme.colors.text.muted}>{statusLabel()}</text>
+        <text fg={theme.colors.text.faint}>{scopeLabel()}</text>
+      </box>
+      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+        <text fg={theme.colors.text.muted}>↑↓ navigate · ⏎ open · ctrl-a scope · esc close</text>
       </box>
     </box>
   );

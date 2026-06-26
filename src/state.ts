@@ -31,6 +31,7 @@ import {
   type ActivityLog,
 } from "./git/activity";
 import {
+  changedPathsDiffer,
   EMPTY_TREE_SHA,
   mergeChanged,
   type ChangedFile,
@@ -40,7 +41,8 @@ import {
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
 import {
-  buildFileTree,
+  buildTreeStructure,
+  decorateTree,
   defaultExpandedDirectories,
   expandAncestorsForPath,
   flattenTree,
@@ -263,9 +265,20 @@ function createState() {
   const showFileContent = createMemo(
     () => selectedPath() !== undefined && (selectedFile() === undefined || fileView()),
   );
-  const tree = createMemo(() =>
-    buildFileTree(gitModel().repoFiles, gitModel().changedByPath, { changesOnly: changesOnly() }),
+  // Split the tree build so the repo-size-proportional structure pass is skipped
+  // On a content-only edit. `repoFiles` is reference-stable across changed-set
+  // Updates (mergeChanged preserves it, repoFilesCache dedupes), and `changedPaths`
+  // Changes only when a path appears/disappears, so `treeStructure` rebuilds only
+  // On a real structural shift; `tree` overlays the live changed set (counts,
+  // Badges, aggregates) cheaply over that cached structure on every model update.
+  const repoFiles = createMemo(() => gitModel().repoFiles);
+  const changedPaths = createMemo(() => new Set(gitModel().changedByPath.keys()), undefined, {
+    equals: (previous, next) => previous.size === next.size && previous.isSubsetOf(next),
+  });
+  const treeStructure = createMemo(() =>
+    buildTreeStructure(repoFiles(), changedPaths(), { changesOnly: changesOnly() }),
   );
+  const tree = createMemo(() => decorateTree(treeStructure(), gitModel().changedByPath));
   const treeRows = createMemo(() => flattenTree(tree(), expandedDirectories()));
   const focusedRowIndex = createMemo(() => {
     const rows = treeRows();
@@ -859,7 +872,8 @@ function createState() {
   // Set the instant a real change lands; a slow safety poll is the floor that
   // Covers anything the watcher misses (a platform without recursive watch, a
   // Gitignored boundary), so the worst case is poll-speed, never stale. The repo
-  // File list keeps its own slow poll. Re-keys only on repoRoot/scope; cleanup
+  // File list refreshes only when the changed set's paths shift (plus a slow
+  // Floor), never on a blind timer. Re-keys only on repoRoot/scope; cleanup
   // Aborts the controller, closing the watcher and any in-flight git.
   createEffect(() => {
     const root = repoRoot();
@@ -870,97 +884,131 @@ function createState() {
     const controller = new AbortController();
     // A fresh worktree re-proves the watcher from scratch (its fs.watch is new).
     setLastWatcherTick(0);
-    const refreshChanged = Git.use((git) => git.changedFiles(root, scopeNow)).pipe(
-      Effect.tap((next) =>
-        Effect.sync(() => {
-          const prev = gitModel();
-          if (prev.repoRoot === root) {
-            setGitModel(mergeChanged(prev, next));
-          }
-        }),
-      ),
-      // Last-commit's right side is the literal HEAD (it always follows the
-      // Newest commit), but its parent must re-resolve as HEAD moves so a new
-      // Commit advances the window and re-keys checks. Guarded so we only re-key
-      // When the parent actually changed; session/all/staged need no resolution.
-      Effect.tap(() =>
-        scopeNow.kind === "last-commit"
-          ? Git.use((git) => git.parentRef(root)).pipe(
-              Effect.tap((parent) =>
-                Effect.sync(() => {
-                  const current = scope();
-                  if (current.kind === "last-commit" && current.ref !== parent) {
-                    setScope({ headRef: "HEAD", kind: "last-commit", ref: parent });
+    runtime
+      .runPromise(
+        Effect.gen(function* refreshLoop() {
+          // Two conflating queues (sliding, capacity 1): every trigger collapses
+          // To at most one pending run, so a burst of fs events on a large repo
+          // Can never queue a backlog of expensive `git status` / `ls-files`
+          // Reads. Each drain is serial, so two reads of the same kind never
+          // Overlap and write each other's stale result.
+          const changedTriggers = yield* Queue.sliding<void>(1);
+          const repoFilesTriggers = yield* Queue.sliding<void>(1);
+
+          const refreshChanged = Git.use((git) => git.changedFiles(root, scopeNow)).pipe(
+            // Functional update so the merge is always against the latest committed
+            // Model: the repoFiles drain runs concurrently, so reasoning about which
+            // Write lands first is unnecessary when each merges from the current state.
+            Effect.tap((next) =>
+              Effect.sync(() =>
+                setGitModel((prev) => {
+                  if (prev.repoRoot !== root) {
+                    return prev;
                   }
+                  // Only re-list the whole repo when the file set actually shifted;
+                  // A content-only edit leaves the tree structure untouched.
+                  if (changedPathsDiffer(prev.changed, next.changed)) {
+                    Queue.offerUnsafe(repoFilesTriggers, undefined);
+                  }
+                  return mergeChanged(prev, next);
                 }),
               ),
-              Effect.ignore,
-            )
-          : Effect.void,
-      ),
-      // The heartbeat is the always-on detector: a failure means this worktree
-      // Was deleted when its root is gone, or when the main worktree is gone (a
-      // Linked worktree's git breaks once main's .git is deleted, even if its own
-      // Dir lingers). Flag it (App recovers); any other failure is transient.
-      Effect.catch(() =>
-        Effect.sync(() => {
-          const main = mainWorktreePath();
-          if (!existsSync(root) || (main !== "" && !existsSync(main))) {
-            setCurrentWorktreeDeleted(true);
-          }
-        }),
-      ),
-    );
-    // Three refresh sources, merged through ONE serializing mapEffect so two
-    // ChangedFiles reads can never overlap and write each other's stale result:
-    // An immediate tick on (re)key, a debounced fs-watch tick per change (which
-    // Also records watcher health), and a safety poll whose cadence adapts to
-    // That health — fast where the watcher is unproven or has missed a change,
-    // Slow once it has earned trust. See `refreshDelay`.
-    const watchTicks = Stream.unwrap(
-      Effect.gen(function* watchStream() {
-        const watcher = yield* Watcher;
-        return watcher.changes(root);
-      }),
-    ).pipe(Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))));
-    const safetyTicks = Stream.fromEffect(
-      Effect.suspend(() =>
-        Effect.sleep(
-          refreshDelay({
-            lastChangeAt: lastChange(),
-            lastWatcherTickAt: lastWatcherTick(),
-            now: Date.now(),
-          }),
-        ),
-      ),
-    ).pipe(Stream.forever);
-    const changedRefresh = Stream.mergeAll([Stream.make(undefined), watchTicks, safetyTicks], {
-      concurrency: "unbounded",
-    }).pipe(Stream.mapEffect(() => refreshChanged));
-    const repoFilesPoll = Stream.fromEffect(
-      Effect.gen(function* repoFilesLoop() {
-        yield* Git.use((git) => git.repoFiles(root)).pipe(
-          Effect.tap((next) =>
-            Effect.sync(() => {
-              const prev = gitModel();
-              if (prev.repoRoot === root && prev.repoFilesKey !== next.repoFilesKey) {
-                setGitModel({
-                  ...prev,
-                  repoFiles: next.repoFiles,
-                  repoFilesKey: next.repoFilesKey,
-                });
-              }
+            ),
+            // Last-commit's right side is the literal HEAD (it always follows the
+            // Newest commit), but its parent must re-resolve as HEAD moves so a new
+            // Commit advances the window and re-keys checks. Guarded so we only re-key
+            // When the parent actually changed; session/all/staged need no resolution.
+            Effect.tap(() =>
+              scopeNow.kind === "last-commit"
+                ? Git.use((git) => git.parentRef(root)).pipe(
+                    Effect.tap((parent) =>
+                      Effect.sync(() => {
+                        const current = scope();
+                        if (current.kind === "last-commit" && current.ref !== parent) {
+                          setScope({ headRef: "HEAD", kind: "last-commit", ref: parent });
+                        }
+                      }),
+                    ),
+                    Effect.ignore,
+                  )
+                : Effect.void,
+            ),
+            // The heartbeat is the always-on detector: a failure means this worktree
+            // Was deleted when its root is gone, or when the main worktree is gone (a
+            // Linked worktree's git breaks once main's .git is deleted, even if its own
+            // Dir lingers). Flag it (App recovers); any other failure is transient.
+            Effect.catch(() =>
+              Effect.sync(() => {
+                const main = mainWorktreePath();
+                if (!existsSync(root) || (main !== "" && !existsSync(main))) {
+                  setCurrentWorktreeDeleted(true);
+                }
+              }),
+            ),
+          );
+          const refreshRepoFiles = Git.use((git) => git.repoFiles(root)).pipe(
+            Effect.tap((next) =>
+              Effect.sync(() =>
+                setGitModel((prev) =>
+                  prev.repoRoot === root && prev.repoFilesKey !== next.repoFilesKey
+                    ? { ...prev, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey }
+                    : prev,
+                ),
+              ),
+            ),
+            Effect.ignore,
+          );
+
+          // Changed-set triggers: an immediate tick on (re)key, a debounced
+          // Fs-watch tick per change (which also records watcher health), and a
+          // Safety poll whose cadence adapts to that health — fast where the
+          // Watcher is unproven or has missed a change, slow once it has earned
+          // Trust. See `refreshDelay`.
+          const watchTicks = Stream.unwrap(
+            Effect.gen(function* watchStream() {
+              const watcher = yield* Watcher;
+              return watcher.changes(root);
             }),
-          ),
-          Effect.ignore,
-        );
-        yield* Effect.sleep("5 seconds");
-      }),
-    ).pipe(Stream.forever);
-    runtime
-      .runPromise(Stream.merge(changedRefresh, repoFilesPoll).pipe(Stream.runDrain), {
-        signal: controller.signal,
-      })
+          ).pipe(Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))));
+          const safetyTicks = Stream.fromEffect(
+            Effect.suspend(() =>
+              Effect.sleep(
+                refreshDelay({
+                  lastChangeAt: lastChange(),
+                  lastWatcherTickAt: lastWatcherTick(),
+                  now: Date.now(),
+                }),
+              ),
+            ),
+          ).pipe(Stream.forever);
+          // RepoFiles triggers: an immediate load on (re)key plus a slow floor.
+          // The changed refresh wakes it on any real structural shift, so this
+          // Floor only covers a change the changed set never reflected.
+          const repoFilesFloor = Stream.fromEffect(Effect.sleep("30 seconds")).pipe(Stream.forever);
+
+          const feedChanged = Stream.mergeAll([Stream.make(undefined), watchTicks, safetyTicks], {
+            concurrency: "unbounded",
+          }).pipe(Stream.runForEach(() => Queue.offer(changedTriggers, undefined)));
+          const feedRepoFiles = Stream.mergeAll([Stream.make(undefined), repoFilesFloor], {
+            concurrency: "unbounded",
+          }).pipe(Stream.runForEach(() => Queue.offer(repoFilesTriggers, undefined)));
+          const drainChanged = Stream.fromQueue(changedTriggers).pipe(
+            Stream.mapEffect(() => refreshChanged),
+            Stream.runDrain,
+          );
+          const drainRepoFiles = Stream.fromQueue(repoFilesTriggers).pipe(
+            Stream.mapEffect(() => refreshRepoFiles),
+            Stream.runDrain,
+          );
+
+          // All four run until the controller aborts (worktree/scope re-key),
+          // Which interrupts the fiber and closes the watcher's fs handles.
+          yield* Effect.all([feedChanged, feedRepoFiles, drainChanged, drainRepoFiles], {
+            concurrency: "unbounded",
+          });
+        }),
+        { signal: controller.signal },
+      )
       .catch(() => {});
     onCleanup(() => controller.abort());
   });

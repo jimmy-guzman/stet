@@ -77,6 +77,14 @@ try {
   );
   await configRuntime.dispose();
 
+  // Register the configured themes and seed the theme selection *before* the
+  // Renderer enters the alt-screen, so a config-validation throw still lands on
+  // The normal terminal rather than a torn-down one. These need neither the
+  // Renderer nor the detected appearance; appearance is applied just below.
+  const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
+  registerThemes(themes);
+  setSelection(config.theme);
+
   // Create the renderer up front and detect the terminal's dark/light appearance
   // Before the first runtime use (which warms the diff highlighter), so the whole
   // App themes to match. Detection is a bounded terminal query; a terminal that
@@ -85,59 +93,91 @@ try {
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
 
-  // Register the configured themes and seed the reactive theme state before the
-  // App runtime warms the highlighter. Selection + appearance feed the active
-  // Theme; a selection naming an unknown theme falls back to the built-in and is
-  // Reported. The renderer's theme_mode event updates appearance live (App.tsx).
-  const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
-  registerThemes(themes);
-  setSelection(config.theme);
+  // Restore the terminal on every exit path, not just a clean quit. In raw mode a
+  // Keyboard ctrl-c is a keypress the keymap owns, so these process signals fire
+  // Only on an external kill or a crash — exactly the paths that otherwise leave
+  // The alt-screen buffer active and the next launch blank. destroy() is
+  // Idempotent, so racing the keymap's own quit is harmless.
+  const restoreTerminal = () => {
+    renderer.setTerminalTitle("");
+    renderer.destroy();
+  };
+  const crash = (error: unknown) => {
+    restoreTerminal();
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  };
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.on(signal, () => {
+      restoreTerminal();
+      process.exit(0);
+    });
+  }
+  process.on("uncaughtException", crash);
+  process.on("unhandledRejection", crash);
+
+  // Apply the detected appearance and validate the active theme name. Both need
+  // The renderer's appearance and are non-throwing, so running them after the
+  // Alt-screen is entered leaves no window for a blank-on-error. Selection +
+  // Appearance together feed the active theme before the first runtime use warms
+  // The highlighter; the renderer's theme_mode event updates appearance live.
   setAppearance(appearance);
   const activeName = selectThemeName(config.theme, appearance);
   if (!hasTheme(activeName)) {
     themeIssues.push(`theme "${activeName}" not found; using the ${appearance} default`);
   }
 
-  const { changed, mainWorktreePath, repoRoot, sessionBase } = await runtime.runPromise(startup);
-
-  // oxlint-disable-next-line no-magic-numbers -- one-time startup model assembly
-  const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
-  const initialSelectedPath = model.changed[0]?.path ?? model.repoFiles[0]?.path;
-  const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));
-  const initialExpanded =
-    initialSelectedPath === undefined
-      ? baseExpanded
-      : expandAncestorsForPath(baseExpanded, initialSelectedPath);
-
+  // The CLI-derived state needs no git, so seed it before the first paint.
   batch(() => {
     state.setScope(options.scope);
     state.setCliBaseRef(options.scope.ref);
-    state.setSessionBase(sessionBase);
     state.setIconsEnabled(options.icons);
     state.setOverflow(options.overflow);
     state.setEditorTemplate(resolveEditorTemplate(options.editor ?? config.editor));
     state.setIdeTemplate(resolveIdeTemplate(options.ide ?? config.ide));
-    state.setGitModel(model);
-    state.setRepoRoot(model.repoRoot);
-    state.setMainWorktreePath(mainWorktreePath);
-    state.setLastChange(Date.now());
-    state.setSelectedPath(initialSelectedPath);
-    state.setFocusedNodeId(initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`);
-    state.setExpandedDirectories(initialExpanded);
-    state.setCheckerState(initialCheckerState(model.changed));
   });
-  void state.runChecks(model);
 
-  // A bad config never blocks startup; the first issue surfaces as a notice.
-  const issues = [...configIssues, ...themeIssues];
-  if (issues.length > 0) {
-    state.notify(issues[0] ?? "config has issues");
-  }
-
-  // OpenTUI's exitOnCtrlC only calls renderer.destroy(), never process.exit, so
-  // The background git poll keeps the event loop alive and the process lags
-  // Before exiting. Route ctrl-c through our own quit() (in the keymap) instead.
+  // Paint the shell immediately from the empty model — every effect guards on the
+  // Empty root / undefined selection — so a large repo shows the UI at once
+  // Instead of a blank alt-screen for the whole git load. The model loads in the
+  // Background and seeds when it resolves, the same instant-then-fill shape a
+  // Worktree switch already uses. A load failure (not a repo) restores the
+  // Terminal before exiting, since the alt-screen is now already entered.
   void render(() => <App />, renderer);
+
+  runtime
+    .runPromise(startup)
+    .then(({ changed, mainWorktreePath, repoRoot, sessionBase }) => {
+      const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
+      const initialSelectedPath = model.changed[0]?.path ?? model.repoFiles[0]?.path;
+      const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));
+      const initialExpanded =
+        initialSelectedPath === undefined
+          ? baseExpanded
+          : expandAncestorsForPath(baseExpanded, initialSelectedPath);
+
+      batch(() => {
+        state.setSessionBase(sessionBase);
+        state.setGitModel(model);
+        state.setRepoRoot(model.repoRoot);
+        state.setMainWorktreePath(mainWorktreePath);
+        state.setLastChange(Date.now());
+        state.setSelectedPath(initialSelectedPath);
+        state.setFocusedNodeId(
+          initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`,
+        );
+        state.setExpandedDirectories(initialExpanded);
+        state.setCheckerState(initialCheckerState(model.changed));
+      });
+      void state.runChecks(model);
+
+      // A bad config never blocks startup; the first issue surfaces as a notice.
+      const issues = [...configIssues, ...themeIssues];
+      if (issues.length > 0) {
+        state.notify(issues[0] ?? "config has issues");
+      }
+    })
+    .catch(crash);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

@@ -26,7 +26,7 @@ export function ScopePicker() {
       zIndex={100}
     >
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.strong}>scope</text>
+        <text fg={theme.colors.text.strong}>switch scope</text>
       </box>
       <scrollbox
         ref={(el) => (scopeRef = el)}
@@ -65,6 +65,9 @@ export function ScopePicker() {
           }}
         </Index>
       </scrollbox>
+      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+        <text fg={theme.colors.text.muted}>↑↓ navigate · ⏎ switch · esc close</text>
+      </box>
     </box>
   );
 }

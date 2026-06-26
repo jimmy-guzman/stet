@@ -331,6 +331,18 @@ function stageFromCodes(index: string, worktree: string): StageState {
   return staged ? "staged" : "unstaged";
 }
 
+// Whether the *set* of changed paths shifted (a file appeared or disappeared),
+// Ignoring churn in additions/deletions/mtime. Both arrays are path-sorted
+// (assembleChanged sorts, mergeChanged preserves order), so a positional compare
+// Suffices. Drives the repoFiles refresh: the full file tree only needs re-listing
+// When the file set changes, never on a content-only edit.
+export function changedPathsDiffer(previous: ChangedFile[], next: ChangedFile[]) {
+  if (previous.length !== next.length) {
+    return true;
+  }
+  return previous.some((file, index) => file.path !== next[index]?.path);
+}
+
 function changedSignature(files: ChangedFile[]) {
   return files
     .map(

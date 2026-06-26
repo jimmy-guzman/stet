@@ -49,11 +49,11 @@ export function HelpOverlay() {
       zIndex={100}
     >
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.strong}>keys</text>
+        <text fg={theme.colors.text.strong}>keyboard shortcuts</text>
       </box>
       <scrollbox
         width="100%"
-        height={Math.min(KEY_HELP.length, Math.max(1, state.terminalHeight() - 6))}
+        height={Math.min(KEY_HELP.length, Math.max(1, state.terminalHeight() - 7))}
         scrollY
         viewportCulling
         scrollbarOptions={{
@@ -79,6 +79,9 @@ export function HelpOverlay() {
           )}
         </For>
       </scrollbox>
+      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+        <text fg={theme.colors.text.muted}>esc close</text>
+      </box>
     </box>
   );
 }

@@ -29,7 +29,7 @@ export function WorktreePicker() {
       zIndex={100}
     >
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.strong}>worktrees</text>
+        <text fg={theme.colors.text.strong}>switch worktree</text>
       </box>
       <scrollbox
         ref={(el) => (worktreeRef = el)}
@@ -111,6 +111,9 @@ export function WorktreePicker() {
           </Show>
         </Show>
       </scrollbox>
+      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+        <text fg={theme.colors.text.muted}>↑↓ navigate · ⏎ switch · esc close</text>
+      </box>
     </box>
   );
 }

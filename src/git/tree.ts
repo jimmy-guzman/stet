@@ -41,13 +41,27 @@ export function buildFileTree(
   changedByPath: Map<string, ChangedFile>,
   options: BuildTreeOptions,
 ): FileTreeNode[] {
+  return decorateTree(
+    buildTreeStructure(repoFiles, new Set(changedByPath.keys()), options),
+    changedByPath,
+  );
+}
+
+// The repo-size-proportional half: the directory hierarchy and file nodes, sorted
+// And single-child-flattened. It depends only on the file *set* (repoFiles plus
+// Any changed paths the index dropped) and `changesOnly`, never on per-file churn,
+// So the reactive layer memoizes it across content-only edits and skips this walk.
+export function buildTreeStructure(
+  repoFiles: RepoFile[],
+  changedPaths: Set<string>,
+  options: BuildTreeOptions,
+): FileTreeNode[] {
   const root = makeDirectory("", "");
   const directories = new Map<string, DirectoryNode>([["", root]]);
   const seen = new Set<string>();
 
   function insert(path: string, tracked: boolean, symlink: boolean) {
-    const changed = changedByPath.get(path);
-    if (options.changesOnly && changed === undefined) {
+    if (options.changesOnly && !changedPaths.has(path)) {
       return;
     }
 
@@ -69,7 +83,7 @@ export function buildFileTree(
     }
 
     parent.children.push({
-      changed,
+      changed: undefined,
       id: `file:${path}`,
       name: parts.at(-1) ?? path,
       path,
@@ -85,15 +99,32 @@ export function buildFileTree(
   }
 
   // Staged deletions vanish from ls-files; keep them visible via the changed set
-  for (const path of changedByPath.keys()) {
+  for (const path of changedPaths) {
     if (!seen.has(path)) {
       insert(path, true, false);
     }
   }
 
-  aggregateDirectory(root);
   sortTree(root);
   return root.children.map(flattenSingleChildChains);
+}
+
+// The cheap half: overlay the current changed set onto a prebuilt structure,
+// Setting each file's change and re-aggregating directories from it. Runs on every
+// Model update (where counts churn) while the structure above stays cached.
+export function decorateTree(
+  nodes: FileTreeNode[],
+  changedByPath: Map<string, ChangedFile>,
+): FileTreeNode[] {
+  return nodes.map((node) => decorateNode(node, changedByPath));
+}
+
+function decorateNode(node: FileTreeNode, changedByPath: Map<string, ChangedFile>): FileTreeNode {
+  if (node.type === "file") {
+    return { ...node, changed: changedByPath.get(node.path) };
+  }
+  const children = node.children.map((child) => decorateNode(child, changedByPath));
+  return { ...node, ...aggregateChildren(children), children };
 }
 
 export function defaultExpandedDirectories(changedPaths: string[]) {
@@ -171,7 +202,10 @@ function makeDirectory(name: string, path: string): DirectoryNode {
   };
 }
 
-function aggregateDirectory(directory: DirectoryNode) {
+// Sum a directory's churn, file/changed counts, merged stage, and warnings from
+// Its already-decorated children. Pure (returns the fields rather than mutating),
+// So `decorateNode` can rebuild directories immutably over the cached structure.
+function aggregateChildren(children: FileTreeNode[]) {
   const warnings = new Set<string>();
   const stages = new Set<StageState>();
   let additions = 0;
@@ -179,9 +213,8 @@ function aggregateDirectory(directory: DirectoryNode) {
   let fileCount = 0;
   let changedCount = 0;
 
-  for (const child of directory.children) {
+  for (const child of children) {
     if (child.type === "directory") {
-      aggregateDirectory(child);
       additions += child.additions;
       deletions += child.deletions;
       fileCount += child.fileCount;
@@ -207,12 +240,14 @@ function aggregateDirectory(directory: DirectoryNode) {
     }
   }
 
-  directory.additions = additions;
-  directory.deletions = deletions;
-  directory.fileCount = fileCount;
-  directory.changedCount = changedCount;
-  directory.stage = stages.size === 0 ? undefined : stages.size === 1 ? [...stages][0] : "mixed";
-  directory.warnings = [...warnings];
+  return {
+    additions,
+    changedCount,
+    deletions,
+    fileCount,
+    stage: stages.size === 0 ? undefined : stages.size === 1 ? [...stages][0] : "mixed",
+    warnings: [...warnings],
+  };
 }
 
 function sortTree(directory: DirectoryNode) {

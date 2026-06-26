@@ -95,6 +95,7 @@ const openDiffView = ["Ctrl+P", 'Type "DiffView"', "Sleep 400ms", "Enter", "Slee
  */
 const screens = [
   { name: "sideye", steps: openDiffView },
+  { name: "scope-picker", steps: ['Type "s"', "Sleep 800ms"].join("\n") },
   { name: "worktree-picker", steps: ['Type "w"', "Sleep 800ms"].join("\n") },
   {
     /**

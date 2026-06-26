@@ -3,6 +3,7 @@ import { renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  changedPathsDiffer,
   diffArgs,
   EMPTY_TREE_SHA,
   mergeModel,
@@ -456,5 +457,23 @@ describe("mergeModel", () => {
     expect(merged).not.toBe(prev);
     expect(merged.changedByPath.get("a.ts")).toBe(stable);
     expect(merged.changedByPath.get("b.ts")).toBe(next.changedByPath.get("b.ts"));
+  });
+});
+
+describe("changedPathsDiffer", () => {
+  test("is false when only counts/stage/mtime churn", () => {
+    const previous = [file("a.ts"), file("b.ts")];
+    const next = [file("a.ts", { additions: 9, deletions: 4, mtimeMs: 99 }), file("b.ts")];
+    expect(changedPathsDiffer(previous, next)).toBe(false);
+  });
+
+  test("is true when a path appears or disappears", () => {
+    const previous = [file("a.ts"), file("b.ts")];
+    expect(changedPathsDiffer(previous, [file("a.ts")])).toBe(true);
+    expect(changedPathsDiffer(previous, [file("a.ts"), file("b.ts"), file("c.ts")])).toBe(true);
+  });
+
+  test("is true when a path is renamed even at the same count", () => {
+    expect(changedPathsDiffer([file("a.ts")], [file("renamed.ts")])).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ import { ProvisionerLive } from "./diagnostics/provision";
 import { LanguageServersLive } from "./diagnostics/servers";
 import { DiagnosticsLive } from "./diagnostics/service";
 import { DiffEngineLive } from "./diff/engine";
+import { EditorLive } from "./editor/service";
 import { FileLive } from "./file/service";
 import { GitLive } from "./git/service";
 import { ProcessLive } from "./process";
@@ -20,6 +21,7 @@ import { WatcherLive } from "./watcher/service";
 const AppLayer = Layer.mergeAll(
   DiagnosticsLive,
   DiffEngineLive,
+  EditorLive,
   FileLive,
   ClipboardLive,
   WatcherLive,

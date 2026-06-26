@@ -7,9 +7,10 @@ import { batch } from "solid-js";
 
 import packageJson from "../package.json";
 import { App } from "./App";
-import { helpText, parseArgs, resolveEditorTemplate, resolveIdeTemplate } from "./cli";
+import { helpText, parseArgs } from "./cli";
 import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
+import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import type { GitModel } from "./git/model";
 import { Git } from "./git/service";
 import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";

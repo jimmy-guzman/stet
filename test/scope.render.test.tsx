@@ -91,7 +91,7 @@ describe("scope switching", () => {
       // The active scope (all) carries the ● marker.
       expect(open).toContain("● all changes");
 
-      mockInput.pressKey("escape");
+      mockInput.pressEscape();
       const closed = await settleUntil(
         "escape closes the picker",
         (frame) => !frame.includes("● all changes"),

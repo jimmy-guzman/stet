@@ -3,9 +3,9 @@ import { basename, join } from "node:path";
 
 import type { ThemeMode } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
+import { Effect } from "effect";
 import { createEffect, onCleanup, Show } from "solid-js";
 
-import { buildEditorCommand } from "./cli";
 import { HeaderBar } from "./components/HeaderBar";
 import { HelpOverlay } from "./components/HelpOverlay";
 import { Palette } from "./components/Palette";
@@ -17,8 +17,11 @@ import { StatusBar } from "./components/StatusBar";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { Viewer } from "./components/Viewer";
 import { WorktreePicker } from "./components/WorktreePicker";
+import { buildEditorCommand } from "./editor/reference";
+import { Editor } from "./editor/service";
 import type { Worktree } from "./git/model";
 import { createKeyHandler } from "./keymap";
+import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { useTheme } from "./theme/context";
@@ -117,37 +120,27 @@ export function App() {
     if (argv.length === 0) {
       return;
     }
+    const cwd = state.gitModel().repoRoot;
     if (mode === "terminal") {
       renderer.suspend();
       try {
-        const proc = Bun.spawn(argv, {
-          cwd: state.gitModel().repoRoot,
-          stderr: "inherit",
-          stdin: "inherit",
-          stdout: "inherit",
-        });
-        await proc.exited;
+        await runtime.runPromise(Editor.use((editor) => editor.openTerminal(argv, cwd)));
       } catch (error) {
         state.notify(error instanceof Error ? error.message : "failed to open editor");
       } finally {
         renderer.resume();
       }
     } else {
-      try {
-        const proc = Bun.spawn(argv, {
-          cwd: state.gitModel().repoRoot,
-          stderr: "ignore",
-          stdin: "ignore",
-          stdout: "ignore",
-        });
-        void proc.exited.then((code) => {
-          if (code !== 0) {
-            state.notify(`IDE exited with code ${String(code)}`);
-          }
-        });
-      } catch (error) {
-        state.notify(error instanceof Error ? error.message : "failed to open IDE");
-      }
+      runtime.runFork(
+        Editor.use((editor) => editor.openIde(argv, cwd)).pipe(
+          Effect.tap((code) =>
+            code !== 0
+              ? Effect.sync(() => state.notify(`IDE exited with code ${String(code)}`))
+              : Effect.void,
+          ),
+          Effect.catch((error) => Effect.sync(() => state.notify(error.message))),
+        ),
+      );
     }
   }
 

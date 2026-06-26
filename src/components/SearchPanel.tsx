@@ -46,8 +46,6 @@ export function SearchPanel() {
     const more = state.searchTruncated() ? "+" : "";
     return `${results().length}${more} match${results().length === 1 ? "" : "es"} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
   };
-  // With no matches the list band is gone, so the status row carries the empty hint
-  // (alongside the scope on its right) instead of a separate blank list row.
   const statusLabel = () => {
     if (results().length > 0) {
       return summary();
@@ -79,8 +77,6 @@ export function SearchPanel() {
         onInput={onInput}
         onSubmit={onSubmit}
       />
-      {/* The list only mounts once there are matches; until then the status row below
-          carries the empty hint, so an empty search never leaves a blank list band. */}
       <Show when={results().length > 0}>
         <scrollbox
           ref={(el) => (searchRef = el)}

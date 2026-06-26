@@ -27,6 +27,8 @@ describe("help overlay", () => {
       );
       expect(help).toContain("go to file: fuzzy-search the whole repo");
       expect(help).toContain("toggle the file tree sidebar");
+      expect(help).toContain("open in terminal editor");
+      expect(help).toContain("open in GUI / IDE");
 
       // P and b must be swallowed: no problems panel, no sidebar toggle, overlay stays
       mockInput.pressKey("p");

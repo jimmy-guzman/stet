@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 
 import type { ThemeMode } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
+import { Effect } from "effect";
 import { createEffect, onCleanup, Show } from "solid-js";
 
 import { HeaderBar } from "./components/HeaderBar";
@@ -16,8 +17,11 @@ import { StatusBar } from "./components/StatusBar";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { Viewer } from "./components/Viewer";
 import { WorktreePicker } from "./components/WorktreePicker";
+import { buildEditorCommand } from "./editor/reference";
+import { Editor } from "./editor/service";
 import type { Worktree } from "./git/model";
 import { createKeyHandler } from "./keymap";
+import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { useTheme } from "./theme/context";
@@ -101,7 +105,46 @@ export function App() {
     quit("sideye: worktree deleted, nothing left to inspect");
   });
 
-  useKeyboard(createKeyHandler({ quit }));
+  async function openInEditor(
+    filePath: string,
+    line: number | undefined,
+    mode: "terminal" | "ide",
+  ) {
+    const template = mode === "ide" ? state.ideTemplate() : state.editorTemplate();
+    if (template === undefined) {
+      state.notify("no IDE configured — set 'ide' in config or use --ide");
+      return;
+    }
+    const absolutePath = join(state.gitModel().repoRoot, filePath);
+    const argv = buildEditorCommand(template, absolutePath, line);
+    if (argv.length === 0) {
+      return;
+    }
+    const cwd = state.gitModel().repoRoot;
+    if (mode === "terminal") {
+      renderer.suspend();
+      try {
+        await runtime.runPromise(Editor.use((editor) => editor.openTerminal(argv, cwd)));
+      } catch (error) {
+        state.notify(error instanceof Error ? error.message : "failed to open editor");
+      } finally {
+        renderer.resume();
+      }
+    } else {
+      runtime.runFork(
+        Editor.use((editor) => editor.openIde(argv, cwd)).pipe(
+          Effect.tap((code) =>
+            code !== 0
+              ? Effect.sync(() => state.notify(`IDE exited with code ${String(code)}`))
+              : Effect.void,
+          ),
+          Effect.catch((error) => Effect.sync(() => state.notify(error.message))),
+        ),
+      );
+    }
+  }
+
+  useKeyboard(createKeyHandler({ openInEditor, quit }));
 
   return (
     <box

@@ -11,13 +11,15 @@ export interface DiffScope {
 }
 
 export interface CliOptions {
-  scope: DiffScope;
+  editor: string | undefined;
   help: boolean;
-  version: boolean;
   icons: boolean;
+  ide: string | undefined;
   lspDownload: boolean;
   /** Long line handling: `scroll` (default) or `wrap`. */
   overflow: "scroll" | "wrap";
+  scope: DiffScope;
+  version: boolean;
 }
 
 export function parseArgs(args: string[]): CliOptions {
@@ -28,8 +30,12 @@ export function parseArgs(args: string[]): CliOptions {
   let lspDownload = true;
   let overflow: "scroll" | "wrap" = "scroll";
   let ref: string | undefined;
+  let editor: string | undefined;
+  let ide: string | undefined;
 
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
     if (arg === "--no-icons") {
       icons = false;
       continue;
@@ -65,6 +71,42 @@ export function parseArgs(args: string[]): CliOptions {
       continue;
     }
 
+    if (arg.startsWith("--editor=")) {
+      const value = arg.slice("--editor=".length);
+      if (value.trim() === "") {
+        throw new Error("--editor requires a non-empty value");
+      }
+      editor = value;
+      continue;
+    }
+
+    if (arg === "--editor") {
+      const value = args[++i];
+      if (value === undefined || value.trim() === "") {
+        throw new Error("--editor requires a non-empty value");
+      }
+      editor = value;
+      continue;
+    }
+
+    if (arg.startsWith("--ide=")) {
+      const value = arg.slice("--ide=".length);
+      if (value.trim() === "") {
+        throw new Error("--ide requires a non-empty value");
+      }
+      ide = value;
+      continue;
+    }
+
+    if (arg === "--ide") {
+      const value = args[++i];
+      if (value === undefined || value.trim() === "") {
+        throw new Error("--ide requires a non-empty value");
+      }
+      ide = value;
+      continue;
+    }
+
     if (arg.startsWith("-")) {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -77,8 +119,10 @@ export function parseArgs(args: string[]): CliOptions {
   }
 
   return {
+    editor,
     help,
     icons,
+    ide,
     lspDownload,
     overflow,
     scope: { kind, ref: ref ?? "HEAD" },
@@ -139,6 +183,30 @@ Usage:
   sideye --no-icons        (disable Nerd Font file-type icons in the tree)
   sideye --no-lsp-download (do not auto-download a missing language server)
   sideye --wrap            (wrap long lines in the viewer instead of overflowing)
+  sideye --editor <template>
+  sideye --ide <template>
+
+Options:
+  --editor <template>
+      Command template for the terminal editor (e key). The renderer
+      suspends, hands the TTY to the editor, then resumes when it exits.
+      Use {file} for the path and {line} for the line number.
+      Examples:
+        --editor "vim +{line} {file}"
+        --editor "nvim +{line} {file}"
+        --editor "nano +{line} {file}"
+      Falls back to SIDEYE_EDITOR, then $EDITOR / $VISUAL (with known-editor
+      heuristics for the line arg format), then vim.
+
+  --ide <template>
+      Command template for a GUI / IDE (o key). Spawns the process and
+      returns immediately; the renderer stays live in its pane.
+      Examples:
+        --ide "code --goto {file}:{line}"
+        --ide "zed {file}:{line}"
+        --ide "subl {file}:{line}"
+      Falls back to SIDEYE_IDE, then $VISUAL when it differs from $EDITOR.
+      If nothing is configured, o does nothing.
 
 Keys:
   tab        switch focus between the file tree and the viewer
@@ -168,6 +236,8 @@ Anywhere:
   ctrl-p     open the go-to-file palette (type to fuzzy-search, enter jumps)
   ctrl-f     search file contents (ctrl-a toggles changes/repo, enter jumps)
   s          open the scope picker (unstaged/staged/all/session/last commit)
+  e          open in terminal editor (suspends TUI, --editor template)
+  o          open in GUI / IDE (renderer stays live, --ide template)
   t          open the theme switcher (filter, preview live, enter applies)
   c          toggle changes-only filter for the tree
   v          toggle diff <-> full file view

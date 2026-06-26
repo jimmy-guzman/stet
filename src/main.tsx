@@ -10,6 +10,7 @@ import { App } from "./App";
 import { helpText, parseArgs } from "./cli";
 import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
+import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import type { GitModel } from "./git/model";
 import { Git } from "./git/service";
 import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
@@ -133,6 +134,8 @@ try {
     state.setCliBaseRef(options.scope.ref);
     state.setIconsEnabled(options.icons);
     state.setOverflow(options.overflow);
+    state.setEditorTemplate(resolveEditorTemplate(options.editor ?? config.editor));
+    state.setIdeTemplate(resolveIdeTemplate(options.ide ?? config.ide));
   });
 
   // Paint the shell immediately from the empty model — every effect guards on the

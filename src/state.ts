@@ -254,6 +254,8 @@ function createState() {
   const [now, setNow] = createSignal(Date.now());
   const [terminalWidth, setTerminalWidth] = createSignal(80);
   const [terminalHeight, setTerminalHeight] = createSignal(24);
+  const [editorTemplate, setEditorTemplate] = createSignal<string>("vim +{line} {file}");
+  const [ideTemplate, setIdeTemplate] = createSignal<string | undefined>(undefined);
 
   // --- synchronous derived ---
   const selectedFile = createMemo(() => {
@@ -1105,6 +1107,7 @@ function createState() {
     cursorIndex,
     cursorLineNumber,
     diffView,
+    editorTemplate,
     expandedDirectories,
     fileView,
     findActive,
@@ -1120,6 +1123,7 @@ function createState() {
     gitModel,
     helpOpen,
     iconsEnabled,
+    ideTemplate,
     jumpTarget,
     lineMap,
     loadWorktrees,
@@ -1165,6 +1169,7 @@ function createState() {
     setCliBaseRef,
     setCurrentWorktreeDeleted,
     setCursorIndex,
+    setEditorTemplate,
     setExpandedDirectories,
     setFileView,
     setFindActive,
@@ -1177,6 +1182,7 @@ function createState() {
     setGitModel,
     setHelpOpen,
     setIconsEnabled,
+    setIdeTemplate,
     setJumpTarget,
     setLastChange,
     setMainWorktreePath,

@@ -35,6 +35,58 @@ describe("parseArgs", () => {
     expect(parseArgs(["--wrap"]).overflow).toBe("wrap");
   });
 
+  test("accepts --editor as a separate argument", () => {
+    expect(parseArgs(["--editor", "nvim +{line} {file}"]).editor).toBe("nvim +{line} {file}");
+  });
+
+  test("accepts --editor= inline syntax", () => {
+    expect(parseArgs(["--editor=code --goto {file}:{line}"]).editor).toBe(
+      "code --goto {file}:{line}",
+    );
+  });
+
+  test("--editor does not affect scope", () => {
+    const result = parseArgs(["--staged", "--editor", "hx {file}:{line}"]);
+    expect(result.scope.kind).toBe("staged");
+    expect(result.editor).toBe("hx {file}:{line}");
+  });
+
+  test("accepts --ide as a separate argument", () => {
+    expect(parseArgs(["--ide", "code --goto {file}:{line}"]).ide).toBe("code --goto {file}:{line}");
+  });
+
+  test("accepts --ide= inline syntax", () => {
+    expect(parseArgs(["--ide=zed {file}:{line}"]).ide).toBe("zed {file}:{line}");
+  });
+
+  test("--ide does not affect --editor or scope", () => {
+    const result = parseArgs([
+      "--editor",
+      "nvim +{line} {file}",
+      "--ide",
+      "code --goto {file}:{line}",
+    ]);
+    expect(result.editor).toBe("nvim +{line} {file}");
+    expect(result.ide).toBe("code --goto {file}:{line}");
+    expect(result.scope.kind).toBe("all");
+  });
+
+  test("throws when --editor has no value", () => {
+    expect(() => parseArgs(["--editor"])).toThrow("--editor requires a non-empty value");
+  });
+
+  test("throws when --ide has no value", () => {
+    expect(() => parseArgs(["--ide"])).toThrow("--ide requires a non-empty value");
+  });
+
+  test("editor defaults to undefined when not provided", () => {
+    expect(parseArgs([]).editor).toBeUndefined();
+  });
+
+  test("ide defaults to undefined when not provided", () => {
+    expect(parseArgs([]).ide).toBeUndefined();
+  });
+
   test("rejects unknown options", () => {
     expect(() => parseArgs(["--nope"])).toThrow("Unknown option: --nope");
   });
@@ -79,5 +131,17 @@ describe("helpText", () => {
       "y          copy the focused file's path (tree) or path:line (viewer)",
     );
     expect(helpText()).toContain("The view is live");
+  });
+
+  test("documents the --editor and --ide flags", () => {
+    expect(helpText()).toContain("--editor <template>");
+    expect(helpText()).toContain("--ide <template>");
+    expect(helpText()).toContain("{file}");
+    expect(helpText()).toContain("{line}");
+  });
+
+  test("documents the e and o keybindings", () => {
+    expect(helpText()).toContain("e          open in terminal editor");
+    expect(helpText()).toContain("o          open in GUI / IDE");
   });
 });

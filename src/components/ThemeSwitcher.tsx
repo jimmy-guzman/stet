@@ -57,9 +57,6 @@ export function ThemeSwitcher() {
       backgroundColor={theme.colors.surface.panel}
       zIndex={100}
     >
-      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.strong}>theme</text>
-      </box>
       <input
         focused
         width="100%"

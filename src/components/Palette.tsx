@@ -123,6 +123,9 @@ export function Palette() {
           </Index>
         </Show>
       </scrollbox>
+      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+        <text fg={theme.colors.text.muted}>↑↓ navigate · ⏎ open · esc close</text>
+      </box>
     </box>
   );
 }

@@ -38,7 +38,7 @@ describe("worktree picker", () => {
       mockInput.pressKey("w");
       const picker = await settleUntil(
         "worktree picker",
-        (frame) => frame.includes("worktrees") && frame.includes("side-branch"),
+        (frame) => frame.includes("switch worktree") && frame.includes("side-branch"),
       );
       expect(picker).toContain("side-branch");
 

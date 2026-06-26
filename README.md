@@ -83,6 +83,13 @@ supports. Unchanged files open read-only with no diff gutters, just the source.
 
 ![read-only file view showing a source file with syntax highlighting and no diff gutters](assets/screenshots/read-only.png)
 
+### Switch scope
+
+Press `s` to pick what the diff compares: all changes, staged, unstaged,
+everything since sideye launched, or just the last commit.
+
+![scope picker listing the five diff scopes with the active one marked](assets/screenshots/scope-picker.png)
+
 ### Switch worktrees
 
 Press `w` to jump between git worktrees without leaving the view. The tree,

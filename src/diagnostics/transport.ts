@@ -4,14 +4,11 @@
  * requests get a minimal reply so the server never blocks, notifications are logged. Decoupled from
  * the process so it can be driven by a fake in-process peer in tests.
  */
-import { Data, Deferred, Effect, Queue, type Cause } from "effect";
+import { Data, Deferred, Effect, Queue } from "effect";
+import type { Cause } from "effect";
 
-import {
-  isJsonRpcNotification,
-  isJsonRpcRequest,
-  isJsonRpcResponse,
-  type JsonRpcMessage,
-} from "./jsonrpc";
+import { isJsonRpcNotification, isJsonRpcRequest, isJsonRpcResponse } from "./jsonrpc";
+import type { JsonRpcMessage } from "./jsonrpc";
 
 export class LspRequestError extends Data.TaggedError("LspRequestError")<{
   readonly method: string;

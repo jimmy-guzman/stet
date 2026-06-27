@@ -1,7 +1,9 @@
 import { createMemo, createRoot, createSignal } from "solid-js";
 
-import { selectThemeName, themeForName, type ThemeSelection } from "./registry";
-import { resolveTheme, type ResolvedTheme } from "./resolve";
+import { selectThemeName, themeForName } from "./registry";
+import type { ThemeSelection } from "./registry";
+import { resolveTheme } from "./resolve";
+import type { ResolvedTheme } from "./resolve";
 
 // The reactive theme state, the single seam the UI (useTheme) and the diff engine
 // Read. `appearance` follows the terminal: detected once at startup, then updated

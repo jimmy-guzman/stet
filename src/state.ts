@@ -12,14 +12,15 @@ import {
   findingsLineMap,
   initialCheckerState,
   markPending,
-  type CheckerState,
-  type Diagnostic,
 } from "./diagnostics/checker";
+import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
-import { DiffEngine, structureDiff, type DiffRender, type RenderInput } from "./diff/engine";
-import { contentToContextPatch, type FileContent } from "./file/content";
+import { DiffEngine, structureDiff } from "./diff/engine";
+import type { DiffRender, RenderInput } from "./diff/engine";
+import { contentToContextPatch } from "./file/content";
+import type { FileContent } from "./file/content";
 import { File } from "./file/service";
 import {
   emptyActivityLog,
@@ -27,17 +28,10 @@ import {
   latestActivity,
   RECENT_MS,
   recordActivity,
-  type ActivityEventKind,
-  type ActivityLog,
 } from "./git/activity";
-import {
-  changedPathsDiffer,
-  EMPTY_TREE_SHA,
-  mergeChanged,
-  type ChangedFile,
-  type GitModel,
-  type Worktree,
-} from "./git/model";
+import type { ActivityEventKind, ActivityLog } from "./git/activity";
+import { changedPathsDiffer, EMPTY_TREE_SHA, mergeChanged } from "./git/model";
+import type { ChangedFile, GitModel, Worktree } from "./git/model";
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
 import {
@@ -49,7 +43,8 @@ import {
 } from "./git/tree";
 import { runtime } from "./runtime";
 import { activeThemeName, selection, setSelection } from "./theme/active";
-import { themeNames, type ThemeSelection } from "./theme/registry";
+import { themeNames } from "./theme/registry";
+import type { ThemeSelection } from "./theme/registry";
 import { worktreeLabel } from "./ui-helpers";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
@@ -73,9 +68,8 @@ import {
   remember,
   selectTab,
   unpinTab,
-  type Location,
-  type NavState,
 } from "./viewer/navigation";
+import type { Location, NavState } from "./viewer/navigation";
 import { Watcher } from "./watcher/service";
 
 interface JumpTarget {

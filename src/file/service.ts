@@ -1,12 +1,8 @@
 import { Context, Effect, Layer } from "effect";
 
 import { Process } from "../process";
-import {
-  classifyFileBytes,
-  loadFileContent,
-  type FileContent,
-  type LoadFileContentOptions,
-} from "./content";
+import { classifyFileBytes, loadFileContent } from "./content";
+import type { FileContent, LoadFileContentOptions } from "./content";
 
 export class File extends Context.Service<
   File,

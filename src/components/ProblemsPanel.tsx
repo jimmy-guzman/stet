@@ -2,7 +2,8 @@ import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core";
 import { batch, createEffect, For, Show } from "solid-js";
 
 import { PROBLEMS_HEIGHT } from "../constants";
-import { sourceLabel, type ProblemItem } from "../diagnostics/problems";
+import { sourceLabel } from "../diagnostics/problems";
+import type { ProblemItem } from "../diagnostics/problems";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { truncate } from "../utils/text";

@@ -15,14 +15,11 @@ import { pathToFileURL } from "node:url";
 import { Context, Effect, Layer, Stream } from "effect";
 
 import type { ChangedFile } from "../git/model";
-import {
-  stateForResolvedChecker,
-  type CheckerFileState,
-  type CheckerName,
-  type Diagnostic,
-} from "./checker";
+import { stateForResolvedChecker } from "./checker";
+import type { CheckerFileState, CheckerName, Diagnostic } from "./checker";
 import { isLspDiagnostic, mapLspDiagnostic } from "./protocol";
-import { LanguageServers, lspLanguageId, serversForPath, type ServerHandle } from "./servers";
+import { LanguageServers, lspLanguageId, serversForPath } from "./servers";
+import type { ServerHandle } from "./servers";
 import type { LspConnection } from "./transport";
 
 export interface CheckerUpdate {

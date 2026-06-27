@@ -1,11 +1,5 @@
-import {
-  allFindings,
-  checkerNames,
-  countBySeverity,
-  type CheckerName,
-  type CheckerState,
-  type Diagnostic,
-} from "./checker";
+import { allFindings, checkerNames, countBySeverity } from "./checker";
+import type { CheckerName, CheckerState, Diagnostic } from "./checker";
 
 /**
  * One rendered row of the problems panel. Headers and help sub-lines are decorations between the

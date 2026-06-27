@@ -4,10 +4,13 @@
  * forked read-loop decodes framed messages onto an inbound queue and `send` frames outbound
  * messages onto stdin. The server lifecycle (spawn, handshake, pool) is layered on top in P3.
  */
-import { Context, Data, Effect, Layer, Queue, type Cause, type Scope } from "effect";
+import { Context, Data, Effect, Layer, Queue } from "effect";
+import type { Cause, Scope } from "effect";
 
-import { createFrameDecoder, encodeMessage, type JsonRpcMessage } from "./jsonrpc";
-import { makeTransport, type LspConnection, type LspTransportChannel } from "./transport";
+import { createFrameDecoder, encodeMessage } from "./jsonrpc";
+import type { JsonRpcMessage } from "./jsonrpc";
+import { makeTransport } from "./transport";
+import type { LspConnection, LspTransportChannel } from "./transport";
 
 export class LspSpawnError extends Data.TaggedError("LspSpawnError")<{
   readonly command: readonly string[];

@@ -1,6 +1,7 @@
 import { Context, Data, Effect, Layer } from "effect";
 
-import { loadConfigText, type LoadedConfig } from "./load";
+import { loadConfigText } from "./load";
+import type { LoadedConfig } from "./load";
 import { configPaths } from "./paths";
 
 class ConfigReadError extends Data.TaggedError("ConfigReadError")<{

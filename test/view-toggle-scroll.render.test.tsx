@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { ScrollBoxRenderable, type Renderable } from "@opentui/core";
+import { ScrollBoxRenderable } from "@opentui/core";
+import type { Renderable } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 
 import { App } from "../src/App";

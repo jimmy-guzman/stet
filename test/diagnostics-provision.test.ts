@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 import { Effect, Layer, Queue } from "effect";
 
-import { makeProvisioner, Provisioner, type ProvisionSpec } from "../src/diagnostics/provision";
+import { makeProvisioner, Provisioner } from "../src/diagnostics/provision";
+import type { ProvisionSpec } from "../src/diagnostics/provision";
 import { Process } from "../src/process";
 
 const spec: ProvisionSpec = {

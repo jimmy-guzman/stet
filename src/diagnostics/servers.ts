@@ -7,12 +7,16 @@
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-import { Context, Data, Effect, Layer, RcMap, type Scope } from "effect";
+import { Context, Data, Effect, Layer, RcMap } from "effect";
+import type { Scope } from "effect";
 
 import { resolveBinary } from "./checker";
-import { LspProcess, type LspSpawnError } from "./lsp-process";
-import { cachedBinaryPath, Provisioner, type ProvisionSpec } from "./provision";
-import { LspRequestError, type LspConnection } from "./transport";
+import { LspProcess } from "./lsp-process";
+import type { LspSpawnError } from "./lsp-process";
+import { cachedBinaryPath, Provisioner } from "./provision";
+import type { ProvisionSpec } from "./provision";
+import { LspRequestError } from "./transport";
+import type { LspConnection } from "./transport";
 
 export class ServerUnavailable extends Data.TaggedError("ServerUnavailable")<{
   readonly language: string;

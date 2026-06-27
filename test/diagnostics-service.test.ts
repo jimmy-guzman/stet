@@ -6,12 +6,8 @@ import { join } from "node:path";
 import { Effect, Layer, Stream } from "effect";
 
 import type { CheckerFileState } from "../src/diagnostics/checker";
-import {
-  LanguageServers,
-  ServerInstalling,
-  ServerUnavailable,
-  type ServerHandle,
-} from "../src/diagnostics/servers";
+import { LanguageServers, ServerInstalling, ServerUnavailable } from "../src/diagnostics/servers";
+import type { ServerHandle } from "../src/diagnostics/servers";
 import { Diagnostics, DiagnosticsLive } from "../src/diagnostics/service";
 import type { LspConnection } from "../src/diagnostics/transport";
 import type { ChangedFile } from "../src/git/model";
@@ -160,7 +156,10 @@ test("merges findings from every server that handles the file", async () => {
     const state = await runDiagnostics(
       dir,
       [changed("src/a.ts")],
-      fakeServers({ oxlint: pushingHandle([aLintWarning]), typescript: pushingHandle([anError]) }),
+      fakeServers({
+        oxlint: pushingHandle([aLintWarning]),
+        typescript: pushingHandle([anError]),
+      }),
     );
     const fileState = state.get("src/a.ts");
     expect(fileState?.status).toBe("findings");
@@ -177,7 +176,10 @@ test("streams a snapshot per server as each finishes, not one combined update", 
     const updates = await collectUpdates(
       dir,
       [changed("src/a.ts")],
-      fakeServers({ oxlint: pushingHandle([aLintWarning]), typescript: pushingHandle([]) }),
+      fakeServers({
+        oxlint: pushingHandle([aLintWarning]),
+        typescript: pushingHandle([]),
+      }),
     );
     // Two servers handle the file, so it surfaces two progressive snapshots rather than one.
     expect(updates).toHaveLength(2);
@@ -266,7 +268,12 @@ test("degrades to unavailable when the server cannot be acquired", async () => {
   await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
     const failing = Layer.succeed(LanguageServers)({
       acquire: () =>
-        Effect.fail(new ServerUnavailable({ language: "typescript", message: "not found" })),
+        Effect.fail(
+          new ServerUnavailable({
+            language: "typescript",
+            message: "not found",
+          }),
+        ),
     });
     const state = await runDiagnostics(dir, [changed("src/a.ts")], failing);
     expect(state.get("src/a.ts")?.status).toBe("unavailable");

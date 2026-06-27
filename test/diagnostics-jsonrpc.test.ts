@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
 
-import {
-  createFrameDecoder,
-  encodeMessage,
-  isJsonRpcResponse,
-  type JsonRpcMessage,
-} from "../src/diagnostics/jsonrpc";
+import { createFrameDecoder, encodeMessage, isJsonRpcResponse } from "../src/diagnostics/jsonrpc";
+import type { JsonRpcMessage } from "../src/diagnostics/jsonrpc";
 
 function split(bytes: Uint8Array, at: number) {
   return [bytes.subarray(0, at), bytes.subarray(at)] as const;

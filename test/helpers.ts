@@ -11,11 +11,8 @@ import { initialCheckerState } from "../src/diagnostics/checker";
 import { File, FileLive } from "../src/file/service";
 import type { ChangedFile, GitModel } from "../src/git/model";
 import { Git, GitLive } from "../src/git/service";
-import {
-  defaultExpandedDirectories,
-  expandAncestorsForPath,
-  type FileTreeRow,
-} from "../src/git/tree";
+import { defaultExpandedDirectories, expandAncestorsForPath } from "../src/git/tree";
+import type { FileTreeRow } from "../src/git/tree";
 import { ProcessLive } from "../src/process";
 import { state } from "../src/state";
 

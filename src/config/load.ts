@@ -1,6 +1,7 @@
 import { Result, Schema } from "effect";
 
-import { emptyConfig, UserConfigSchema, type UserConfig } from "./schema";
+import { emptyConfig, UserConfigSchema } from "./schema";
+import type { UserConfig } from "./schema";
 
 // Issues never block startup: a malformed or invalid config falls back to
 // Defaults and the issues surface as a notice.

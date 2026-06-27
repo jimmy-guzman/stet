@@ -1,16 +1,11 @@
-import {
-  fg,
-  StyledText,
-  type MouseEvent,
-  type RGBA,
-  type ScrollBoxRenderable,
-  type TextRenderable,
-} from "@opentui/core";
+import { fg, StyledText } from "@opentui/core";
+import type { MouseEvent, RGBA, ScrollBoxRenderable, TextRenderable } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
 import { batch, createEffect, createMemo, Index, onCleanup, Show, untrack } from "solid-js";
 
 import { followScrollTop } from "../../diff/follow";
-import { isLineRow, type DiffLineRow, type DiffRow } from "../../diff/rows";
+import { isLineRow } from "../../diff/rows";
+import type { DiffLineRow, DiffRow } from "../../diff/rows";
 import { sliceSpansWindow } from "../../diff/spans";
 import { visibleWindow, visibleWindowVariable } from "../../diff/windowing";
 import { state } from "../../state";

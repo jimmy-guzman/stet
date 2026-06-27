@@ -1,4 +1,5 @@
-import { TextBuffer, TextBufferView, type WidthMethod } from "@opentui/core";
+import { TextBuffer, TextBufferView } from "@opentui/core";
+import type { WidthMethod } from "@opentui/core";
 
 // Exact wrapped-line measurement: a reusable native TextBufferView measures how
 // Many terminal rows a line occupies under word wrap, via the same engine call

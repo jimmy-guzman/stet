@@ -4,7 +4,8 @@ import { bundledThemesInfo } from "shiki/themes";
 import { darkTheme } from "./dark";
 import { lightTheme } from "./light";
 import { mergeDeep } from "./merge";
-import { ThemeSchema, type Theme } from "./tokens";
+import { ThemeSchema } from "./tokens";
+import type { Theme } from "./tokens";
 
 // Kept here, not imported from config, so theme/ stays free of a config
 // Dependency; the config schema validates the matching shape.

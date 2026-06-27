@@ -213,7 +213,8 @@ Commands:
   upgrade
       Update sideye to the latest release using the channel it was installed
       through: a standalone install re-runs the install script, an npm install
-      runs npm, and a Homebrew install runs brew upgrade.
+      runs npm, and a Homebrew install runs brew upgrade. If the install
+      channel cannot be determined, it prints the upgrade commands instead.
 
 Options:
   --editor <template>

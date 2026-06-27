@@ -15,6 +15,14 @@ describe("classifyInstall", () => {
     expect(classifyInstall("/usr/lib/node_modules/sideye-linux-x64/bin/sideye")).toBe("npm");
   });
 
+  test("treats a Homebrew-prefixed npm install as npm, not brew", () => {
+    expect(
+      classifyInstall(
+        "/opt/homebrew/lib/node_modules/sideye/node_modules/sideye-darwin-arm64/bin/sideye",
+      ),
+    ).toBe("npm");
+  });
+
   test("detects the curl install directory", () => {
     expect(classifyInstall("/home/alice/.sideye/bin/sideye")).toBe("standalone");
   });

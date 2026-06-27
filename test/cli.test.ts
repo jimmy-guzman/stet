@@ -178,4 +178,9 @@ describe("helpText", () => {
     expect(helpText()).toContain("e          open in terminal editor");
     expect(helpText()).toContain("o          open in GUI / IDE");
   });
+
+  test("documents the upgrade command", () => {
+    expect(helpText()).toContain("sideye upgrade");
+    expect(helpText()).toContain("Update sideye to the latest release");
+  });
 });

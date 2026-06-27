@@ -98,9 +98,6 @@ export function Viewer() {
   });
 
   const focused = () => state.focusedPane() === "diff";
-  // The strip shows (and the header turns into the panel band) once a tab is
-  // Pinned; a lone preview keeps the calm body-colored header with just the path.
-  const hasTabStrip = () => state.tabItems().some((tab) => !tab.preview);
   const displayedFile = () => {
     const view = state.diffView();
     return view === undefined ? undefined : state.gitModel().changedByPath.get(view.path);
@@ -176,12 +173,11 @@ export function Viewer() {
             justifyContent="space-between"
             paddingLeft={1}
             paddingRight={1}
-            backgroundColor={hasTabStrip() ? theme.colors.surface.panel : undefined}
           >
             {/* The strip earns the row only once a tab is pinned; a lone preview
                 shows the path as before. */}
             <Show
-              when={hasTabStrip()}
+              when={state.tabItems().some((tab) => !tab.preview)}
               fallback={<text fg={theme.colors.text.primary}>{state.selectedPath() ?? ""}</text>}
             >
               <Tabs />

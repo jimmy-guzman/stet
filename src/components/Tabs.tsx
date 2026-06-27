@@ -1,7 +1,6 @@
 import { createTextAttributes } from "@opentui/core";
 import { batch, createMemo, Index, Show } from "solid-js";
 
-import type { ChangeKind } from "../git/model";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { createDoubleClickGuard } from "../utils/double-click";
@@ -27,19 +26,7 @@ export function Tabs() {
   const theme = useTheme();
   const isDoubleClick = createDoubleClickGuard();
 
-  // Active = selected (on the body surface); otherwise a changed file's label is
-  // Tinted by its kind, like the tree, leaving unchanged files muted. The preview
-  // (ephemeral) tab is signalled by italic instead, freeing the color channel so
-  // A previewed changed file still shows its diff tint.
-  const labelColor = (cell: { active: boolean; kind: ChangeKind | undefined }) =>
-    cell.active
-      ? theme.colors.text.selected
-      : cell.kind !== undefined
-        ? theme.colors.kind[cell.kind]
-        : theme.colors.text.muted;
-
   const layout = createMemo(() => {
-    const changed = state.gitModel().changedByPath;
     const cells = state.tabItems().map((tab) => {
       const label =
         tab.path === undefined
@@ -47,12 +34,9 @@ export function Tabs() {
           : tab.active
             ? truncateLeft(tab.path, PATH_MAX)
             : truncateName(baseName(tab.path), TAB_MAX);
-      // The file's change-kind, used to color the label (changed files only).
-      const kind = tab.path === undefined ? undefined : changed.get(tab.path)?.kind;
       return {
         active: tab.active,
         id: tab.id,
-        kind,
         label,
         preview: tab.preview,
         // Display columns (a label can hold a wide glyph), plus the 1-col pad
@@ -112,11 +96,6 @@ export function Tabs() {
             // OpenTUI text selection (a stray highlight); the strip is chrome,
             // Not content (mirrors Sidebar's focusable ref).
             ref={(el) => (el.selectable = false)}
-            // Depth: the active tab matches the viewer body (base), so it reads as
-            // Raised/connected to the content, while the inactive tabs sit on the
-            // Darker panel surface and recede. Panel is darker than base in both
-            // Themes (cursor would invert in dark), so the active always pops.
-            backgroundColor={cell().active ? theme.colors.surface.base : theme.colors.surface.panel}
             onMouseDown={() =>
               batch(() => {
                 state.activateTab(cell().id);
@@ -126,9 +105,11 @@ export function Tabs() {
               })
             }
           >
+            {/* Hierarchy by type, not chrome: the active tab is the one full-
+                strength label, the rest recede to muted; the preview is italic. */}
             <text
               ref={(el) => (el.selectable = false)}
-              fg={labelColor(cell())}
+              fg={cell().active ? theme.colors.text.primary : theme.colors.text.muted}
               attributes={createTextAttributes({ italic: cell().preview })}
             >
               {` ${cell().label} `}

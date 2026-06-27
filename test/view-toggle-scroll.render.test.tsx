@@ -63,7 +63,7 @@ describe("view toggle scroll", () => {
 
     try {
       // The diff lands with the cursor on the low change.
-      await settleUntil("diff view", (frame) => frame.includes("diff · ln 110"), 5);
+      await settleUntil("diff view", (frame) => /-\d+ · ln 110/.test(frame), 5);
 
       // Focus the viewer and toggle to whole-file view.
       mockInput.pressTab();
@@ -73,7 +73,7 @@ describe("view toggle scroll", () => {
       // Viewport stays blank here (the settle would time out); with it, the content
       // Around line 110 paints with no intervening navigation.
       const frame = await settleUntil("low change visible in file view", (current) => {
-        if (!current.includes("file · ln 110")) {
+        if (!/lines · ln 110/.test(current)) {
           return false;
         }
         const numbers = visibleLineNumbers(current);

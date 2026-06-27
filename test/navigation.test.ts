@@ -4,13 +4,21 @@ import {
   back,
   canBack,
   canForward,
+  closeTab,
   currentLocation,
   forward,
   initialNav,
   navigate,
+  nextTab,
+  openTab,
+  pinTab,
+  prevTab,
+  previewTab,
+  unpinTab,
   recall,
   recordCurrent,
   remember,
+  selectTab,
   type Location,
 } from "../src/viewer/navigation";
 
@@ -137,6 +145,92 @@ describe("MRU viewports", () => {
     });
     expect(currentLocation(back(nav))?.viewport.scrollTop).toBe(9);
     expect(recall(nav, "a")?.viewport.scrollTop).toBe(20);
+  });
+});
+
+describe("preview / pin", () => {
+  test("the seeded tab is a preview tab", () => {
+    const nav = initialNav(loc("a"));
+    expect(previewTab(nav)?.id).toBe("0");
+  });
+
+  test("pinTab clears the preview flag and is idempotent", () => {
+    const pinned = pinTab(initialNav(loc("a")), "0");
+    expect(previewTab(pinned)).toBeUndefined();
+    expect(pinTab(pinned, "0")).toEqual(pinned);
+  });
+
+  test("unpinTab makes a tab the sole preview, discarding a stale preview", () => {
+    // Tab 0 pinned (active), tab 1 a leftover preview.
+    const nav = openTab(pinTab(initialNav(loc("a")), "0"), loc("b"), "1", true);
+    const unpinned = unpinTab(nav, "0");
+    expect(previewTab(unpinned)?.id).toBe("0");
+    expect(unpinned.tabs.filter((tab) => tab.preview)).toHaveLength(1);
+    expect(unpinned.tabs.some((tab) => tab.id === "1")).toBe(false);
+  });
+
+  test("a freshly opened preview tab is the only preview", () => {
+    const nav = openTab(pinTab(initialNav(loc("a")), "0"), loc("b"), "1", true);
+    expect(previewTab(nav)?.id).toBe("1");
+    expect(nav.tabs.filter((tab) => tab.preview)).toHaveLength(1);
+  });
+});
+
+describe("tabs", () => {
+  test("openTab appends a tab and activates it", () => {
+    const nav = openTab(initialNav(loc("a")), loc("b"), "1", false);
+    expect(nav.tabs).toHaveLength(2);
+    expect(nav.activeTabId).toBe("1");
+    expect(currentLocation(nav)?.path).toBe("b");
+  });
+
+  test("each tab keeps its own independent history", () => {
+    let nav = navigate(initialNav(loc("a")), loc("c", "jump")); // Tab 0: a -> c
+    nav = openTab(nav, loc("b"), "1", false); // Tab 1: b
+    nav = selectTab(nav, "0");
+    expect(currentLocation(nav)?.path).toBe("c");
+    nav = back(nav);
+    expect(currentLocation(nav)?.path).toBe("a");
+    // Tab 1 stays untouched by tab 0's back.
+    nav = selectTab(nav, "1");
+    expect(currentLocation(nav)?.path).toBe("b");
+    expect(canBack(nav)).toBe(false);
+  });
+
+  test("closeTab of the active rightmost tab activates the left neighbor", () => {
+    let nav = openTab(openTab(initialNav(loc("a")), loc("b"), "1", false), loc("c"), "2", false);
+    nav = closeTab(nav, "2");
+    expect(nav.tabs).toHaveLength(2);
+    expect(nav.activeTabId).toBe("1");
+    expect(currentLocation(nav)?.path).toBe("b");
+  });
+
+  test("closeTab of an active middle tab activates the right neighbor", () => {
+    let nav = openTab(openTab(initialNav(loc("a")), loc("b"), "1", false), loc("c"), "2", false);
+    nav = selectTab(nav, "1");
+    nav = closeTab(nav, "1");
+    expect(nav.activeTabId).toBe("2");
+  });
+
+  test("closeTab of the last remaining tab reverts it to a preview", () => {
+    const pinned = pinTab(initialNav(loc("a")), "0");
+    const closed = closeTab(pinned, "0");
+    expect(closed.tabs).toHaveLength(1);
+    expect(previewTab(closed)?.id).toBe("0");
+  });
+
+  test("nextTab and prevTab cycle with wrap-around", () => {
+    const two = openTab(initialNav(loc("a")), loc("b"), "1", false); // Active "1"
+    expect(nextTab(two).activeTabId).toBe("0");
+    expect(prevTab(two).activeTabId).toBe("0");
+    const onZero = selectTab(two, "0");
+    expect(nextTab(onZero).activeTabId).toBe("1");
+    expect(prevTab(onZero).activeTabId).toBe("1");
+  });
+
+  test("selectTab ignores an unknown id", () => {
+    const nav = initialNav(loc("a"));
+    expect(selectTab(nav, "nope")).toEqual(nav);
   });
 });
 

@@ -40,13 +40,13 @@ describe("back / forward navigation", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => frame.includes("diff · ln"), 5);
+      await settleUntil("diff view", (frame) => lnOf(frame) !== undefined, 5);
 
       // Open a.ts and move the cursor down inside it, away from the first change.
       state.selectFile("src/a.ts");
       const onA = await settleUntil(
         "a.ts open",
-        (frame) => frame.includes("src/a.ts") && frame.includes("diff · ln"),
+        (frame) => frame.includes("src/a.ts") && lnOf(frame) !== undefined,
       );
       const startLn = lnOf(onA);
       state.setFocusedPane("diff");
@@ -56,7 +56,7 @@ describe("back / forward navigation", () => {
       const moved = await settleUntil(
         "cursor moved",
         (frame) =>
-          frame.includes("src/a.ts") && frame.includes("diff · ln") && lnOf(frame) !== startLn,
+          frame.includes("src/a.ts") && lnOf(frame) !== undefined && lnOf(frame) !== startLn,
       );
       const movedLn = lnOf(moved);
       expect(movedLn).not.toBe(startLn);
@@ -65,14 +65,14 @@ describe("back / forward navigation", () => {
       state.selectFile("src/b.ts");
       await settleUntil(
         "b.ts open",
-        (frame) => frame.includes("src/b.ts") && frame.includes("diff · ln"),
+        (frame) => frame.includes("src/b.ts") && lnOf(frame) !== undefined,
       );
 
       // Back returns to a.ts at the exact line we left.
       state.goBack();
       const back = await settleUntil(
         "back on a.ts",
-        (frame) => frame.includes("src/a.ts") && frame.includes("diff · ln"),
+        (frame) => frame.includes("src/a.ts") && lnOf(frame) !== undefined,
       );
       expect(lnOf(back)).toBe(movedLn);
 
@@ -80,7 +80,7 @@ describe("back / forward navigation", () => {
       state.goForward();
       await settleUntil(
         "forward on b.ts",
-        (frame) => frame.includes("src/b.ts") && frame.includes("diff · ln"),
+        (frame) => frame.includes("src/b.ts") && lnOf(frame) !== undefined,
       );
     } finally {
       renderer.destroy();

@@ -85,6 +85,17 @@ supports. Unchanged files open read-only with no diff gutters, just the source.
 
 ![read-only file view showing a source file with syntax highlighting and no diff gutters](assets/screenshots/read-only.png)
 
+### Browse, go back, and pin tabs
+
+Browsing the tree previews files in one calm view, so nothing piles up. `<` and
+`>` step back and forward through where you've been, restoring each spot's cursor
+and scroll. When you want to keep a file while you look at another, `ctrl-t` pins
+it as a tab (and `ctrl-t` again unpins it); `{` / `}` switch tabs and `ctrl-w`
+closes one. Each tab carries its own history and remembered position, and a tab's
+label is tinted by its diff status.
+
+![tab strip with pinned, diff-status-tinted tabs and the active file](assets/screenshots/tabs.png)
+
 ### Switch scope
 
 Press `s` to pick what the diff compares: all changes, staged, unstaged,
@@ -170,6 +181,10 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `r`         | re-run checks                                     |
 | `ctrl-d/u`  | half-page cursor movement in the viewer           |
 | `g` / `G`   | jump to first / last line                         |
+| `<` / `>`   | back / forward through viewer history             |
+| `ctrl-t`    | pin / unpin the current file as a tab             |
+| `ctrl-w`    | close the active tab                              |
+| `{` / `}`   | previous / next tab                               |
 | `?`         | show all keybindings                              |
 | `q` / `esc` | quit (esc closes the problems panel first)        |
 

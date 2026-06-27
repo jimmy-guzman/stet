@@ -114,4 +114,32 @@ describe("createKeyHandler", () => {
     handle(keyEvent({ name: ">" }));
     expect(state.selectedPath()).toBe("b.ts");
   });
+
+  test("ctrl-t pins; a later navigation opens a fresh preview; { } cycle; ctrl-w closes", () => {
+    state.selectFile("a.ts");
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ ctrl: true, name: "t" })); // Pin a.ts (no new tab yet)
+    expect(state.tabItems().length).toBe(1);
+    expect(state.tabItems()[0].preview).toBe(false);
+
+    state.selectFile("b.ts"); // Fresh preview -> two tabs
+    expect(state.tabItems().length).toBe(2);
+
+    const activeBefore = state.tabItems().findIndex((tab) => tab.active);
+    handle(keyEvent({ name: "{" }));
+    expect(state.tabItems().findIndex((tab) => tab.active)).not.toBe(activeBefore);
+
+    handle(keyEvent({ ctrl: true, name: "w" }));
+    expect(state.tabItems().length).toBe(1);
+  });
+
+  test("ctrl-t does not fall through to the theme picker", () => {
+    state.selectFile("a.ts");
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ ctrl: true, name: "t" }));
+
+    expect(state.themeOpen()).toBe(false);
+  });
 });

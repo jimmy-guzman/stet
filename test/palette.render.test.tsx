@@ -53,9 +53,9 @@ describe("go-to-file palette", () => {
       mockInput.pressEnter();
       const after = await settleUntil(
         "selected tree file",
-        (frame) => frame.includes("src/tree.ts ·") && !frame.includes("go to file"),
+        (frame) => frame.includes("src/tree.ts") && !frame.includes("go to file"),
       );
-      expect(after).toContain("src/tree.ts ·");
+      expect(after).toContain("src/tree.ts");
       expect(after).not.toContain("go to file");
     } finally {
       renderer.destroy();

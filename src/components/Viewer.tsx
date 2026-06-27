@@ -3,8 +3,9 @@ import { batch, createEffect, on, Show } from "solid-js";
 
 import { state } from "../state";
 import { useTheme } from "../theme/context";
-import { nearestNavigableIndex, placeholderText, viewerTitle } from "../ui-helpers";
+import { nearestNavigableIndex, placeholderText, viewerStats } from "../ui-helpers";
 import { DiffView } from "./diff/DiffView";
+import { Tabs } from "./Tabs";
 
 export function Viewer() {
   const theme = useTheme();
@@ -169,14 +170,14 @@ export function Viewer() {
             paddingLeft={1}
             paddingRight={1}
           >
-            <text fg={theme.colors.text.primary}>
-              {viewerTitle(
-                state.diffView()?.path,
-                displayedFile(),
-                state.diffView()?.showFileContent ?? false,
-                state.diffView()?.fileContent,
-              )}
-            </text>
+            {/* The strip earns the row only once a tab is pinned; a lone preview
+                shows the path as before. */}
+            <Show
+              when={state.tabItems().some((tab) => !tab.preview)}
+              fallback={<text fg={theme.colors.text.primary}>{state.selectedPath() ?? ""}</text>}
+            >
+              <Tabs />
+            </Show>
             <box flexDirection="row">
               {/* Keep the active scope legible at the diff, so a staged/unstaged
                   view is never misread as the whole change. */}
@@ -192,8 +193,16 @@ export function Viewer() {
                 </text>
               </Show>
               <text fg={theme.colors.text.muted}>
-                {state.diffView()?.showFileContent ? "file" : "diff"}
-                {state.cursorLineNumber() === undefined ? "" : ` · ln ${state.cursorLineNumber()}`}
+                {[
+                  viewerStats(
+                    displayedFile(),
+                    state.diffView()?.showFileContent ?? false,
+                    state.diffView()?.fileContent,
+                  ),
+                  state.cursorLineNumber() === undefined ? "" : `ln ${state.cursorLineNumber()}`,
+                ]
+                  .filter((part) => part !== "")
+                  .join(" · ")}
               </text>
             </box>
           </box>

@@ -244,6 +244,28 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // Tabs. ctrl-t/ctrl-w must precede the plain t (theme) and w (worktree)
+      // Handlers below, which match on name without excluding ctrl.
+      if (key.ctrl && key.name === "t") {
+        state.togglePinActiveTab();
+        return;
+      }
+
+      if (key.ctrl && key.name === "w") {
+        state.closeActiveTab();
+        return;
+      }
+
+      if (key.name === "{") {
+        state.cycleTab(-1);
+        return;
+      }
+
+      if (key.name === "}") {
+        state.cycleTab(1);
+        return;
+      }
+
       if (key.name === "w") {
         state.setWorktreeOpen(true);
         state.setWorktreeIndex(0);

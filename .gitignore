@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Agent worktrees
 .claude/worktrees/
+
+# macOS
+.DS_Store

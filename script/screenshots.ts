@@ -95,6 +95,36 @@ const openDiffView = ["Ctrl+P", 'Type "DiffView"', "Sleep 400ms", "Enter", "Slee
  */
 const screens = [
   { name: "sideye", steps: openDiffView },
+  {
+    /**
+     * Pin two changed files into tabs (`ctrl-t`), then land on a third as the active preview, so
+     * the strip shows pinned tabs beside the active one. The pinned labels are tinted by
+     * change-kind (DiffView modified = amber, Tabs.tsx added = green), so run against a checkout
+     * where these are changed (this repo by default — the tabs work is uncommitted here).
+     */
+    name: "tabs",
+    steps: [
+      "Ctrl+P",
+      'Type "DiffView"',
+      "Sleep 400ms",
+      "Enter",
+      "Sleep 700ms",
+      "Ctrl+T",
+      "Sleep 300ms",
+      "Ctrl+P",
+      'Type "components/Tabs"',
+      "Sleep 400ms",
+      "Enter",
+      "Sleep 700ms",
+      "Ctrl+T",
+      "Sleep 300ms",
+      "Ctrl+P",
+      'Type "src/state"',
+      "Sleep 400ms",
+      "Enter",
+      "Sleep 900ms",
+    ].join("\n"),
+  },
   { name: "scope-picker", steps: ['Type "s"', "Sleep 800ms"].join("\n") },
   { name: "worktree-picker", steps: ['Type "w"', "Sleep 800ms"].join("\n") },
   {

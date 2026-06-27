@@ -55,12 +55,12 @@ test("recovers when a layout pass strands the physical scroll", async () => {
   const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
   try {
-    await settleUntil("diff view", (frame) => frame.includes("diff · ln 110"), 5);
+    await settleUntil("diff view", (frame) => /-\d+ · ln 110/.test(frame), 5);
     mockInput.pressTab();
     mockInput.pressKey("v");
     await settleUntil(
       "file view scrolled to the change",
-      (current) => current.includes("file · ln 110") && visibleLineNumbers(current).includes(110),
+      (current) => /lines · ln 110/.test(current) && visibleLineNumbers(current).includes(110),
     );
 
     const box = diffScrollBox(renderer.root);

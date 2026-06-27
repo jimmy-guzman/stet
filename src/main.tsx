@@ -91,7 +91,11 @@ try {
   // App themes to match. Detection is a bounded terminal query; a terminal that
   // Does not answer within the timeout falls back to dark. The same renderer is
   // Reused for the first paint below, so detection costs no extra frame.
-  const renderer = await createCliRenderer({ exitOnCtrlC: false });
+  // Disable OpenTUI's focus-the-element-under-the-pointer on mouse-down
+  // (`autoFocus`), which would otherwise draw the terminal cursor in a clicked
+  // Renderable (e.g. a tab). sideye drives focus through its own keymap, and
+  // Overlay inputs focus via their explicit `focused` prop, so nothing relies on it.
+  const renderer = await createCliRenderer({ autoFocus: false, exitOnCtrlC: false });
   const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
 
   // Restore the terminal on every exit path, not just a clean quit. In raw mode a

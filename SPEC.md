@@ -48,6 +48,16 @@ Refresh the tree, diff, and file content while the user watches. A debounced fil
 - Binary, missing, and oversized files render explicit placeholders, never raw bytes. `f` loads full content when truncated.
 - `/` opens an in-buffer find over the rendered lines: smart-case substring match (case-insensitive unless the query has an uppercase char), `n`/`N` cycle, `esc` clears, and a file switch ends it. Matches are highlighted at the line level; substring-range highlighting within a line is out of scope for v1.
 
+## Navigation and tabs
+
+The viewer is a set of tabs, each an ordered history of Locations (a Location is what restores the view: path, cursor file-line, scroll, and the `v`/`f` toggles). The pure model lives in `src/viewer/navigation.ts`; `state` keeps the live signals (`selectedPath`/`cursorIndex`/scroll) as the source of truth and the history as an orthogonal recorder that captures a Location on leave and applies one on arrive.
+
+- **One preview tab.** At most one tab is the ephemeral _preview_ (rendered dim). All navigation — tree browse, jumps, palette, search, problems, `.` recency — targets the preview tab and replaces it in place: continuous tree browsing coalesces into one history entry, a deliberate jump pushes (truncating forward entries, browser semantics). Browsing never spawns or duplicates tabs; this is the calm single-buffer feel by default. The strip renders in the viewer's title row only when more than one tab is open; with one tab the row shows the path.
+- **Pin/unpin (`ctrl-t`).** Toggles the active tab. Pinning the preview makes it persistent and the next navigation opens a fresh preview; unpinning a pinned tab reverts it to the (sole) preview, discarding any stale preview so exactly one exists. Navigating to a file already open in a _pinned_ tab focuses that tab rather than previewing it, so a file is never in both the preview and a pinned tab.
+- **History and tabs (`<`/`>`, `{`/`}`, `ctrl-w`).** `<`/`>` move back/forward within the _active_ tab's own history (no truncation), restoring that entry's exact cursor and scroll. `{`/`}` cycle tabs with wrap; `ctrl-w` closes the active tab — closing the sole remaining tab reverts it to the preview (a view always exists, so the floor is the ephemeral preview).
+- **Remembered position.** A global per-path MRU viewport (cursor file-line + scroll), shared across tabs, is written on every navigate-away. A _fresh_ visit to a path restores its MRU position; back/forward restore the exact spot recorded on the history entry instead. Cursor is a file line (stable across refreshes); scroll is best-effort.
+- **Coherence.** Scope stays a global lens, never captured per tab or per Location. Refresh and scope changes never reset the history (only a `navigate` resets). A worktree switch resets navigation to a single fresh tab seeded with the new worktree's selected file. The tab strip is chrome (non-selectable); a tab's label is tinted by its file's diff status (kind), with the active tab highlighted and the preview dimmed.
+
 ## Content search
 
 - `ctrl-f` opens a project content search backed by `git grep` (literal `-F`, smart-case, `-I` to skip binary, `--untracked` so it covers the tree's universe). It searches working-tree file content, not diffs.

@@ -59,13 +59,20 @@ import {
   back,
   canBack,
   canForward,
+  closeTab,
   currentLocation,
   forward,
   initialNav,
   navigate,
+  nextTab,
+  openTab,
+  pinTab,
+  prevTab,
   recall,
   recordCurrent,
   remember,
+  selectTab,
+  unpinTab,
   type Location,
   type NavState,
 } from "./viewer/navigation";
@@ -279,6 +286,9 @@ function createState() {
   // Restores them on back/forward or a revisit (capture-on-leave, like a browser).
   const [navState, setNavState] = createSignal<NavState>(initialNav(undefined));
   const [pendingRestore, setPendingRestore] = createSignal<PendingRestore | undefined>(undefined);
+  // Monotonic tab id source (the seed tab is "0"); never reset, so ids stay unique
+  // Across a seedNav that re-collapses to one tab.
+  let nextTabId = 1;
   const [jumpTarget, setJumpTarget] = createSignal<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
   const [status, setStatus] = createSignal("");
@@ -617,6 +627,17 @@ function createState() {
   // --- navigation ---
   const canGoBack = createMemo(() => canBack(navState()));
   const canGoForward = createMemo(() => canForward(navState()));
+  // The tab strip's view-model: each open tab's current file and which is active.
+  // The viewer shows the strip only when there is more than one.
+  const tabItems = createMemo(() => {
+    const nav = navState();
+    return nav.tabs.map((tab) => ({
+      active: tab.id === nav.activeTabId,
+      id: tab.id,
+      path: tab.entries[tab.index]?.path,
+      preview: tab.preview,
+    }));
+  });
 
   // Snapshot the live viewer state for the path being left, so a later
   // Back/forward restores the exact spot. Undefined when nothing is selected.
@@ -667,20 +688,41 @@ function createState() {
     });
   }
 
+  // Record the location being left into its tab and into the MRU, the shared
+  // Capture-on-leave step before any tab switch / navigation.
+  function recordLeaving(nav: NavState, leaving: Location | undefined) {
+    return leaving === undefined
+      ? nav
+      : remember(recordCurrent(nav, leaving), leaving.path, {
+          cursorLine: leaving.cursorLine,
+          viewport: leaving.viewport,
+        });
+  }
+
+  // All file navigation routes to the single preview tab (Zed's model): a pinned
+  // Tab already showing `path` is focused (no dup); otherwise the preview tab is
+  // Navigated in place (browse coalesces, jump pushes), or a fresh preview tab is
+  // Opened when none exists (e.g. right after a pin).
   function navigateTo(path: string, kind: "browse" | "jump") {
+    const nav = navState();
+    const pinned = nav.tabs.find((tab) => !tab.preview && tab.entries[tab.index]?.path === path);
+    if (pinned !== undefined) {
+      activateTab(pinned.id);
+      return;
+    }
     const leaving = captureCurrent();
     const arriving = arrivingLocation(path, kind);
+    const preview = nav.tabs.find((tab) => tab.preview);
+    const id = preview === undefined ? String(nextTabId) : preview.id;
+    if (preview === undefined) {
+      nextTabId += 1;
+    }
     batch(() => {
-      setNavState((nav) => {
-        const recorded = leaving === undefined ? nav : recordCurrent(nav, leaving);
-        const remembered =
-          leaving === undefined
-            ? recorded
-            : remember(recorded, leaving.path, {
-                cursorLine: leaving.cursorLine,
-                viewport: leaving.viewport,
-              });
-        return navigate(remembered, arriving);
+      setNavState((current) => {
+        const recorded = recordLeaving(current, leaving);
+        return preview === undefined
+          ? openTab(recorded, arriving, id, true)
+          : navigate({ ...recorded, activeTabId: preview.id }, arriving);
       });
       goToLocation(arriving);
     });
@@ -709,6 +751,70 @@ function createState() {
     }
     const leaving = captureCurrent();
     const moved = forward(leaving === undefined ? nav : recordCurrent(nav, leaving));
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  // Tab switches reuse back/forward's capture-on-leave / apply-on-arrive: record
+  // Where we left the active tab, transform the tab set, then restore the new
+  // Active tab's current location.
+  function switchActiveTab(transform: (nav: NavState) => NavState) {
+    const nav = navState();
+    const leaving = captureCurrent();
+    const recorded = leaving === undefined ? nav : recordCurrent(nav, leaving);
+    const remembered =
+      leaving === undefined
+        ? recorded
+        : remember(recorded, leaving.path, {
+            cursorLine: leaving.cursorLine,
+            viewport: leaving.viewport,
+          });
+    const moved = transform(remembered);
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  // Toggle the active tab's pin: a preview pins (persists; the next navigation
+  // Opens a fresh preview), a pinned tab unpins (reverts to the dim preview). The
+  // Viewed file is unchanged either way, so only navState moves.
+  function togglePinActiveTab() {
+    setNavState((nav) => {
+      const active = nav.tabs.find((tab) => tab.id === nav.activeTabId);
+      if (active === undefined) {
+        return nav;
+      }
+      return active.preview ? pinTab(nav, nav.activeTabId) : unpinTab(nav, nav.activeTabId);
+    });
+  }
+
+  function cycleTab(direction: number) {
+    switchActiveTab((nav) => (direction > 0 ? nextTab(nav) : prevTab(nav)));
+  }
+
+  function activateTab(id: string) {
+    switchActiveTab((nav) => selectTab(nav, id));
+  }
+
+  // Close the active tab. Removing it activates a neighbor (restore its location);
+  // Closing the sole tab instead reverts it to the preview (same file, strip gone),
+  // So no location change and nothing to restore.
+  function closeActiveTab() {
+    const nav = navState();
+    const moved = closeTab(nav, nav.activeTabId);
+    if (moved.tabs.length === nav.tabs.length) {
+      setNavState(moved);
+      return;
+    }
     const target = currentLocation(moved);
     batch(() => {
       setNavState(moved);
@@ -1255,6 +1361,7 @@ function createState() {
   });
 
   return {
+    activateTab,
     activityLog,
     allProblemItems,
     canGoBack,
@@ -1262,6 +1369,7 @@ function createState() {
     changesOnly,
     checkerState,
     checksRunning,
+    closeActiveTab,
     closeThemePicker,
     collapseSidebar,
     copy,
@@ -1270,6 +1378,7 @@ function createState() {
     currentWorktreeDeleted,
     cursorIndex,
     cursorLineNumber,
+    cycleTab,
     diffView,
     editorTemplate,
     expandedDirectories,
@@ -1390,12 +1499,14 @@ function createState() {
     status,
     statusRight,
     switchWorktree,
+    tabItems,
     terminalHeight,
     terminalWidth,
     themeIndex,
     themeOpen,
     themeOrigin,
     themeResults,
+    togglePinActiveTab,
     treeRows,
     truncated,
     viewerHeight,

@@ -24,7 +24,7 @@ describe("createKeyHandler", () => {
   const noop = async () => {};
 
   afterEach(() => {
-    state.setSelectedPath(undefined);
+    state.seedNav(undefined);
   });
 
   test("ctrl-c quits", () => {
@@ -46,7 +46,7 @@ describe("createKeyHandler", () => {
   });
 
   test("e opens the selected file in terminal editor", () => {
-    batch(() => state.setSelectedPath("src/foo.ts"));
+    batch(() => state.seedNav("src/foo.ts"));
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
@@ -75,7 +75,7 @@ describe("createKeyHandler", () => {
   });
 
   test("o opens the selected file in IDE", () => {
-    batch(() => state.setSelectedPath("src/bar.ts"));
+    batch(() => state.seedNav("src/bar.ts"));
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
@@ -101,5 +101,45 @@ describe("createKeyHandler", () => {
     handle(keyEvent({ name: "o" }));
 
     expect(calls).toEqual([]);
+  });
+
+  test("< steps back and > steps forward through history", () => {
+    state.selectFile("a.ts");
+    state.selectFile("b.ts");
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ name: "<" }));
+    expect(state.selectedPath()).toBe("a.ts");
+
+    handle(keyEvent({ name: ">" }));
+    expect(state.selectedPath()).toBe("b.ts");
+  });
+
+  test("ctrl-t pins; a later navigation opens a fresh preview; { } cycle; ctrl-w closes", () => {
+    state.selectFile("a.ts");
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ ctrl: true, name: "t" })); // Pin a.ts (no new tab yet)
+    expect(state.tabItems().length).toBe(1);
+    expect(state.tabItems()[0].preview).toBe(false);
+
+    state.selectFile("b.ts"); // Fresh preview -> two tabs
+    expect(state.tabItems().length).toBe(2);
+
+    const activeBefore = state.tabItems().findIndex((tab) => tab.active);
+    handle(keyEvent({ name: "{" }));
+    expect(state.tabItems().findIndex((tab) => tab.active)).not.toBe(activeBefore);
+
+    handle(keyEvent({ ctrl: true, name: "w" }));
+    expect(state.tabItems().length).toBe(1);
+  });
+
+  test("ctrl-t does not fall through to the theme picker", () => {
+    state.selectFile("a.ts");
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ ctrl: true, name: "t" }));
+
+    expect(state.themeOpen()).toBe(false);
   });
 });

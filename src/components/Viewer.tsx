@@ -1,26 +1,51 @@
 import type { InputRenderable } from "@opentui/core";
-import { batch, createEffect, createMemo, on, Show } from "solid-js";
+import { batch, createEffect, on, Show } from "solid-js";
 
 import { state } from "../state";
 import { useTheme } from "../theme/context";
-import { nearestNavigableIndex, placeholderText, viewerTitle } from "../ui-helpers";
+import { nearestNavigableIndex, placeholderText, viewerStats } from "../ui-helpers";
 import { DiffView } from "./diff/DiffView";
+import { Tabs } from "./Tabs";
 
 export function Viewer() {
   const theme = useTheme();
   let findInputRef: InputRenderable | undefined;
 
-  // Reset the cursor to the first change only when the displayed file changes,
-  // Not on live edits of the same file. Keyed through a memo so it fires once per
-  // Path change, not on every diffView commit (the plain->highlighted upgrade
-  // Commits twice for the same path, and Solid's `on` does not value-dedupe).
-  const loadedPath = createMemo(() => state.diffView()?.path);
-  createEffect(
-    on(loadedPath, () => {
-      const first = state.navigableLines().findIndex((line) => line.type !== "context");
-      state.setCursorIndex(first === -1 ? 0 : first);
-    }),
-  );
+  // Apply a navigation's pending restore once the target diff has loaded under the
+  // Matching view intent (the same async-coherence guard a jump uses). A fresh
+  // Open carries `cursorLine: undefined` -> first change and a zero viewport, so
+  // "reset on file switch" is just restore-to-default; back/forward and revisits
+  // Carry a remembered line and viewport. This replaces the old per-path cursor
+  // Reset and DiffView's scrollX reset with one path.
+  createEffect(() => {
+    const pending = state.pendingRestore();
+    if (pending === undefined) {
+      return;
+    }
+    const view = state.diffView();
+    if (view?.path !== pending.path || view.showFileContent !== state.showFileContent()) {
+      return;
+    }
+    const lines = state.navigableLines();
+    const found =
+      pending.cursorLine === undefined
+        ? lines.findIndex((line) => line.type !== "context")
+        : lines.findIndex(
+            (line) => line.newLine === pending.cursorLine || line.oldLine === pending.cursorLine,
+          );
+    const index =
+      found !== -1
+        ? found
+        : pending.cursorLine === undefined
+          ? 0
+          : Math.max(0, nearestNavigableIndex(lines, pending.cursorLine));
+    batch(() => {
+      state.setCursorIndex(index);
+      state.setViewerScrollTop(pending.viewport.scrollTop);
+      state.setViewerScrollX(pending.viewport.scrollX);
+      state.setPendingRestore(undefined);
+    });
+  });
 
   // Clamp the cursor when a refresh shrinks the content under it.
   createEffect(() => {
@@ -31,7 +56,9 @@ export function Viewer() {
   });
 
   // Deferred jumps (problem/recency navigation): land on the line, un-truncate,
-  // Or escalate to file view to find it.
+  // Or escalate to file view to find it. A jump sets both `jumpTarget` and (via
+  // SelectFile) `pendingRestore`; this effect must stay declared after the restore
+  // Effect above so it runs last and the jump's line wins over the restored cursor.
   createEffect(() => {
     const jump = state.jumpTarget();
     if (jump === undefined || jump.path !== state.selectedPath()) {
@@ -147,14 +174,14 @@ export function Viewer() {
             paddingLeft={1}
             paddingRight={1}
           >
-            <text fg={theme.colors.text.primary}>
-              {viewerTitle(
-                state.diffView()?.path,
-                displayedFile(),
-                state.diffView()?.showFileContent ?? false,
-                state.diffView()?.fileContent,
-              )}
-            </text>
+            {/* The strip earns the row only once a tab is pinned; a lone preview
+                shows the path as before. */}
+            <Show
+              when={state.tabItems().some((tab) => !tab.preview)}
+              fallback={<text fg={theme.colors.text.primary}>{state.selectedPath() ?? ""}</text>}
+            >
+              <Tabs />
+            </Show>
             <box flexDirection="row">
               {/* Keep the active scope legible at the diff, so a staged/unstaged
                   view is never misread as the whole change. */}
@@ -170,8 +197,16 @@ export function Viewer() {
                 </text>
               </Show>
               <text fg={theme.colors.text.muted}>
-                {state.diffView()?.showFileContent ? "file" : "diff"}
-                {state.cursorLineNumber() === undefined ? "" : ` · ln ${state.cursorLineNumber()}`}
+                {[
+                  viewerStats(
+                    displayedFile(),
+                    state.diffView()?.showFileContent ?? false,
+                    state.diffView()?.fileContent,
+                  ),
+                  state.cursorLineNumber() === undefined ? "" : `ln ${state.cursorLineNumber()}`,
+                ]
+                  .filter((part) => part !== "")
+                  .join(" · ")}
               </text>
             </box>
           </box>

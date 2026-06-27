@@ -2,30 +2,27 @@ import type { Diagnostic } from "./diagnostics/checker";
 import type { FileContent } from "./file/content";
 import type { ChangedFile, Worktree } from "./git/model";
 
-export function viewerTitle(
-  selectedPath: string | undefined,
+// The right-side stats for the active file: line count in full-file view, the
+// Add/remove counts (plus any warnings) in diff view. The diff/file mode is left
+// Implicit, since `N lines` vs `+A -D` already says which it is.
+export function viewerStats(
   selectedFile: ChangedFile | undefined,
   showFileContent: boolean,
   fileContent: FileContent | undefined,
 ) {
-  if (selectedPath === undefined) {
+  if (showFileContent) {
+    return fileContent?.kind === "text"
+      ? `${fileContent.lineCount} lines${fileContent.truncated ? " (truncated)" : ""}`
+      : "";
+  }
+  if (selectedFile === undefined) {
     return "";
   }
-
-  if (showFileContent) {
-    const lines =
-      fileContent?.kind === "text"
-        ? ` · ${fileContent.lineCount} lines${fileContent.truncated ? " (truncated)" : ""}`
-        : "";
-    return `${selectedPath}${lines}`;
+  const warnings = selectedFile.warnings.length === 0 ? "" : ` !${selectedFile.warnings.join(",")}`;
+  if (selectedFile.binary) {
+    return `binary${warnings}`;
   }
-
-  const rename = selectedFile?.oldPath === undefined ? "" : ` (from ${selectedFile.oldPath})`;
-  const warnings =
-    selectedFile === undefined || selectedFile.warnings.length === 0
-      ? ""
-      : ` !${selectedFile.warnings.join(",")}`;
-  return `${selectedPath}${rename}  +${selectedFile?.additions ?? 0} -${selectedFile?.deletions ?? 0}${warnings}`;
+  return `+${selectedFile.additions} -${selectedFile.deletions}${warnings}`;
 }
 
 export function worktreeLabel(worktree: Worktree) {

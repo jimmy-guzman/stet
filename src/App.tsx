@@ -59,6 +59,18 @@ export function App() {
     renderer.setTerminalTitle([...segments, "sideye"].join(" · "));
   });
 
+  // A read-only TUI should not show a stray terminal cursor outside its inputs.
+  // The renderer shows one by default, so hide it whenever no input overlay is
+  // Open (each input shows its own caret while focused); `autoFocus: false` on the
+  // Renderer keeps a click from re-showing it by focusing the clicked renderable.
+  createEffect(() => {
+    const inputFocused =
+      state.paletteOpen() || state.searchOpen() || state.themeOpen() || state.findOpen();
+    if (!inputFocused) {
+      renderer.setCursorPosition(0, 0, false);
+    }
+  });
+
   function quit(message?: string) {
     // The renderer no longer owns the background fibers (the git poll runs on the
     // Shared runtime, not the render tree), so tear down the screen and exit

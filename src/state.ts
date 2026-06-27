@@ -55,12 +55,44 @@ import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
 import { truncate } from "./utils/text";
+import {
+  back,
+  canBack,
+  canForward,
+  closeTab,
+  currentLocation,
+  forward,
+  initialNav,
+  navigate,
+  nextTab,
+  openTab,
+  pinTab,
+  prevTab,
+  recall,
+  recordCurrent,
+  remember,
+  selectTab,
+  unpinTab,
+  type Location,
+  type NavState,
+} from "./viewer/navigation";
 import { Watcher } from "./watcher/service";
 
 interface JumpTarget {
   path: string;
   line: number;
   escalate: boolean;
+}
+
+// A one-shot request to place the cursor and scroll once the diff for `path`
+// Has loaded: every navigation enqueues one (a fresh open carries
+// `cursorLine: undefined` -> first change; back/forward and revisits carry the
+// Remembered line). The Viewer applies it under the same async-coherence guard as
+// A jump, so "reset on file switch" is just restore-to-default through one path.
+interface PendingRestore {
+  path: string;
+  cursorLine: number | undefined;
+  viewport: { scrollTop: number; scrollX: number };
 }
 
 // The coherent diff-pane snapshot. A selection commits in two structure-identical
@@ -243,6 +275,20 @@ function createState() {
   const [lastChange, setLastChange] = createSignal(0);
   const [lastWatcherTick, setLastWatcherTick] = createSignal(0);
   const [cursorIndex, setCursorIndex] = createSignal(0);
+  // The viewer's scroll offsets, lifted out of DiffView so a navigation can
+  // Capture and restore them; the renderer mirrors `viewerScrollTop` onto the
+  // Scrollbox every frame (it stays the single source of truth for the window).
+  const [viewerScrollTop, setViewerScrollTop] = createSignal(0);
+  const [viewerScrollX, setViewerScrollX] = createSignal(0);
+  // The viewer's navigation history: tabs of visited Locations plus a per-path
+  // MRU viewport. `selectedPath`/`fileView`/the scroll signals stay the live
+  // Source of truth the viewer renders; navState records them on leave and
+  // Restores them on back/forward or a revisit (capture-on-leave, like a browser).
+  const [navState, setNavState] = createSignal<NavState>(initialNav(undefined));
+  const [pendingRestore, setPendingRestore] = createSignal<PendingRestore | undefined>(undefined);
+  // Monotonic tab id source (the seed tab is "0"); never reset, so ids stay unique
+  // Across a seedNav that re-collapses to one tab.
+  let nextTabId = 1;
   const [jumpTarget, setJumpTarget] = createSignal<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
   const [status, setStatus] = createSignal("");
@@ -362,6 +408,12 @@ function createState() {
     runtime
       .runPromise(loadDiffView(src), { signal })
       .then(({ highlight, view }) => {
+        // The controller can abort after the load resolved but before this
+        // Microtask drains; committing then would paint a stale snapshot over the
+        // Fresh one. Mirror the phase-2 guard so only the live selection lands.
+        if (signal.aborted) {
+          return;
+        }
         setDiffView(view);
         // Phase 2: highlight off the critical path, then swap in colored rows
         // (structure-identical) only if this exact phase-1 snapshot is still
@@ -578,6 +630,245 @@ function createState() {
     );
   });
 
+  // --- navigation ---
+  const canGoBack = createMemo(() => canBack(navState()));
+  const canGoForward = createMemo(() => canForward(navState()));
+  // The tab strip's view-model: each open tab's current file and which is active.
+  // The viewer shows the strip only when there is more than one.
+  const tabItems = createMemo(() => {
+    const nav = navState();
+    return nav.tabs.map((tab) => ({
+      active: tab.id === nav.activeTabId,
+      id: tab.id,
+      path: tab.entries[tab.index]?.path,
+      preview: tab.preview,
+    }));
+  });
+
+  // Snapshot the live viewer state for the path being left, so a later
+  // Back/forward restores the exact spot. Undefined when nothing is selected.
+  // A still-outstanding restore for this path means the cursor/scroll signals
+  // Have not been applied for it yet (they still hold the previous file's values
+  // While its diff loads); capture the intended restore instead of those stale
+  // Live signals, so rapid navigation never records a neighbor's position.
+  function captureCurrent(): Location | undefined {
+    const path = selectedPath();
+    if (path === undefined) {
+      return undefined;
+    }
+    const pending = pendingRestore();
+    const settled = pending === undefined || pending.path !== path;
+    const line = navigableLines()[cursorIndex()];
+    return {
+      cursorLine: settled ? (line?.newLine ?? line?.oldLine) : pending.cursorLine,
+      fileView: fileView(),
+      fullContent: fullContentPaths().has(path),
+      kind: currentLocation(navState())?.kind ?? "jump",
+      path,
+      viewport: settled
+        ? { scrollTop: viewerScrollTop(), scrollX: viewerScrollX() }
+        : pending.viewport,
+    };
+  }
+
+  // The Location to arrive at when opening `path` fresh: a revisit restores its
+  // Remembered cursor/scroll from the MRU, a first visit defaults (first change,
+  // Top). `fileView` always resets to the diff, matching the prior selectFile.
+  function arrivingLocation(path: string, kind: "browse" | "jump"): Location {
+    const remembered = recall(navState(), path);
+    return {
+      cursorLine: remembered?.cursorLine,
+      fileView: false,
+      fullContent: fullContentPaths().has(path),
+      kind,
+      path,
+      viewport: remembered?.viewport ?? { scrollTop: 0, scrollX: 0 },
+    };
+  }
+
+  // Drive the live signals to a Location and enqueue its restore. The fullContent
+  // Set is additive (a path stays un-truncated globally); back never re-truncates.
+  function goToLocation(location: Location) {
+    setSelectedPath(location.path);
+    setFileView(location.fileView);
+    if (location.fullContent) {
+      setFullContentPaths((current) =>
+        current.has(location.path) ? current : new Set(current).add(location.path),
+      );
+    }
+    setPendingRestore({
+      cursorLine: location.cursorLine,
+      path: location.path,
+      viewport: location.viewport,
+    });
+  }
+
+  // Record the location being left into its tab and into the MRU, the shared
+  // Capture-on-leave step before any tab switch / navigation.
+  function recordLeaving(nav: NavState, leaving: Location | undefined) {
+    return leaving === undefined
+      ? nav
+      : remember(recordCurrent(nav, leaving), leaving.path, {
+          cursorLine: leaving.cursorLine,
+          viewport: leaving.viewport,
+        });
+  }
+
+  // All file navigation routes to the single preview tab (Zed's model): a pinned
+  // Tab already showing `path` is focused (no dup); otherwise the preview tab is
+  // Navigated in place (browse coalesces, jump pushes), or a fresh preview tab is
+  // Opened when none exists (e.g. right after a pin).
+  function navigateTo(path: string, kind: "browse" | "jump") {
+    const nav = navState();
+    const pinned = nav.tabs.find((tab) => !tab.preview && tab.entries[tab.index]?.path === path);
+    if (pinned !== undefined) {
+      activateTab(pinned.id);
+      return;
+    }
+    const leaving = captureCurrent();
+    const arriving = arrivingLocation(path, kind);
+    const preview = nav.tabs.find((tab) => tab.preview);
+    const id = preview === undefined ? String(nextTabId) : preview.id;
+    if (preview === undefined) {
+      nextTabId += 1;
+    }
+    batch(() => {
+      setNavState((current) => {
+        const recorded = recordLeaving(current, leaving);
+        return preview === undefined
+          ? openTab(recorded, arriving, id, true)
+          : navigate({ ...recorded, activeTabId: preview.id }, arriving);
+      });
+      goToLocation(arriving);
+    });
+  }
+
+  function goBack() {
+    const nav = navState();
+    if (!canBack(nav)) {
+      return;
+    }
+    const leaving = captureCurrent();
+    const moved = back(recordLeaving(nav, leaving));
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  function goForward() {
+    const nav = navState();
+    if (!canForward(nav)) {
+      return;
+    }
+    const leaving = captureCurrent();
+    const moved = forward(recordLeaving(nav, leaving));
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  // Tab switches reuse back/forward's capture-on-leave / apply-on-arrive: record
+  // Where we left the active tab, transform the tab set, then restore the new
+  // Active tab's current location.
+  function switchActiveTab(transform: (nav: NavState) => NavState) {
+    const nav = navState();
+    const leaving = captureCurrent();
+    const recorded = leaving === undefined ? nav : recordCurrent(nav, leaving);
+    const remembered =
+      leaving === undefined
+        ? recorded
+        : remember(recorded, leaving.path, {
+            cursorLine: leaving.cursorLine,
+            viewport: leaving.viewport,
+          });
+    const moved = transform(remembered);
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  // Toggle the active tab's pin: a preview pins (persists; the next navigation
+  // Opens a fresh preview), a pinned tab unpins (reverts to the dim preview). The
+  // Viewed file is unchanged either way, so only navState moves.
+  function togglePinActiveTab() {
+    setNavState((nav) => {
+      const active = nav.tabs.find((tab) => tab.id === nav.activeTabId);
+      if (active === undefined) {
+        return nav;
+      }
+      return active.preview ? pinTab(nav, nav.activeTabId) : unpinTab(nav, nav.activeTabId);
+    });
+  }
+
+  // Pin-only (idempotent): the double-click gesture promotes the active tab and
+  // Never unpins, unlike `ctrl-t`'s toggle. Unpinning stays a keyboard action.
+  function pinActiveTab() {
+    setNavState((nav) => pinTab(nav, nav.activeTabId));
+  }
+
+  function cycleTab(direction: number) {
+    switchActiveTab((nav) => (direction > 0 ? nextTab(nav) : prevTab(nav)));
+  }
+
+  function activateTab(id: string) {
+    switchActiveTab((nav) => selectTab(nav, id));
+  }
+
+  // Close the active tab. Removing it activates a neighbor (restore its location);
+  // Closing the sole tab instead reverts it to the preview (same file, strip gone),
+  // So no location change and nothing to restore.
+  function closeActiveTab() {
+    const nav = navState();
+    const leaving = captureCurrent();
+    const moved = closeTab(recordLeaving(nav, leaving), nav.activeTabId);
+    if (moved.tabs.length === nav.tabs.length) {
+      setNavState(moved);
+      return;
+    }
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  // Reset history to a fresh single tab seeded with `path` (startup and worktree
+  // Switch). Caller already runs inside a batch; this stays unbatched so it folds
+  // Into that one update.
+  function seedNav(path: string | undefined) {
+    if (path === undefined) {
+      setNavState(initialNav(undefined));
+      setSelectedPath(undefined);
+      setFileView(false);
+      setPendingRestore(undefined);
+      return;
+    }
+    const location: Location = {
+      cursorLine: undefined,
+      fileView: false,
+      fullContent: false,
+      kind: "jump",
+      path,
+      viewport: { scrollTop: 0, scrollX: 0 },
+    };
+    setNavState(initialNav(location));
+    goToLocation(location);
+  }
+
   // --- actions ---
   function moveFocus(direction: number) {
     const rows = treeRows();
@@ -587,17 +878,15 @@ function createState() {
     }
     setFocusedNodeId(node.id);
     if (node.type === "file") {
-      setSelectedPath(node.path);
-      setFileView(false);
+      navigateTo(node.path, "browse");
     }
   }
 
   function selectFile(path: string) {
     batch(() => {
-      setSelectedPath(path);
       setFocusedNodeId(`file:${path}`);
-      setFileView(false);
       setExpandedDirectories((current) => expandAncestorsForPath(current, path));
+      navigateTo(path, "jump");
     });
   }
 
@@ -843,14 +1132,15 @@ function createState() {
         setLastChange(Date.now());
         setRepoRoot(fresh.repoRoot);
         setGitModel(fresh);
-        setSelectedPath(selected);
         setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
         setExpandedDirectories(
           selected === undefined ? expanded : expandAncestorsForPath(expanded, selected),
         );
         setFullContentPaths(new Set<string>());
-        setFileView(false);
         setJumpTarget(undefined);
+        // Reset navigation: worktree A's history is meaningless in B, so collapse
+        // To one fresh tab on the new worktree's selected file.
+        seedNav(selected);
         setProblemIndex(0);
         setActivityLog(emptyActivityLog);
         setFocusedPane("tree");
@@ -1093,11 +1383,15 @@ function createState() {
   });
 
   return {
+    activateTab,
     activityLog,
     allProblemItems,
+    canGoBack,
+    canGoForward,
     changesOnly,
     checkerState,
     checksRunning,
+    closeActiveTab,
     closeThemePicker,
     collapseSidebar,
     copy,
@@ -1106,6 +1400,7 @@ function createState() {
     currentWorktreeDeleted,
     cursorIndex,
     cursorLineNumber,
+    cycleTab,
     diffView,
     editorTemplate,
     expandedDirectories,
@@ -1121,6 +1416,8 @@ function createState() {
     focusedRowIndex,
     fullContentPaths,
     gitModel,
+    goBack,
+    goForward,
     helpOpen,
     iconsEnabled,
     ideTemplate,
@@ -1129,6 +1426,7 @@ function createState() {
     loadWorktrees,
     mainWorktreePath,
     moveFocus,
+    navState,
     navigableLines,
     notify,
     now,
@@ -1142,6 +1440,8 @@ function createState() {
     paletteResults,
     paletteWidth,
     paneHeight,
+    pendingRestore,
+    pinActiveTab,
     problemIndex,
     problems,
     problemsOpen,
@@ -1159,6 +1459,7 @@ function createState() {
     searchResults,
     searchScope,
     searchTruncated,
+    seedNav,
     selectFile,
     selectScope,
     selectedFile,
@@ -1192,6 +1493,7 @@ function createState() {
     setPaletteIndex,
     setPaletteOpen,
     setPaletteQuery,
+    setPendingRestore,
     setProblemIndex,
     setProblemsOpen,
     setRepoRoot,
@@ -1202,7 +1504,6 @@ function createState() {
     setSearchOpen,
     setSearchQuery,
     setSearchScope,
-    setSelectedPath,
     setSessionBase,
     setSidebarOpen,
     setStatus,
@@ -1210,6 +1511,8 @@ function createState() {
     setTerminalWidth,
     setThemeIndex,
     setThemeQuery,
+    setViewerScrollTop,
+    setViewerScrollX,
     setWorktreeIndex,
     setWorktreeOpen,
     setWorktrees,
@@ -1219,15 +1522,19 @@ function createState() {
     status,
     statusRight,
     switchWorktree,
+    tabItems,
     terminalHeight,
     terminalWidth,
     themeIndex,
     themeOpen,
     themeOrigin,
     themeResults,
+    togglePinActiveTab,
     treeRows,
     truncated,
     viewerHeight,
+    viewerScrollTop,
+    viewerScrollX,
     worktreeIndex,
     worktreeOpen,
     worktrees,

@@ -22,7 +22,7 @@ function seed(paths: string[]) {
     state.setExpandedDirectories(new Set<string>());
     state.setGitModel(modelWith(paths));
     state.setFocusedNodeId(`file:${paths[0]}`);
-    state.setSelectedPath(undefined);
+    state.seedNav(undefined);
   });
 }
 
@@ -32,7 +32,7 @@ afterEach(() => {
     state.setGitModel(modelWith([]));
     state.setExpandedDirectories(new Set<string>());
     state.setFocusedNodeId("");
-    state.setSelectedPath(undefined);
+    state.seedNav(undefined);
   });
 });
 

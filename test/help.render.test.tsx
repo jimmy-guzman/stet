@@ -12,7 +12,9 @@ describe("help overlay", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
+      // Tall enough to fit the whole keybindings list, so the last-row assertions
+      // Below verify it sizes to show every shortcut (no clip) when there's room.
+      height: 44,
       width: 120,
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
@@ -29,6 +31,10 @@ describe("help overlay", () => {
       expect(help).toContain("toggle the file tree sidebar");
       expect(help).toContain("open in terminal editor");
       expect(help).toContain("open in GUI / IDE");
+      // The list sizes to fit (wrapped descriptions included), so even the last
+      // Row is visible without scrolling — guards the clip regression.
+      expect(help).toContain("pin / unpin the current file as a tab");
+      expect(help).toContain("quit (esc closes panels first)");
 
       // P and b must be swallowed: no problems panel, no sidebar toggle, overlay stays
       mockInput.pressKey("p");

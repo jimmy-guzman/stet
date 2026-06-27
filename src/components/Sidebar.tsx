@@ -3,11 +3,15 @@ import { createEffect, For, Show } from "solid-js";
 
 import { state } from "../state";
 import { useTheme } from "../theme/context";
+import { createDoubleClickGuard } from "../utils/double-click";
 import { TreeRow } from "./TreeRow";
 
 export function Sidebar() {
   const theme = useTheme();
   let sidebarRef: ScrollBoxRenderable | undefined;
+  // One guard for the whole tree: double-clicking a file row pins it, mirroring
+  // The tab strip. Owned here (not per row) so it outlives a row remount.
+  const isDoubleFileClick = createDoubleClickGuard();
 
   // Keep the focused row in view as the cursor moves.
   createEffect(() => {
@@ -50,7 +54,9 @@ export function Sidebar() {
           },
         }}
       >
-        <For each={state.treeRows()}>{(row) => <TreeRow row={row} />}</For>
+        <For each={state.treeRows()}>
+          {(row) => <TreeRow row={row} isDoubleClick={isDoubleFileClick} />}
+        </For>
         <Show when={state.treeRows().length < state.paneHeight()}>
           <box
             id="tree-filler"

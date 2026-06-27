@@ -29,22 +29,23 @@ describe("view toggle jumps", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => frame.includes("diff · ln"), 5);
+      // Diff view shows the add/remove stats; full-file view shows "N lines".
+      await settleUntil("diff view", (frame) => /-\d+ · ln \d/.test(frame), 5);
 
       // Focus the viewer, switch to file view, and move far away from the hunk
       mockInput.pressTab();
       mockInput.pressKey("v");
-      await settleUntil("file view", (frame) => frame.includes("file · ln"));
+      await settleUntil("file view", (frame) => /lines · ln \d/.test(frame));
       // Plain j presses: ctrl-d (0x04) is not delivered on every platform
       for (const _ of lines) {
         mockInput.pressKey("j");
       }
-      await settleUntil("cursor at end of file", (frame) => frame.includes("file · ln 30"));
+      await settleUntil("cursor at end of file", (frame) => /lines · ln 30/.test(frame));
 
       // Toggling back must land on the nearest hunk line, not bounce to file view
       mockInput.pressKey("v");
-      const after = await settleUntil("diff view again", (frame) => frame.includes("diff · ln"));
-      expect(after).not.toContain("file · ln");
+      const after = await settleUntil("diff view again", (frame) => /-\d+ · ln \d/.test(frame));
+      expect(after).not.toMatch(/lines · ln/);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

@@ -7,17 +7,7 @@ import {
   type TextRenderable,
 } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import {
-  batch,
-  createEffect,
-  createMemo,
-  createSignal,
-  Index,
-  on,
-  onCleanup,
-  Show,
-  untrack,
-} from "solid-js";
+import { batch, createEffect, createMemo, Index, on, onCleanup, Show, untrack } from "solid-js";
 
 import { followScrollTop } from "../../diff/follow";
 import { isLineRow, type DiffLineRow, type DiffRow } from "../../diff/rows";
@@ -69,8 +59,12 @@ export function DiffView() {
   const measurer = createLineMeasurer(renderer.widthMethod);
   onCleanup(() => measurer.destroy());
   let scrollRef: ScrollBoxRenderable | undefined;
-  const [scrollTop, setScrollTop] = createSignal(0);
-  const [scrollX, setScrollX] = createSignal(0);
+  // Scroll offsets live in `state` (lifted out of this component) so a navigation
+  // Can capture and restore them; this view is just their reader/writer.
+  const scrollTop = state.viewerScrollTop;
+  const setScrollTop = state.setViewerScrollTop;
+  const scrollX = state.viewerScrollX;
+  const setScrollX = state.setViewerScrollX;
 
   const rows = createMemo<DiffRow[]>(() => state.diffView()?.render.rows ?? []);
   const wrap = () => state.overflow() === "wrap";

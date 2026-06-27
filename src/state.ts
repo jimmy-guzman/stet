@@ -243,6 +243,11 @@ function createState() {
   const [lastChange, setLastChange] = createSignal(0);
   const [lastWatcherTick, setLastWatcherTick] = createSignal(0);
   const [cursorIndex, setCursorIndex] = createSignal(0);
+  // The viewer's scroll offsets, lifted out of DiffView so a navigation can
+  // Capture and restore them; the renderer mirrors `viewerScrollTop` onto the
+  // Scrollbox every frame (it stays the single source of truth for the window).
+  const [viewerScrollTop, setViewerScrollTop] = createSignal(0);
+  const [viewerScrollX, setViewerScrollX] = createSignal(0);
   const [jumpTarget, setJumpTarget] = createSignal<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
   const [status, setStatus] = createSignal("");
@@ -1210,6 +1215,8 @@ function createState() {
     setTerminalWidth,
     setThemeIndex,
     setThemeQuery,
+    setViewerScrollTop,
+    setViewerScrollX,
     setWorktreeIndex,
     setWorktreeOpen,
     setWorktrees,
@@ -1228,6 +1235,8 @@ function createState() {
     treeRows,
     truncated,
     viewerHeight,
+    viewerScrollTop,
+    viewerScrollX,
     worktreeIndex,
     worktreeOpen,
     worktrees,

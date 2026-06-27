@@ -8,17 +8,14 @@ import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { kindLetter } from "../ui-helpers";
 import { lerpHex } from "../utils/color";
-import { createDoubleClickGuard } from "../utils/double-click";
 import { fileIcon, folderIcon, symlinkIcon } from "../utils/file-icon";
 import { truncate, truncateName } from "../utils/text";
 
-// Shared across rows (each is its own component instance), so a double-click on
-// The same file row pins it, mirroring the tab strip's double-click gesture.
-const isDoubleFileClick = createDoubleClickGuard();
-
 // Fine-grained reactivity replaces React.memo: only the rows whose focus,
-// Selection, or checker state actually change re-evaluate.
-export function TreeRow(props: { row: FileTreeRow }) {
+// Selection, or checker state actually change re-evaluate. The double-click guard
+// Is owned by the Sidebar and shared across rows, so it survives a row remount
+// Mid-gesture (a changed file's row re-renders) and never leaks process-wide.
+export function TreeRow(props: { row: FileTreeRow; isDoubleClick: (id: string) => boolean }) {
   const theme = useTheme();
   const node = props.row.node;
   const indent = " ".repeat(Math.max(0, props.row.depth) * 2);
@@ -38,7 +35,7 @@ export function TreeRow(props: { row: FileTreeRow }) {
       state.setFocusedPane("tree");
       if (node.type === "file") {
         state.selectFile(node.path);
-        if (isDoubleFileClick(node.path)) {
+        if (props.isDoubleClick(node.path)) {
           state.pinActiveTab();
         }
         return;

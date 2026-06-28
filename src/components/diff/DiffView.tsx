@@ -401,7 +401,7 @@ export function DiffView() {
           and stranding the file's last line below the fold. Separators count as 1 in
           both modes, so they pin unconditionally. */}
       <Index each={visibleRows()}>
-        {(row) => (
+        {(row, rowIndex) => (
           <Show
             when={asLineRow(row())}
             fallback={
@@ -416,7 +416,11 @@ export function DiffView() {
               <box
                 width="100%"
                 flexDirection="row"
-                height={wrap() ? undefined : 1}
+                // Explicit per-row height in both modes, from the same `heights()`
+                // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
+                // Transition does not relayout the text leaf, so a `z` toggle into
+                // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
+                height={heights()[window().start + rowIndex] ?? 1}
                 onMouseDown={(event: MouseEvent) => {
                   event.stopPropagation();
                   batch(() => {

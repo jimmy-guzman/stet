@@ -93,8 +93,9 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setFileComboboxOpen(false);
     state.setFileComboboxQuery("");
     state.setFileComboboxIndex(0);
-    state.setWorktreeMenuOpen(false);
-    state.setWorktreeMenuIndex(0);
+    state.setWorktreeComboboxOpen(false);
+    state.setWorktreeComboboxIndex(0);
+    state.setWorktreeComboboxQuery("");
     state.setWorktrees(undefined);
     state.setHelpDialogOpen(false);
     state.setCursorIndex(0);

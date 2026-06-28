@@ -117,10 +117,11 @@ everything since sideye launched, or just the last commit.
 
 ### Switch worktrees
 
-Press `w` to jump between git worktrees without leaving the view. The tree,
-diffs, polling, and checks all re-point at the chosen worktree.
+Press `w` to jump between git worktrees without leaving the view. Type to
+filter by branch or path, `↑↓` to move, `⏎` to switch. The tree, diffs,
+polling, and checks all re-point at the chosen worktree.
 
-![worktree picker listing worktrees, including one marked prunable](assets/screenshots/worktree-picker.png)
+![worktree combobox with a filter input listing worktrees, the current one marked](assets/screenshots/worktree-picker.png)
 
 ### Switch themes
 

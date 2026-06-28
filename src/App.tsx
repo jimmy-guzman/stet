@@ -16,7 +16,7 @@ import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { ThemeCombobox } from "./components/ThemeCombobox";
 import { Viewer } from "./components/Viewer";
-import { WorktreeMenu } from "./components/WorktreeMenu";
+import { WorktreeCombobox } from "./components/WorktreeCombobox";
 import { buildEditorCommand } from "./editor/reference";
 import { Editor } from "./editor/service";
 import type { Worktree } from "./git/model";
@@ -68,6 +68,7 @@ export function App() {
       state.fileComboboxOpen() ||
       state.searchComboboxOpen() ||
       state.themeComboboxOpen() ||
+      state.worktreeComboboxOpen() ||
       state.findOpen();
     if (!inputFocused) {
       renderer.setCursorPosition(0, 0, false);
@@ -185,8 +186,8 @@ export function App() {
       <Show when={state.searchComboboxOpen()}>
         <SearchCombobox />
       </Show>
-      <Show when={state.worktreeMenuOpen()}>
-        <WorktreeMenu />
+      <Show when={state.worktreeComboboxOpen()}>
+        <WorktreeCombobox />
       </Show>
       <Show when={state.scopeMenuOpen()}>
         <ScopeMenu />

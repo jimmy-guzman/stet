@@ -6,15 +6,31 @@ import { useTheme } from "../theme/context";
 import { worktreeLabel } from "../ui-helpers";
 import { collapseHome, truncateLeft } from "../utils/text";
 
-export function WorktreeMenu() {
+export function WorktreeCombobox() {
   const theme = useTheme();
-  let worktreeMenuRef: ScrollBoxRenderable | undefined;
+  let worktreeComboboxRef: ScrollBoxRenderable | undefined;
 
   createEffect(() => {
-    worktreeMenuRef?.scrollChildIntoView(`worktree-menu-${state.worktreeMenuIndex()}`);
+    worktreeComboboxRef?.scrollChildIntoView(`worktree-combobox-${state.worktreeComboboxIndex()}`);
   });
 
   const repoRoot = () => state.gitModel().repoRoot;
+
+  function onInput(value: string) {
+    batch(() => {
+      state.setWorktreeComboboxQuery(value);
+      state.setWorktreeComboboxIndex(0);
+    });
+  }
+
+  function onSubmit() {
+    const worktree = state.worktreeComboboxResults()?.[state.worktreeComboboxIndex()];
+    if (worktree === undefined) {
+      state.setWorktreeComboboxOpen(false);
+    } else {
+      void state.switchWorktree(worktree);
+    }
+  }
 
   return (
     <box
@@ -28,13 +44,22 @@ export function WorktreeMenu() {
       backgroundColor={theme.colors.surface.panel}
       zIndex={100}
     >
-      <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.strong}>switch worktree</text>
-      </box>
-      <scrollbox
-        ref={(el) => (worktreeMenuRef = el)}
+      <input
+        focused
         width="100%"
-        height={Math.min(12, Math.max(1, state.worktrees()?.length ?? 1))}
+        placeholder="switch worktree…"
+        backgroundColor={theme.colors.surface.panel}
+        focusedBackgroundColor={theme.colors.surface.panel}
+        textColor={theme.colors.text.primary}
+        focusedTextColor={theme.colors.text.primary}
+        cursorColor={theme.colors.accent.primary}
+        onInput={onInput}
+        onSubmit={onSubmit}
+      />
+      <scrollbox
+        ref={(el) => (worktreeComboboxRef = el)}
+        width="100%"
+        height={Math.min(12, Math.max(1, state.worktreeComboboxResults()?.length ?? 1))}
         scrollY
         viewportCulling
         scrollbarOptions={{
@@ -45,23 +70,25 @@ export function WorktreeMenu() {
         }}
       >
         <Show
-          when={state.worktrees() !== undefined}
+          when={state.worktreeComboboxResults() !== undefined}
           fallback={
-            <box id="worktree-menu-loading" paddingLeft={1}>
+            <box id="worktree-combobox-loading" paddingLeft={1}>
               <text fg={theme.colors.text.muted}>loading…</text>
             </box>
           }
         >
           <Show
-            when={(state.worktrees()?.length ?? 0) > 0}
+            when={(state.worktreeComboboxResults()?.length ?? 0) > 0}
             fallback={
-              <box id="worktree-menu-empty" paddingLeft={1}>
-                <text fg={theme.colors.text.muted}>no worktrees</text>
+              <box id="worktree-combobox-empty" paddingLeft={1}>
+                <text fg={theme.colors.text.muted}>
+                  {state.worktreeComboboxQuery() === "" ? "no worktrees" : "no matches"}
+                </text>
               </box>
             }
           >
             {/* Id-by-index is required: reordering must never change a live renderable's id */}
-            <Index each={state.worktrees()}>
+            <Index each={state.worktreeComboboxResults()}>
               {(worktree, index) => {
                 const current = () => worktree().path === repoRoot();
                 const badges = () =>
@@ -69,19 +96,19 @@ export function WorktreeMenu() {
                     .filter((badge) => badge !== "")
                     .join(" ");
                 const nameFg = () =>
-                  index === state.worktreeMenuIndex()
+                  index === state.worktreeComboboxIndex()
                     ? theme.colors.text.selected
                     : theme.colors.text.strong;
                 return (
                   <box
-                    id={`worktree-menu-${index}`}
+                    id={`worktree-combobox-${index}`}
                     width="100%"
                     flexDirection="row"
                     justifyContent="space-between"
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={
-                      index === state.worktreeMenuIndex()
+                      index === state.worktreeComboboxIndex()
                         ? theme.colors.surface.cursor
                         : theme.colors.surface.panel
                     }

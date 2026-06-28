@@ -103,6 +103,8 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setSearchComboboxQuery("");
     state.setSearchComboboxIndex(0);
     state.setSearchComboboxScope("changed");
+    state.setThemeComboboxQuery("");
+    state.setThemeComboboxIndex(0);
   });
 }
 

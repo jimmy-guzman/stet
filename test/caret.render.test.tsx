@@ -83,11 +83,17 @@ describe("word caret", () => {
         (current) => /ln \d+(?!:)/.test(current) && !/ln \d+:\d/.test(current),
       );
       expect(onLine).not.toMatch(/ln \d+:\d/);
+      // `caretColumn` is what `y` copies: undefined here means a `path:line` copy.
+      // (Asserting the column source directly, since the clipboard is a real
+      // Subprocess that is absent on Linux CI.)
+      expect(state.caretColumn()).toBeUndefined();
 
-      // Clicking the content word re-selects a symbol, so the column returns.
+      // Clicking the content word re-selects a symbol, so the column returns and
+      // `y` would copy path:line:col.
       const wordColumn = rows[rowIndex].indexOf("alpha");
       await mouse.click(wordColumn + 1, rowIndex);
       await settleUntil("symbol re-selected", (current) => /ln \d+:\d+/.test(current));
+      expect(state.caretColumn()).toBeGreaterThan(0);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

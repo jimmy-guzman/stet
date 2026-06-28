@@ -379,12 +379,10 @@ export function createKeyHandler(host: HostEffects) {
           const lineNumber = line?.newLine ?? line?.oldLine;
           state.copy(
             formatCopyReference({
-              // Emit the column only when the caret is on a symbol; a gutter click
-              // (line-level) or a word-less line copies path:line.
-              column:
-                lineNumber === undefined || state.caretWord() === undefined
-                  ? undefined
-                  : state.cursorColumn() + 1,
+              // Emit the exact column unless the caret is line-level (a gutter
+              // Click), which copies path:line. `caretColumn` keeps the precise
+              // Column even when it lands in a gap.
+              column: lineNumber === undefined ? undefined : state.caretColumn(),
               line: lineNumber,
               path: selectedPath,
             }),

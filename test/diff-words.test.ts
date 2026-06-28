@@ -31,6 +31,14 @@ test("treats unicode letters and digits, _ and $ as identifier characters", () =
   ]);
 });
 
+test("keeps an astral identifier glyph whole (no surrogate-pair split)", () => {
+  // "x𝐀y": 𝐀 (U+1D400) is a \p{L} letter spanning two UTF-16 units, so the word
+  // Runs 0..4 (x=1, 𝐀=2, y=1) rather than breaking on the lone surrogate halves.
+  const astral = "x\u{1D400}y";
+  expect(words(astral)).toEqual([{ end: 4, start: 0 }]);
+  expect(wordAt(astral, 1)).toEqual({ end: 4, start: 0 });
+});
+
 test("a blank or whitespace-only line has no words; the caret home is 0", () => {
   expect(words("   ")).toEqual([]);
   expect(wordStarts("")).toEqual([]);

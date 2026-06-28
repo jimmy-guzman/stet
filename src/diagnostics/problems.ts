@@ -121,6 +121,7 @@ export function buildProblemItems(state: CheckerState): ProblemItem[] {
         diagnostics: diagnostics.toSorted(
           (a, b) =>
             (a.line ?? Number.MAX_SAFE_INTEGER) - (b.line ?? Number.MAX_SAFE_INTEGER) ||
+            (a.column ?? 0) - (b.column ?? 0) ||
             severityOrder[a.severity] - severityOrder[b.severity],
         ),
         path,

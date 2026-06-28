@@ -428,8 +428,13 @@ export function DiffView() {
                     const content = line()
                       .spans.map((part) => part.text)
                       .join("");
+                    // The horizontal scroll offset only applies in scroll mode; in
+                    // Wrap mode there is none (a click on a wrapped continuation row
+                    // Stays approximate, the v1 wrap caret limitation).
                     const column =
-                      event.x - (state.sidebarWidth() + 1 + gutterWidth() + 1) + scrollX();
+                      event.x -
+                      (state.sidebarWidth() + 1 + gutterWidth() + 1) +
+                      (wrap() ? 0 : scrollX());
                     if (column >= 0) {
                       const index = columnToIndex(content, column);
                       state.setCursorColumn(wordAt(content, index)?.start ?? index);

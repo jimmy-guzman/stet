@@ -15,16 +15,16 @@ export interface Word {
   end: number;
 }
 
-// `\p{L}`/`\p{N}` match per code point; a lone surrogate half (an astral glyph,
-// Never a real identifier char) fails the test and reads as a gap, which is fine.
-const isIdentifier = (char: string | undefined) => char !== undefined && IDENTIFIER.test(char);
-
 /** Every word in the line, in order. */
 export function words(line: string): Word[] {
   const out: Word[] = [];
   let start = -1;
-  for (let index = 0; index <= line.length; index += 1) {
-    if (isIdentifier(line[index])) {
+  // Iterate by code point (`\p{L}`/`\p{N}` are per code point) while tracking the
+  // UTF-16 offset, so an astral identifier glyph counts as one character and the
+  // Returned offsets stay UTF-16 indices (what LSP `character` positions use).
+  let index = 0;
+  for (const char of line) {
+    if (IDENTIFIER.test(char)) {
       if (start === -1) {
         start = index;
       }
@@ -32,6 +32,10 @@ export function words(line: string): Word[] {
       out.push({ end: index, start });
       start = -1;
     }
+    index += char.length;
+  }
+  if (start !== -1) {
+    out.push({ end: index, start });
   }
   return out;
 }

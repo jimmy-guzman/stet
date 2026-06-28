@@ -608,12 +608,15 @@ function createState() {
     const line = cursorLine();
     return line?.newLine ?? line?.oldLine;
   });
-  // The symbol the caret sits on: the single source of truth for "is the caret on a
-  // Word, and which" that the highlight, the `:col` in copy/stats, and (later) the
-  // Code-intel requests read. Undefined in line-level mode or on a word-less line.
+  // The symbol the caret sits on, for the highlight and (later) the code-intel
+  // Requests. Undefined in line-level mode or on a gap/word-less position.
   const caretWord = createMemo(() =>
     caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn()),
   );
+  // The exact 1-based column the caret points at, for `:col` in copy/stats. Driven
+  // By line-level alone (not `caretWord`), so a diagnostic jump that lands in a gap
+  // Still reports its precise column instead of falling back to line-only.
+  const caretColumn = createMemo(() => (caretLineLevel() ? undefined : cursorColumn() + 1));
   const cursorFindings = createMemo(() => {
     const line = cursorLine();
     return line?.newLine === undefined ? undefined : lineMap().get(line.newLine);
@@ -1474,6 +1477,7 @@ function createState() {
     allProblemItems,
     canGoBack,
     canGoForward,
+    caretColumn,
     caretLineLevel,
     caretNextWord,
     caretPrevWord,

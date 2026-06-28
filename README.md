@@ -36,8 +36,9 @@ problems. You decide what to say next.
   then keeps the current file and selection stable as the view refreshes.
 - Marks recent activity and lets you jump to the latest touched file.
 - Shows diagnostics in the tree, in the viewer, and in a problems panel.
-- Copies a `path:line:col` reference and snippet so you can paste it back into
-  the agent conversation.
+- Copies a reference and snippet to paste back into the agent conversation: the
+  file `path` in the tree, `path:line` in the viewer, and `path:line:col` when the
+  caret is on a symbol.
 
 The git-backed file tree renders first. Diagnostics come in later as decorations.
 That keeps the basic view useful even when checks are still running.
@@ -188,7 +189,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `\`         | reset the sidebar to its default width            |
 | `.`         | jump to the most recently changed file            |
 | `n`         | jump to the next file with findings               |
-| `y`         | copy focused file path, or `path:line:col`        |
+| `y`         | copy `path`, `path:line`, or `path:line:col`      |
 | `f`         | load full content when truncated                  |
 | `r`         | re-run checks                                     |
 | `ctrl-d/u`  | half-page cursor movement in the viewer           |

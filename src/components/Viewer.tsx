@@ -241,9 +241,9 @@ export function Viewer() {
                   ),
                   state.cursorLineNumber() === undefined
                     ? ""
-                    : state.caretWord() === undefined
+                    : state.caretColumn() === undefined
                       ? `ln ${state.cursorLineNumber()}`
-                      : `ln ${state.cursorLineNumber()}:${state.cursorColumn() + 1}`,
+                      : `ln ${state.cursorLineNumber()}:${state.caretColumn()}`,
                 ]
                   .filter((part) => part !== "")
                   .join(" · ")}

@@ -379,8 +379,12 @@ export function createKeyHandler(host: HostEffects) {
           const lineNumber = line?.newLine ?? line?.oldLine;
           state.copy(
             formatCopyReference({
-              // The caret column only means something once a line is located.
-              column: lineNumber === undefined ? undefined : state.cursorColumn() + 1,
+              // Emit the column only when the caret is on a symbol; a gutter click
+              // (line-level) or a word-less line copies path:line.
+              column:
+                lineNumber === undefined || state.caretWord() === undefined
+                  ? undefined
+                  : state.cursorColumn() + 1,
               line: lineNumber,
               path: selectedPath,
             }),

@@ -19,7 +19,7 @@ import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
-import { firstWord, lastWord, nextWord, prevWord } from "./diff/words";
+import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { contentToContextPatch } from "./file/content";
 import type { FileContent } from "./file/content";
 import { File } from "./file/service";
@@ -281,6 +281,11 @@ function createState() {
   // Line's first word whenever the cursor line or content changes (the Viewer
   // Effect), unless a restore/jump placed it on a valid word.
   const [cursorColumn, setCursorColumn] = createSignal(0);
+  // True when the caret selects a whole line, not a symbol on it (a click on the
+  // Gutter): no word is highlighted and `y` copies `path:line`, not `path:line:col`.
+  // Transient — any vertical move, word hop, jump, or content click re-selects a
+  // Symbol, so it is never captured into navigation history.
+  const [caretLineLevel, setCaretLineLevel] = createSignal(false);
   // The viewer's scroll offsets, lifted out of DiffView so a navigation can
   // Capture and restore them; the renderer mirrors `viewerScrollTop` onto the
   // Scrollbox every frame (it stays the single source of truth for the window).
@@ -603,6 +608,12 @@ function createState() {
     const line = cursorLine();
     return line?.newLine ?? line?.oldLine;
   });
+  // The symbol the caret sits on: the single source of truth for "is the caret on a
+  // Word, and which" that the highlight, the `:col` in copy/stats, and (later) the
+  // Code-intel requests read. Undefined in line-level mode or on a word-less line.
+  const caretWord = createMemo(() =>
+    caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn()),
+  );
   const cursorFindings = createMemo(() => {
     const line = cursorLine();
     return line?.newLine === undefined ? undefined : lineMap().get(line.newLine);
@@ -908,14 +919,20 @@ function createState() {
   // Caret itself, so those use `setCursorIndex` directly and bypass this.
   function setCursorRow(index: number) {
     batch(() => {
+      setCaretLineLevel(false);
       setCursorIndex(index);
       setCursorColumn(firstWord(navigableLines()[index]?.content ?? ""));
     });
   }
 
   // Hop the caret to the next word; past the line's last word it wraps to the next
-  // Navigable line's first word, so h/l tab through every symbol in the file.
+  // Navigable line's first word, so h/l tab through every symbol in the file. From
+  // Line-level (a gutter click), the first hop just selects the current first word.
   function caretNextWord() {
+    if (caretLineLevel()) {
+      setCaretLineLevel(false);
+      return;
+    }
     const content = cursorLineContent();
     const column = cursorColumn();
     const next = nextWord(content, column);
@@ -933,8 +950,15 @@ function createState() {
     }
   }
   // Hop the caret to the previous word; past the line's first word it wraps to the
-  // Previous navigable line's last word.
+  // Previous navigable line's last word. From line-level, select the line's last word.
   function caretPrevWord() {
+    if (caretLineLevel()) {
+      batch(() => {
+        setCaretLineLevel(false);
+        setCursorColumn(lastWord(cursorLineContent()));
+      });
+      return;
+    }
     const content = cursorLineContent();
     const column = cursorColumn();
     const previous = prevWord(content, column);
@@ -1450,8 +1474,10 @@ function createState() {
     allProblemItems,
     canGoBack,
     canGoForward,
+    caretLineLevel,
     caretNextWord,
     caretPrevWord,
+    caretWord,
     changesOnly,
     checkerState,
     checksRunning,
@@ -1531,6 +1557,7 @@ function createState() {
     selectedFile,
     selectedPath,
     setActivityLog,
+    setCaretLineLevel,
     setChangesOnly,
     setCheckerState,
     setCliBaseRef,

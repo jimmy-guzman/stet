@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { createMockMouse } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 
 import { App } from "../src/App";
+import { state } from "../src/state";
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
 describe("word caret", () => {
@@ -44,6 +46,48 @@ describe("word caret", () => {
       mockInput.pressKey("h");
       const back = await settleUntil("caret wraps back", (frame) => /ln 1:11\b/.test(frame));
       expect(back).toMatch(/ln 1:11\b/);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("clicking the line number selects the line (no symbol), so y copies path:line", async () => {
+    const repoRoot = createFixtureRepo("sideye-caret-gutter-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": "const a = 1\n",
+    });
+    writeFileSync(join(repoRoot, "src", "a.ts"), "const alpha = 2\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    const mouse = createMockMouse(renderer);
+
+    try {
+      // The caret homes to a symbol, so the stats line carries a column.
+      const frame = await settleUntil("caret on a symbol", (current) => /ln \d+:\d+/.test(current));
+      const rows = frame.split("\n");
+      const rowIndex = rows.findIndex((row) => row.includes("alpha"));
+      expect(rowIndex).toBeGreaterThan(-1);
+
+      // Click the gutter (just past the sidebar, before the content): line-level,
+      // So the stats line drops the column.
+      await mouse.click(state.sidebarWidth() + 2, rowIndex);
+      const onLine = await settleUntil(
+        "line-level selection",
+        (current) => /ln \d+(?!:)/.test(current) && !/ln \d+:\d/.test(current),
+      );
+      expect(onLine).not.toMatch(/ln \d+:\d/);
+
+      // Clicking the content word re-selects a symbol, so the column returns.
+      const wordColumn = rows[rowIndex].indexOf("alpha");
+      await mouse.click(wordColumn + 1, rowIndex);
+      await settleUntil("symbol re-selected", (current) => /ln \d+:\d+/.test(current));
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

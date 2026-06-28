@@ -288,11 +288,11 @@ export function DiffView() {
   // The caret word's display-column range on the cursor line, derived from the
   // Caret offset; undefined when the caret sits in a gap (no word to highlight).
   const caretRange = createMemo<CaretRange | undefined>(() => {
-    const content = state.cursorLineContent();
-    const word = wordAt(content, state.cursorColumn());
+    const word = state.caretWord();
     if (word === undefined) {
       return undefined;
     }
+    const content = state.cursorLineContent();
     const from = Bun.stringWidth(content.slice(0, word.start));
     return { from, to: from + Bun.stringWidth(content.slice(word.start, word.end)) };
   });
@@ -433,6 +433,10 @@ export function DiffView() {
                     if (column >= 0) {
                       const index = columnToIndex(content, column);
                       state.setCursorColumn(wordAt(content, index)?.start ?? index);
+                    } else {
+                      // A click on the gutter/sign selects the line, not a symbol:
+                      // `y` then copies path:line.
+                      state.setCaretLineLevel(true);
                     }
                   });
                 }}

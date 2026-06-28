@@ -52,6 +52,7 @@ export function Viewer() {
     // Offset that no longer fits if the content changed under it.
     const column = pending.cursorColumn ?? firstWord(lines[index]?.content ?? "");
     batch(() => {
+      state.setCaretLineLevel(false);
       state.setCursorIndex(index);
       state.setCursorColumn(column);
       state.setViewerScrollTop(pending.viewport.scrollTop);
@@ -108,6 +109,7 @@ export function Viewer() {
     if (index !== -1) {
       const content = lines[index]?.content ?? "";
       batch(() => {
+        state.setCaretLineLevel(false);
         state.setCursorIndex(index);
         state.setCursorColumn(
           jump.column === undefined ? firstWord(content) : caretForColumn(content, jump.column),
@@ -239,7 +241,9 @@ export function Viewer() {
                   ),
                   state.cursorLineNumber() === undefined
                     ? ""
-                    : `ln ${state.cursorLineNumber()}:${state.cursorColumn() + 1}`,
+                    : state.caretWord() === undefined
+                      ? `ln ${state.cursorLineNumber()}`
+                      : `ln ${state.cursorLineNumber()}:${state.cursorColumn() + 1}`,
                 ]
                   .filter((part) => part !== "")
                   .join(" · ")}

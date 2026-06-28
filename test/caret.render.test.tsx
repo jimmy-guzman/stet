@@ -114,8 +114,10 @@ describe("word caret", () => {
       "src/a.ts": "const a = 1\n",
       "src/b.ts": "const b = 1\n",
     });
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
-    writeFileSync(join(repoRoot, "src", "b.ts"), "const b = 2\n");
+    // Distinctive content per file (`alpha` vs `beta`) so the rendered diff proves
+    // Which file is active, not just the line:col shape.
+    writeFileSync(join(repoRoot, "src", "a.ts"), "const alpha = 2\n");
+    writeFileSync(join(repoRoot, "src", "b.ts"), "const beta = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
@@ -127,7 +129,10 @@ describe("word caret", () => {
 
     try {
       state.selectFile("src/a.ts");
-      await settleUntil("file a caret home", (current) => /ln \d+:1\b/.test(current));
+      await settleUntil(
+        "file a caret home",
+        (current) => /ln \d+:1\b/.test(current) && current.includes("alpha"),
+      );
 
       // Move the caret off the first word so the column is non-default, then leave.
       mockInput.pressTab();
@@ -135,14 +140,19 @@ describe("word caret", () => {
       await settleUntil("caret moved on a", (current) => /ln \d+:7\b/.test(current));
 
       state.selectFile("src/b.ts");
-      await settleUntil("file b", (current) => /ln \d+:1\b/.test(current));
+      await settleUntil("file b active", (current) => current.includes("beta"));
 
-      // Back to a must restore the captured caret column, not re-home to the first word.
+      // Back must switch the view to a *and* restore its captured caret column, not
+      // Stay on b or re-home to a's first word.
       mockInput.pressKey("<");
-      const restored = await settleUntil("a caret restored", (current) =>
-        /ln \d+:7\b/.test(current),
+      const restored = await settleUntil(
+        "a active and caret restored",
+        (current) => current.includes("alpha") && /ln \d+:7\b/.test(current),
       );
+      expect(restored).toContain("alpha");
+      expect(restored).not.toContain("beta");
       expect(restored).toMatch(/ln \d+:7\b/);
+      expect(state.selectedPath()).toBe("src/a.ts");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

@@ -3,6 +3,7 @@ import { watch } from "node:fs";
 import { Context, Effect, Layer, Queue, Stream } from "effect";
 
 import { Git } from "../git/service";
+import { shouldRefresh } from "./filter";
 import { watchRoots } from "./scope";
 
 const DEBOUNCE = "100 millis";
@@ -21,14 +22,16 @@ export class Watcher extends Context.Service<
   }
 >()("sideye/Watcher") {}
 
-function watchStream(roots: readonly string[]) {
+function watchStream(roots: ReturnType<typeof watchRoots>) {
   return Stream.callback<void>(
     (queue) =>
       Effect.gen(function* watch_() {
         const watchers = roots.flatMap((root) => {
           try {
-            const watcher = watch(root, { recursive: true }, () => {
-              Queue.offerUnsafe(queue, undefined);
+            const watcher = watch(root.path, { recursive: true }, (_event, filename) => {
+              if (shouldRefresh(root.gitInternalPrefix, filename)) {
+                Queue.offerUnsafe(queue, undefined);
+              }
             });
             // An async watcher error (e.g. the root is removed) must not crash the
             // Stream; drop it and let the slow poll cover that root.

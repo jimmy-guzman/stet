@@ -13,6 +13,11 @@ export interface Diagnostic {
   checker: CheckerName;
   path: string;
   line?: number;
+  /** 1-based start column, present when the diagnostic carries a line (LSP always supplies it). */
+  column?: number;
+  /** 1-based end of the range, kept for caret placement and future range highlighting. */
+  endLine?: number;
+  endColumn?: number;
   severity: "error" | "warning" | "info";
   message: string;
   /** The LSP `source` of the diagnostic, shown as a label (e.g. "ts", "eslint"). */

@@ -3,6 +3,7 @@ import type { Theme } from "./tokens";
 export const lightTheme: Theme = {
   accent: { primary: "#d446a1" },
   border: { focused: "#ab3276", unfocused: "#bbbec1" },
+  caret: { wordBg: "#cdd4df" },
   diff: {
     addedBg: "#c9e8cc",
     addedLineNumberBg: "#a8d9ad",

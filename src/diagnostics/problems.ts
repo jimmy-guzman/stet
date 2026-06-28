@@ -18,7 +18,7 @@ export type ProblemItem =
       warnings: number;
       info: number;
     }
-  | { kind: "problem"; id: string; problem: Diagnostic; summary: string; lineWidth: number }
+  | { kind: "problem"; id: string; problem: Diagnostic; summary: string; labelWidth: number }
   | { kind: "help"; id: string; owner: number; text: string };
 
 /**
@@ -28,6 +28,19 @@ export type ProblemItem =
  */
 export function isNavigableProblemItem(item: ProblemItem) {
   return item.kind === "problem" || item.kind === "failure";
+}
+
+/**
+ * The location shown in the panel's left column: `line:col` when the diagnostic carries a column,
+ * `line` alone otherwise, and "" when it has no line at all.
+ */
+export function problemLocationLabel(diagnostic: Diagnostic) {
+  if (diagnostic.line === undefined) {
+    return "";
+  }
+  return diagnostic.column === undefined
+    ? String(diagnostic.line)
+    : `${diagnostic.line}:${diagnostic.column}`;
 }
 
 const isHelpLine = (line: string) => /^(?:help|hint):/i.test(line);
@@ -108,6 +121,7 @@ export function buildProblemItems(state: CheckerState): ProblemItem[] {
         diagnostics: diagnostics.toSorted(
           (a, b) =>
             (a.line ?? Number.MAX_SAFE_INTEGER) - (b.line ?? Number.MAX_SAFE_INTEGER) ||
+            (a.column ?? 0) - (b.column ?? 0) ||
             severityOrder[a.severity] - severityOrder[b.severity],
         ),
         path,
@@ -125,11 +139,9 @@ export function buildProblemItems(state: CheckerState): ProblemItem[] {
       path: group.path,
       warnings: group.counts.warnings,
     });
-    const lineWidth = Math.max(
+    const labelWidth = Math.max(
       1,
-      ...group.diagnostics.map((diagnostic) =>
-        diagnostic.line === undefined ? 0 : String(diagnostic.line).length,
-      ),
+      ...group.diagnostics.map((diagnostic) => problemLocationLabel(diagnostic).length),
     );
     group.diagnostics.forEach((problem, index) => {
       const { help, summary } = splitDiagnosticMessage(problem.message);
@@ -137,7 +149,7 @@ export function buildProblemItems(state: CheckerState): ProblemItem[] {
       items.push({
         id: `problem-${group.path}-${index}`,
         kind: "problem",
-        lineWidth,
+        labelWidth,
         problem,
         summary,
       });

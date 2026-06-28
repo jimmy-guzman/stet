@@ -2,7 +2,7 @@ import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core";
 import { batch, createEffect, For, Show } from "solid-js";
 
 import { PROBLEMS_HEIGHT } from "../constants";
-import { sourceLabel } from "../diagnostics/problems";
+import { problemLocationLabel, sourceLabel } from "../diagnostics/problems";
 import type { ProblemItem } from "../diagnostics/problems";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
@@ -150,11 +150,11 @@ export function ProblemsPanel() {
 
               const { problem } = item;
               const source = sourceLabel(problem.source ?? problem.checker);
-              const lineLabel =
-                problem.line === undefined ? "" : String(problem.line).padStart(item.lineWidth);
+              const location = problemLocationLabel(problem);
+              const lineLabel = location === "" ? "" : location.padStart(item.labelWidth);
               // Everything the message shares its row with: paddingLeft (1 + INDENT),
-              // PaddingRight (1), the icon, and the line column (digits + trailing space).
-              const overhead = 1 + INDENT + 1 + ICON + item.lineWidth + 1;
+              // PaddingRight (1), the icon, and the location column (line:col + trailing space).
+              const overhead = 1 + INDENT + 1 + ICON + item.labelWidth + 1;
               // Reserve room for the source too, then degrade: drop the right-pinned
               // Source before truncating the message below readability.
               const withSource = contentWidth() - overhead - (source.length + 1);
@@ -176,6 +176,7 @@ export function ProblemsPanel() {
                       state.selectFile(problem.path);
                       if (problem.line !== undefined) {
                         state.setJumpTarget({
+                          column: problem.column,
                           escalate: true,
                           line: problem.line,
                           path: problem.path,

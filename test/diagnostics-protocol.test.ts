@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { mapLspDiagnostic } from "../src/diagnostics/protocol";
+import { isLspDiagnostic, mapLspDiagnostic } from "../src/diagnostics/protocol";
 
 const range = { end: { character: 5, line: 0 }, start: { character: 1, line: 0 } };
 
@@ -13,6 +13,25 @@ test("maps the 0-based LSP start line to a 1-based line", () => {
     "file:///repo/src/a.ts",
   );
   expect(mapped.line).toBe(42);
+});
+
+test("preserves the 1-based start column and the end range", () => {
+  const mapped = mapLspDiagnostic(
+    { message: "m", range: { end: { character: 9, line: 7 }, start: { character: 4, line: 3 } } },
+    "file:///repo/a.ts",
+  );
+  expect(mapped.line).toBe(4);
+  expect(mapped.column).toBe(5);
+  expect(mapped.endLine).toBe(8);
+  expect(mapped.endColumn).toBe(10);
+});
+
+test("narrows a diagnostic only when both ends of the range are positions", () => {
+  expect(isLspDiagnostic({ message: "m", range })).toBe(true);
+  expect(isLspDiagnostic({ message: "m", range: { start: range.start } })).toBe(false);
+  expect(isLspDiagnostic({ message: "m", range: { end: { line: 0 }, start: range.start } })).toBe(
+    false,
+  );
 });
 
 test("maps LSP severities onto the domain vocabulary", () => {

@@ -1,11 +1,19 @@
 import type { InputRenderable } from "@opentui/core";
 import { batch, createEffect, on, Show } from "solid-js";
 
+import { firstWord, wordAt } from "../diff/words";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { nearestNavigableIndex, placeholderText, viewerStats } from "../ui-helpers";
 import { DiffView } from "./diff/DiffView";
 import { Tabs } from "./Tabs";
+
+// The caret offset for a 1-based jump column: snap to the word that owns it, else
+// Land on the raw (clamped) offset so a jump into a gap still lands precisely.
+function caretForColumn(content: string, column: number) {
+  const index = Math.max(0, Math.min(column - 1, content.length));
+  return wordAt(content, index)?.start ?? index;
+}
 
 export function Viewer() {
   const theme = useTheme();
@@ -39,21 +47,42 @@ export function Viewer() {
         : pending.cursorLine === undefined
           ? 0
           : Math.max(0, nearestNavigableIndex(lines, pending.cursorLine));
+    // The caret restores to its remembered offset (already a word start), or the
+    // New line's first word on a fresh open; the clamp effect below corrects an
+    // Offset that no longer fits if the content changed under it.
+    const column = pending.cursorColumn ?? firstWord(lines[index]?.content ?? "");
     batch(() => {
+      state.setCaretLineLevel(false);
       state.setCursorIndex(index);
+      state.setCursorColumn(column);
       state.setViewerScrollTop(pending.viewport.scrollTop);
       state.setViewerScrollX(pending.viewport.scrollX);
       state.setPendingRestore(undefined);
     });
   });
 
-  // Clamp the cursor when a refresh shrinks the content under it.
+  // Clamp the cursor when a refresh shrinks the content under it (setCursorRow also
+  // Re-homes the caret to the new line's first word).
   createEffect(() => {
     const last = state.navigableLines().length - 1;
     if (state.cursorIndex() > last) {
-      state.setCursorIndex(Math.max(0, last));
+      state.setCursorRow(Math.max(0, last));
     }
   });
+
+  // Caret safety net: if the line under the caret changes length (content reload)
+  // And the caret now overflows it, re-home to the first word. Keyed on the cursor
+  // Line content; the body is untracked, so it never fights an in-range placement.
+  createEffect(
+    on(
+      () => state.cursorLineContent(),
+      (content) => {
+        if (state.cursorColumn() > content.length) {
+          state.setCursorColumn(firstWord(content));
+        }
+      },
+    ),
+  );
 
   // Deferred jumps (problem/recency navigation): land on the line, un-truncate,
   // Or escalate to file view to find it. A jump sets both `jumpTarget` and (via
@@ -78,8 +107,15 @@ export function Viewer() {
     const lines = state.navigableLines();
     const index = lines.findIndex((line) => line.newLine === jump.line);
     if (index !== -1) {
-      state.setCursorIndex(index);
-      state.setJumpTarget(undefined);
+      const content = lines[index]?.content ?? "";
+      batch(() => {
+        state.setCaretLineLevel(false);
+        state.setCursorIndex(index);
+        state.setCursorColumn(
+          jump.column === undefined ? firstWord(content) : caretForColumn(content, jump.column),
+        );
+        state.setJumpTarget(undefined);
+      });
       return;
     }
     if (state.truncated() && !state.fullContentPaths().has(jump.path)) {
@@ -92,7 +128,7 @@ export function Viewer() {
     }
     const nearest = nearestNavigableIndex(lines, jump.line);
     if (nearest >= 0) {
-      state.setCursorIndex(nearest);
+      state.setCursorRow(nearest);
     }
     state.setJumpTarget(undefined);
   });
@@ -148,7 +184,7 @@ export function Viewer() {
       const first = matches[0];
       if (first !== undefined) {
         state.setFindMatchPos(0);
-        state.setCursorIndex(first);
+        state.setCursorRow(first);
         state.setFindActive(true);
       }
       state.setFindOpen(false);
@@ -203,7 +239,11 @@ export function Viewer() {
                     state.diffView()?.showFileContent ?? false,
                     state.diffView()?.fileContent,
                   ),
-                  state.cursorLineNumber() === undefined ? "" : `ln ${state.cursorLineNumber()}`,
+                  state.cursorLineNumber() === undefined
+                    ? ""
+                    : state.caretColumn() === undefined
+                      ? `ln ${state.cursorLineNumber()}`
+                      : `ln ${state.cursorLineNumber()}:${state.caretColumn()}`,
                 ]
                   .filter((part) => part !== "")
                   .join(" · ")}

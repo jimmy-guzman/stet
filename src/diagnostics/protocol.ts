@@ -27,6 +27,11 @@ export interface LspDiagnostic {
 export interface MappedDiagnostic {
   path: string;
   line: number;
+  /** 1-based start column (LSP `start.character` is a 0-based UTF-16 offset). */
+  column: number;
+  /** 1-based end of the range, kept for caret placement and future range highlighting. */
+  endLine: number;
+  endColumn: number;
   severity: "error" | "warning" | "info";
   message: string;
   source?: string;
@@ -45,6 +50,9 @@ function mapSeverity(severity: number | undefined): "error" | "warning" | "info"
 
 export function mapLspDiagnostic(diagnostic: LspDiagnostic, uri: string): MappedDiagnostic {
   return {
+    column: diagnostic.range.start.character + 1,
+    endColumn: diagnostic.range.end.character + 1,
+    endLine: diagnostic.range.end.line + 1,
     line: diagnostic.range.start.line + 1,
     message: diagnostic.message,
     path: fileURLToPath(uri),
@@ -62,5 +70,9 @@ export function isLspDiagnostic(value: unknown): value is LspDiagnostic {
   if (!isObject(value) || typeof value.message !== "string" || !isObject(value.range)) {
     return false;
   }
-  return isObject(value.range.start) && typeof value.range.start.line === "number";
+  return isPosition(value.range.start) && isPosition(value.range.end);
+}
+
+function isPosition(value: unknown): value is LspPosition {
+  return isObject(value) && typeof value.line === "number" && typeof value.character === "number";
 }

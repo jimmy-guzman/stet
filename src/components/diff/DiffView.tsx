@@ -1,22 +1,37 @@
-import { fg, StyledText } from "@opentui/core";
+import { bg, fg, StyledText } from "@opentui/core";
 import type { MouseEvent, RGBA, ScrollBoxRenderable, TextRenderable } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
 import { batch, createEffect, createMemo, Index, onCleanup, Show, untrack } from "solid-js";
 
-import { followScrollTop } from "../../diff/follow";
+import { followScrollTop, followScrollX } from "../../diff/follow";
 import { isLineRow } from "../../diff/rows";
 import type { DiffLineRow, DiffRow } from "../../diff/rows";
-import { sliceSpansWindow } from "../../diff/spans";
+import { columnToIndex, markRange, sliceSpansWindow } from "../../diff/spans";
+import type { HighlightSpan } from "../../diff/spans";
 import { visibleWindow, visibleWindowVariable } from "../../diff/windowing";
+import { wordAt } from "../../diff/words";
 import { state } from "../../state";
 import { useTheme } from "../../theme/context";
 import { createLineMeasurer } from "./line-measure";
+
+// The caret word's display-column range on the cursor line, [from, to). Undefined
+// On a line with no word under the caret.
+interface CaretRange {
+  from: number;
+  to: number;
+}
 
 // One renderable per line: the per-token colors live inside a single StyledText
 // Buffer instead of one <text> per token (a screenful of highlighted code was
 // Hundreds of flex nodes). Content is set imperatively because the binding's
 // `content` prop stringifies objects and StyledText is not a typed JSX child.
-function StyledLine(props: { row: DiffLineRow; wrap: boolean; width: number; scrollX: number }) {
+function StyledLine(props: {
+  row: DiffLineRow;
+  wrap: boolean;
+  width: number;
+  scrollX: number;
+  caret: CaretRange | undefined;
+}) {
   const theme = useTheme();
   let ref: TextRenderable | undefined;
   createEffect(() => {
@@ -33,12 +48,23 @@ function StyledLine(props: { row: DiffLineRow; wrap: boolean; width: number; scr
           : theme.colors.text.faint;
     // Scroll mode: render the horizontal window [scrollX, scrollX+width) so all
     // Lines shift together (the sign stays fixed). Wrap mode keeps full spans.
-    const spans = props.wrap
+    const windowed = props.wrap
       ? row.spans
       : sliceSpansWindow(row.spans, props.scrollX, props.width - 1);
+    // The caret word gets a background. Its range is in content display columns;
+    // In scroll mode the window starts at scrollX, so shift the range by it. In
+    // Wrap mode the column styling follows the word wherever it wraps.
+    const offset = props.wrap ? 0 : props.scrollX;
+    const spans: HighlightSpan[] =
+      props.caret === undefined
+        ? windowed
+        : markRange(windowed, props.caret.from - offset, props.caret.to - offset);
     ref.content = new StyledText([
       fg(signColor)(sign),
-      ...spans.map((part) => fg(part.fg ?? theme.colors.text.primary)(part.text)),
+      ...spans.map((part) => {
+        const chunk = fg(part.fg ?? theme.colors.text.primary)(part.text);
+        return part.highlight === true ? bg(theme.colors.caret.wordBg)(chunk) : chunk;
+      }),
     ]);
   });
   return <text ref={(el) => (ref = el)} wrapMode={props.wrap ? "word" : "none"} />;
@@ -259,6 +285,41 @@ export function DiffView() {
 
   const isCursor = (row: DiffLineRow) => row.navIndex === state.cursorIndex();
 
+  // The caret word's display-column range on the cursor line, derived from the
+  // Caret offset; undefined when the caret sits in a gap (no word to highlight).
+  const caretRange = createMemo<CaretRange | undefined>(() => {
+    const word = state.caretWord();
+    if (word === undefined) {
+      return undefined;
+    }
+    const content = state.cursorLineContent();
+    const from = Bun.stringWidth(content.slice(0, word.start));
+    return { from, to: from + Bun.stringWidth(content.slice(word.start, word.end)) };
+  });
+
+  // Keep the caret word in view as it hops along a long line (scroll mode only;
+  // Wrap mode has no horizontal scroll). Reads scrollX untracked, like the vertical
+  // Follow, so free horizontal wheel scrolling is never snapped back.
+  const CARET_SCROLL_MARGIN = 4;
+  createEffect(() => {
+    const range = caretRange();
+    if (range === undefined || wrap()) {
+      return;
+    }
+    const current = untrack(scrollX);
+    const next = followScrollX({
+      current,
+      from: range.from,
+      margin: CARET_SCROLL_MARGIN,
+      maxScroll: maxScrollX(),
+      to: range.to,
+      viewport: contentWidth() - 1,
+    });
+    if (next !== current) {
+      setScrollX(next);
+    }
+  });
+
   // The gutter carries two orthogonal signals on separate channels: its background
   // Is the diff state (add/remove), and its line-number digits take the diagnostic
   // Severity color. They never fight, and a severity number only ever lands on a
@@ -302,8 +363,10 @@ export function DiffView() {
         : undefined;
   };
 
-  const resolveBackground = (bg: { normal: string; active: RGBA } | undefined, cursor: boolean) =>
-    cursor ? (bg?.active ?? theme.colors.surface.cursor) : bg?.normal;
+  const resolveBackground = (
+    background: { normal: string; active: RGBA } | undefined,
+    cursor: boolean,
+  ) => (cursor ? (background?.active ?? theme.colors.surface.cursor) : background?.normal);
 
   const gutterBackground = (row: DiffLineRow) => resolveBackground(gutterState(row), isCursor(row));
   const contentBackground = (row: DiffLineRow) =>
@@ -358,7 +421,28 @@ export function DiffView() {
                   event.stopPropagation();
                   batch(() => {
                     state.setFocusedPane("diff");
-                    state.setCursorIndex(line().navIndex);
+                    state.setCursorRow(line().navIndex);
+                    // Land the caret on the clicked word: map the screen x onto a
+                    // Content column (past the sidebar, viewer border, gutter, sign),
+                    // Then snap to the word that owns it.
+                    const content = line()
+                      .spans.map((part) => part.text)
+                      .join("");
+                    // The horizontal scroll offset only applies in scroll mode; in
+                    // Wrap mode there is none (a click on a wrapped continuation row
+                    // Stays approximate, the v1 wrap caret limitation).
+                    const column =
+                      event.x -
+                      (state.sidebarWidth() + 1 + gutterWidth() + 1) +
+                      (wrap() ? 0 : scrollX());
+                    if (column >= 0) {
+                      const index = columnToIndex(content, column);
+                      state.setCursorColumn(wordAt(content, index)?.start ?? index);
+                    } else {
+                      // A click on the gutter/sign selects the line, not a symbol:
+                      // `y` then copies path:line.
+                      state.setCaretLineLevel(true);
+                    }
                   });
                 }}
               >
@@ -371,6 +455,7 @@ export function DiffView() {
                     wrap={wrap()}
                     width={contentWidth()}
                     scrollX={scrollX()}
+                    caret={isCursor(line()) ? caretRange() : undefined}
                   />
                 </box>
               </box>

@@ -1,14 +1,18 @@
 export interface CopyReferencePayload {
   path: string;
   line?: number;
+  column?: number;
 }
 
 export function formatCopyReference(payload: CopyReferencePayload) {
   if (payload.line === undefined) {
     return payload.path;
   }
+  if (payload.column === undefined) {
+    return `${payload.path}:${payload.line}`;
+  }
 
-  return `${payload.path}:${payload.line}`;
+  return `${payload.path}:${payload.line}:${payload.column}`;
 }
 
 const LINUX_CLIPBOARD_COMMANDS = [

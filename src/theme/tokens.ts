@@ -35,6 +35,9 @@ const stageTokens: Record<StageState, typeof Hex> = {
 export const ThemeSchema = Schema.Struct({
   accent: Schema.Struct({ primary: Hex }),
   border: Schema.Struct({ focused: Hex, unfocused: Hex }),
+  // Background of the word under the in-line caret; reads on top of the cursor-row
+  // Highlight, so it is distinct from `surface.cursor` and `find.matchBg`.
+  caret: Schema.Struct({ wordBg: Hex }),
   diff: Schema.Struct({
     addedBg: Hex,
     addedLineNumberBg: Hex,

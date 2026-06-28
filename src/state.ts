@@ -19,6 +19,7 @@ import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
+import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { contentToContextPatch } from "./file/content";
 import type { FileContent } from "./file/content";
 import { File } from "./file/service";
@@ -75,6 +76,9 @@ import { Watcher } from "./watcher/service";
 interface JumpTarget {
   path: string;
   line: number;
+  // 1-based column to land the caret on (snapped to the word that owns it);
+  // Undefined keeps the caret at the target line's first word.
+  column?: number;
   escalate: boolean;
 }
 
@@ -86,6 +90,8 @@ interface JumpTarget {
 interface PendingRestore {
   path: string;
   cursorLine: number | undefined;
+  // The caret's UTF-16 offset to restore; undefined → the cursor line's first word.
+  cursorColumn: number | undefined;
   viewport: { scrollTop: number; scrollX: number };
 }
 
@@ -269,6 +275,17 @@ function createState() {
   const [lastChange, setLastChange] = createSignal(0);
   const [lastWatcherTick, setLastWatcherTick] = createSignal(0);
   const [cursorIndex, setCursorIndex] = createSignal(0);
+  // The in-line caret: a UTF-16 offset (a word start) on the cursor line. Motion
+  // Hops word to word; a precise offset is still stored so a diagnostic jump lands
+  // On its exact column and copy-reference can emit `:line:col`. Normalized to the
+  // Line's first word whenever the cursor line or content changes (the Viewer
+  // Effect), unless a restore/jump placed it on a valid word.
+  const [cursorColumn, setCursorColumn] = createSignal(0);
+  // True when the caret selects a whole line, not a symbol on it (a click on the
+  // Gutter): no word is highlighted and `y` copies `path:line`, not `path:line:col`.
+  // Transient — any vertical move, word hop, jump, or content click re-selects a
+  // Symbol, so it is never captured into navigation history.
+  const [caretLineLevel, setCaretLineLevel] = createSignal(false);
   // The viewer's scroll offsets, lifted out of DiffView so a navigation can
   // Capture and restore them; the renderer mirrors `viewerScrollTop` onto the
   // Scrollbox every frame (it stays the single source of truth for the window).
@@ -586,10 +603,20 @@ function createState() {
 
   // --- status / cursor view-model ---
   const cursorLine = createMemo(() => navigableLines()[cursorIndex()]);
+  const cursorLineContent = createMemo(() => cursorLine()?.content ?? "");
   const cursorLineNumber = createMemo(() => {
     const line = cursorLine();
     return line?.newLine ?? line?.oldLine;
   });
+  // The symbol the caret sits on, for the highlight and (later) the code-intel
+  // Requests. Undefined in line-level mode or on a gap/word-less position.
+  const caretWord = createMemo(() =>
+    caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn()),
+  );
+  // The exact 1-based column the caret points at, for `:col` in copy/stats. Driven
+  // By line-level alone (not `caretWord`), so a diagnostic jump that lands in a gap
+  // Still reports its precise column instead of falling back to line-only.
+  const caretColumn = createMemo(() => (caretLineLevel() ? undefined : cursorColumn() + 1));
   const cursorFindings = createMemo(() => {
     const line = cursorLine();
     return line?.newLine === undefined ? undefined : lineMap().get(line.newLine);
@@ -654,6 +681,7 @@ function createState() {
     const settled = pending === undefined || pending.path !== path;
     const line = navigableLines()[cursorIndex()];
     return {
+      cursorColumn: settled ? cursorColumn() : pending.cursorColumn,
       cursorLine: settled ? (line?.newLine ?? line?.oldLine) : pending.cursorLine,
       fileView: fileView(),
       fullContent: fullContentPaths().has(path),
@@ -671,6 +699,7 @@ function createState() {
   function arrivingLocation(path: string, kind: "browse" | "jump"): Location {
     const remembered = recall(navState(), path);
     return {
+      cursorColumn: remembered?.cursorColumn,
       cursorLine: remembered?.cursorLine,
       fileView: false,
       fullContent: fullContentPaths().has(path),
@@ -691,6 +720,7 @@ function createState() {
       );
     }
     setPendingRestore({
+      cursorColumn: location.cursorColumn,
       cursorLine: location.cursorLine,
       path: location.path,
       viewport: location.viewport,
@@ -703,6 +733,7 @@ function createState() {
     return leaving === undefined
       ? nav
       : remember(recordCurrent(nav, leaving), leaving.path, {
+          cursorColumn: leaving.cursorColumn,
           cursorLine: leaving.cursorLine,
           viewport: leaving.viewport,
         });
@@ -780,6 +811,7 @@ function createState() {
       leaving === undefined
         ? recorded
         : remember(recorded, leaving.path, {
+            cursorColumn: leaving.cursorColumn,
             cursorLine: leaving.cursorLine,
             viewport: leaving.viewport,
           });
@@ -882,6 +914,69 @@ function createState() {
       setExpandedDirectories((current) => expandAncestorsForPath(current, path));
       navigateTo(path, "jump");
     });
+  }
+
+  // Move the line cursor and land the caret on the new line's first word, so every
+  // Vertical move (j/k, page, top/bottom, find cycle, the row click) leaves the
+  // Caret on a symbol ready for go-to-definition/hover. A jump or restore sets the
+  // Caret itself, so those use `setCursorIndex` directly and bypass this.
+  function setCursorRow(index: number) {
+    batch(() => {
+      setCaretLineLevel(false);
+      setCursorIndex(index);
+      setCursorColumn(firstWord(navigableLines()[index]?.content ?? ""));
+    });
+  }
+
+  // Hop the caret to the next word; past the line's last word it wraps to the next
+  // Navigable line's first word, so h/l tab through every symbol in the file. From
+  // Line-level (a gutter click), the first hop just selects the current first word.
+  function caretNextWord() {
+    if (caretLineLevel()) {
+      setCaretLineLevel(false);
+      return;
+    }
+    const content = cursorLineContent();
+    const column = cursorColumn();
+    const next = nextWord(content, column);
+    if (next !== column) {
+      setCursorColumn(next);
+      return;
+    }
+    const lines = navigableLines();
+    const index = cursorIndex();
+    if (index < lines.length - 1) {
+      batch(() => {
+        setCursorIndex(index + 1);
+        setCursorColumn(firstWord(lines[index + 1]?.content ?? ""));
+      });
+    }
+  }
+  // Hop the caret to the previous word; past the line's first word it wraps to the
+  // Previous navigable line's last word. From line-level, select the line's last word.
+  function caretPrevWord() {
+    if (caretLineLevel()) {
+      batch(() => {
+        setCaretLineLevel(false);
+        setCursorColumn(lastWord(cursorLineContent()));
+      });
+      return;
+    }
+    const content = cursorLineContent();
+    const column = cursorColumn();
+    const previous = prevWord(content, column);
+    if (previous !== column) {
+      setCursorColumn(previous);
+      return;
+    }
+    const lines = navigableLines();
+    const index = cursorIndex();
+    if (index > 0) {
+      batch(() => {
+        setCursorIndex(index - 1);
+        setCursorColumn(lastWord(lines[index - 1]?.content ?? ""));
+      });
+    }
   }
 
   let checksController: AbortController | undefined;
@@ -1382,6 +1477,11 @@ function createState() {
     allProblemItems,
     canGoBack,
     canGoForward,
+    caretColumn,
+    caretLineLevel,
+    caretNextWord,
+    caretPrevWord,
+    caretWord,
     changesOnly,
     checkerState,
     checksRunning,
@@ -1392,7 +1492,9 @@ function createState() {
     counts,
     countsText,
     currentWorktreeDeleted,
+    cursorColumn,
     cursorIndex,
+    cursorLineContent,
     cursorLineNumber,
     cycleTab,
     diffView,
@@ -1459,11 +1561,14 @@ function createState() {
     selectedFile,
     selectedPath,
     setActivityLog,
+    setCaretLineLevel,
     setChangesOnly,
     setCheckerState,
     setCliBaseRef,
     setCurrentWorktreeDeleted,
+    setCursorColumn,
     setCursorIndex,
+    setCursorRow,
     setEditorTemplate,
     setExpandedDirectories,
     setFileView,

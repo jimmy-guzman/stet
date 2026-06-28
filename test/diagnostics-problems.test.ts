@@ -4,6 +4,7 @@ import type { CheckerState, Diagnostic } from "../src/diagnostics/checker";
 import {
   buildProblemItems,
   isNavigableProblemItem,
+  problemLocationLabel,
   sourceLabel,
   splitDiagnosticMessage,
 } from "../src/diagnostics/problems";
@@ -95,6 +96,14 @@ describe("isNavigableProblemItem", () => {
   });
 });
 
+describe("problemLocationLabel", () => {
+  test("shows line:col, line alone, or nothing", () => {
+    expect(problemLocationLabel(diagnostic({ column: 7, line: 2 }))).toBe("2:7");
+    expect(problemLocationLabel(diagnostic({ column: undefined, line: 2 }))).toBe("2");
+    expect(problemLocationLabel(diagnostic({ column: 7, line: undefined }))).toBe("");
+  });
+});
+
 describe("sourceLabel", () => {
   test("shortens the long typescript source to tsc", () => {
     expect(sourceLabel("typescript")).toBe("tsc");
@@ -124,6 +133,20 @@ describe("buildProblemItems", () => {
       warnings: 1,
     });
     expect(items.filter((item) => item.kind === "problem")).toHaveLength(2);
+  });
+
+  test("widens the location column to the widest line:col in the group", () => {
+    const items = buildProblemItems(
+      stateWith([
+        diagnostic({ column: 3, line: 2, message: "a" }),
+        diagnostic({ column: 40, line: 120, message: "b" }),
+      ]),
+    );
+    const widths = items
+      .filter((item) => item.kind === "problem")
+      .map((item) => item.kind === "problem" && item.labelWidth);
+    // "120:40" is the widest at 6 characters; every row shares it so summaries align.
+    expect(widths).toEqual([6, 6]);
   });
 
   test("orders file groups by worst severity, then path", () => {

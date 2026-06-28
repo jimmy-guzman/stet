@@ -65,6 +65,12 @@ export function firstWord(line: string): number {
   return wordStarts(line)[0] ?? 0;
 }
 
+/** The line's last word start, or 0 for a line with no words. */
+export function lastWord(line: string): number {
+  const starts = wordStarts(line);
+  return starts[starts.length - 1] ?? 0;
+}
+
 function lastAtOrBefore(starts: number[], index: number) {
   return starts.toReversed().find((start) => start <= index);
 }

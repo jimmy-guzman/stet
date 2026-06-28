@@ -19,7 +19,7 @@ import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
-import { firstWord, nextWord, prevWord } from "./diff/words";
+import { firstWord, lastWord, nextWord, prevWord } from "./diff/words";
 import { contentToContextPatch } from "./file/content";
 import type { FileContent } from "./file/content";
 import { File } from "./file/service";
@@ -913,13 +913,43 @@ function createState() {
     });
   }
 
-  // Hop the caret to the next/previous word on the cursor line; a no-op at the
-  // Line's last/first word (the word helpers stay put rather than wrapping).
+  // Hop the caret to the next word; past the line's last word it wraps to the next
+  // Navigable line's first word, so h/l tab through every symbol in the file.
   function caretNextWord() {
-    setCursorColumn((column) => nextWord(cursorLineContent(), column));
+    const content = cursorLineContent();
+    const column = cursorColumn();
+    const next = nextWord(content, column);
+    if (next !== column) {
+      setCursorColumn(next);
+      return;
+    }
+    const lines = navigableLines();
+    const index = cursorIndex();
+    if (index < lines.length - 1) {
+      batch(() => {
+        setCursorIndex(index + 1);
+        setCursorColumn(firstWord(lines[index + 1]?.content ?? ""));
+      });
+    }
   }
+  // Hop the caret to the previous word; past the line's first word it wraps to the
+  // Previous navigable line's last word.
   function caretPrevWord() {
-    setCursorColumn((column) => prevWord(cursorLineContent(), column));
+    const content = cursorLineContent();
+    const column = cursorColumn();
+    const previous = prevWord(content, column);
+    if (previous !== column) {
+      setCursorColumn(previous);
+      return;
+    }
+    const lines = navigableLines();
+    const index = cursorIndex();
+    if (index > 0) {
+      batch(() => {
+        setCursorIndex(index - 1);
+        setCursorColumn(lastWord(lines[index - 1]?.content ?? ""));
+      });
+    }
   }
 
   let checksController: AbortController | undefined;

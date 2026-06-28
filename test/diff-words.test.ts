@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
 
-import { firstWord, nextWord, prevWord, wordAt, words, wordStarts } from "../src/diff/words";
+import {
+  firstWord,
+  lastWord,
+  nextWord,
+  prevWord,
+  wordAt,
+  words,
+  wordStarts,
+} from "../src/diff/words";
 
 const line = "const user = getUser(id)";
 // Words:        const(0-5) user(6-10) getUser(13-20) id(21-23)
@@ -29,6 +37,13 @@ test("a blank or whitespace-only line has no words; the caret home is 0", () => 
   expect(firstWord("   ")).toBe(0);
   expect(firstWord(line)).toBe(0);
   expect(firstWord("  hi")).toBe(2);
+});
+
+test("firstWord and lastWord bracket the line's words for caret wrapping", () => {
+  expect(firstWord(line)).toBe(0);
+  expect(lastWord(line)).toBe(21);
+  expect(lastWord("   ")).toBe(0);
+  expect(lastWord("one")).toBe(0);
 });
 
 test("wordAt returns the owning word, or undefined inside a gap", () => {

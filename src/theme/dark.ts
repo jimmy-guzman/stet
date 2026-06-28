@@ -3,7 +3,7 @@ import type { Theme } from "./tokens";
 export const darkTheme: Theme = {
   accent: { primary: "#ffa7d9" },
   border: { focused: "#ffa7d9", unfocused: "#2c2e30" },
-  caret: { wordBg: "#4a3442" },
+  caret: { wordBg: "#434c5e" },
   diff: {
     addedBg: "#16301a",
     addedLineNumberBg: "#183f20",

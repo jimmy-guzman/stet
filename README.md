@@ -36,8 +36,8 @@ problems. You decide what to say next.
   then keeps the current file and selection stable as the view refreshes.
 - Marks recent activity and lets you jump to the latest touched file.
 - Shows diagnostics in the tree, in the viewer, and in a problems panel.
-- Copies a `path:line` reference and snippet so you can paste it back into the
-  agent conversation.
+- Copies a `path:line:col` reference and snippet so you can paste it back into
+  the agent conversation.
 
 The git-backed file tree renders first. Diagnostics come in later as decorations.
 That keeps the basic view useful even when checks are still running.
@@ -168,7 +168,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | Key         | Action                                            |
 | ----------- | ------------------------------------------------- |
 | `j` / `k`   | move in the tree, viewer, or problems panel       |
-| `h` / `l`   | collapse / expand folders                         |
+| `h` / `l`   | collapse / expand folders, or word-hop the caret  |
 | `tab`       | switch focus between tree and viewer              |
 | `enter`     | open the focused item / jump to a problem         |
 | `ctrl-p`    | go to file: fuzzy-search the whole repo           |
@@ -188,7 +188,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `\`         | reset the sidebar to its default width            |
 | `.`         | jump to the most recently changed file            |
 | `n`         | jump to the next file with findings               |
-| `y`         | copy focused file path, or `path:line`            |
+| `y`         | copy focused file path, or `path:line:col`        |
 | `f`         | load full content when truncated                  |
 | `r`         | re-run checks                                     |
 | `ctrl-d/u`  | half-page cursor movement in the viewer           |

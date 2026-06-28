@@ -46,3 +46,36 @@ export function followScrollTop({
         : current;
   return Math.max(0, Math.min(next, maxScroll));
 }
+
+export interface FollowRange {
+  /** The kept range's start display column. */
+  from: number;
+  /** The kept range's end display column (exclusive). */
+  to: number;
+  /** Visible content width in display columns. */
+  viewport: number;
+  /** The current horizontal scroll offset. */
+  current: number;
+  /** Deepest valid horizontal scroll offset. */
+  maxScroll: number;
+  /** Desired context columns to keep between the range and each viewport edge. */
+  margin: number;
+}
+
+// Horizontal sibling of `followScrollTop`: keep the caret word's display range in
+// View as it hops along the line, with a margin of context columns on each side.
+// A range wider than the viewport anchors its start.
+export function followScrollX({ from, to, viewport, current, maxScroll, margin }: FollowRange) {
+  const width = to - from;
+  if (width >= viewport) {
+    return Math.max(0, Math.min(from, maxScroll));
+  }
+  const safeMargin = Math.min(Math.max(0, margin), Math.floor((viewport - width) / 2));
+  const next =
+    from - safeMargin < current
+      ? from - safeMargin
+      : to + safeMargin > current + viewport
+        ? to + safeMargin - viewport
+        : current;
+  return Math.max(0, Math.min(next, maxScroll));
+}

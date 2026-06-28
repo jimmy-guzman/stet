@@ -19,6 +19,7 @@ import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
+import { firstWord, nextWord, prevWord } from "./diff/words";
 import { contentToContextPatch } from "./file/content";
 import type { FileContent } from "./file/content";
 import { File } from "./file/service";
@@ -75,6 +76,9 @@ import { Watcher } from "./watcher/service";
 interface JumpTarget {
   path: string;
   line: number;
+  // 1-based column to land the caret on (snapped to the word that owns it);
+  // Undefined keeps the caret at the target line's first word.
+  column?: number;
   escalate: boolean;
 }
 
@@ -86,6 +90,8 @@ interface JumpTarget {
 interface PendingRestore {
   path: string;
   cursorLine: number | undefined;
+  // The caret's UTF-16 offset to restore; undefined → the cursor line's first word.
+  cursorColumn: number | undefined;
   viewport: { scrollTop: number; scrollX: number };
 }
 
@@ -269,6 +275,12 @@ function createState() {
   const [lastChange, setLastChange] = createSignal(0);
   const [lastWatcherTick, setLastWatcherTick] = createSignal(0);
   const [cursorIndex, setCursorIndex] = createSignal(0);
+  // The in-line caret: a UTF-16 offset (a word start) on the cursor line. Motion
+  // Hops word to word; a precise offset is still stored so a diagnostic jump lands
+  // On its exact column and copy-reference can emit `:line:col`. Normalized to the
+  // Line's first word whenever the cursor line or content changes (the Viewer
+  // Effect), unless a restore/jump placed it on a valid word.
+  const [cursorColumn, setCursorColumn] = createSignal(0);
   // The viewer's scroll offsets, lifted out of DiffView so a navigation can
   // Capture and restore them; the renderer mirrors `viewerScrollTop` onto the
   // Scrollbox every frame (it stays the single source of truth for the window).
@@ -586,6 +598,7 @@ function createState() {
 
   // --- status / cursor view-model ---
   const cursorLine = createMemo(() => navigableLines()[cursorIndex()]);
+  const cursorLineContent = createMemo(() => cursorLine()?.content ?? "");
   const cursorLineNumber = createMemo(() => {
     const line = cursorLine();
     return line?.newLine ?? line?.oldLine;
@@ -654,6 +667,7 @@ function createState() {
     const settled = pending === undefined || pending.path !== path;
     const line = navigableLines()[cursorIndex()];
     return {
+      cursorColumn: settled ? cursorColumn() : pending.cursorColumn,
       cursorLine: settled ? (line?.newLine ?? line?.oldLine) : pending.cursorLine,
       fileView: fileView(),
       fullContent: fullContentPaths().has(path),
@@ -671,6 +685,7 @@ function createState() {
   function arrivingLocation(path: string, kind: "browse" | "jump"): Location {
     const remembered = recall(navState(), path);
     return {
+      cursorColumn: remembered?.cursorColumn,
       cursorLine: remembered?.cursorLine,
       fileView: false,
       fullContent: fullContentPaths().has(path),
@@ -691,6 +706,7 @@ function createState() {
       );
     }
     setPendingRestore({
+      cursorColumn: location.cursorColumn,
       cursorLine: location.cursorLine,
       path: location.path,
       viewport: location.viewport,
@@ -703,6 +719,7 @@ function createState() {
     return leaving === undefined
       ? nav
       : remember(recordCurrent(nav, leaving), leaving.path, {
+          cursorColumn: leaving.cursorColumn,
           cursorLine: leaving.cursorLine,
           viewport: leaving.viewport,
         });
@@ -780,6 +797,7 @@ function createState() {
       leaving === undefined
         ? recorded
         : remember(recorded, leaving.path, {
+            cursorColumn: leaving.cursorColumn,
             cursorLine: leaving.cursorLine,
             viewport: leaving.viewport,
           });
@@ -882,6 +900,26 @@ function createState() {
       setExpandedDirectories((current) => expandAncestorsForPath(current, path));
       navigateTo(path, "jump");
     });
+  }
+
+  // Move the line cursor and land the caret on the new line's first word, so every
+  // Vertical move (j/k, page, top/bottom, find cycle, the row click) leaves the
+  // Caret on a symbol ready for go-to-definition/hover. A jump or restore sets the
+  // Caret itself, so those use `setCursorIndex` directly and bypass this.
+  function setCursorRow(index: number) {
+    batch(() => {
+      setCursorIndex(index);
+      setCursorColumn(firstWord(navigableLines()[index]?.content ?? ""));
+    });
+  }
+
+  // Hop the caret to the next/previous word on the cursor line; a no-op at the
+  // Line's last/first word (the word helpers stay put rather than wrapping).
+  function caretNextWord() {
+    setCursorColumn((column) => nextWord(cursorLineContent(), column));
+  }
+  function caretPrevWord() {
+    setCursorColumn((column) => prevWord(cursorLineContent(), column));
   }
 
   let checksController: AbortController | undefined;
@@ -1382,6 +1420,8 @@ function createState() {
     allProblemItems,
     canGoBack,
     canGoForward,
+    caretNextWord,
+    caretPrevWord,
     changesOnly,
     checkerState,
     checksRunning,
@@ -1392,7 +1432,9 @@ function createState() {
     counts,
     countsText,
     currentWorktreeDeleted,
+    cursorColumn,
     cursorIndex,
+    cursorLineContent,
     cursorLineNumber,
     cycleTab,
     diffView,
@@ -1463,7 +1505,9 @@ function createState() {
     setCheckerState,
     setCliBaseRef,
     setCurrentWorktreeDeleted,
+    setCursorColumn,
     setCursorIndex,
+    setCursorRow,
     setEditorTemplate,
     setExpandedDirectories,
     setFileView,

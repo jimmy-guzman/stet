@@ -176,6 +176,7 @@ export function ProblemsPanel() {
                       state.selectFile(problem.path);
                       if (problem.line !== undefined) {
                         state.setJumpTarget({
+                          column: problem.column,
                           escalate: true,
                           line: problem.line,
                           path: problem.path,

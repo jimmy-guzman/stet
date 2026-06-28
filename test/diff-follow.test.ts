@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { followScrollTop } from "../src/diff/follow";
+import { followScrollTop, followScrollX } from "../src/diff/follow";
 
 // Viewport of 10 rows, content of 100 rows (so maxScroll = 90), 3-row margin.
 const base = { height: 1, margin: 3, maxScroll: 90, viewport: 10 };
@@ -58,5 +58,34 @@ describe("followScrollTop", () => {
     expect(
       followScrollTop({ current: 10, height: 1, margin: 3, maxScroll: 90, top: 12, viewport: 3 }),
     ).toBe(11);
+  });
+});
+
+// Viewport of 10 columns, content up to maxScroll 90, 3-column margin.
+const xBase = { margin: 3, maxScroll: 90, viewport: 10 };
+
+describe("followScrollX", () => {
+  test("does not scroll while the caret word sits inside the margins", () => {
+    // Showing cols [0,10): a word at [4,6) keeps margin on both sides.
+    expect(followScrollX({ ...xBase, current: 0, from: 4, to: 6 })).toBe(0);
+  });
+
+  test("scrolls right before the word reaches the right edge", () => {
+    // Showing [0,10): word [8,10) is flush right, so scroll to keep 3 cols after it.
+    expect(followScrollX({ ...xBase, current: 0, from: 8, to: 10 })).toBe(3);
+  });
+
+  test("scrolls left before the word reaches the left edge", () => {
+    // Showing [10,20): word [12,14) is within the left margin, so scroll left.
+    expect(followScrollX({ ...xBase, current: 10, from: 12, to: 14 })).toBe(9);
+  });
+
+  test("anchors a word wider than the viewport to its start", () => {
+    expect(followScrollX({ ...xBase, current: 0, from: 5, to: 20 })).toBe(5);
+  });
+
+  test("clamps to the start and the deepest valid scroll", () => {
+    expect(followScrollX({ ...xBase, current: 5, from: 0, to: 2 })).toBe(0);
+    expect(followScrollX({ ...xBase, current: 80, from: 95, to: 97 })).toBe(90);
   });
 });

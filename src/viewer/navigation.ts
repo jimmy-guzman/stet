@@ -16,6 +16,10 @@ interface Viewport {
 // Navigable index (which only has meaning against a loaded diff).
 export interface Position {
   cursorLine: number | undefined;
+  // The caret's UTF-16 offset on the cursor line (a word start). Undefined means
+  // "the line's first word", mirroring how `cursorLine: undefined` means "first
+  // Change" — so a fresh open lands the caret at the first symbol.
+  cursorColumn?: number;
   viewport: Viewport;
 }
 

@@ -36,7 +36,7 @@ export function createKeyHandler(host: HostEffects) {
     const target = matches[pos];
     if (target !== undefined) {
       state.setFindMatchPos(pos);
-      state.setCursorIndex(target);
+      state.setCursorRow(target);
     }
   };
 
@@ -376,8 +376,14 @@ export function createKeyHandler(host: HostEffects) {
         }
         if (selectedPath !== undefined) {
           const line = state.navigableLines()[state.cursorIndex()];
+          const lineNumber = line?.newLine ?? line?.oldLine;
           state.copy(
-            formatCopyReference({ line: line?.newLine ?? line?.oldLine, path: selectedPath }),
+            formatCopyReference({
+              // The caret column only means something once a line is located.
+              column: lineNumber === undefined ? undefined : state.cursorColumn() + 1,
+              line: lineNumber,
+              path: selectedPath,
+            }),
           );
         }
         return;
@@ -408,7 +414,12 @@ export function createKeyHandler(host: HostEffects) {
             const { problem } = item;
             state.selectFile(problem.path);
             if (problem.line !== undefined) {
-              state.setJumpTarget({ escalate: true, line: problem.line, path: problem.path });
+              state.setJumpTarget({
+                column: problem.column,
+                escalate: true,
+                line: problem.line,
+                path: problem.path,
+              });
             }
             state.setFocusedPane("diff");
           }
@@ -420,19 +431,23 @@ export function createKeyHandler(host: HostEffects) {
         const last = state.navigableLines().length - 1;
         const halfPage = Math.max(1, Math.floor(state.viewerHeight() / 2));
         if (key.name === "j" || key.name === "down") {
-          state.setCursorIndex(Math.max(0, Math.min(state.cursorIndex() + 1, last)));
+          state.setCursorRow(Math.max(0, Math.min(state.cursorIndex() + 1, last)));
         } else if (key.name === "k" || key.name === "up") {
-          state.setCursorIndex(Math.max(state.cursorIndex() - 1, 0));
+          state.setCursorRow(Math.max(state.cursorIndex() - 1, 0));
         } else if (key.ctrl && key.name === "d") {
-          state.setCursorIndex(Math.max(0, Math.min(state.cursorIndex() + halfPage, last)));
+          state.setCursorRow(Math.max(0, Math.min(state.cursorIndex() + halfPage, last)));
         } else if (key.ctrl && key.name === "u") {
-          state.setCursorIndex(Math.max(state.cursorIndex() - halfPage, 0));
+          state.setCursorRow(Math.max(state.cursorIndex() - halfPage, 0));
         } else if (key.name === "g" && !key.shift) {
-          state.setCursorIndex(0);
+          state.setCursorRow(0);
         } else if (key.name === "g" || key.name === "G") {
-          state.setCursorIndex(Math.max(0, last));
+          state.setCursorRow(Math.max(0, last));
+        } else if (key.name === "l" || key.name === "right") {
+          state.caretNextWord();
         } else if (key.name === "h" || key.name === "left") {
-          state.setFocusedPane("tree");
+          // The caret hops words; `tab` is the way back to the tree (a no-op here
+          // At the first word). h no longer focuses the tree.
+          state.caretPrevWord();
         }
         return;
       }

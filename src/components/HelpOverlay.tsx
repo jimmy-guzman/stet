@@ -33,7 +33,7 @@ function wrappedLineCount(text: string, width: number) {
 // Mirrors the Keys table in README.md
 const KEY_HELP: [combo: string, action: string][] = [
   ["j / k", "move in the tree, viewer, or problems panel"],
-  ["h / l", "collapse / expand folders"],
+  ["h / l", "collapse / expand folders (tree) or hop the caret by word (viewer)"],
   ["tab", "switch focus between tree and viewer"],
   ["enter", "open the focused item / jump to a problem"],
   ["ctrl-p", "go to file: fuzzy-search the whole repo"],
@@ -52,7 +52,7 @@ const KEY_HELP: [combo: string, action: string][] = [
   ["[ / ] / \\", "shrink (collapses past min) / grow / reset sidebar"],
   [".", "jump to the most recently changed file"],
   ["n", "jump to the next file with findings"],
-  ["y", "copy the focused file's path (tree) or path:line (viewer)"],
+  ["y", "copy the focused file's path (tree) or path:line:col (viewer)"],
   ["f", "load full content when truncated"],
   ["r", "re-run checks"],
   ["ctrl-d/u", "half-page cursor movement in the viewer"],

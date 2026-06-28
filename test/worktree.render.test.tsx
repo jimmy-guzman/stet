@@ -49,7 +49,7 @@ describe("worktree picker", () => {
 
       mockInput.pressKey("w");
       await settleUntil("worktree picker again", (frame) => frame.includes("side-branch"));
-      mockInput.pressKey("j");
+      mockInput.pressArrow("down");
       // Let the cursor move commit before enter, as a real key cadence would
       await settleUntil("picker cursor moved", () => true, 2);
       mockInput.pressEnter();
@@ -59,6 +59,45 @@ describe("worktree picker", () => {
       );
       expect(switched).toContain("side-only.ts");
       expect(switched).toContain(".wt · worktree vs HEAD");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("typing filters the worktree list", async () => {
+    const repoRoot = createFixtureRepo("sideye-worktree-filter-", {
+      "README.md": "# Fixture\n",
+    });
+    const linkedRoot = join(repoRoot, ".wt");
+    runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 34,
+      width: 120,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5);
+
+      mockInput.pressKey("w");
+      await settleUntil("worktree picker", (frame) => frame.includes("side-branch"));
+
+      await mockInput.typeText("branch");
+      const filtered = await settleUntil("filtered to side-branch", (frame) =>
+        frame.includes("side-branch"),
+      );
+      expect(filtered).toContain("side-branch");
+
+      await mockInput.typeText("zzz");
+      const empty = await settleUntil(
+        "no matches",
+        (frame) => frame.includes("no matches") && !frame.includes("side-branch"),
+      );
+      expect(empty).toContain("no matches");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

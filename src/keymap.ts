@@ -54,20 +54,21 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (state.worktreeMenuOpen()) {
-        const worktrees = state.worktrees();
-        const lastIndex = Math.max(0, (worktrees?.length ?? 1) - 1);
-        if (key.name === "escape" || key.name === "w") {
-          state.setWorktreeMenuOpen(false);
-        } else if (key.name === "j" || key.name === "down") {
-          state.setWorktreeMenuIndex(Math.min(state.worktreeMenuIndex() + 1, lastIndex));
-        } else if (key.name === "k" || key.name === "up") {
-          state.setWorktreeMenuIndex(Math.max(state.worktreeMenuIndex() - 1, 0));
-        } else if (key.name === "return") {
-          const worktree = worktrees?.[state.worktreeMenuIndex()];
-          if (worktree !== undefined) {
-            void state.switchWorktree(worktree);
-          }
+      // The worktree picker owns the keyboard while open (like the palette): nav
+      // Here, text and submit (the switch) are the input element's job. Escape
+      // Closes; enter (the input's onSubmit) switches to the highlighted worktree.
+      if (state.worktreeComboboxOpen()) {
+        if (key.name === "escape") {
+          state.setWorktreeComboboxOpen(false);
+        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
+          state.setWorktreeComboboxIndex(
+            Math.min(
+              state.worktreeComboboxIndex() + 1,
+              Math.max(0, (state.worktreeComboboxResults()?.length ?? 0) - 1),
+            ),
+          );
+        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
+          state.setWorktreeComboboxIndex(Math.max(state.worktreeComboboxIndex() - 1, 0));
         }
         return;
       }
@@ -278,8 +279,12 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "w") {
-        state.setWorktreeMenuOpen(true);
-        state.setWorktreeMenuIndex(0);
+        // Solid mounts and focuses the picker's filter input within this same key
+        // Event, so without preventDefault the triggering "w" would be typed into it.
+        key.preventDefault();
+        state.setWorktreeComboboxOpen(true);
+        state.setWorktreeComboboxIndex(0);
+        state.setWorktreeComboboxQuery("");
         state.setWorktrees(undefined);
         state.loadWorktrees(state.gitModel().repoRoot);
         return;

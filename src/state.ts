@@ -50,7 +50,7 @@ import { worktreeLabel } from "./ui-helpers";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
-import { truncate } from "./utils/text";
+import { collapseHome, truncate } from "./utils/text";
 import {
   back,
   canBack,
@@ -252,8 +252,9 @@ function createState() {
   const [findActive, setFindActive] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal("");
   const [findMatchPos, setFindMatchPos] = createSignal(0);
-  const [worktreeMenuOpen, setWorktreeMenuOpen] = createSignal(false);
-  const [worktreeMenuIndex, setWorktreeMenuIndex] = createSignal(0);
+  const [worktreeComboboxOpen, setWorktreeComboboxOpen] = createSignal(false);
+  const [worktreeComboboxIndex, setWorktreeComboboxIndex] = createSignal(0);
+  const [worktreeComboboxQuery, setWorktreeComboboxQuery] = createSignal("");
   const [worktrees, setWorktrees] = createSignal<Worktree[] | undefined>(undefined);
   const [helpDialogOpen, setHelpDialogOpen] = createSignal(false);
   const [themeComboboxOpen, setThemeComboboxOpen] = createSignal(false);
@@ -388,6 +389,25 @@ function createState() {
     const query = themeComboboxQuery().toLowerCase();
     return themeComboboxItems().filter((item) => isSubsequence(query, item.name.toLowerCase()));
   };
+  // `undefined` while the worktree list is still loading (so the picker keeps its
+  // Loading state); otherwise the subsequence-filtered list, matching the branch
+  // Label and path so a query can narrow by either.
+  const worktreeComboboxResults = createMemo(() => {
+    const list = worktrees();
+    if (list === undefined) {
+      return undefined;
+    }
+    const query = worktreeComboboxQuery().toLowerCase();
+    if (query === "") {
+      return list;
+    }
+    return list.filter((worktree) =>
+      isSubsequence(
+        query,
+        `${worktreeLabel(worktree)} ${collapseHome(worktree.path)}`.toLowerCase(),
+      ),
+    );
+  });
 
   // --- coherent diff-pane snapshot (the freeze fix) ---
   const diffSource = createMemo(() => {
@@ -1061,7 +1081,7 @@ function createState() {
         const selectable = list.filter((worktree) => !worktree.bare);
         batch(() => {
           setWorktrees(selectable);
-          setWorktreeMenuIndex(
+          setWorktreeComboboxIndex(
             Math.max(
               0,
               selectable.findIndex((worktree) => worktree.path === root),
@@ -1071,7 +1091,7 @@ function createState() {
       })
       .catch((error: unknown) => {
         batch(() => {
-          setWorktreeMenuOpen(false);
+          setWorktreeComboboxOpen(false);
           setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error));
         });
       });
@@ -1178,7 +1198,7 @@ function createState() {
   // Belongs here next to `runChecks`; `reason` overrides the status.
   let switchRequest = 0;
   async function switchWorktree(worktree: Worktree, reason?: string) {
-    setWorktreeMenuOpen(false);
+    setWorktreeComboboxOpen(false);
     if (worktree.path === gitModel().repoRoot) {
       return;
     }
@@ -1612,8 +1632,9 @@ function createState() {
     setThemeComboboxQuery,
     setViewerScrollTop,
     setViewerScrollX,
-    setWorktreeMenuIndex,
-    setWorktreeMenuOpen,
+    setWorktreeComboboxIndex,
+    setWorktreeComboboxOpen,
+    setWorktreeComboboxQuery,
     setWorktrees,
     showFileContent,
     sidebarOpen,
@@ -1634,8 +1655,10 @@ function createState() {
     viewerHeight,
     viewerScrollTop,
     viewerScrollX,
-    worktreeMenuIndex,
-    worktreeMenuOpen,
+    worktreeComboboxIndex,
+    worktreeComboboxOpen,
+    worktreeComboboxQuery,
+    worktreeComboboxResults,
     worktrees,
   };
 }

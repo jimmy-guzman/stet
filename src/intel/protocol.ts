@@ -51,7 +51,14 @@ function isLocation(value: unknown): value is LspLocation {
 }
 
 function isLocationLink(value: unknown): value is LspLocationLink {
-  return isObject(value) && typeof value.targetUri === "string" && isRange(value.targetRange);
+  return (
+    isObject(value) &&
+    typeof value.targetUri === "string" &&
+    isRange(value.targetRange) &&
+    // `targetSelectionRange` is optional, but a present-but-malformed one would crash the `.start`
+    // Read in `mapItem`; require it to be a valid range when supplied so the link is skipped instead.
+    (value.targetSelectionRange === undefined || isRange(value.targetSelectionRange))
+  );
 }
 
 function locationFrom(uri: string, start: LspPosition): NormalizedLocation | undefined {

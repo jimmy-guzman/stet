@@ -1073,6 +1073,9 @@ function createState() {
   // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
   // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
   async function goToDefinition() {
+    // A fresh invocation supersedes any in-flight lookup, even when the guards below no-op, so a
+    // Stale result can't land a jump after the user has moved on.
+    definitionController?.abort();
     const path = selectedPath();
     const line = cursorLineNumber();
     if (path === undefined || line === undefined) {
@@ -1088,7 +1091,6 @@ function createState() {
       notify("nothing to resolve on a removed line");
       return;
     }
-    definitionController?.abort();
     const controller = new AbortController();
     definitionController = controller;
     const requestRoot = repoRoot();

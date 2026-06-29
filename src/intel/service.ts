@@ -5,6 +5,7 @@
  * (oxlint, which advertises none, drops out; typescript answers). The seam the diagnostics push
  * flow lacks; #130/#131.
  */
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,6 +16,19 @@ import type { Capability, ServerHandle } from "../diagnostics/servers";
 import { relativize } from "../utils/path";
 import { normalizeDefinition, normalizeReferences } from "./protocol";
 import type { NormalizedLocation } from "./protocol";
+
+/**
+ * Canonicalize to realpath so a symlinked repo root and a server-resolved target compare in the
+ * same form; falls back to the raw path when it no longer exists (a deleted or out-of-repo
+ * target).
+ */
+function realpathOr(path: string) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
 
 /** A code-intel request that failed past degradation (server error, dropped connection, timeout). */
 export class IntelRequestError extends Data.TaggedError("IntelRequestError")<{
@@ -112,11 +126,14 @@ export const IntelLive = Layer.effect(
               ),
             );
           // The reply's paths are absolute; the tree/viewer key off repo-relative paths (a target
-          // Outside the repo stays absolute, so the caller can detect and skip it).
+          // Outside the repo stays absolute, so the caller can detect and skip it). Both sides are
+          // Canonicalized so a symlinked root (macOS /var ↔ /private/var) still matches an in-repo
+          // Target the server resolved to its realpath; out-of-repo targets stay absolute.
+          const canonicalRoot = realpathOr(repoRoot);
           return normalize(reply).map((location) => ({
             column: location.column,
             line: location.line,
-            path: relativize(location.path, repoRoot),
+            path: relativize(realpathOr(location.path), canonicalRoot),
           }));
         }),
       );

@@ -70,3 +70,20 @@ test("handshake yields an empty capability set when no providers are advertised"
   expect(handle.capabilities.has("pullDiagnostics")).toBe(false);
   expect(handle.capabilities.size).toBe(0);
 });
+
+test("handshake treats a malformed provider value as unsupported", async () => {
+  // Only `true` or an options object advertises support; a non-conformant `null`/`0` must not count.
+  const connection: LspConnection = {
+    clearPublished: () => Effect.void,
+    closed: Effect.sync(() => false),
+    notify: () => Effect.void,
+    published: Effect.sync(() => new Map<string, unknown[]>()),
+    request: () =>
+      Effect.succeed({ capabilities: { definitionProvider: null, referencesProvider: 0 } }),
+  };
+
+  const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
+
+  expect(handle.capabilities.has("definition")).toBe(false);
+  expect(handle.capabilities.has("references")).toBe(false);
+});

@@ -46,6 +46,12 @@ test("normalizeDefinition drops malformed items", () => {
   ]);
 });
 
+test("normalizeDefinition drops a LocationLink with a present-but-malformed targetSelectionRange", () => {
+  // A non-nullish, non-range selection range must not reach the `.start` read; skip the link.
+  const link = { targetRange: range, targetSelectionRange: 42, targetUri: uri };
+  expect(normalizeDefinition([link, { range, uri }])).toEqual([{ column: 3, line: 5, path }]);
+});
+
 test("normalizeDefinition skips non-file URIs instead of throwing", () => {
   const untitled = { range, uri: "untitled:Untitled-1" };
   expect(normalizeDefinition([untitled, { range, uri }])).toEqual([{ column: 3, line: 5, path }]);

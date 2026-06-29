@@ -185,7 +185,7 @@ function parseCapabilities(initializeResult: unknown): Set<Capability> {
     capabilityProviders
       .filter(([, provider]) => {
         const advertised = capabilities[provider];
-        return advertised !== undefined && advertised !== false;
+        return advertised === true || isObject(advertised);
       })
       .map(([capability]) => capability),
   );

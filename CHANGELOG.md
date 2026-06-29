@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.2...sideye-v0.3.3) (2026-06-29)
+
+
+### Bug Fixes
+
+* **intel:** 🐛 wait for tsserver project load before go-to-definition ([#150](https://github.com/jimmy-guzman/sideye/issues/150)) ([e661fa3](https://github.com/jimmy-guzman/sideye/commit/e661fa3f97670ee3e215aa7f64770c860b08917b))
+* **memory:** 🐛 bound diagnostics state and diff caches ([#148](https://github.com/jimmy-guzman/sideye/issues/148)) ([159dbdc](https://github.com/jimmy-guzman/sideye/commit/159dbdce03df5ce0c63106b894cfa5b59bdbb531))
+
 ## [0.3.2](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.1...sideye-v0.3.2) (2026-06-29)
 
 

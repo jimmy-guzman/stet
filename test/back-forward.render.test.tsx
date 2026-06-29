@@ -72,7 +72,7 @@ describe("back / forward navigation", () => {
       state.goBack();
       const back = await settleUntil(
         "back on a.ts",
-        (frame) => frame.includes("src/a.ts") && lnOf(frame) !== undefined,
+        (frame) => frame.includes("src/a.ts") && lnOf(frame) === movedLn,
       );
       expect(lnOf(back)).toBe(movedLn);
 

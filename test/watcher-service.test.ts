@@ -14,16 +14,26 @@ const WatcherTest = WatcherLive.pipe(Layer.provide(GitLive), Layer.provide(Proce
 test("Watcher.changes emits a debounced tick when a file changes", async () => {
   const repo = createFixtureRepo("watcher-service-", { "a.txt": "one\n" });
   try {
+    let writes = 0;
     const ticks = await Effect.runPromise(
       Effect.gen(function* program() {
         const watcher = yield* Watcher;
         const collecting = yield* Effect.forkChild(
           watcher.changes(repo).pipe(Stream.take(1), Stream.runCount),
         );
-        // Let the watcher arm, then make a real change in the worktree.
-        yield* Effect.sleep("50 millis");
-        yield* Effect.sync(() => writeFileSync(join(repo, "a.txt"), "one\ntwo\n"));
-        return yield* Fiber.join(collecting).pipe(Effect.timeout("3 seconds"));
+        // The watcher attaches fs.watch only after a git-dir subprocess resolves.
+        // A fixed arm delay can't cover that on a loaded runner.
+        // So nudge repeatedly (interval > debounce, varied content) until a tick lands.
+        const writing = yield* Effect.forkChild(
+          Effect.suspend(() => {
+            writes += 1;
+            writeFileSync(join(repo, "a.txt"), `one\n${writes}\n`);
+            return Effect.void;
+          }).pipe(Effect.delay("150 millis"), Effect.forever),
+        );
+        const collected = yield* Fiber.join(collecting).pipe(Effect.timeout("3 seconds"));
+        yield* Fiber.interrupt(writing);
+        return collected;
       }).pipe(Effect.provide(WatcherTest)),
     );
 

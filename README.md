@@ -200,6 +200,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `F12`      | go to definition of the symbol under the caret    |
 | `<` / `>`  | back / forward through viewer history             |
 | `y`        | copy `path`, `path:line`, or `path:line:col`      |
+| `Y`        | copy the entire contents of the viewed file       |
 
 ### tabs
 

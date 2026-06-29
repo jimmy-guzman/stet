@@ -389,7 +389,12 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "y") {
+      if (key.name === "Y" || (key.name === "y" && key.shift)) {
+        state.copyFileContents();
+        return;
+      }
+
+      if (key.name === "y" && !key.shift) {
         if (state.focusedPane() === "tree") {
           const row = state.treeRows()[state.focusedRowIndex()];
           if (row !== undefined) {

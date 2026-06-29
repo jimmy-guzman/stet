@@ -1138,10 +1138,41 @@ function createState() {
     }
   }
 
-  function copy(text: string) {
+  function copy(text: string, message = `copied ${text.split("\n")[0]}`) {
     runtime
       .runPromise(Clipboard.use((clipboard) => clipboard.copy(text)))
-      .then(() => notify(`copied ${text.split("\n")[0]}`))
+      .then(() => notify(message))
+      .catch((error: unknown) => notify(error instanceof Error ? error.message : String(error)));
+  }
+
+  // Reads the file fresh with `full: true` rather than reusing the loaded
+  // `diffView`: in diff view only the diff is in memory, and the file-view
+  // Snapshot can be truncated. Mirrors `loadDiffView`'s deleted-file gitSpec.
+  function copyFileContents() {
+    const path = selectedPath();
+    if (path === undefined) {
+      return;
+    }
+    const model = gitModel();
+    const file = selectedFile();
+    const currentScope = scope();
+    const gitSpec =
+      file?.kind === "deleted"
+        ? currentScope.kind === "unstaged"
+          ? `:${path}`
+          : `${currentScope.ref}:${path}`
+        : undefined;
+    runtime
+      .runPromise(
+        File.use((service) => service.content(model.repoRoot, path, { full: true, gitSpec })),
+      )
+      .then((content) => {
+        if (content.kind === "text") {
+          copy(content.content, `copied ${path}`);
+          return;
+        }
+        notify(`can't copy ${path} (${content.kind})`);
+      })
       .catch((error: unknown) => notify(error instanceof Error ? error.message : String(error)));
   }
 
@@ -1585,6 +1616,7 @@ function createState() {
     closeThemePicker,
     collapseSidebar,
     copy,
+    copyFileContents,
     counts,
     countsText,
     currentWorktreeDeleted,

@@ -57,6 +57,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
       ["F12", "go to definition of the symbol under the caret"],
       ["< / >", "back / forward through viewer history"],
       ["y", "copy path (tree) or path:line:col (viewer; path:line on a line-number click)"],
+      ["Y", "copy the entire contents of the viewed file"],
     ],
     heading: "viewer",
   },

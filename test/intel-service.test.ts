@@ -141,8 +141,16 @@ test("definition waits for project load before requesting", async () => {
         { character: 6, line: 0 },
         fakeServers({ typescript: ts }),
       );
-      // The pull opens the doc, then blocks on readiness: no definition request goes out yet.
-      await Effect.runPromise(Effect.sleep("50 millis"));
+      // Wait until the pull has actually opened the doc (rather than guessing with a fixed delay),
+      // Then assert it's now blocked on readiness: the next step after didOpen is the held gate, so
+      // No definition request can have gone out yet.
+      await Effect.runPromise(
+        Effect.gen(function* awaitOpen() {
+          while (!log.some((entry) => entry.method === "textDocument/didOpen")) {
+            yield* Effect.sleep("1 milli");
+          }
+        }).pipe(Effect.timeout("5 seconds")),
+      );
       expect(log.map((entry) => entry.method)).toEqual(["textDocument/didOpen"]);
 
       await Effect.runPromise(Deferred.succeed(gate, undefined));

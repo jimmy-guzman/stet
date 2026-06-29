@@ -165,6 +165,30 @@ describe("structure and decoration split", () => {
     });
   });
 
+  test("decorateTree returns stable references for nodes whose changed field did not change", () => {
+    const structure = buildTreeStructure(repoFiles, new Set(changedByPath.keys()), {
+      changesOnly: false,
+    });
+    const first = decorateTree(structure, changedByPath);
+    const second = decorateTree(first, changedByPath);
+
+    // Nothing changed between calls — the entire array and every node should be the same ref.
+    expect(second).toBe(first);
+    for (let i = 0; i < first.length; i++) {
+      expect(second[i]).toBe(first[i]);
+    }
+
+    // An unchanged file inside a directory also keeps its reference.
+    const expanded = new Set(["dir:src", "dir:src/components/ui"]);
+    const rows = flattenTree(first, expanded);
+    const buttonBefore = rows.find((r) => r.node.path === "src/components/ui/Button.tsx");
+    expect(buttonBefore).toBeDefined();
+    const rows2 = flattenTree(second, expanded);
+    const buttonAfter = rows2.find((r) => r.node.path === "src/components/ui/Button.tsx");
+    expect(buttonAfter).toBeDefined();
+    expect(buttonAfter?.node).toBe(buttonBefore?.node);
+  });
+
   test("buildFileTree equals structure-then-decorate", () => {
     const composed = buildFileTree(repoFiles, changedByPath, { changesOnly: false });
     const split = decorateTree(

@@ -178,10 +178,7 @@ export function mergeChanged(
   prev: GitModel,
   next: Pick<GitModel, "changed" | "changedByPath" | "scopeKey">,
 ): GitModel {
-  if (
-    prev.scopeKey === next.scopeKey &&
-    changedSignature(prev.changed) === changedSignature(next.changed)
-  ) {
+  if (prev.scopeKey === next.scopeKey && sameChangedSet(prev.changed, next.changed)) {
     return prev;
   }
 
@@ -286,7 +283,7 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
     prev.repoRoot === next.repoRoot &&
     prev.scopeKey === next.scopeKey &&
     prev.repoFilesKey === next.repoFilesKey &&
-    changedSignature(prev.changed) === changedSignature(next.changed)
+    sameChangedSet(prev.changed, next.changed)
   ) {
     return prev;
   }
@@ -302,6 +299,10 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
   }
 
   return { ...next, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) };
+}
+
+function sameChangedSet(a: ChangedFile[], b: ChangedFile[]) {
+  return a.length === b.length && a.every((file, i) => sameChangedFile(file, b[i]));
 }
 
 function sameChangedFile(a: ChangedFile, b: ChangedFile) {
@@ -341,15 +342,6 @@ export function changedPathsDiffer(previous: ChangedFile[], next: ChangedFile[])
     return true;
   }
   return previous.some((file, index) => file.path !== next[index]?.path);
-}
-
-function changedSignature(files: ChangedFile[]) {
-  return files
-    .map(
-      (file) =>
-        `${file.path}\0${file.kind}\0${file.stage}\0${file.additions}\0${file.deletions}\0${file.mtimeMs}`,
-    )
-    .join("\x01");
 }
 
 let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined;

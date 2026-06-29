@@ -335,16 +335,27 @@ function createState() {
   const changedPaths = createMemo(() => new Set(gitModel().changedByPath.keys()), undefined, {
     equals: (previous, next) => previous.size === next.size && previous.isSubsetOf(next),
   });
+  // Paths absent from repoFiles but present in changedPaths: staged deletions only. Narrower
+  // Than changedPaths so the O(repoFiles) structure walk is skipped on content-only edits.
+  const repoFilePaths = createMemo(() => new Set(repoFiles().map((f) => f.path)));
+  const stagedDeletionPaths = createMemo(
+    () => {
+      const filePaths = repoFilePaths();
+      return new Set([...changedPaths()].filter((p) => !filePaths.has(p)));
+    },
+    undefined,
+    { equals: (previous, next) => previous.size === next.size && previous.isSubsetOf(next) },
+  );
   const treeStructure = createMemo(() =>
-    buildTreeStructure(repoFiles(), changedPaths(), { changesOnly: changesOnly() }),
+    buildTreeStructure(repoFiles(), changesOnly() ? changedPaths() : stagedDeletionPaths(), {
+      changesOnly: changesOnly(),
+    }),
   );
   const tree = createMemo(() => decorateTree(treeStructure(), gitModel().changedByPath));
   const treeRows = createMemo(() => flattenTree(tree(), expandedDirectories()));
-  const focusedRowIndex = createMemo(() => {
-    const rows = treeRows();
-    const index = rows.findIndex((row) => row.node.id === focusedNodeId());
-    return index === -1 ? 0 : index;
-  });
+  // Index the flat row list by node id so cursor moves are O(1) rather than O(rows).
+  const treeRowsById = createMemo(() => new Map(treeRows().map((row) => [row.node.id, row.index])));
+  const focusedRowIndex = createMemo(() => treeRowsById().get(focusedNodeId()) ?? 0);
   const recencyByPath = createMemo(() => lastChangedAt(activityLog()));
   const problems = createMemo(() => allFindings(checkerState()));
   const counts = createMemo(() => countBySeverity(problems()));

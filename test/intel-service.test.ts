@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -74,37 +74,71 @@ function withRepo(files: Record<string, string>, run: (dir: string) => Promise<v
 const definitionRange = { end: { character: 9, line: 4 }, start: { character: 2, line: 4 } };
 
 test("definition opens the file, requests at the caret, normalizes, then closes", async () => {
-  await withRepo({ "src/a.ts": "const x = y\n" }, async (dir) => {
-    const log: Recorded[] = [];
-    const targetUri = pathToFileURL(join(dir, "src/b.ts")).href;
-    const ts = handle(
-      ["definition"],
-      (method) =>
-        method === "textDocument/definition"
-          ? Effect.succeed({ range: definitionRange, uri: targetUri })
-          : Effect.succeed(null),
-      log,
-    );
-    const servers = fakeServers({
-      oxlint: handle([], () => Effect.succeed(null), []),
-      typescript: ts,
-    });
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },
+    async (dir) => {
+      const log: Recorded[] = [];
+      const targetUri = pathToFileURL(join(dir, "src/b.ts")).href;
+      const ts = handle(
+        ["definition"],
+        (method) =>
+          method === "textDocument/definition"
+            ? Effect.succeed({ range: definitionRange, uri: targetUri })
+            : Effect.succeed(null),
+        log,
+      );
+      const servers = fakeServers({
+        oxlint: handle([], () => Effect.succeed(null), []),
+        typescript: ts,
+      });
 
-    const result = await runDefinition(dir, "src/a.ts", { character: 6, line: 0 }, servers);
+      const result = await runDefinition(dir, "src/a.ts", { character: 6, line: 0 }, servers);
 
-    // The absolute target under the repo root comes back repo-relative, ready for the tree/viewer.
-    expect(result).toEqual([{ column: 3, line: 5, path: "src/b.ts" }]);
-    expect(log.map((entry) => entry.method)).toEqual([
-      "textDocument/didOpen",
-      "textDocument/definition",
-      "textDocument/didClose",
-    ]);
-    const request = log[1];
-    expect(request?.params).toMatchObject({
-      position: { character: 6, line: 0 },
-      textDocument: { uri: pathToFileURL(join(dir, "src/a.ts")).href },
-    });
-  });
+      // The absolute target under the repo root comes back repo-relative, ready for the tree/viewer.
+      expect(result).toEqual([{ column: 3, line: 5, path: "src/b.ts" }]);
+      expect(log.map((entry) => entry.method)).toEqual([
+        "textDocument/didOpen",
+        "textDocument/definition",
+        "textDocument/didClose",
+      ]);
+      const request = log[1];
+      expect(request?.params).toMatchObject({
+        position: { character: 6, line: 0 },
+        textDocument: { uri: pathToFileURL(join(dir, "src/a.ts")).href },
+      });
+    },
+  );
+});
+
+test("definition relativizes an in-repo target when the repo root is a symlink", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },
+    async (dir) => {
+      // The repo lives under a symlink (macOS /var ↔ /private/var); the server resolves the target to
+      // Its realpath. Without canonicalizing both sides, the prefix check drops the in-repo jump.
+      const link = `${dir}-link`;
+      symlinkSync(realpathSync(dir), link);
+      try {
+        const targetUri = pathToFileURL(realpathSync(join(link, "src/b.ts"))).href;
+        const ts = handle(
+          ["definition"],
+          () => Effect.succeed({ range: definitionRange, uri: targetUri }),
+          [],
+        );
+
+        const result = await runDefinition(
+          link,
+          "src/a.ts",
+          { character: 6, line: 0 },
+          fakeServers({ typescript: ts }),
+        );
+
+        expect(result).toEqual([{ column: 3, line: 5, path: "src/b.ts" }]);
+      } finally {
+        rmSync(link, { force: true });
+      }
+    },
+  );
 });
 
 test("definition leaves an out-of-repo target absolute so the caller can skip it", async () => {

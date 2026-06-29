@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { Effect, Layer, Stream } from "effect";
 
@@ -122,6 +123,40 @@ const aLintWarning = {
   severity: 2,
   source: "oxc",
 };
+
+test("closes every opened document even when the run is interrupted mid-settle", async () => {
+  await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
+    const opens: string[] = [];
+    const closes: string[] = [];
+    // A server that never publishes, so `settle` keeps looping and the run is still in-flight when we
+    // Interrupt it; records every open and close so the test can assert the refcount stays balanced.
+    const connection: LspConnection = {
+      clearPublished: () => Effect.void,
+      closeDocument: (uri) => Effect.sync(() => void closes.push(uri)),
+      closed: Effect.sync(() => false),
+      notify: () => Effect.void,
+      openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
+      published: Effect.sync(() => new Map<string, unknown[]>()),
+      request: () => Effect.succeed(null),
+    };
+    const handle: ServerHandle = { capabilities: new Set(), connection };
+
+    await Effect.runPromise(
+      Diagnostics.pipe(
+        Effect.flatMap((diagnostics) =>
+          Stream.runDrain(diagnostics.run(dir, [changed("src/a.ts")])),
+        ),
+        // The settle loop runs ~10s; interrupt it long before, while the document is still open.
+        Effect.timeout("100 millis"),
+        Effect.catchTag("TimeoutError", () => Effect.void),
+        Effect.provide(DiagnosticsLive.pipe(Layer.provide(fakeServers({ typescript: handle })))),
+      ),
+    );
+
+    expect(opens).toEqual([pathToFileURL(join(dir, "src/a.ts")).href]);
+    expect(closes).toEqual(opens);
+  });
+});
 
 test("maps a pushed diagnostic onto the changed file as findings", async () => {
   await withRepo({ "src/a.ts": "const a: string = 1\n" }, async (dir) => {

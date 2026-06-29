@@ -107,13 +107,16 @@ export const IntelLive = Layer.effect(
           const uri = pathToFileURL(absolute).href;
           // Open/close as one resource so the close is registered atomically with the open and runs
           // On success, error, or interruption (no leak in the window before a finalizer installs).
-          // The connection is shared with the diagnostics pool, so a concurrent open of the same uri
-          // Can race this lifecycle; a per-uri refcount in the transport is the follow-up (see SPEC).
+          // The connection is shared with the diagnostics pool; `openDocument`/`closeDocument` refcount
+          // The uri in the transport, so a concurrent open of the same doc no longer races this bracket.
           yield* Effect.acquireRelease(
-            handle.connection.notify("textDocument/didOpen", {
-              textDocument: { languageId: lspLanguageId(path), text, uri, version: 1 },
+            handle.connection.openDocument({
+              languageId: lspLanguageId(path),
+              text,
+              uri,
+              version: 1,
             }),
-            () => handle.connection.notify("textDocument/didClose", { textDocument: { uri } }),
+            () => handle.connection.closeDocument(uri),
           );
           const reply = yield* handle.connection
             .request(method, { position, textDocument: { uri }, ...extraParams })

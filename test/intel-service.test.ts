@@ -26,8 +26,14 @@ function handle(
 ): ServerHandle {
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
+    closeDocument: (uri) =>
+      Effect.sync(() => void log.push({ method: "textDocument/didClose", params: { uri } })),
     closed: Effect.sync(() => false),
     notify: (method, params) => Effect.sync(() => void log.push({ method, params })),
+    openDocument: (textDocument) =>
+      Effect.sync(
+        () => void log.push({ method: "textDocument/didOpen", params: { textDocument } }),
+      ),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: (method, params) => {
       log.push({ method, params });

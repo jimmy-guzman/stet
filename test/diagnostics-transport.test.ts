@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { Effect, Exit, Queue } from "effect";
 import type { Cause } from "effect";
 
-import { isJsonRpcRequest } from "../src/diagnostics/jsonrpc";
+import { isJsonRpcNotification, isJsonRpcRequest } from "../src/diagnostics/jsonrpc";
 import type { JsonRpcMessage } from "../src/diagnostics/jsonrpc";
 import { makeTransport } from "../src/diagnostics/transport";
 import type { LspConnection } from "../src/diagnostics/transport";
@@ -43,6 +43,71 @@ function withPeer<A, E>(run: (peer: Peer) => Effect.Effect<A, E>) {
 function idOf(message: JsonRpcMessage) {
   return isJsonRpcRequest(message) ? message.id : 0;
 }
+
+const doc = (uri: string) => ({ languageId: "typescript", text: "x", uri, version: 1 });
+
+/** Drain every notification the client has written so far and return them, in order. */
+function sentNotifications(sent: Queue.Dequeue<JsonRpcMessage, Cause.Done>) {
+  return Queue.takeAll(sent).pipe(Effect.map((messages) => messages.filter(isJsonRpcNotification)));
+}
+
+test("didOpen is sent only for the first holder of a uri", async () => {
+  const methods = await withPeer(({ connection, sent }) =>
+    connection.openDocument(doc("file:///a.ts")).pipe(
+      Effect.andThen(connection.openDocument(doc("file:///a.ts"))),
+      Effect.andThen(sentNotifications(sent)),
+      Effect.map((notifications) => notifications.map((message) => message.method)),
+    ),
+  );
+  expect(methods).toEqual(["textDocument/didOpen"]);
+});
+
+test("didClose is sent only when the last holder of a uri releases", async () => {
+  const methods = await withPeer(({ connection, sent }) =>
+    connection.openDocument(doc("file:///a.ts")).pipe(
+      Effect.andThen(connection.openDocument(doc("file:///a.ts"))),
+      Effect.andThen(connection.closeDocument("file:///a.ts")),
+      Effect.andThen(connection.closeDocument("file:///a.ts")),
+      Effect.andThen(sentNotifications(sent)),
+      Effect.map((notifications) => notifications.map((message) => message.method)),
+    ),
+  );
+  expect(methods).toEqual(["textDocument/didOpen", "textDocument/didClose"]);
+});
+
+test("distinct uris are refcounted independently", async () => {
+  const notifications = await withPeer(({ connection, sent }) =>
+    connection
+      .openDocument(doc("file:///a.ts"))
+      .pipe(
+        Effect.andThen(connection.openDocument(doc("file:///b.ts"))),
+        Effect.andThen(connection.closeDocument("file:///a.ts")),
+        Effect.andThen(sentNotifications(sent)),
+      ),
+  );
+  // A opens, b opens, a closes while b stays open.
+  expect(notifications).toMatchObject([
+    { method: "textDocument/didOpen", params: { textDocument: { uri: "file:///a.ts" } } },
+    { method: "textDocument/didOpen", params: { textDocument: { uri: "file:///b.ts" } } },
+    { method: "textDocument/didClose", params: { textDocument: { uri: "file:///a.ts" } } },
+  ]);
+});
+
+test("a uri reopened after a full release sends a fresh didOpen", async () => {
+  const methods = await withPeer(({ connection, sent }) =>
+    connection.openDocument(doc("file:///a.ts")).pipe(
+      Effect.andThen(connection.closeDocument("file:///a.ts")),
+      Effect.andThen(connection.openDocument(doc("file:///a.ts"))),
+      Effect.andThen(sentNotifications(sent)),
+      Effect.map((notifications) => notifications.map((message) => message.method)),
+    ),
+  );
+  expect(methods).toEqual([
+    "textDocument/didOpen",
+    "textDocument/didClose",
+    "textDocument/didOpen",
+  ]);
+});
 
 test("request resolves with the result of the matching response", async () => {
   const exit = await withPeer(({ connection, reply, sent }) =>

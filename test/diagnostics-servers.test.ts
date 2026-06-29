@@ -35,8 +35,10 @@ test("handshake parses advertised providers into the capability set", async () =
   const notified: string[] = [];
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     notify: (method) => Effect.sync(() => void notified.push(method)),
+    openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: (method) =>
       Effect.sync(() => {
@@ -71,8 +73,10 @@ test("handshake yields an empty capability set when no providers are advertised"
   // An oxlint-shaped reply: it lints via push and advertises none of the code-intel providers.
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     notify: () => Effect.void,
+    openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: () => Effect.succeed({ capabilities: {} }),
   };
@@ -88,8 +92,10 @@ test("handshake treats a malformed provider value as unsupported", async () => {
   // Only `true` or an options object advertises support; a non-conformant `null`/`0` must not count.
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     notify: () => Effect.void,
+    openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: () =>
       Effect.succeed({ capabilities: { definitionProvider: null, referencesProvider: 0 } }),

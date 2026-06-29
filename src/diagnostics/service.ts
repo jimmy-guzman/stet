@@ -79,8 +79,11 @@ interface Collected {
 }
 
 function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: ChangedFile[]) {
+  // Hoisted so the `ensuring` finalizer below closes every doc opened so far, keeping the per-uri
+  // Refcount balanced even when a refresh interrupts the run or it fails mid-loop; a leaked open
+  // Count would suppress every later didOpen for that uri (no republish, file stuck pending).
+  const opened: { file: ChangedFile; uri: string }[] = [];
   return Effect.gen(function* collect() {
-    const opened: { file: ChangedFile; uri: string }[] = [];
     const pending: ChangedFile[] = [];
     for (const file of files) {
       const absolute = join(repoRoot, file.path);
@@ -96,8 +99,11 @@ function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: Chang
       }
       const uri = pathToFileURL(absolute).href;
       yield* handle.connection.clearPublished([uri]);
-      yield* handle.connection.notify("textDocument/didOpen", {
-        textDocument: { languageId: lspLanguageId(file.path), text, uri, version: 1 },
+      yield* handle.connection.openDocument({
+        languageId: lspLanguageId(file.path),
+        text,
+        uri,
+        version: 1,
       });
       opened.push({ file, uri });
     }
@@ -123,14 +129,14 @@ function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: Chang
       }
     }
 
-    yield* Effect.forEach(
-      opened,
-      (entry) =>
-        handle.connection.notify("textDocument/didClose", { textDocument: { uri: entry.uri } }),
-      { discard: true },
-    );
     return { diagnostics, pending, resolved };
-  });
+  }).pipe(
+    Effect.ensuring(
+      Effect.forEach(opened, (entry) => handle.connection.closeDocument(entry.uri), {
+        discard: true,
+      }),
+    ),
+  );
 }
 
 type LanguageOutcome =

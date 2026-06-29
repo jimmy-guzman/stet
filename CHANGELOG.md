@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.2](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.1...sideye-v0.3.2) (2026-06-29)
+
+
+### Features
+
+* **cli:** ✨ add upgrade command for self-updating ([#127](https://github.com/jimmy-guzman/sideye/issues/127)) ([b51b0a3](https://github.com/jimmy-guzman/sideye/commit/b51b0a3ad45ea3ac7e3e108edfac1a38606cb044))
+* **intel:** ✨ add go to definition through intel ([#138](https://github.com/jimmy-guzman/sideye/issues/138)) ([ff74627](https://github.com/jimmy-guzman/sideye/commit/ff746270056e7b4ed2c59a33be18eee5bf6bd831))
+* **intel:** ✨ refcount shared LSP document opens per uri ([#146](https://github.com/jimmy-guzman/sideye/issues/146)) ([204ebb7](https://github.com/jimmy-guzman/sideye/commit/204ebb738eee5331699f21a7bb417f7fbc1d751b)), closes [#139](https://github.com/jimmy-guzman/sideye/issues/139)
+* **intel:** ✨ skip non-providers via static registry capability hints ([#144](https://github.com/jimmy-guzman/sideye/issues/144)) ([0947783](https://github.com/jimmy-guzman/sideye/commit/0947783e0a9098a3703f3d24aa4d426e5a4cec2f))
+* **overlays:** ✨ filter worktrees with a combobox ([#135](https://github.com/jimmy-guzman/sideye/issues/135)) ([482e170](https://github.com/jimmy-guzman/sideye/commit/482e1705402c8d1329365056a333d79361bba070))
+* **overlays:** ✨ group the help dialog keys by category ([#136](https://github.com/jimmy-guzman/sideye/issues/136)) ([c341f48](https://github.com/jimmy-guzman/sideye/commit/c341f4898f1843c33a00bea5184844786bc89d8f))
+* **viewer:** ✨ add back/forward history & preview/pin tabs ([#123](https://github.com/jimmy-guzman/sideye/issues/123)) ([020c662](https://github.com/jimmy-guzman/sideye/commit/020c6622d628e88be59861056cfbee2596f3624a))
+* **viewer:** ✨ copy the entire file with Y ([#145](https://github.com/jimmy-guzman/sideye/issues/145)) ([4235649](https://github.com/jimmy-guzman/sideye/commit/4235649f38b1444f4e8ed498160de7f9cc06b244))
+* **viewer:** ✨ in-line word caret w/ diagnostic columns ([#129](https://github.com/jimmy-guzman/sideye/issues/129)) ([5e5bd74](https://github.com/jimmy-guzman/sideye/commit/5e5bd742e8355dd430a500b3d1806aea5e649f63))
+
+
+### Bug Fixes
+
+* **intel:** 🐛 relativize symlinked-root definitions ([#143](https://github.com/jimmy-guzman/sideye/issues/143)) ([a2c07d3](https://github.com/jimmy-guzman/sideye/commit/a2c07d3a652ffdceb87e8bd2c5688bbc247288e4)), closes [#141](https://github.com/jimmy-guzman/sideye/issues/141)
+* **viewer:** 🐛 wrap diff lines again when toggling long-line mode ([#134](https://github.com/jimmy-guzman/sideye/issues/134)) ([7238f80](https://github.com/jimmy-guzman/sideye/commit/7238f80665342f10f9638c49f13d8d887dfd4435))
+* **watcher:** 🐛 drop spurious .git-internal events that flood refreshes ([#137](https://github.com/jimmy-guzman/sideye/issues/137)) ([320e37d](https://github.com/jimmy-guzman/sideye/commit/320e37d5a2c592c33bd6d49cbb74667a9ddfa026))
+
 ## [0.3.1](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.0...sideye-v0.3.1) (2026-06-26)
 
 

@@ -178,11 +178,7 @@ export function mergeChanged(
   prev: GitModel,
   next: Pick<GitModel, "changed" | "changedByPath" | "scopeKey">,
 ): GitModel {
-  if (
-    prev.scopeKey === next.scopeKey &&
-    prev.changed.length === next.changed.length &&
-    prev.changed.every((file, i) => sameChangedFile(file, next.changed[i]))
-  ) {
+  if (prev.scopeKey === next.scopeKey && sameChangedSet(prev.changed, next.changed)) {
     return prev;
   }
 
@@ -287,8 +283,7 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
     prev.repoRoot === next.repoRoot &&
     prev.scopeKey === next.scopeKey &&
     prev.repoFilesKey === next.repoFilesKey &&
-    prev.changed.length === next.changed.length &&
-    prev.changed.every((file, i) => sameChangedFile(file, next.changed[i]))
+    sameChangedSet(prev.changed, next.changed)
   ) {
     return prev;
   }
@@ -304,6 +299,10 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
   }
 
   return { ...next, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) };
+}
+
+function sameChangedSet(a: ChangedFile[], b: ChangedFile[]) {
+  return a.length === b.length && a.every((file, i) => sameChangedFile(file, b[i]));
 }
 
 function sameChangedFile(a: ChangedFile, b: ChangedFile) {

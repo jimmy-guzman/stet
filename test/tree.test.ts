@@ -186,7 +186,7 @@ describe("structure and decoration split", () => {
     const rows2 = flattenTree(second, expanded);
     const buttonAfter = rows2.find((r) => r.node.path === "src/components/ui/Button.tsx");
     expect(buttonAfter).toBeDefined();
-    expect(buttonAfter!.node).toBe(buttonBefore!.node);
+    expect(buttonAfter?.node).toBe(buttonBefore?.node);
   });
 
   test("buildFileTree equals structure-then-decorate", () => {

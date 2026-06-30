@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.4](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.3...sideye-v0.3.4) (2026-06-30)
+
+
+### Features
+
+* **intel:** ✨ hover type/docs via a anchored decoration seam ([#162](https://github.com/jimmy-guzman/sideye/issues/162)) ([e4ca7fd](https://github.com/jimmy-guzman/sideye/commit/e4ca7fd8ce48e6c0f1a15b1c6cca4ee794791fe5))
+* **logs:** ✨ color status & terminal output by severity ([#156](https://github.com/jimmy-guzman/sideye/issues/156)) ([4e5c2ee](https://github.com/jimmy-guzman/sideye/commit/4e5c2eebca202441e49752753d597b546a0a9c15))
+* **sidebar:** ✨ author an empty state for the file tree ([#159](https://github.com/jimmy-guzman/sideye/issues/159)) ([44224bd](https://github.com/jimmy-guzman/sideye/commit/44224bd1aa7e8e9185a74cf597271eb2ea31f5c8))
+* **upgrade:** ✨ check the latest release & surface updates ([#154](https://github.com/jimmy-guzman/sideye/issues/154)) ([ca1df5f](https://github.com/jimmy-guzman/sideye/commit/ca1df5ff9a05cab288e194c807fc24ae4012aa7e))
+
+
+### Performance Improvements
+
+* ⚡️ skip O(N) allocs in reactive cascade on every git poll ([#151](https://github.com/jimmy-guzman/sideye/issues/151)) ([8568b16](https://github.com/jimmy-guzman/sideye/commit/8568b1695f451032d8ca06ed1862096279c47f8c))
+
 ## [0.3.3](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.2...sideye-v0.3.3) (2026-06-29)
 
 

@@ -2,7 +2,7 @@
 
 `sideye` is a read-only companion TUI for CLI coding agents (claude code, opencode, codex). You run an agent in one terminal pane and `sideye` in another to inspect what changed: everything an IDE shows you, nothing it does for you. **It only inspects. It never reviews, explains, approves, rejects, gates, talks to an agent, or writes to the repo.** That constraint shapes every change here.
 
-See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md` for the implementation invariants behind those features. Read SPEC before changing tree construction, the viewer, recency, diagnostics, scopes, or worktrees.
+See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md` for the implementation invariants behind those features; see `TASTE.md` for the craft bar every interface surface clears. Read SPEC before changing tree construction, the viewer, recency, diagnostics, scopes, or worktrees, and TASTE before adding or reworking any UI surface.
 
 ## Stack
 
@@ -84,6 +84,7 @@ Reactive state is SolidJS-native (signals/memos); async IO is Effect v4 (beta). 
 ## Docs
 
 - **After introducing a new pattern, feature, convention, or structural change, ask whether `AGENTS.md` and/or `README.md` should be updated, then apply the changes.** Docs rot the moment the code moves without them. Catching the update at the point of change is the only time it reliably happens.
+- **New or reworked UI surfaces clear the bar in `TASTE.md`:** design every state (default/hover/focus/active/disabled/loading/error), empty states included; theme tokens only; no layout shift; keyboard-operable; severity paired with its glyph; plain sentence-case copy.
 
 ## Implementing a change
 

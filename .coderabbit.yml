@@ -5,6 +5,7 @@ knowledge_base:
     filePatterns:
       - "**/CLAUDE.md"
       - "**/AGENTS.md"
+      - "**/TASTE.md"
       - ".agents/skills/**"
       - ".claude/skills/**"
 reviews:

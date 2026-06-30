@@ -166,6 +166,14 @@ the same language servers that drive diagnostics. A cross-file jump records your
 spot, so `<` returns to the call site. It's a read-only LSP request, exactly
 like the diagnostics it shares servers with: it never writes to the repo.
 
+### Hover
+
+Press `K` with the caret on a symbol to show its type and docs in a small card
+anchored at the caret, the way an editor's hover does. The type signature is
+syntax-highlighted with the same theme as the diff; the docs read as plain text.
+The card clears as soon as you move the caret, scroll, switch files, or press
+`esc`. It's the same read-only LSP request family as go-to-definition.
+
 ### Problems
 
 Diagnostics from the repo's language servers stream into a problems panel as
@@ -195,19 +203,20 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 
 ### viewer
 
-| Key        | Action                                            |
-| ---------- | ------------------------------------------------- |
-| `/`        | find in the viewer; `n`/`N` cycle, `esc` clears   |
-| `ctrl-f`   | search files; `ctrl-a` toggles changes/repo scope |
-| `v`        | toggle diff <-> full file view for a changed file |
-| `z`        | toggle long-line wrap in the viewer               |
-| `f`        | load full content when truncated                  |
-| `ctrl-d/u` | half-page cursor movement in the viewer           |
-| `g` / `G`  | jump to first / last line                         |
-| `F12`      | go to definition of the symbol under the caret    |
-| `<` / `>`  | back / forward through viewer history             |
-| `y`        | copy `path`, `path:line`, or `path:line:col`      |
-| `Y`        | copy the entire contents of the viewed file       |
+| Key        | Action                                              |
+| ---------- | --------------------------------------------------- |
+| `/`        | find in the viewer; `n`/`N` cycle, `esc` clears     |
+| `ctrl-f`   | search files; `ctrl-a` toggles changes/repo scope   |
+| `v`        | toggle diff <-> full file view for a changed file   |
+| `z`        | toggle long-line wrap in the viewer                 |
+| `f`        | load full content when truncated                    |
+| `ctrl-d/u` | half-page cursor movement in the viewer             |
+| `g` / `G`  | jump to first / last line                           |
+| `F12`      | go to definition of the symbol under the caret      |
+| `K`        | hover: type and docs for the symbol under the caret |
+| `<` / `>`  | back / forward through viewer history               |
+| `y`        | copy `path`, `path:line`, or `path:line:col`        |
+| `Y`        | copy the entire contents of the viewed file         |
 
 ### tabs
 

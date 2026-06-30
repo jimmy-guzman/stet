@@ -13,6 +13,7 @@ import { wordAt } from "@/diff/words";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 
+import { CaretCard } from "./CaretCard";
 import { createLineMeasurer } from "./line-measure";
 
 // The caret word's display-column range on the cursor line, [from, to). Undefined
@@ -298,6 +299,21 @@ export function DiffView() {
     return { from, to: from + Bun.stringWidth(content.slice(word.start, word.end)) };
   });
 
+  // The cursor row's cumulative top, the same sum the vertical-follow effect uses,
+  // Lifted to a memo so the caret-anchored card reads it without recomputing.
+  const cursorTop = createMemo(() => {
+    const cursorRow = lineRowIndices()[state.cursorIndex()];
+    if (cursorRow === undefined) {
+      return undefined;
+    }
+    return heights()
+      .slice(0, cursorRow)
+      .reduce((sum, height) => sum + height, 0);
+  });
+  // The viewer interior width (gutter + content, inside the border), the coordinate
+  // Space the card's absolute left/clamp live in.
+  const innerWidth = () => contentWidth() + gutterWidth();
+
   // Keep the caret word in view as it hops along a long line (scroll mode only;
   // Wrap mode has no horizontal scroll). Reads scrollX untracked, like the vertical
   // Follow, so free horizontal wheel scrolling is never snapped back.
@@ -380,95 +396,103 @@ export function DiffView() {
   const asLineRow = (row: DiffRow) => (isLineRow(row) ? row : undefined);
 
   return (
-    <scrollbox
-      ref={(el) => (scrollRef = el)}
-      width="100%"
-      height={state.viewerHeight()}
-      scrollY
-      onMouseScroll={onWheel}
-      scrollbarOptions={{
-        trackOptions: {
-          backgroundColor: theme.rgba.transparent,
-          foregroundColor: theme.colors.scrollbar.thumb,
-        },
-        visible: false,
-      }}
-    >
-      <box width="100%" height={window().topSpacer} />
-      {/* Non-wrap rows are pinned to height 1 because `heights()` counts every such
+    <box position="relative" width="100%" height={state.viewerHeight()}>
+      <scrollbox
+        ref={(el) => (scrollRef = el)}
+        width="100%"
+        height={state.viewerHeight()}
+        scrollY
+        onMouseScroll={onWheel}
+        scrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.rgba.transparent,
+            foregroundColor: theme.colors.scrollbar.thumb,
+          },
+          visible: false,
+        }}
+      >
+        <box width="100%" height={window().topSpacer} />
+        {/* Non-wrap rows are pinned to height 1 because `heights()` counts every such
           row as one terminal row, and the spacers/maxScrollY derive from that. Some
           graphemes (emoji with a U+FE0F variation selector) otherwise lay a
           `wrapMode="none"` text out two rows tall, under-counting the content height
           and stranding the file's last line below the fold. Separators count as 1 in
           both modes, so they pin unconditionally. */}
-      <Index each={visibleRows()}>
-        {(row, rowIndex) => (
-          <Show
-            when={asLineRow(row())}
-            fallback={
-              <box width="100%" height={1} backgroundColor={theme.colors.surface.panel}>
-                <text fg={theme.colors.text.faint}>
-                  {`${"⋯".padStart(numberWidth())} ${separatorText(row())}`}
-                </text>
-              </box>
-            }
-          >
-            {(line) => (
-              <box
-                width="100%"
-                flexDirection="row"
-                // Explicit per-row height in both modes, from the same `heights()`
-                // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
-                // Transition does not relayout the text leaf, so a `z` toggle into
-                // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
-                height={heights()[window().start + rowIndex] ?? 1}
-                onMouseDown={(event: MouseEvent) => {
-                  event.stopPropagation();
-                  batch(() => {
-                    state.setFocusedPane("diff");
-                    state.setCursorRow(line().navIndex);
-                    // Land the caret on the clicked word: map the screen x onto a
-                    // Content column (past the sidebar, viewer border, gutter, sign),
-                    // Then snap to the word that owns it.
-                    const content = line()
-                      .spans.map((part) => part.text)
-                      .join("");
-                    // The horizontal scroll offset only applies in scroll mode; in
-                    // Wrap mode there is none (a click on a wrapped continuation row
-                    // Stays approximate, the v1 wrap caret limitation).
-                    const column =
-                      event.x -
-                      (state.sidebarWidth() + 1 + gutterWidth() + 1) +
-                      (wrap() ? 0 : scrollX());
-                    if (column >= 0) {
-                      const index = columnToIndex(content, column);
-                      state.setCursorColumn(wordAt(content, index)?.start ?? index);
-                    } else {
-                      // A click on the gutter/sign selects the line, not a symbol:
-                      // `y` then copies path:line.
-                      state.setCaretLineLevel(true);
-                    }
-                  });
-                }}
-              >
-                <text fg={gutterNumberColor(line())} bg={gutterBackground(line())}>
-                  {`${lineLabel(line())} `}
-                </text>
-                <box flexGrow={1} backgroundColor={contentBackground(line())}>
-                  <StyledLine
-                    row={line()}
-                    wrap={wrap()}
-                    width={contentWidth()}
-                    scrollX={scrollX()}
-                    caret={isCursor(line()) ? caretRange() : undefined}
-                  />
+        <Index each={visibleRows()}>
+          {(row, rowIndex) => (
+            <Show
+              when={asLineRow(row())}
+              fallback={
+                <box width="100%" height={1} backgroundColor={theme.colors.surface.panel}>
+                  <text fg={theme.colors.text.faint}>
+                    {`${"⋯".padStart(numberWidth())} ${separatorText(row())}`}
+                  </text>
                 </box>
-              </box>
-            )}
-          </Show>
-        )}
-      </Index>
-      <box width="100%" height={window().bottomSpacer} />
-    </scrollbox>
+              }
+            >
+              {(line) => (
+                <box
+                  width="100%"
+                  flexDirection="row"
+                  // Explicit per-row height in both modes, from the same `heights()`
+                  // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
+                  // Transition does not relayout the text leaf, so a `z` toggle into
+                  // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
+                  height={heights()[window().start + rowIndex] ?? 1}
+                  onMouseDown={(event: MouseEvent) => {
+                    event.stopPropagation();
+                    batch(() => {
+                      state.setFocusedPane("diff");
+                      state.setCursorRow(line().navIndex);
+                      // Land the caret on the clicked word: map the screen x onto a
+                      // Content column (past the sidebar, viewer border, gutter, sign),
+                      // Then snap to the word that owns it.
+                      const content = line()
+                        .spans.map((part) => part.text)
+                        .join("");
+                      // The horizontal scroll offset only applies in scroll mode; in
+                      // Wrap mode there is none (a click on a wrapped continuation row
+                      // Stays approximate, the v1 wrap caret limitation).
+                      const column =
+                        event.x -
+                        (state.sidebarWidth() + 1 + gutterWidth() + 1) +
+                        (wrap() ? 0 : scrollX());
+                      if (column >= 0) {
+                        const index = columnToIndex(content, column);
+                        state.setCursorColumn(wordAt(content, index)?.start ?? index);
+                      } else {
+                        // A click on the gutter/sign selects the line, not a symbol:
+                        // `y` then copies path:line.
+                        state.setCaretLineLevel(true);
+                      }
+                    });
+                  }}
+                >
+                  <text fg={gutterNumberColor(line())} bg={gutterBackground(line())}>
+                    {`${lineLabel(line())} `}
+                  </text>
+                  <box flexGrow={1} backgroundColor={contentBackground(line())}>
+                    <StyledLine
+                      row={line()}
+                      wrap={wrap()}
+                      width={contentWidth()}
+                      scrollX={scrollX()}
+                      caret={isCursor(line()) ? caretRange() : undefined}
+                    />
+                  </box>
+                </box>
+              )}
+            </Show>
+          )}
+        </Index>
+        <box width="100%" height={window().bottomSpacer} />
+      </scrollbox>
+      <CaretCard
+        cursorTop={cursorTop}
+        caretFrom={() => caretRange()?.from}
+        contentLeft={() => gutterWidth() + 1}
+        innerWidth={innerWidth}
+      />
+    </box>
   );
 }

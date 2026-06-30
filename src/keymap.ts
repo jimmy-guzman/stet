@@ -149,6 +149,13 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // A caret-anchored decoration (the hover card) is dismiss-on-esc, claiming the
+      // Key before the find and global esc handlers; any caret move already closes it.
+      if (state.viewerDecoration() !== undefined && key.name === "escape") {
+        state.closeViewerDecoration();
+        return;
+      }
+
       // The find bar owns the keyboard while open: only escape cancels it; text
       // And submit are the input element's job (same split as the palette).
       if (state.findOpen()) {
@@ -386,6 +393,13 @@ export function createKeyHandler(host: HostEffects) {
       // Caret from state and guards itself, so it's safe to dispatch globally.
       if (key.name === "f12" && !key.shift) {
         void state.goToDefinition();
+        return;
+      }
+
+      // Hover (type + docs) for the symbol under the caret, in a caret-anchored card
+      // (Shift+K, the established LSP hover key). The action reads the caret and guards itself.
+      if (key.name === "K" || (key.name === "k" && key.shift)) {
+        void state.showHover();
         return;
       }
 

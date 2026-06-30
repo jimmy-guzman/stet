@@ -342,3 +342,50 @@ test("references sends includeDeclaration context and maps the Location array", 
     expect(log[1]?.params).toMatchObject({ context: { includeDeclaration: true } });
   });
 });
+
+test("hover opens, requests at the caret, returns normalized text, then closes", async () => {
+  await withRepo({ "src/a.ts": "const alpha = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    const ts = handle(
+      ["hover"],
+      (method) =>
+        method === "textDocument/hover"
+          ? Effect.succeed({
+              contents: { kind: "markdown", value: "```typescript\nconst alpha: 1\n```" },
+            })
+          : Effect.succeed(null),
+      log,
+    );
+
+    const result = await Effect.runPromise(
+      Intel.pipe(
+        Effect.flatMap((intel) => intel.hover(dir, "src/a.ts", { character: 6, line: 0 })),
+        Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+      ),
+    );
+
+    expect(result).toEqual([{ kind: "code", lang: "typescript", lines: ["const alpha: 1"] }]);
+    expect(log.map((entry) => entry.method)).toEqual([
+      "textDocument/didOpen",
+      "textDocument/hover",
+      "textDocument/didClose",
+    ]);
+    expect(log[1]?.params).toMatchObject({
+      position: { character: 6, line: 0 },
+      textDocument: { uri: pathToFileURL(join(dir, "src/a.ts")).href },
+    });
+  });
+});
+
+test("hover returns empty when no acquired server advertises it", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const servers = fakeServers({ typescript: handle([], () => Effect.succeed(null), []) });
+    const result = await Effect.runPromise(
+      Intel.pipe(
+        Effect.flatMap((intel) => intel.hover(dir, "src/a.ts", { character: 0, line: 0 })),
+        Effect.provide(IntelLive.pipe(Layer.provide(servers))),
+      ),
+    );
+    expect(result).toEqual([]);
+  });
+});

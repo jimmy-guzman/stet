@@ -100,7 +100,7 @@ const registry: Record<string, ServerSpec> = {
     args: ["--stdio"],
     binary: "typescript-language-server",
     extensions: codeExtensions,
-    provides: ["definition", "references"],
+    provides: ["definition", "references", "hover"],
     provision: { packages: ["typescript-language-server", "typescript"] },
   },
 };

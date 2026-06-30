@@ -16,7 +16,7 @@ describe("help overlay", () => {
       // Tall enough to fit the whole grouped keybindings list (its section headers
       // And spacers included), so the last-row assertions below verify it sizes to
       // Show every shortcut (no clip) when there's room.
-      height: 55,
+      height: 57,
       width: 120,
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
@@ -35,6 +35,8 @@ describe("help overlay", () => {
       expect(help).toContain("workspace");
       expect(help).toContain("layout");
       expect(help).toContain("go to file: fuzzy-search the whole repo");
+      // The hover shortcut must be listed, or the height bump alone would pass with it gone.
+      expect(help).toContain("hover: type and docs for the symbol under the caret");
       expect(help).toContain("copy the entire contents of the viewed file");
       expect(help).toContain("toggle the file tree sidebar");
       expect(help).toContain("open in terminal editor");

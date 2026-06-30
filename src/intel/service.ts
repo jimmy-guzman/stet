@@ -15,8 +15,8 @@ import { LanguageServers, lspLanguageId, serversProviding } from "@/diagnostics/
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
 import { relativize } from "@/utils/path";
 
-import { normalizeDefinition, normalizeReferences } from "./protocol";
-import type { NormalizedLocation } from "./protocol";
+import { normalizeDefinition, normalizeReferences, parseHover } from "./protocol";
+import type { HoverSegment, NormalizedLocation } from "./protocol";
 
 /**
  * Canonicalize to realpath so a symlinked repo root and a server-resolved target compare in the
@@ -55,6 +55,11 @@ export class Intel extends Context.Service<
       path: string,
       position: Position,
     ) => Effect.Effect<NormalizedLocation[], IntelRequestError>;
+    readonly hover: (
+      repoRoot: string,
+      path: string,
+      position: Position,
+    ) => Effect.Effect<HoverSegment[], IntelRequestError>;
   }
 >()("sideye/Intel") {}
 
@@ -80,20 +85,25 @@ export const IntelLive = Layer.effect(
       });
     }
 
-    function pull(
+    // The shared open/project-load/request/close bracket. Returns whatever `normalize` makes of the
+    // Reply (locations, hover text, …); `empty` is the result when no capable server answers or the
+    // File vanished. The location callers relativize inside their own `normalize`, so this stays
+    // Generic over the reply shape rather than baking the path mapping in.
+    function pull<T>(
       repoRoot: string,
       path: string,
       position: Position,
       capability: Capability,
       method: string,
       extraParams: Record<string, unknown>,
-      normalize: (reply: unknown) => NormalizedLocation[],
+      normalize: (reply: unknown) => T,
+      empty: T,
     ) {
       return Effect.scoped(
         Effect.gen(function* request() {
           const handle = yield* firstCapableServer(repoRoot, path, capability);
           if (handle === undefined) {
-            return [];
+            return empty;
           }
           const absolute = join(repoRoot, path);
           // A file deleted between the caret read and this pull can't be opened; degrade to empty.
@@ -103,7 +113,7 @@ export const IntelLive = Layer.effect(
               .catch(() => undefined),
           );
           if (text === undefined) {
-            return [];
+            return empty;
           }
           const uri = pathToFileURL(absolute).href;
           // Open/close as one resource so the close is registered atomically with the open and runs
@@ -138,18 +148,26 @@ export const IntelLive = Layer.effect(
                 Effect.fail(new IntelRequestError({ message: error.message, method })),
               ),
             );
-          // The reply's paths are absolute; the tree/viewer key off repo-relative paths (a target
-          // Outside the repo stays absolute, so the caller can detect and skip it). Both sides are
-          // Canonicalized so a symlinked root (macOS /var ↔ /private/var) still matches an in-repo
-          // Target the server resolved to its realpath; out-of-repo targets stay absolute.
-          const canonicalRoot = realpathOr(repoRoot);
-          return normalize(reply).map((location) => ({
-            column: location.column,
-            line: location.line,
-            path: relativize(realpathOr(location.path), canonicalRoot),
-          }));
+          return normalize(reply);
         }),
       );
+    }
+
+    // A location reply's paths are absolute; relativize each to a repo path (a target outside the
+    // Repo, e.g. node_modules, stays absolute so the caller can detect and skip it). Both sides are
+    // Canonicalized so a symlinked root (macOS /var ↔ /private/var) still matches an in-repo target
+    // The server resolved to its realpath. Hover carries no paths, so it skips this entirely.
+    function relativizeLocations(
+      repoRoot: string,
+      normalize: (reply: unknown) => NormalizedLocation[],
+    ) {
+      const canonicalRoot = realpathOr(repoRoot);
+      return (reply: unknown) =>
+        normalize(reply).map((location) => ({
+          column: location.column,
+          line: location.line,
+          path: relativize(realpathOr(location.path), canonicalRoot),
+        }));
     }
 
     return {
@@ -161,8 +179,11 @@ export const IntelLive = Layer.effect(
           "definition",
           "textDocument/definition",
           {},
-          normalizeDefinition,
+          relativizeLocations(repoRoot, normalizeDefinition),
+          [],
         ),
+      hover: (repoRoot, path, position) =>
+        pull(repoRoot, path, position, "hover", "textDocument/hover", {}, parseHover, []),
       references: (repoRoot, path, position) =>
         pull(
           repoRoot,
@@ -171,7 +192,8 @@ export const IntelLive = Layer.effect(
           "references",
           "textDocument/references",
           { context: { includeDeclaration: true } },
-          normalizeReferences,
+          relativizeLocations(repoRoot, normalizeReferences),
+          [],
         ),
     };
   }),

@@ -17,6 +17,7 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "prepare": "effect-language-service patch",
     "screenshots": "bun run script/screenshots.ts",
     "sideye": "bun run src/main.tsx",
     "typecheck": "tsc --noEmit",

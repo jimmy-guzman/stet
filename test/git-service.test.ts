@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 
 import { EMPTY_TREE_SHA } from "@/git/model";
 import { Git, GitLive } from "@/git/service";
@@ -26,8 +26,7 @@ test("Git.loadModel reports a modified file with churn counts", async () => {
     const model = await Effect.runPromise(
       Git.pipe(
         Effect.flatMap((git) => git.loadModel(repo, allScope)),
-        Effect.provide(GitLive),
-        Effect.provide(ProcessLive),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
 
@@ -47,8 +46,7 @@ test("Git.changedFiles includes an untracked file", async () => {
     const result = await Effect.runPromise(
       Git.pipe(
         Effect.flatMap((git) => git.changedFiles(repo, allScope)),
-        Effect.provide(GitLive),
-        Effect.provide(ProcessLive),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
 
@@ -64,8 +62,7 @@ test("Git.parentRef returns the empty tree on a root commit", async () => {
     const parent = await Effect.runPromise(
       Git.pipe(
         Effect.flatMap((git) => git.parentRef(repo)),
-        Effect.provide(GitLive),
-        Effect.provide(ProcessLive),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
 
@@ -85,8 +82,7 @@ test("Git.parentRef returns the prior commit's SHA when one exists", async () =>
     const parent = await Effect.runPromise(
       Git.pipe(
         Effect.flatMap((git) => git.parentRef(repo)),
-        Effect.provide(GitLive),
-        Effect.provide(ProcessLive),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
 
@@ -104,8 +100,7 @@ test("Git.headRef returns the current HEAD SHA", async () => {
     const resolved = await Effect.runPromise(
       Git.pipe(
         Effect.flatMap((git) => git.headRef(repo)),
-        Effect.provide(GitLive),
-        Effect.provide(ProcessLive),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
 
@@ -125,8 +120,7 @@ test("Git.headRef returns the empty tree when HEAD is unborn", async () => {
     const resolved = await Effect.runPromise(
       Git.pipe(
         Effect.flatMap((git) => git.headRef(repo)),
-        Effect.provide(GitLive),
-        Effect.provide(ProcessLive),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
 

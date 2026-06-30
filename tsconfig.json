@@ -14,7 +14,14 @@
     "skipLibCheck": true,
     "types": ["bun"],
     "noEmit": true,
-    "plugins": [{ "name": "@effect/language-service" }]
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": {
+          "effectSucceedWithVoid": "off"
+        }
+      }
+    ]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx", "script/**/*.ts"]
 }

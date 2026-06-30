@@ -19,7 +19,7 @@ import type { ChangedFile } from "@/git/model";
 import { stateForResolvedChecker } from "./checker";
 import type { CheckerFileState, CheckerName, Diagnostic } from "./checker";
 import { isLspDiagnostic, mapLspDiagnostic } from "./protocol";
-import { activeServersForPath, LanguageServers, lspLanguageId } from "./servers";
+import { activeLanguages, LanguageServers, lspLanguageId, serversForPath } from "./servers";
 import type { ServerHandle } from "./servers";
 import type { LspConnection } from "./transport";
 
@@ -242,10 +242,10 @@ export const DiagnosticsLive = Layer.effect(
 
     // Files no active server handles stay unavailable; nothing else reports them, so they survive the
     // Merge. A repo-gated server (Biome off in a non-Biome repo) doesn't count as a handler here.
-    function noServerState(repoRoot: string, changed: ChangedFile[]) {
+    function noServerState(serversFor: (path: string) => string[], changed: ChangedFile[]) {
       const map = new Map<string, CheckerFileState>();
       for (const file of changed) {
-        if (activeServersForPath(file.path, repoRoot).length === 0) {
+        if (serversFor(file.path).length === 0) {
           map.set(file.path, {
             count: 0,
             diagnostics: [],
@@ -262,7 +262,7 @@ export const DiagnosticsLive = Layer.effect(
     // (clean, or the pending a server that never published leaves); until then the file holds its
     // Prior badge (or pending on a cold start) rather than flickering to pending each re-run.
     function snapshot(
-      repoRoot: string,
+      serversFor: (path: string) => string[],
       changed: ChangedFile[],
       done: Set<string>,
       maps: Map<string, CheckerFileState>[],
@@ -272,7 +272,7 @@ export const DiagnosticsLive = Layer.effect(
       const merged = mergeStates(maps);
       const state = new Map<string, CheckerFileState>(noServer);
       for (const file of changed) {
-        const languages = activeServersForPath(file.path, repoRoot);
+        const languages = serversFor(file.path);
         if (languages.length === 0) {
           continue;
         }
@@ -307,10 +307,13 @@ export const DiagnosticsLive = Layer.effect(
       prior?: ReadonlyMap<string, CheckerFileState>,
     ) {
       const changed = files.filter((file) => file.kind !== "deleted");
-      const noServer = noServerState(repoRoot, changed);
-      const languages = [
-        ...new Set(changed.flatMap((file) => activeServersForPath(file.path, repoRoot))),
-      ];
+      // Evaluate each server's repo gate once for this run, then reuse it per file (and per snapshot
+      // Emission below) so a filesystem-stat gate like Biome's isn't re-checked for every file.
+      const active = activeLanguages(repoRoot);
+      const serversFor = (path: string) =>
+        serversForPath(path).filter((language) => active.has(language));
+      const noServer = noServerState(serversFor, changed);
+      const languages = [...new Set(changed.flatMap((file) => serversFor(file.path)))];
       if (languages.length === 0) {
         return Stream.make({ checker: "diagnostics", state: noServer } satisfies CheckerUpdate);
       }
@@ -322,9 +325,7 @@ export const DiagnosticsLive = Layer.effect(
             stateForLanguage(
               repoRoot,
               language,
-              changed.filter((file) =>
-                activeServersForPath(file.path, repoRoot).includes(language),
-              ),
+              changed.filter((file) => serversFor(file.path).includes(language)),
             ).pipe(Effect.map((map) => ({ language, map }))),
           ),
         ),
@@ -345,7 +346,7 @@ export const DiagnosticsLive = Layer.effect(
             ({
               checker: "diagnostics",
               state: snapshot(
-                repoRoot,
+                serversFor,
                 changed,
                 accumulator.done,
                 accumulator.maps,

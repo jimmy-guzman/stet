@@ -144,9 +144,21 @@ export function serversForPath(path: string): string[] {
   );
 }
 
+/**
+ * The registered languages whose repo gate (if any) accepts `repoRoot`. Evaluate once per run and
+ * reuse across files: a gate may stat the filesystem (Biome's `detect`), so re-checking it per file
+ * per snapshot emission would re-stat the same config repeatedly for an invariant result.
+ */
+export function activeLanguages(repoRoot: string): Set<string> {
+  return new Set(
+    Object.keys(registry).filter((language) => registry[language]?.detect?.(repoRoot) ?? true),
+  );
+}
+
 /** Servers whose extension matches this path and whose repo gate (if any) accepts `repoRoot`. */
 export function activeServersForPath(path: string, repoRoot: string): string[] {
-  return serversForPath(path).filter((language) => registry[language]?.detect?.(repoRoot) ?? true);
+  const active = activeLanguages(repoRoot);
+  return serversForPath(path).filter((language) => active.has(language));
 }
 
 /** Servers for this path that statically declare they can answer `capability`, in registry order. */

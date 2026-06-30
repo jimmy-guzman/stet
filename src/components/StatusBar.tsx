@@ -16,13 +16,14 @@ export function StatusBar() {
     return "? keys · q quit";
   };
   // Pair the level glyph with its color so severity reads without relying on color
-  // Alone, the way the counts badge and problems panel already do.
+  // Alone, the way the counts badge and problems panel already do. An idle bar (no
+  // Leveled message) renders bare: no glyph, neutral color.
   const status = createMemo(() => {
     const level = state.statusRightLevel();
-    return {
-      fg: levelColor(theme.colors, level),
-      text: `${levelGlyph(level)} ${state.statusRight()}`,
-    };
+    const text = state.statusRight();
+    return level === undefined
+      ? { fg: theme.colors.text.secondary, text }
+      : { fg: levelColor(theme.colors, level), text: `${levelGlyph(level)} ${text}` };
   });
   return (
     <box

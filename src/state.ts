@@ -696,17 +696,17 @@ function createState() {
         ? ""
         : `${Math.max(0, Math.round((now() - latest.at) / 1000))}s ago ${latest.path}`;
     const displayStatus = checksRunning() ? "running checks…" : status();
-    // The level tracks the status text; pure-activity rows (empty status) stay neutral.
-    const level: LogLevel = checksRunning() || displayStatus === "" ? "info" : statusLevel();
-    return {
-      level,
-      text: truncate(
-        [activityText, truncated() ? `${displayStatus} · truncated; f for full` : displayStatus]
-          .filter((part) => part !== "")
-          .join(" · "),
-        textWidth,
-      ),
-    };
+    const text = truncate(
+      [activityText, truncated() ? `${displayStatus} · truncated; f for full` : displayStatus]
+        .filter((part) => part !== "")
+        .join(" · "),
+      textWidth,
+    );
+    // A glyph belongs only to an actual status message. Activity alone is ambient
+    // And idle is empty, so neither carries a level: the bar renders the text bare,
+    // Never a lone glyph.
+    const level = displayStatus === "" ? undefined : checksRunning() ? "info" : statusLevel();
+    return { level, text };
   });
   const statusRight = () => statusRightModel().text;
   const statusRightLevel = () => statusRightModel().level;
@@ -1799,7 +1799,6 @@ function createState() {
     setSearchComboboxScope,
     setSessionBase,
     setSidebarOpen,
-    setStatus,
     setTerminalHeight,
     setTerminalWidth,
     setThemeComboboxIndex,

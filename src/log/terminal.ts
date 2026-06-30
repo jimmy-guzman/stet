@@ -16,14 +16,17 @@ function format(text: string, level: LogLevel) {
   return ansi === null ? line : `${ansi}${line}\x1b[0m`;
 }
 
-export const logError = (text: string) => {
-  console.error(format(text, "error"));
-};
+// Errors go to stderr; every other level to stdout. The level-named helpers are
+// Thin wrappers, so a caller with a dynamic level (the quit notice) uses `log`.
+export function log(level: LogLevel, text: string) {
+  const line = format(text, level);
+  if (level === "error") {
+    console.error(line);
+    return;
+  }
+  console.log(line);
+}
 
-export const logSuccess = (text: string) => {
-  console.log(format(text, "success"));
-};
-
-export const logInfo = (text: string) => {
-  console.log(format(text, "info"));
-};
+export const logError = (text: string) => log("error", text);
+export const logSuccess = (text: string) => log("success", text);
+export const logInfo = (text: string) => log("info", text);

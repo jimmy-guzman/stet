@@ -68,6 +68,10 @@ export function parseArgs(args: string[]): CliOptions {
     throw new Error(`Unexpected argument: ${positionals[1]}`);
   }
 
+  if (values.staged && values.unstaged) {
+    throw new Error("--staged and --unstaged are mutually exclusive");
+  }
+
   const kind: ScopeKind = values.staged ? "staged" : values.unstaged ? "unstaged" : "all";
 
   return {

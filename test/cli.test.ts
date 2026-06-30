@@ -19,6 +19,12 @@ describe("parseArgs", () => {
     expect(parseArgs(["--unstaged"]).scope).toEqual({ kind: "unstaged", ref: "HEAD" });
   });
 
+  test("rejects --staged and --unstaged together", () => {
+    expect(() => parseArgs(["--staged", "--unstaged"])).toThrow(
+      "--staged and --unstaged are mutually exclusive",
+    );
+  });
+
   test("enables file-type icons by default", () => {
     expect(parseArgs([]).icons).toBe(true);
   });
@@ -77,6 +83,14 @@ describe("parseArgs", () => {
 
   test("throws when --ide is empty", () => {
     expect(() => parseArgs(["--ide", ""])).toThrow("--ide requires a non-empty value");
+  });
+
+  test("throws when --editor has no value", () => {
+    expect(() => parseArgs(["--editor"])).toThrow("Option '--editor <value>' argument missing");
+  });
+
+  test("throws when --ide has no value", () => {
+    expect(() => parseArgs(["--ide"])).toThrow("Option '--ide <value>' argument missing");
   });
 
   test("editor defaults to undefined when not provided", () => {

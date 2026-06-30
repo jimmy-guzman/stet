@@ -1,3 +1,5 @@
+import util from "node:util";
+
 export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit";
 
 // Picker order, also the single source of truth for the scope list.
@@ -45,111 +47,52 @@ export function parseCommand(args: string[]): Command {
 }
 
 export function parseArgs(args: string[]): CliOptions {
-  let kind: ScopeKind = "all";
-  let help = false;
-  let version = false;
-  let icons = true;
-  let lspDownload = true;
-  let overflow: "scroll" | "wrap" = "scroll";
-  let ref: string | undefined;
-  let editor: string | undefined;
-  let ide: string | undefined;
+  const { values, positionals } = util.parseArgs({
+    allowPositionals: true,
+    args,
+    options: {
+      "editor": { type: "string" },
+      "help": { short: "h", type: "boolean" },
+      "ide": { type: "string" },
+      "no-icons": { type: "boolean" },
+      "no-lsp-download": { type: "boolean" },
+      "staged": { type: "boolean" },
+      "unstaged": { type: "boolean" },
+      "version": { short: "v", type: "boolean" },
+      "wrap": { type: "boolean" },
+    },
+    strict: true,
+  });
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-
-    if (arg === "--no-icons") {
-      icons = false;
-      continue;
-    }
-
-    if (arg === "--no-lsp-download") {
-      lspDownload = false;
-      continue;
-    }
-
-    if (arg === "--wrap") {
-      overflow = "wrap";
-      continue;
-    }
-
-    if (arg === "--staged") {
-      kind = "staged";
-      continue;
-    }
-
-    if (arg === "--unstaged") {
-      kind = "unstaged";
-      continue;
-    }
-
-    if (arg === "--help" || arg === "-h") {
-      help = true;
-      continue;
-    }
-
-    if (arg === "--version" || arg === "-v") {
-      version = true;
-      continue;
-    }
-
-    if (arg.startsWith("--editor=")) {
-      const value = arg.slice("--editor=".length);
-      if (value.trim() === "") {
-        throw new Error("--editor requires a non-empty value");
-      }
-      editor = value;
-      continue;
-    }
-
-    if (arg === "--editor") {
-      const value = args[++i];
-      if (value === undefined || value.trim() === "") {
-        throw new Error("--editor requires a non-empty value");
-      }
-      editor = value;
-      continue;
-    }
-
-    if (arg.startsWith("--ide=")) {
-      const value = arg.slice("--ide=".length);
-      if (value.trim() === "") {
-        throw new Error("--ide requires a non-empty value");
-      }
-      ide = value;
-      continue;
-    }
-
-    if (arg === "--ide") {
-      const value = args[++i];
-      if (value === undefined || value.trim() === "") {
-        throw new Error("--ide requires a non-empty value");
-      }
-      ide = value;
-      continue;
-    }
-
-    if (arg.startsWith("-")) {
-      throw new Error(`Unknown option: ${arg}`);
-    }
-
-    if (ref !== undefined) {
-      throw new Error(`Unexpected argument: ${arg}`);
-    }
-
-    ref = arg;
+  if (positionals.length > 1) {
+    throw new Error(`Unexpected argument: ${positionals[1]}`);
   }
 
+  if (values.staged && values.unstaged) {
+    throw new Error("--staged and --unstaged are mutually exclusive");
+  }
+
+  const kind: ScopeKind = values.staged ? "staged" : values.unstaged ? "unstaged" : "all";
+
   return {
-    editor,
-    help,
-    icons,
-    ide,
-    lspDownload,
-    overflow,
-    scope: { kind, ref: ref ?? "HEAD" },
-    version,
+    editor: requireNonEmptyValue("--editor", values.editor),
+    help: values.help ?? false,
+    icons: !values["no-icons"],
+    ide: requireNonEmptyValue("--ide", values.ide),
+    lspDownload: !values["no-lsp-download"],
+    overflow: values.wrap ? "wrap" : "scroll",
+    scope: { kind, ref: positionals[0] ?? "HEAD" },
+    version: values.version ?? false,
   };
+}
+
+// A blank command template (`--editor=`) parses to an empty string.
+// Sideye rejects that as a usage error even though parseArgs accepts it.
+function requireNonEmptyValue(flag: string, value: string | undefined) {
+  if (value !== undefined && value.trim() === "") {
+    throw new Error(`${flag} requires a non-empty value`);
+  }
+  return value;
 }
 
 export function scopeLabel(scope: DiffScope) {

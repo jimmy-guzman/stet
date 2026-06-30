@@ -159,7 +159,7 @@ describe("createKeyHandler", () => {
   });
 
   test("escape closes an open caret-anchored decoration and is swallowed before quit", () => {
-    state.openViewerDecoration({ lines: ["const x: 1"], status: "ready" });
+    state.openViewerDecoration({ lines: [{ kind: "prose", text: "const x: 1" }], status: "ready" });
     expect(state.viewerDecoration()).not.toBeUndefined();
     let quitCount = 0;
     const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });

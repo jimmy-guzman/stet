@@ -169,9 +169,10 @@ like the diagnostics it shares servers with: it never writes to the repo.
 ### Hover
 
 Press `K` with the caret on a symbol to show its type and docs in a small card
-anchored at the caret, the way an editor's hover does. The card clears as soon as
-you move the caret, scroll, switch files, or press `esc`. It's the same read-only
-LSP request family as go-to-definition.
+anchored at the caret, the way an editor's hover does. The type signature is
+syntax-highlighted with the same theme as the diff; the docs read as plain text.
+The card clears as soon as you move the caret, scroll, switch files, or press
+`esc`. It's the same read-only LSP request family as go-to-definition.
 
 ### Problems
 

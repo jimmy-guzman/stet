@@ -234,6 +234,26 @@ async function ensureLanguages(meta: { name: string; prevName?: string }) {
   await Promise.all([...pending].filter((lang) => !areLanguagesAttached(lang)).map(attach));
 }
 
+/**
+ * Highlight a standalone code snippet (a hover card's signature) into per-line spans, reusing the
+ * diff's shared highlighter and active theme so the colors match. Never rejects: an unknown
+ * language or highlighter failure falls back to one plain span per line, so the snippet still shows
+ * uncolored.
+ */
+export async function highlightSnippet(code: string, lang: string): Promise<RenderSpan[][]> {
+  try {
+    const themeName = await ensureDiffTheme();
+    const hl = await highlighter(themeName);
+    if (!areLanguagesAttached(lang)) {
+      await attach(lang);
+    }
+    const { tokens } = hl.codeToTokens(code, { lang, theme: themeName });
+    return tokens.map((line) => line.map((token) => ({ fg: token.color, text: token.content })));
+  } catch {
+    return code.split("\n").map((line) => [{ text: line }]);
+  }
+}
+
 async function compute(input: RenderInput): Promise<DiffRender> {
   const meta = parsePatchFiles(input.patch)[0]?.files[0];
   if (meta === undefined) {

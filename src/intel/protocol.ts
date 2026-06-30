@@ -100,41 +100,101 @@ export function normalizeReferences(reply: unknown): NormalizedLocation[] {
   return Array.isArray(reply) ? reply.map(mapItem).filter(isNormalized) : [];
 }
 
-// A `MarkedString` is a bare string or a `{ language, value }` code segment; a
-// `MarkupContent` is `{ kind, value }`. Both expose their text on `.value`.
-function markedText(item: unknown): string {
-  if (typeof item === "string") {
-    return item;
+/**
+ * One piece of a hover reply: a fenced code block (carrying its language, for syntax highlighting)
+ * or a run of prose. The fence delimiters themselves are dropped; the card highlights code segments
+ * and renders prose plain.
+ */
+export type HoverSegment =
+  | { kind: "code"; lang: string | undefined; lines: string[] }
+  | { kind: "prose"; lines: string[] };
+
+function trimBlankEdges(lines: string[]): string[] {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start]?.trim() === "") {
+    start += 1;
   }
-  return isObject(item) && typeof item.value === "string" ? item.value : "";
+  while (end > start && lines[end - 1]?.trim() === "") {
+    end -= 1;
+  }
+  return lines.slice(start, end);
 }
 
-// We render the card as plain lines, so the markdown fences tsserver wraps its
-// Code segments in (```typescript … ```) would show as literal noise; drop the
-// Fence lines and collapse the blank runs they leave behind.
-function stripFences(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("```"))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n");
+// Split a markdown string into ordered code-fence and prose segments. A line whose
+// First non-space is ``` toggles code mode; the opening fence's info string is the
+// Code language, and the fence lines themselves are dropped.
+function markdownSegments(text: string): HoverSegment[] {
+  const segments: HoverSegment[] = [];
+  let prose: string[] = [];
+  let code: string[] | undefined;
+  let lang: string | undefined;
+  const flushProse = () => {
+    const lines = trimBlankEdges(prose);
+    if (lines.length > 0) {
+      segments.push({ kind: "prose", lines });
+    }
+    prose = [];
+  };
+  for (const line of text.split("\n")) {
+    if (line.trimStart().startsWith("```")) {
+      if (code === undefined) {
+        flushProse();
+        lang = line.trimStart().slice(3).trim() || undefined;
+        code = [];
+      } else {
+        segments.push({ kind: "code", lang, lines: trimBlankEdges(code) });
+        code = undefined;
+        lang = undefined;
+      }
+      continue;
+    }
+    (code ?? prose).push(line);
+  }
+  // An unterminated fence (a malformed reply) still yields its code.
+  if (code !== undefined) {
+    segments.push({ kind: "code", lang, lines: trimBlankEdges(code) });
+  }
+  flushProse();
+  return segments;
+}
+
+function segmentsFromItem(item: unknown): HoverSegment[] {
+  if (typeof item === "string") {
+    return markdownSegments(item);
+  }
+  if (!isObject(item)) {
+    return [];
+  }
+  // A `MarkedString` code segment carries its own language and is not fenced.
+  if (typeof item.language === "string" && typeof item.value === "string") {
+    return [
+      {
+        kind: "code",
+        lang: item.language || undefined,
+        lines: trimBlankEdges(item.value.split("\n")),
+      },
+    ];
+  }
+  // A `MarkupContent`: markdown may carry fences, plaintext is prose.
+  if (typeof item.value === "string") {
+    return item.kind === "markdown"
+      ? markdownSegments(item.value)
+      : [{ kind: "prose", lines: trimBlankEdges(item.value.split("\n")) }];
+  }
+  return [];
 }
 
 /**
  * `textDocument/hover` replies with `{ contents, range? }` or null, where `contents` is a
- * `MarkupContent`, a `MarkedString`, or a `MarkedString[]`. Normalized to trimmed plain text (empty
- * when there is nothing to show).
+ * `MarkupContent`, a `MarkedString`, or a `MarkedString[]`. Parsed into ordered code/prose
+ * segments; an empty array means there is nothing to show.
  */
-export function normalizeHover(reply: unknown): string {
+export function parseHover(reply: unknown): HoverSegment[] {
   if (!isObject(reply)) {
-    return "";
+    return [];
   }
   const { contents } = reply;
-  const raw = Array.isArray(contents)
-    ? contents
-        .map(markedText)
-        .filter((text) => text.length > 0)
-        .join("\n\n")
-    : markedText(contents);
-  return stripFences(raw).trim();
+  const items = Array.isArray(contents) ? contents : [contents];
+  return items.flatMap(segmentsFromItem).filter((segment) => segment.lines.length > 0);
 }

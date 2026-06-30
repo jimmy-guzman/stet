@@ -18,8 +18,9 @@ import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
-import { DiffEngine, structureDiff } from "./diff/engine";
+import { DiffEngine, highlightSnippet, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
+import type { RenderSpan } from "./diff/hast";
 import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { contentToContextPatch } from "./file/content";
 import type { FileContent } from "./file/content";
@@ -43,6 +44,7 @@ import {
   expandAncestorsForPath,
   flattenTree,
 } from "./git/tree";
+import type { HoverSegment } from "./intel/protocol";
 import { Intel } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
@@ -91,12 +93,36 @@ interface JumpTarget {
 // From the centered command-palette overlays. Content-agnostic on purpose so a
 // Second consumer reuses the same seam; the caret cell it renders at is derived
 // Live in DiffView, not stored here.
+// One rendered line of a decoration: a syntax-highlighted code line (colored
+// Spans) or a plain prose line. The card renders code as styled spans and prose
+// As muted text, the way an editor's hover shows a highlighted signature above
+// Plain docs.
+type DecorationLine = { kind: "code"; spans: RenderSpan[] } | { kind: "prose"; text: string };
+
 interface ViewerDecoration {
   status: "loading" | "ready" | "empty" | "error";
-  /** A short card header; omitted for a header-less card. */
-  title?: string;
-  /** Body lines, already normalized to plain text. */
-  lines: string[];
+  lines: DecorationLine[];
+}
+
+// A hover segment becomes rendered lines: prose maps one line each; a code block
+// Is syntax-highlighted in its language (uncolored when the language is absent).
+async function segmentToLines(
+  segment: HoverSegment,
+  highlight: (code: string, lang: string) => Promise<RenderSpan[][]>,
+): Promise<DecorationLine[]> {
+  if (segment.kind === "prose") {
+    return segment.lines.map((text) => ({ kind: "prose", text }));
+  }
+  if (segment.lang === undefined) {
+    return segment.lines.map((line) => ({ kind: "code", spans: [{ text: line }] }));
+  }
+  const highlighted = await highlight(segment.lines.join("\n"), segment.lang);
+  return highlighted.map((spans) => ({ kind: "code", spans }));
+}
+
+// A single muted line (loading / empty / error), the simplest decoration content.
+function noticeLines(text: string): DecorationLine[] {
+  return [{ kind: "prose", text }];
 }
 
 // The caret/scroll/file the decoration opened against; any drift closes it, so the
@@ -111,6 +137,10 @@ interface DecorationAnchor {
   path: string | undefined;
   repoRoot: string;
   scope: string;
+  // The active theme the card's colors were highlighted against; a theme switch
+  // Leaves caret/scroll/path/scope untouched yet restyles the diff, so a stale
+  // Card must close rather than keep the old palette.
+  theme: string;
 }
 
 // A one-shot request to place the cursor and scroll once the diff for `path`
@@ -1238,6 +1268,7 @@ function createState() {
         scope: scopeIdentity(),
         scrollTop: viewerScrollTop(),
         scrollX: viewerScrollX(),
+        theme: activeThemeName(),
       });
       setViewerDecorationContent(content);
     });
@@ -1281,9 +1312,9 @@ function createState() {
     const controller = new AbortController();
     hoverController = controller;
     const requestRoot = repoRoot();
-    openViewerDecoration({ lines: [], status: "loading" });
+    openViewerDecoration({ lines: noticeLines("…"), status: "loading" });
     try {
-      const text = await runtime.runPromise(
+      const segments = await runtime.runPromise(
         Intel.use((intel) =>
           intel.hover(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
         ),
@@ -1292,12 +1323,34 @@ function createState() {
       if (controller.signal.aborted || repoRoot() !== requestRoot) {
         return;
       }
-      resolveViewerDecoration(
-        text === "" ? { lines: [], status: "empty" } : { lines: text.split("\n"), status: "ready" },
+      if (segments.length === 0) {
+        resolveViewerDecoration({ lines: noticeLines("no hover info"), status: "empty" });
+        return;
+      }
+      const groups = await Promise.all(
+        segments.map((segment) => segmentToLines(segment, highlightSnippet)),
       );
+      if (controller.signal.aborted) {
+        return;
+      }
+      // Flatten the groups with a blank line between segments (signature from docs),
+      // The way an editor spaces them.
+      const lines: DecorationLine[] = [];
+      for (const [index, group] of groups.entries()) {
+        if (index > 0) {
+          lines.push({ kind: "prose", text: "" });
+        }
+        for (const groupLine of group) {
+          lines.push(groupLine);
+        }
+      }
+      resolveViewerDecoration({ lines, status: "ready" });
     } catch {
       if (!controller.signal.aborted) {
-        resolveViewerDecoration({ lines: [], status: "error" });
+        resolveViewerDecoration({
+          lines: noticeLines("couldn't reach the language server"),
+          status: "error",
+        });
       }
     }
   }
@@ -1316,7 +1369,8 @@ function createState() {
       viewerScrollX() !== anchor.scrollX ||
       selectedPath() !== anchor.path ||
       repoRoot() !== anchor.repoRoot ||
-      scopeIdentity() !== anchor.scope
+      scopeIdentity() !== anchor.scope ||
+      activeThemeName() !== anchor.theme
     ) {
       closeViewerDecoration();
     }

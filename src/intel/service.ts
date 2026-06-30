@@ -15,8 +15,8 @@ import { LanguageServers, lspLanguageId, serversProviding } from "@/diagnostics/
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
 import { relativize } from "@/utils/path";
 
-import { normalizeDefinition, normalizeHover, normalizeReferences } from "./protocol";
-import type { NormalizedLocation } from "./protocol";
+import { normalizeDefinition, normalizeReferences, parseHover } from "./protocol";
+import type { HoverSegment, NormalizedLocation } from "./protocol";
 
 /**
  * Canonicalize to realpath so a symlinked repo root and a server-resolved target compare in the
@@ -59,7 +59,7 @@ export class Intel extends Context.Service<
       repoRoot: string,
       path: string,
       position: Position,
-    ) => Effect.Effect<string, IntelRequestError>;
+    ) => Effect.Effect<HoverSegment[], IntelRequestError>;
   }
 >()("sideye/Intel") {}
 
@@ -183,7 +183,7 @@ export const IntelLive = Layer.effect(
           [],
         ),
       hover: (repoRoot, path, position) =>
-        pull(repoRoot, path, position, "hover", "textDocument/hover", {}, normalizeHover, ""),
+        pull(repoRoot, path, position, "hover", "textDocument/hover", {}, parseHover, []),
       references: (repoRoot, path, position) =>
         pull(
           repoRoot,

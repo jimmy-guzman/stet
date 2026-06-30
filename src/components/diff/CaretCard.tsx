@@ -1,5 +1,9 @@
-import { createMemo, Index, Show } from "solid-js";
+import { fg, StyledText } from "@opentui/core";
+import type { TextRenderable } from "@opentui/core";
+import { createEffect, createMemo, Index, Show } from "solid-js";
 
+import type { RenderSpan } from "@/diff/hast";
+import { sliceSpansWindow } from "@/diff/spans";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { truncate } from "@/utils/text";
@@ -11,26 +15,52 @@ import { caretCell, placeCard } from "@/viewer/anchor";
 const MAX_CARD_LINES = 12;
 const MAX_CARD_WIDTH = 72;
 
-// Each decoration status maps to its own body so loading, empty, and error read as
-// Real states (TASTE: every async surface designs all three), never a blank box.
-function bodyLines(decoration: NonNullable<ReturnType<typeof state.viewerDecoration>>) {
-  if (decoration.status === "loading") {
-    return ["…"];
-  }
-  if (decoration.status === "error") {
-    return ["couldn't reach the language server"];
-  }
-  if (decoration.status === "empty" || decoration.lines.length === 0) {
-    return ["no hover info"];
-  }
-  return decoration.lines;
+type RenderLine = { kind: "code"; spans: RenderSpan[] } | { kind: "prose"; text: string };
+
+function lineWidth(line: RenderLine) {
+  return line.kind === "code"
+    ? line.spans.reduce((sum, span) => sum + Bun.stringWidth(span.text), 0)
+    : Bun.stringWidth(line.text);
+}
+
+function proseText(line: RenderLine) {
+  return line.kind === "prose" ? line.text : "";
+}
+
+// One card row: a highlighted code line (its spans as a single `StyledText`, set
+// Imperatively like the diff's `StyledLine`) or a plain prose line (muted for the
+// Loading/empty/error states, secondary for docs).
+function CardLine(props: { line: () => RenderLine; muted: () => boolean }) {
+  const theme = useTheme();
+  let ref: TextRenderable | undefined;
+  createEffect(() => {
+    const line = props.line();
+    if (ref === undefined || line.kind !== "code") {
+      return;
+    }
+    ref.content = new StyledText(
+      line.spans.map((span) => fg(span.fg ?? theme.colors.text.primary)(span.text)),
+    );
+  });
+  return (
+    <Show
+      when={props.line().kind === "code"}
+      fallback={
+        <text fg={props.muted() ? theme.colors.text.muted : theme.colors.text.secondary}>
+          {proseText(props.line())}
+        </text>
+      }
+    >
+      <text ref={(el) => (ref = el)} />
+    </Show>
+  );
 }
 
 /**
- * The floating card for the active caret-anchored decoration (hover today, peek Later). Absolutely
- * positioned inside the viewer content area so it never clips Against the scrollbox or shifts the
- * diff; placed below the caret and flipped Above near the bottom edge. The geometry DiffView
- * already computes (the caret's Cumulative top, the gutter+sign offset, the inner width) arrives as
+ * The floating card for the active caret-anchored decoration (hover today, peek later). Absolutely
+ * positioned inside the viewer content area so it never clips against the scrollbox or shifts the
+ * diff; placed below the caret and flipped above near the bottom edge. The geometry DiffView
+ * already computes (the caret's cumulative top, the gutter+sign offset, the inner width) arrives as
  * accessors.
  */
 export function CaretCard(props: {
@@ -64,10 +94,16 @@ export function CaretCard(props: {
     }
     // Leave room for the border (2) and a column of padding each side (2).
     const textWidth = Math.max(8, Math.min(MAX_CARD_WIDTH, viewportWidth - 4));
-    const body = bodyLines(decoration);
-    const clamped = body.slice(0, MAX_CARD_LINES).map((line) => truncate(line, textWidth));
-    const lines = body.length > MAX_CARD_LINES ? [...clamped, "…"] : clamped;
-    const contentWidth = Math.max(...lines.map((line) => line.length));
+    const capped = decoration.lines.slice(0, MAX_CARD_LINES);
+    const lines: RenderLine[] = capped.map((line) =>
+      line.kind === "code"
+        ? { kind: "code", spans: sliceSpansWindow(line.spans, 0, textWidth) }
+        : { kind: "prose", text: truncate(line.text, textWidth) },
+    );
+    if (decoration.lines.length > MAX_CARD_LINES) {
+      lines.push({ kind: "prose", text: "…" });
+    }
+    const contentWidth = Math.max(0, ...lines.map(lineWidth));
     // `placeCard` only constrains the left edge, so cap the width here: a pane too
     // Narrow for even the 8-cell text floor must not let the card run off the right.
     const width = Math.min(contentWidth + 4, viewportWidth);
@@ -78,8 +114,7 @@ export function CaretCard(props: {
       viewportHeight,
       viewportWidth,
     });
-    const muted = decoration.status !== "ready";
-    return { lines, muted, placement, width };
+    return { lines, muted: decoration.status !== "ready", placement, width };
   });
 
   return (
@@ -99,11 +134,7 @@ export function CaretCard(props: {
           zIndex={50}
         >
           <Index each={value().lines}>
-            {(line) => (
-              <text fg={value().muted ? theme.colors.text.muted : theme.colors.text.primary}>
-                {line()}
-              </text>
-            )}
+            {(line) => <CardLine line={line} muted={() => value().muted} />}
           </Index>
         </box>
       )}

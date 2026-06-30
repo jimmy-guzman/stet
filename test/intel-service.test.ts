@@ -364,7 +364,7 @@ test("hover opens, requests at the caret, returns normalized text, then closes",
       ),
     );
 
-    expect(result).toBe("const alpha: 1");
+    expect(result).toEqual([{ kind: "code", lang: "typescript", lines: ["const alpha: 1"] }]);
     expect(log.map((entry) => entry.method)).toEqual([
       "textDocument/didOpen",
       "textDocument/hover",
@@ -386,6 +386,6 @@ test("hover returns empty when no acquired server advertises it", async () => {
         Effect.provide(IntelLive.pipe(Layer.provide(servers))),
       ),
     );
-    expect(result).toBe("");
+    expect(result).toEqual([]);
   });
 });

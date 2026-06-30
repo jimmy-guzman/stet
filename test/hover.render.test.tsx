@@ -33,14 +33,19 @@ describe("caret-anchored decoration card", () => {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
       mockInput.pressTab();
 
+      // A highlighted code line (its text comes through a StyledText) plus a prose
+      // Doc line, the shape a real hover resolves to.
       state.openViewerDecoration({
-        lines: ["const added: number", "", "A constant."],
+        lines: [
+          { kind: "code", spans: [{ fg: "#79b8ff", text: "const added: number" }] },
+          { kind: "prose", text: "A constant." },
+        ],
         status: "ready",
       });
       const card = await settleUntil("card visible at the caret", (frame) =>
         frame.includes("const added: number"),
       );
-      // The card is the only place that text appears, and it sits inside the viewer.
+      // Both the styled code line and the prose line render their text in the card.
       expect(card).toContain("A constant.");
 
       // A caret move closes the card (it described one exact spot).
@@ -52,7 +57,10 @@ describe("caret-anchored decoration card", () => {
       expect(afterMove).not.toContain("const added: number");
 
       // Escape dismisses it, before the find/global esc handlers.
-      state.openViewerDecoration({ lines: ["const added: number"], status: "ready" });
+      state.openViewerDecoration({
+        lines: [{ kind: "prose", text: "const added: number" }],
+        status: "ready",
+      });
       await settleUntil("card reopened", (frame) => frame.includes("const added: number"));
       mockInput.pressEscape();
       const afterEscape = await settleUntil(
@@ -64,7 +72,10 @@ describe("caret-anchored decoration card", () => {
       // A scope switch can leave the path, caret, and scroll untouched yet show a
       // Different diff, so it must still close the card. Set scope alone so only the
       // Scope-drift trigger fires (the card would linger without it).
-      state.openViewerDecoration({ lines: ["const added: number"], status: "ready" });
+      state.openViewerDecoration({
+        lines: [{ kind: "prose", text: "const added: number" }],
+        status: "ready",
+      });
       await settleUntil("card reopened", (frame) => frame.includes("const added: number"));
       state.setScope({ kind: "unstaged", ref: "HEAD" });
       const afterScope = await settleUntil(

@@ -81,9 +81,7 @@ try {
   // It. ConfigLive has no dependencies, so this builds nothing heavy.
   const configRuntime = ManagedRuntime.make(ConfigLive);
   const { config, issues: configIssues } = await configRuntime.runPromise(
-    Effect.gen(function* loadConfig() {
-      return yield* (yield* Config).load();
-    }),
+    Config.pipe(Effect.flatMap((service) => service.load())),
   );
   await configRuntime.dispose();
 

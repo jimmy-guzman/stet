@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 
 import { parseSearchOutput, searchArgs } from "@/git/search";
 import { Git, GitLive } from "@/git/service";
@@ -53,8 +53,7 @@ const runSearch = (repo: string, query: string, paths: readonly string[] | undef
   Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.search(repo, query, paths)),
-      Effect.provide(GitLive),
-      Effect.provide(ProcessLive),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
     ),
   );
 

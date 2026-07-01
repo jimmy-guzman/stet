@@ -262,6 +262,42 @@ test("stays clean when one server resolves clean and another is unavailable", as
   });
 });
 
+const aBiomeFinding = {
+  message: "Unexpected empty block.",
+  range: { end: { character: 1, line: 0 }, start: { character: 0, line: 0 } },
+  severity: 1,
+  source: "biome",
+};
+
+test("runs biome only when the repo has a biome config", async () => {
+  // A css file is biome-only; with a biome.json the repo opts in, so biome reports its findings.
+  await withRepo({ "biome.json": "{}", "src/a.css": "a{}\n" }, async (dir) => {
+    const state = await runDiagnostics(
+      dir,
+      [changed("src/a.css")],
+      fakeServers({ biome: pushingHandle([aBiomeFinding]) }),
+    );
+    const fileState = state.get("src/a.css");
+    expect(fileState?.status).toBe("findings");
+    expect(fileState?.diagnostics[0]).toMatchObject({
+      message: "Unexpected empty block.",
+      source: "biome",
+    });
+  });
+});
+
+test("leaves a biome-only file unavailable in a repo without a biome config", async () => {
+  // No biome.json: biome gates off, so a css file has no active server and never falsely resolves clean.
+  await withRepo({ "src/a.css": "a{}\n" }, async (dir) => {
+    const state = await runDiagnostics(
+      dir,
+      [changed("src/a.css")],
+      fakeServers({ biome: pushingHandle([aBiomeFinding]) }),
+    );
+    expect(state.get("src/a.css")?.status).toBe("unavailable");
+  });
+});
+
 test("marks a file with no language server as unavailable, never clean", async () => {
   await withRepo({ "docs/readme.md": "# hi\n" }, async (dir) => {
     const state = await runDiagnostics(dir, [changed("docs/readme.md")], fakeServers({}));

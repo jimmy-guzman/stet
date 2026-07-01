@@ -5,6 +5,7 @@
  * reference drops, so a worktree switch transparently swaps to a fresh server for the new root.
  */
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Context, Data, Effect, Layer, RcMap } from "effect";
@@ -63,15 +64,37 @@ interface ServerSpec {
   readonly provision?: { readonly packages: readonly string[] };
   /** Per-server handshake extras (caps, initializationOptions, server-request answers). */
   readonly handshake?: (repoRoot: string) => HandshakeConfig;
+  /**
+   * When set, the server runs only in repos this predicate accepts. oxlint/typescript run in every
+   * JS/TS repo, but a competing linter like Biome should activate only where the repo opted into it
+   * (a `biome.json`), the way an editor's Biome extension does, so it neither downloads into repos
+   * that don't use it nor duplicates oxlint's findings.
+   */
+  readonly detect?: (repoRoot: string) => boolean;
 }
 
 // The JS/TS family both servers handle; typescript type-checks it, oxlint lints it.
 const codeExtensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"] as const;
 
+// Biome lints the JS/TS family plus json/css/graphql, where it adds findings oxlint does not.
+const biomeExtensions = [...codeExtensions, "json", "jsonc", "css", "graphql"] as const;
+
 // Adding a language is one registry entry plus its file extensions; the transport, pool, and
 // Handshake are language-agnostic. typescript-language-server also serves JavaScript; oxlint lints
-// The same files, so a `.ts` file resolves to both servers and their findings merge.
+// The same files, so a `.ts` file resolves to both servers and their findings merge. A server with a
+// `detect` gate runs only where its predicate accepts the repo (Biome needs a biome config).
 const registry: Record<string, ServerSpec> = {
+  biome: {
+    args: ["lsp-proxy"],
+    binary: "biome",
+    // Read off disk; `detect` guarantees a biome config exists, so Biome resolves it on its own and
+    // The transport's null default answers its `workspace/configuration` pull. No handshake needed.
+    detect: (repoRoot) =>
+      existsSync(join(repoRoot, "biome.json")) || existsSync(join(repoRoot, "biome.jsonc")),
+    extensions: biomeExtensions,
+    provides: [],
+    provision: { packages: ["@biomejs/biome"] },
+  },
   oxlint: {
     args: ["--lsp"],
     binary: "oxlint",
@@ -121,6 +144,23 @@ export function serversForPath(path: string): string[] {
   );
 }
 
+/**
+ * The registered languages whose repo gate (if any) accepts `repoRoot`. Evaluate once per run and
+ * reuse across files: a gate may stat the filesystem (Biome's `detect`), so re-checking it per file
+ * per snapshot emission would re-stat the same config repeatedly for an invariant result.
+ */
+export function activeLanguages(repoRoot: string): Set<string> {
+  return new Set(
+    Object.keys(registry).filter((language) => registry[language]?.detect?.(repoRoot) ?? true),
+  );
+}
+
+/** Servers whose extension matches this path and whose repo gate (if any) accepts `repoRoot`. */
+export function activeServersForPath(path: string, repoRoot: string): string[] {
+  const active = activeLanguages(repoRoot);
+  return serversForPath(path).filter((language) => active.has(language));
+}
+
 /** Servers for this path that statically declare they can answer `capability`, in registry order. */
 export function serversProviding(path: string, capability: Capability): string[] {
   return serversForPath(path).filter((language) =>
@@ -132,8 +172,12 @@ export function serversProviding(path: string, capability: Capability): string[]
 // Right grammar (tsx vs ts). typescript-language-server distinguishes these four.
 const lspLanguageIdByExtension: Record<string, string> = {
   cjs: "javascript",
+  css: "css",
   cts: "typescript",
+  graphql: "graphql",
   js: "javascript",
+  json: "json",
+  jsonc: "jsonc",
   jsx: "javascriptreact",
   mjs: "javascript",
   mts: "typescript",

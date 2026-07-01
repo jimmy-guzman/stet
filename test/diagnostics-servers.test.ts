@@ -1,8 +1,13 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { Effect } from "effect";
 
 import {
+  activeServersForPath,
+  lspLanguageId,
   performHandshake,
   resolveServerCommand,
   serversForPath,
@@ -11,11 +16,42 @@ import {
 import type { LspConnection } from "@/diagnostics/transport";
 
 test("resolves a source file to every server that handles its extension", () => {
-  // Typescript and oxlint both claim the JS/TS family, so a code file runs through both.
-  expect(serversForPath("src/a.tsx")).toEqual(["oxlint", "typescript"]);
-  expect(serversForPath("src/a.mjs")).toEqual(["oxlint", "typescript"]);
+  // Biome, oxlint, and typescript all claim the JS/TS family, so a code file runs through all three.
+  expect(serversForPath("src/a.tsx")).toEqual(["biome", "oxlint", "typescript"]);
+  expect(serversForPath("src/a.mjs")).toEqual(["biome", "oxlint", "typescript"]);
+  // Only biome claims css/json/graphql; the extension matcher includes it regardless of repo gating.
+  expect(serversForPath("src/a.css")).toEqual(["biome"]);
+  expect(serversForPath("package.json")).toEqual(["biome"]);
   expect(serversForPath("README.md")).toEqual([]);
   expect(serversForPath("Makefile")).toEqual([]);
+});
+
+test("activeServersForPath gates biome on a repo's biome config", () => {
+  const withConfig = mkdtempSync(join(tmpdir(), "sideye-biome-"));
+  const withJsonc = mkdtempSync(join(tmpdir(), "sideye-biome-"));
+  const without = mkdtempSync(join(tmpdir(), "sideye-biome-"));
+  writeFileSync(join(withConfig, "biome.json"), "{}");
+  writeFileSync(join(withJsonc, "biome.jsonc"), "{}");
+
+  try {
+    // A biome.json (or biome.jsonc) opts the repo in; biome then handles the JS/TS family and css.
+    expect(activeServersForPath("src/a.ts", withConfig)).toEqual(["biome", "oxlint", "typescript"]);
+    expect(activeServersForPath("src/a.css", withJsonc)).toEqual(["biome"]);
+    // Without a biome config, biome stays off: oxlint/typescript still run, css has no server.
+    expect(activeServersForPath("src/a.ts", without)).toEqual(["oxlint", "typescript"]);
+    expect(activeServersForPath("src/a.css", without)).toEqual([]);
+  } finally {
+    rmSync(withConfig, { force: true, recursive: true });
+    rmSync(withJsonc, { force: true, recursive: true });
+    rmSync(without, { force: true, recursive: true });
+  }
+});
+
+test("lspLanguageId maps biome's extra file types to their LSP language ids", () => {
+  expect(lspLanguageId("a.json")).toBe("json");
+  expect(lspLanguageId("a.jsonc")).toBe("jsonc");
+  expect(lspLanguageId("a.css")).toBe("css");
+  expect(lspLanguageId("a.graphql")).toBe("graphql");
 });
 
 test("serversProviding keeps only servers whose static hint can answer the intent", () => {

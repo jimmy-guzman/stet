@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.5](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.4...sideye-v0.3.5) (2026-07-01)
+
+
+### Features
+
+* **diagnostics:** ✨ support Biome as a repo-gated LSP source ([#163](https://github.com/jimmy-guzman/sideye/issues/163)) ([245ce01](https://github.com/jimmy-guzman/sideye/commit/245ce0186f253c9c6e6b96900d5ff6fae6fcc7f0))
+* **finder:** ✨ better fuzzy ranking & support multi-word search ([#168](https://github.com/jimmy-guzman/sideye/issues/168)) ([1a2683e](https://github.com/jimmy-guzman/sideye/commit/1a2683e0aaa28f0a9cf26cd4ed1224990862f5e9))
+* **intel:** ✨ add in-flight status while resolving a definition ([#166](https://github.com/jimmy-guzman/sideye/issues/166)) ([109a36c](https://github.com/jimmy-guzman/sideye/commit/109a36c009263bfef13769a9c66bfb8fed2c288d))
+* **viewer:** ✨ reserve a footer for truncated files ([#169](https://github.com/jimmy-guzman/sideye/issues/169)) ([f4069b7](https://github.com/jimmy-guzman/sideye/commit/f4069b7494ae0153dfe593a42f152c9248c87eb6))
+
+
+### Bug Fixes
+
+* **tree:** 🐛 stabilize the file tree during the cold-start load ([#161](https://github.com/jimmy-guzman/sideye/issues/161)) ([fae1af3](https://github.com/jimmy-guzman/sideye/commit/fae1af3c2e7f1d12ec67476fab6f6016e81c6703))
+
 ## [0.3.4](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.3...sideye-v0.3.4) (2026-06-30)
 
 

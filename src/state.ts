@@ -375,6 +375,10 @@ function createState() {
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
   const [status, setStatus] = createSignal("");
   const [statusLevel, setStatusLevel] = createSignal<LogLevel>("info");
+  // A live in-flight indicator for a code-intel pull (F12), distinct from the
+  // Auto-clearing `notice` acknowledgment: it is set on the keystroke and cleared
+  // When the pull settles, so the status bar shows the action is underway.
+  const [intelStatus, setIntelStatus] = createSignal<string | undefined>(undefined);
   const report = (text: string, level: LogLevel = "info") => {
     setStatus(text);
     setStatusLevel(level);
@@ -756,6 +760,13 @@ function createState() {
     const width = Math.max(10, Math.min(terminalWidth() - 50, terminalWidth() - hints.length - 4));
     // Leave room for the leading level glyph + space the status bar prepends.
     const textWidth = Math.max(1, width - 2);
+    // An in-flight code-intel pull outranks even a held acknowledgment: it is the
+    // Acknowledgment of the very keystroke the user is waiting on, so it stays until
+    // The pull settles (which then clears it, letting any follow-up notice show).
+    const busy = intelStatus();
+    if (busy !== undefined) {
+      return { level: "info" as const, text: truncate(busy, textWidth) };
+    }
     // A held acknowledgment wins over ambient status for its dwell, so the user
     // Sees their action confirmed even as checks/activity churn underneath.
     const held = notice();
@@ -1222,6 +1233,7 @@ function createState() {
     }
     const controller = new AbortController();
     definitionController = controller;
+    setIntelStatus("resolving definition…");
     const requestRoot = repoRoot();
     try {
       const locations = await runtime.runPromise(
@@ -1263,6 +1275,12 @@ function createState() {
     } catch {
       if (!controller.signal.aborted) {
         notify("couldn't reach the language server", "error");
+      }
+    } finally {
+      // A superseding F12 installs its own controller and indicator, so only the
+      // Latest invocation clears the busy state; the aborted one leaves it alone.
+      if (definitionController === controller) {
+        setIntelStatus(undefined);
       }
     }
   }
@@ -1326,7 +1344,7 @@ function createState() {
     const controller = new AbortController();
     hoverController = controller;
     const requestRoot = repoRoot();
-    openViewerDecoration({ lines: noticeLines("…"), status: "loading" });
+    openViewerDecoration({ lines: noticeLines("resolving…"), status: "loading" });
     try {
       const segments = await runtime.runPromise(
         Intel.use((intel) =>

@@ -1,5 +1,6 @@
+import { afterEach } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -126,8 +127,18 @@ export function runGit(repoRoot: string, args: string[]) {
   );
 }
 
+const fixtureRepoRoots = new Set<string>();
+
+afterEach(() => {
+  for (const repoRoot of fixtureRepoRoots) {
+    rmSync(repoRoot, { force: true, recursive: true });
+  }
+  fixtureRepoRoots.clear();
+});
+
 export function createFixtureRepo(prefix: string, files: Record<string, string>) {
   const repoRoot = mkdtempSync(join(tmpdir(), prefix));
+  fixtureRepoRoots.add(repoRoot);
 
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(repoRoot, path)), { recursive: true });

@@ -59,7 +59,7 @@ import { fetchLatestVersion, isNewer } from "./upgrade/release";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
-import { collapseHome, truncate } from "./utils/text";
+import { collapseHome, truncate, truncateLeft } from "./utils/text";
 import {
   back,
   canBack,
@@ -820,11 +820,18 @@ function createState() {
       };
     }
     const latest = latestActivity(activityLog());
-    const activityText =
-      latest === undefined || now() - latest.at >= RECENT_MS
-        ? ""
-        : `${Math.max(0, Math.round((now() - latest.at) / 1000))}s ago ${latest.path}`;
     const displayStatus = checksRunning() ? "checking…" : status();
+    const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
+    const prefix =
+      recent === undefined ? "" : `${Math.max(0, Math.round((now() - recent.at) / 1000))}s ago `;
+    // Reserve the seconds prefix and, when present, the " · status" suffix the join
+    // Appends, so a long path shortens from its front (keeping the filename) instead
+    // Of shoving the status off the line.
+    const suffix = displayStatus === "" ? "" : ` · ${displayStatus}`;
+    const activityText =
+      recent === undefined
+        ? ""
+        : `${prefix}${truncateLeft(recent.path, Math.max(1, textWidth - prefix.length - suffix.length))}`;
     const text = truncate(
       [activityText, displayStatus].filter((part) => part !== "").join(" · "),
       textWidth,

@@ -1364,7 +1364,12 @@ function createState() {
     setReferencesStatus("loading");
   }
 
+  // The repoRoot the open overlay's results belong to, captured on open so the drift
+  // Effect below can close it when a worktree switch moves off that repo.
+  let referencesRoot: string | undefined;
+
   function openReferences(label: "references" | "definitions", results: ReferenceResult[]) {
+    referencesRoot = repoRoot();
     batch(() => {
       setReferencesLabel(label);
       setReferencesResults(results);
@@ -1396,6 +1401,7 @@ function createState() {
     const controller = new AbortController();
     referencesController = controller;
     const requestRoot = repoRoot();
+    referencesRoot = requestRoot;
     batch(() => {
       setReferencesLabel("references");
       setReferencesResults([]);
@@ -1458,6 +1464,16 @@ function createState() {
       resetReferencesState();
     });
   }
+
+  // The overlay lists repo-specific paths, so a repoRoot change (a worktree switch, or
+  // The deleted-worktree recovery) leaves it showing files from the old worktree. Close
+  // It on that drift; closeReferences aborts any in-flight request, the way the caret
+  // Decoration clears when its anchor drifts.
+  createEffect(() => {
+    if (referencesOpen() && repoRoot() !== referencesRoot) {
+      closeReferences();
+    }
+  });
 
   // The active scope's identity, so a scope switch that leaves the path unchanged
   // Still drifts the anchor off the now-different diff.

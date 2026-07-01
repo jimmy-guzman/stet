@@ -88,6 +88,9 @@ export function ReferencesOverlay() {
                 </Show>
                 <box
                   id={`references-${index()}`}
+                  // Non-selectable so a click on the row jumps without starting a text
+                  // Selection (a stray highlight), the way the viewer's diff rows do.
+                  ref={(el) => (el.selectable = false)}
                   width="100%"
                   flexDirection="row"
                   paddingLeft={1}

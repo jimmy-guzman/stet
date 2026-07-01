@@ -51,4 +51,42 @@ describe("references overlay", () => {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("closes when the repoRoot changes under it (a worktree switch)", async () => {
+    const repoRoot = createFixtureRepo("sideye-references-", {
+      "notes.txt": "alpha beta\n",
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+    });
+    writeFileSync(join(repoRoot, "notes.txt"), "alpha beta\ngamma delta\n");
+    const otherRoot = createFixtureRepo("sideye-references-other-", { "readme.md": "other\n" });
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
+      mockInput.pressTab();
+
+      void state.findReferences();
+      await settleUntil("overlay open", (frame) => frame.includes("no references"));
+
+      // The same seam switchWorktree commits (setRepoRoot); the overlay's results belong
+      // To the old repo, so the drift effect closes it rather than leaving stale paths.
+      state.setRepoRoot(otherRoot);
+      const closed = await settleUntil(
+        "overlay closed by the repo change",
+        (frame) => !frame.includes("no references"),
+      );
+      expect(closed).not.toContain("↑↓ navigate");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+      rmSync(otherRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

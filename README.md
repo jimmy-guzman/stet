@@ -164,9 +164,9 @@ whole tree.
 Put the caret on a symbol and press `F12` to jump to its definition, backed by
 the same language servers that drive diagnostics. A cross-file jump records your
 spot, so `<` returns to the call site. When more than one definition matches (an
-overloaded symbol), the targets open in the references list rather than jumping
-to the first. It's a read-only LSP request, exactly like the diagnostics it
-shares servers with: it never writes to the repo.
+overloaded symbol), the targets open in a results list to pick from rather than
+jumping to the first. It's a read-only LSP request, exactly like the diagnostics
+it shares servers with: it never writes to the repo.
 
 ### Find references
 

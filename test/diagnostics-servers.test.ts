@@ -19,9 +19,12 @@ test("resolves a source file to every server that handles its extension", () => 
   // Biome, oxlint, and typescript all claim the JS/TS family, so a code file runs through all three.
   expect(serversForPath("src/a.tsx")).toEqual(["biome", "oxlint", "typescript"]);
   expect(serversForPath("src/a.mjs")).toEqual(["biome", "oxlint", "typescript"]);
-  // Only biome claims css/json/graphql; the extension matcher includes it regardless of repo gating.
+  // Only biome claims css/graphql; the extension matcher includes it regardless of repo gating.
   expect(serversForPath("src/a.css")).toEqual(["biome"]);
-  expect(serversForPath("package.json")).toEqual(["biome"]);
+  // Json overlaps biome (biome only in a biome repo, the json server everywhere); yaml is disjoint.
+  expect(serversForPath("package.json")).toEqual(["biome", "json"]);
+  expect(serversForPath("config.yaml")).toEqual(["yaml"]);
+  expect(serversForPath("config.yml")).toEqual(["yaml"]);
   expect(serversForPath("README.md")).toEqual([]);
   expect(serversForPath("Makefile")).toEqual([]);
 });
@@ -47,11 +50,13 @@ test("activeServersForPath gates biome on a repo's biome config", () => {
   }
 });
 
-test("lspLanguageId maps biome's extra file types to their LSP language ids", () => {
+test("lspLanguageId maps non-JS/TS file types to their LSP language ids", () => {
   expect(lspLanguageId("a.json")).toBe("json");
   expect(lspLanguageId("a.jsonc")).toBe("jsonc");
   expect(lspLanguageId("a.css")).toBe("css");
   expect(lspLanguageId("a.graphql")).toBe("graphql");
+  expect(lspLanguageId("a.yaml")).toBe("yaml");
+  expect(lspLanguageId("a.yml")).toBe("yaml");
 });
 
 test("serversProviding keeps only servers whose static hint can answer the intent", () => {
@@ -59,6 +64,9 @@ test("serversProviding keeps only servers whose static hint can answer the inten
   // So intel never acquires it for a code-intel pull.
   expect(serversProviding("src/a.ts", "definition")).toEqual(["typescript"]);
   expect(serversProviding("src/a.tsx", "references")).toEqual(["typescript"]);
+  // Json and yaml only push diagnostics (validation-only), so they never surface for a code-intel pull.
+  expect(serversProviding("package.json", "definition")).toEqual([]);
+  expect(serversProviding("config.yaml", "hover")).toEqual([]);
   expect(serversProviding("README.md", "definition")).toEqual([]);
 });
 

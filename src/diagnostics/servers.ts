@@ -95,6 +95,17 @@ const registry: Record<string, ServerSpec> = {
     provides: [],
     provision: { packages: ["@biomejs/biome"] },
   },
+  json: {
+    // Always-on (no `detect`) so JSON gets schema validation in every repo. It overlaps Biome's
+    // Json coverage where a biome config exists, but the two are complementary: Biome lints, this
+    // Validates against schemas (package.json/tsconfig/SchemaStore); only raw syntax errors double
+    // Up, and the per-file merge unions them.
+    args: ["--stdio"],
+    binary: "vscode-json-language-server",
+    extensions: ["json", "jsonc"],
+    provides: [],
+    provision: { packages: ["vscode-langservers-extracted"] },
+  },
   oxlint: {
     args: ["--lsp"],
     binary: "oxlint",
@@ -125,6 +136,13 @@ const registry: Record<string, ServerSpec> = {
     extensions: codeExtensions,
     provides: ["definition", "references", "hover"],
     provision: { packages: ["typescript-language-server", "typescript"] },
+  },
+  yaml: {
+    args: ["--stdio"],
+    binary: "yaml-language-server",
+    extensions: ["yaml", "yml"],
+    provides: [],
+    provision: { packages: ["yaml-language-server"] },
   },
 };
 
@@ -169,7 +187,8 @@ export function serversProviding(path: string, capability: Capability): string[]
 }
 
 // The LSP `languageId` for `didOpen`, finer-grained than the server key so the server applies the
-// Right grammar (tsx vs ts). typescript-language-server distinguishes these four.
+// Right grammar (tsx vs ts). Every registry extension needs an entry here, or `didOpen` sends
+// `plaintext` and the server never analyzes the file.
 const lspLanguageIdByExtension: Record<string, string> = {
   cjs: "javascript",
   css: "css",
@@ -183,6 +202,8 @@ const lspLanguageIdByExtension: Record<string, string> = {
   mts: "typescript",
   ts: "typescript",
   tsx: "typescriptreact",
+  yaml: "yaml",
+  yml: "yaml",
 };
 
 export function lspLanguageId(path: string): string {

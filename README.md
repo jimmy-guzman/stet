@@ -181,9 +181,10 @@ The card clears as soon as you move the caret, scroll, switch files, or press
 Diagnostics from the repo's language servers stream into a problems panel as
 checks finish: type errors from TypeScript and lint findings from oxlint, plus
 Biome's diagnostics in repos that use it (a `biome.json`/`biome.jsonc`), covering
-JSON, CSS, and GraphQL on top of the JS/TS family. Each is tagged with its source
-and pinpointed to its `line:col`. Press `p` to open it and `enter` to jump to a
-finding.
+CSS and GraphQL on top of the JS/TS family. JSON and YAML get schema-aware
+validation in any repo (Biome only lints JSON, and only where it's configured).
+Each is tagged with its source and pinpointed to its `line:col`. Press `p` to
+open it and `enter` to jump to a finding.
 
 No language server installed? sideye fetches one on first use (preferring the
 repo's own, then your `PATH`), so diagnostics work out of the box. Pass

@@ -547,17 +547,44 @@ function createState() {
     const index = allProblemItems().findIndex(isNavigableProblemItem);
     return index === -1 ? 0 : index;
   });
+  // The go-to-file universe: repoFiles plus changed-only paths (staged
+  // Deletions), the same universe the tree renders. Every dependency is
+  // Identity-gated (`repoFiles` is reference-stable across content edits,
+  // `changedPaths` set-equality-gated), so a content-only refresh tick never
+  // Rebuilds this array while the picker is open.
+  const fileComboboxPaths = createMemo(() => {
+    const filePaths = repoFilePaths();
+    return [
+      ...repoFiles().map((file) => file.path),
+      ...[...changedPaths()].filter((path) => !filePaths.has(path)),
+    ];
+  });
+  // The rank context is snapshotted when the picker opens, so a background
+  // Refresh never re-ranks (and never reorders) the list under the cursor while
+  // It is open; the universe above stays live, so a file created mid-open still
+  // Appears. Per-row decorations (recency dot, changed tint) keep reading live
+  // State.
+  const [fileComboboxRankContext, setFileComboboxRankContext] = createSignal({
+    changed: new Set<string>(),
+    lastChangedAt: new Map<string, number>(),
+  });
+  function openFileCombobox() {
+    batch(() => {
+      setFileComboboxRankContext({
+        changed: untrack(changedPaths),
+        lastChangedAt: untrack(recencyByPath),
+      });
+      setFileComboboxQuery("");
+      setFileComboboxIndex(0);
+      setFileComboboxOpen(true);
+    });
+  }
   const fileComboboxResults = createMemo(() => {
     if (!fileComboboxOpen()) {
       return [];
     }
-    const model = gitModel();
-    const allPaths = [
-      ...new Set([...model.repoFiles.map((file) => file.path), ...model.changedByPath.keys()]),
-    ];
-    return rankFiles(fileComboboxQuery(), allPaths, {
-      changed: new Set(model.changedByPath.keys()),
-      lastChangedAt: recencyByPath(),
+    return rankFiles(fileComboboxQuery(), fileComboboxPaths(), {
+      ...fileComboboxRankContext(),
       limit: 50,
     });
   });
@@ -2519,6 +2546,7 @@ function createState() {
     notify,
     now,
     nudgeSidebarWidth,
+    openFileCombobox,
     openSearch,
     openThemePicker,
     openViewerDecoration,

@@ -48,7 +48,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
   {
     entries: [
       ["/", "find in the viewer; n/N cycle matches, esc clears"],
-      ["ctrl-f", "search file contents; ctrl-a toggles changes/repo"],
+      ["ctrl-f", "project search pane; regex/case/scope/glob toggles"],
       ["v", "toggle diff ↔ full file view for a changed file"],
       ["z", "toggle long-line wrap in the viewer"],
       ["f", "load full content when truncated"],
@@ -58,7 +58,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
       ["Shift+F12", "find references to the symbol under the caret"],
       ["K", "hover: type and docs for the symbol under the caret"],
       ["< / >", "back / forward through viewer history"],
-      ["y", "copy path (tree) or path:line:col (viewer; path:line on a line-number click)"],
+      ["y", "copy path (tree), path:line:col (viewer), or the selected search result"],
       ["Y", "copy the entire contents of the viewed file"],
     ],
     heading: "viewer",
@@ -73,7 +73,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
   },
   {
     entries: [
-      ["s", "cycle scope: all changes → staged → unstaged"],
+      ["s", "scope picker: all/staged/unstaged/session/last commit"],
       ["t", "theme switcher: filter, live-preview, apply"],
       ["w", "switch to another git worktree"],
       ["c", "toggle changes-only filter for the tree"],
@@ -84,7 +84,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
   {
     entries: [
       ["p", "toggle the problems panel"],
-      ["b", "toggle the file tree sidebar"],
+      ["ctrl-b", "toggle the file tree sidebar"],
       ["[ / ] / \\", "shrink (collapses past min) / grow / reset sidebar"],
     ],
     heading: "layout",

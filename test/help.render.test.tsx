@@ -46,9 +46,9 @@ describe("help overlay", () => {
       expect(help).toContain("pin / unpin the current file as a tab");
       expect(help).toContain("quit (esc closes panels first)");
 
-      // P and b must be swallowed: no problems panel, no sidebar toggle, overlay stays
+      // P and ctrl-b must be swallowed: no problems panel, no sidebar toggle, overlay stays
       mockInput.pressKey("p");
-      mockInput.pressKey("b");
+      mockInput.pressKey("b", { ctrl: true });
       const afterSwallowed = await settleUntil(
         "overlay still open",
         (frame) => frame.includes("switch to another git worktree"),

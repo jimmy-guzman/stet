@@ -168,7 +168,15 @@ const screens = [
       "Sleep 1s",
     ].join("\n"),
   },
-  { name: "search", steps: ["Ctrl+F", 'Type "Effect"', "Sleep 1200ms"].join("\n") },
+  {
+    /**
+     * The full-view search pane: type a query with matches across several changed files, wait for
+     * the grep + context reads + highlight to settle, then arrow into the results so the shot shows
+     * the selection tint on a match row alongside the grouped, syntax-highlighted context.
+     */
+    name: "search",
+    steps: ["Ctrl+F", 'Type "Effect"', "Sleep 2s", "Down@250ms 4", "Sleep 1200ms"].join("\n"),
+  },
   {
     // Open an unchanged file: plain syntax-highlighted source, no diff gutters.
     name: "read-only",

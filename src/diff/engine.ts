@@ -224,13 +224,17 @@ function attach(lang: string) {
 // `.gradle` is the Groovy build DSL; @pierre/diffs doesn't map it, so it would
 // Fall back to plain text. `.gradle.kts` already resolves to kts via its
 // Extension, so only the bare `.gradle` case needs the override.
-function filetypeFor(name: string) {
+/**
+ * The Shiki language a file highlights as, shared by the diff and any surface that renders code
+ * from that file (search results), so their colors agree.
+ */
+export function languageForPath(name: string) {
   return name.endsWith(".gradle") ? "groovy" : getFiletypeFromFileName(name);
 }
 
 async function ensureLanguages(meta: { name: string; prevName?: string }) {
   const names = meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
-  const pending = new Set(names.map(filetypeFor)).difference(new Set(["text"]));
+  const pending = new Set(names.map(languageForPath)).difference(new Set(["text"]));
 
   await Promise.all([...pending].filter((lang) => !areLanguagesAttached(lang)).map(attach));
 }

@@ -8,6 +8,7 @@ import { latestActivity } from "./git/activity";
 import { firstFileInNode } from "./git/tree";
 import { state } from "./state";
 import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
+import { isNavigableSearchItem } from "./viewer/search-items";
 
 /**
  * The injection seam for the keymap's irreversible host side-effects (`quit` tears down the
@@ -126,27 +127,162 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // The search panel owns the keyboard while open: nav + scope toggle here,
-      // Text and submit (the jump) are the input element's job (like the palette).
-      if (state.searchComboboxOpen()) {
+      // The search view's sub-focus routing while it is the focused pane: esc,
+      // The tab cycle, and the query toggles are handled for every sub-focus;
+      // Text and submit (the jump) are the input elements' job (like the
+      // Palette). Only the input sub-focuses swallow the remaining keys (they
+      // Own printable characters); results focus has no input, so unhandled
+      // Keys fall through and the global bindings (q, ?, ctrl-p, p...) keep
+      // Working, matching the problems pane. With the tree focused, keys fall
+      // Through to the tree branch while the view stays on screen.
+      if (state.mainView() === "search" && state.focusedPane() === "search") {
         if (key.name === "escape") {
-          state.setSearchComboboxOpen(false);
-        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
-          state.setSearchComboboxIndex(
-            Math.min(
-              state.searchComboboxIndex() + 1,
-              Math.max(0, state.searchComboboxResults().length - 1),
-            ),
-          );
-        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
-          state.setSearchComboboxIndex(Math.max(state.searchComboboxIndex() - 1, 0));
-        } else if (key.ctrl && key.name === "a") {
-          state.setSearchComboboxScope(
-            state.searchComboboxScope() === "changed" ? "repo" : "changed",
-          );
-          state.setSearchComboboxIndex(0);
+          state.closeSearch();
+          return;
         }
-        return;
+        if (key.name === "tab") {
+          // The focused input would swallow the tab as text otherwise.
+          key.preventDefault();
+          const order = ["query", "glob", "results"] as const;
+          const step = key.shift ? -1 : 1;
+          const at = order.indexOf(state.searchFocus());
+          state.setSearchFocus(order[(at + step + order.length) % order.length] ?? "query");
+          return;
+        }
+        // Toggle chords live on keys the input's readline set does not own
+        // (ctrl-a/ctrl-e stay line home/end for editing): ctrl-r regex,
+        // Ctrl-x exact case, ctrl-g changes<->repo, ctrl-s the scope picker.
+        if (key.ctrl && key.name === "r") {
+          state.toggleSearchRegex();
+          return;
+        }
+        if (key.ctrl && key.name === "x") {
+          state.toggleSearchCase();
+          return;
+        }
+        if (key.ctrl && key.name === "g") {
+          state.toggleSearchScope();
+          return;
+        }
+        // The diff scope (which changes "changed" means) is pickable without
+        // Leaving the pane; the ScopeMenu branch earlier in the chain owns the
+        // Keys once open, and a pick reruns the search via the git-model dep.
+        if (key.ctrl && key.name === "s") {
+          state.setScopeMenuIndex(Math.max(0, scopeKinds.indexOf(state.scope().kind)));
+          state.setScopeMenuOpen(true);
+          return;
+        }
+        if (state.searchFocus() !== "results") {
+          // Query/glob focus: down enters the results; ctrl-b still reaches the
+          // Sidebar (VS Code precedent, preventDefault stops the input's
+          // Move-left); ctrl-p falls through to the palette; everything else
+          // Is the input's (its readline chords included).
+          if (key.name === "down" || (key.ctrl && key.name === "n")) {
+            state.setSearchFocus("results");
+            return;
+          }
+          if (key.ctrl && key.name === "b") {
+            key.preventDefault();
+            state.toggleSidebar();
+            return;
+          }
+          if (!(key.ctrl && key.name === "p")) {
+            return;
+          }
+        }
+        if (state.searchFocus() === "results") {
+          const items = state.searchItems();
+          if (key.name === "j" || key.name === "down" || (key.ctrl && key.name === "n")) {
+            state.moveSearchSelection(1);
+            return;
+          }
+          if (key.name === "k" || key.name === "up" || (key.ctrl && key.name === "p")) {
+            // At the first navigable row, up returns to the query field.
+            const current = state.searchIndex();
+            const previous = items.findLastIndex(
+              (item, index) => index < current && isNavigableSearchItem(item),
+            );
+            if (previous === -1) {
+              state.setSearchFocus("query");
+            } else {
+              state.moveSearchSelection(-1);
+            }
+            return;
+          }
+          if (key.ctrl && key.name === "d") {
+            state.pageSearchSelection(1);
+            return;
+          }
+          if (key.ctrl && key.name === "u") {
+            state.pageSearchSelection(-1);
+            return;
+          }
+          if (key.name === "return") {
+            const item = items[state.searchIndex()];
+            if (item?.kind === "header") {
+              state.toggleSearchGroup(item.path);
+            } else {
+              state.jumpToSearchItem(state.searchIndex());
+            }
+            return;
+          }
+          if (key.name === "h" || key.name === "left" || key.name === "l" || key.name === "right") {
+            const item = items[state.searchIndex()];
+            if (item !== undefined && item.kind !== "gap") {
+              const collapse = key.name === "h" || key.name === "left";
+              // A visible line row means its group is expanded; only headers can
+              // Already be collapsed.
+              const collapsed = item.kind === "header" && item.collapsed;
+              if (collapse !== collapsed) {
+                state.toggleSearchGroup(item.path);
+              }
+            }
+            return;
+          }
+          if (key.name === "g" && !key.shift) {
+            const first = items.findIndex(isNavigableSearchItem);
+            if (first !== -1) {
+              state.setSearchSelection(first);
+            }
+            return;
+          }
+          if (key.name === "G" || (key.name === "g" && key.shift)) {
+            const last = items.findLastIndex(isNavigableSearchItem);
+            if (last !== -1) {
+              state.setSearchSelection(last);
+            }
+            return;
+          }
+          // E/o and y retarget from the hidden viewer to the selected result: open
+          // It in the editor, or copy its reference (a match carries its column).
+          if (key.name === "e" || key.name === "o") {
+            const item = items[state.searchIndex()];
+            if (item !== undefined && item.kind !== "gap") {
+              void host.openInEditor(
+                item.path,
+                item.kind === "line" ? item.line : undefined,
+                key.name === "e" ? "terminal" : "ide",
+              );
+            }
+            return;
+          }
+          if (key.name === "y" && !key.shift) {
+            const item = items[state.searchIndex()];
+            if (item?.kind === "header") {
+              state.copy(formatCopyReference({ path: item.path }));
+            } else if (item?.kind === "line") {
+              state.copy(
+                formatCopyReference({
+                  column: item.match?.column,
+                  line: item.line,
+                  path: item.path,
+                }),
+              );
+            }
+            return;
+          }
+          // Unhandled in results focus: fall through to the global bindings.
+        }
       }
 
       // The references overlay owns the keyboard while open. It has no input, so Enter
@@ -188,7 +324,9 @@ export function createKeyHandler(host: HostEffects) {
 
       // A committed find rebinds n/N to cycle matches and esc to clear it; every
       // Other key falls through so diff navigation still works over the highlights.
-      if (state.findActive()) {
+      // Only while the file view is showing: with the search view up, cycling
+      // Would move the cursor of a diff that isn't on screen.
+      if (state.findActive() && state.mainView() === "file") {
         if (key.name === "escape") {
           state.resetFind();
           return;
@@ -210,14 +348,17 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // Opens (or refocuses) the search view; the query and results persist, so
+      // Reopening after a jump restores the result set instead of clearing it.
       if (key.ctrl && key.name === "f") {
-        state.setSearchComboboxOpen(true);
-        state.setSearchComboboxQuery("");
-        state.setSearchComboboxIndex(0);
+        state.openSearch();
         return;
       }
 
-      if (key.name === "/" && state.diffView() !== undefined) {
+      // Only while the file view is showing: the find bar's input lives inside
+      // The Viewer's file branch, so opening it under the search view would
+      // Focus an unmounted input and wedge the keyboard.
+      if (key.name === "/" && state.diffView() !== undefined && state.mainView() === "file") {
         // Solid mounts and focuses the find input within this same key event, so
         // Without preventDefault the triggering "/" would be typed into it.
         key.preventDefault();
@@ -233,19 +374,32 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "escape") {
+        // Esc closes panels innermost-first: the problems panel, then the
+        // Search view left on screen with the tree focused, then the app.
         if (state.problemsOpen()) {
           state.setProblemsOpen(false);
           if (state.focusedPane() === "problems") {
             state.setFocusedPane("tree");
           }
-        } else {
-          host.quit();
+          return;
         }
+        if (state.mainView() === "search") {
+          state.closeSearch();
+          return;
+        }
+        host.quit();
         return;
       }
 
       if (key.name === "tab") {
-        state.setFocusedPane(state.focusedPane() === "diff" ? "tree" : "diff");
+        // From the tree, tab lands on whichever view the main area shows.
+        state.setFocusedPane(
+          state.focusedPane() === "tree"
+            ? state.mainView() === "search"
+              ? "search"
+              : "diff"
+            : "tree",
+        );
         return;
       }
 
@@ -259,12 +413,10 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "b") {
-        if (state.sidebarOpen()) {
-          state.collapseSidebar();
-        } else {
-          state.setSidebarOpen(true);
-        }
+      // Ctrl-b (not a plain b) so the toggle also works while the search pane's
+      // Inputs own the printable keys.
+      if (key.ctrl && key.name === "b") {
+        state.toggleSidebar();
         return;
       }
 
@@ -285,13 +437,15 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       // Tabs. ctrl-t/ctrl-w must precede the plain t (theme) and w (worktree)
-      // Handlers below, which match on name without excluding ctrl.
-      if (key.ctrl && key.name === "t") {
+      // Handlers below, which match on name without excluding ctrl. Both gate on
+      // The file view: they mutate a tab strip the search view hides (the pure
+      // Navigations { and } stay live, since cycling reveals the file view).
+      if (key.ctrl && key.name === "t" && state.mainView() === "file") {
         state.togglePinActiveTab();
         return;
       }
 
-      if (key.ctrl && key.name === "w") {
+      if (key.ctrl && key.name === "w" && state.mainView() === "file") {
         state.closeActiveTab();
         return;
       }
@@ -340,7 +494,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "z") {
+      if (key.name === "z" && state.mainView() === "file") {
         const wrapping = state.overflow() === "wrap";
         state.setOverflow(wrapping ? "scroll" : "wrap");
         state.notify(wrapping ? "wrap off" : "wrap on");
@@ -367,7 +521,17 @@ export function createKeyHandler(host: HostEffects) {
 
       const selectedPath = state.selectedPath();
 
-      if (key.name === "v" && state.selectedFile() !== undefined && selectedPath !== undefined) {
+      // File-view keys act only while the file view is on screen: with the
+      // Search view up they would mutate or read a viewer the user cannot see
+      // (the results branch above retargets e/o/y to the selected result).
+      const fileViewShowing = state.mainView() === "file";
+
+      if (
+        key.name === "v" &&
+        fileViewShowing &&
+        state.selectedFile() !== undefined &&
+        selectedPath !== undefined
+      ) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         if (lineNumber !== undefined) {
@@ -390,19 +554,19 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "f" && selectedPath !== undefined) {
+      if (key.name === "f" && fileViewShowing && selectedPath !== undefined) {
         state.loadFullContent();
         return;
       }
 
-      if (key.name === "e" && selectedPath !== undefined) {
+      if (key.name === "e" && fileViewShowing && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "terminal");
         return;
       }
 
-      if (key.name === "o" && selectedPath !== undefined) {
+      if (key.name === "o" && fileViewShowing && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "ide");
@@ -411,26 +575,26 @@ export function createKeyHandler(host: HostEffects) {
 
       // Go to definition of the symbol under the caret (IDE-standard F12). The action reads the
       // Caret from state and guards itself, so it's safe to dispatch globally.
-      if (key.name === "f12" && !key.shift) {
+      if (key.name === "f12" && !key.shift && fileViewShowing) {
         void state.goToDefinition();
         return;
       }
 
       // Find references to the symbol under the caret (IDE-standard Shift+F12). Opens the
       // Results overlay; the action reads the caret from state and guards itself.
-      if (key.name === "f12" && key.shift) {
+      if (key.name === "f12" && key.shift && fileViewShowing) {
         void state.findReferences();
         return;
       }
 
       // Hover (type + docs) for the symbol under the caret, in a caret-anchored card
       // (Shift+K, the established LSP hover key). The action reads the caret and guards itself.
-      if (key.name === "K" || (key.name === "k" && key.shift)) {
+      if ((key.name === "K" || (key.name === "k" && key.shift)) && fileViewShowing) {
         void state.showHover();
         return;
       }
 
-      if (key.name === "Y" || (key.name === "y" && key.shift)) {
+      if ((key.name === "Y" || (key.name === "y" && key.shift)) && fileViewShowing) {
         state.copyFileContents();
         return;
       }
@@ -443,7 +607,7 @@ export function createKeyHandler(host: HostEffects) {
           }
           return;
         }
-        if (selectedPath !== undefined) {
+        if (selectedPath !== undefined && fileViewShowing) {
           const line = state.navigableLines()[state.cursorIndex()];
           const lineNumber = line?.newLine ?? line?.oldLine;
           state.copy(

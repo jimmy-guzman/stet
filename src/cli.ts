@@ -209,7 +209,7 @@ Problems:
 
 Anywhere:
   ctrl-p     open the go-to-file palette (type to fuzzy-search, enter jumps)
-  ctrl-f     search file contents (ctrl-a toggles changes/repo, enter jumps)
+  ctrl-f     open project search (full-view; regex/case/glob/scope toggles, enter jumps)
   s          open the scope picker (unstaged/staged/all/session/last commit)
   e          open in terminal editor (suspends TUI, --editor template)
   o          open in GUI / IDE (renderer stays live, --ide template)

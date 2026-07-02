@@ -1,4 +1,5 @@
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { lstat, readFile, readlink } from "node:fs/promises";
 
 export type FileContent =
   | { kind: "text"; content: string; lineCount: number; truncated: boolean }
@@ -50,6 +51,34 @@ export function loadFileContent(
   }
 
   return classifyFileBytes(buffer, options);
+}
+
+// The File service's local-read path: same contract as loadFileContent, but the
+// IO awaits instead of blocking, so a burst of reads (search context fetches up
+// To 500 matched files per query) never freezes the render loop. Never rejects.
+export async function loadFileContentAsync(
+  repoRoot: string,
+  path: string,
+  options: { full: boolean },
+): Promise<FileContent> {
+  const absolutePath = `${repoRoot}/${path}`;
+  try {
+    const stat = await lstat(absolutePath);
+    // Git stores a symlink's content as its target path text, never the dereferenced
+    // File, so a link to a dir/binary/missing target still reads as its one-line path.
+    if (stat.isSymbolicLink()) {
+      return textContent(await readlink(absolutePath), options.full);
+    }
+    if (!stat.isFile()) {
+      return { kind: "binary" };
+    }
+    if (stat.size > MAX_FILE_BYTES && !options.full) {
+      return { bytes: stat.size, kind: "too-large" };
+    }
+    return classifyFileBytes(await readFile(absolutePath), options);
+  } catch {
+    return { kind: "missing" };
+  }
 }
 
 // Byte-level binary/size classification shared by the local-read path and the

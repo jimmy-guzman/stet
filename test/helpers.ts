@@ -102,10 +102,20 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setHelpDialogOpen(false);
     state.setCursorIndex(0);
     state.setJumpTarget(undefined);
-    state.setSearchComboboxOpen(false);
-    state.setSearchComboboxQuery("");
-    state.setSearchComboboxIndex(0);
-    state.setSearchComboboxScope("changed");
+    state.closeSearch();
+    state.setSearchQuery("");
+    state.setSearchGlob("");
+    state.setSearchIndex(0);
+    state.setSearchScrollTop(0);
+    if (state.searchRegex()) {
+      state.toggleSearchRegex();
+    }
+    if (state.searchCaseSensitive()) {
+      state.toggleSearchCase();
+    }
+    if (state.searchScope() !== "changed") {
+      state.toggleSearchScope();
+    }
     state.setThemeComboboxQuery("");
     state.setThemeComboboxIndex(0);
   });

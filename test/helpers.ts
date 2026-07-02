@@ -167,12 +167,17 @@ interface FrameSource {
   captureCharFrame: () => string;
 }
 
+// `maxAttempts` defaults to the same headroom already proven necessary for the
+// Slower call sites (search debounce, watcher/scope re-checks) that pass an
+// Explicit override: a fixed low ceiling at a nominal per-tick cost silently
+// Shrinks on a slower/loaded runner (macOS CI has flaked this way), well under
+// The generous per-test timeout callers already declare.
 export function makeSettleUntil({ renderOnce, captureCharFrame }: FrameSource) {
   return async (
     label: string,
     predicate: (frame: string) => boolean,
     minAttempts = 1,
-    maxAttempts = 100,
+    maxAttempts = 400,
   ) => {
     let frame = "";
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {

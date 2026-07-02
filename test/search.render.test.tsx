@@ -49,13 +49,11 @@ describe("project content search", () => {
       expect(repo).toContain("src/lib.ts");
       expect(repo).toContain("// two");
 
-      // Walk the selection into the results (down enters the list on a.ts's
-      // Header) and onto lib.ts's match, then jump: the caret must land on the
-      // Matched line 3 at the match column, not the top of the file.
+      // Enter the results, jump the selection to the last navigable row with G
+      // (lib.ts's match, the file after a.ts), then open it: the caret must land
+      // On the matched line 3 at the match column, not the top of the file.
       mockInput.pressKey("n", { ctrl: true });
-      mockInput.pressKey("j");
-      mockInput.pressKey("j");
-      mockInput.pressKey("j");
+      mockInput.pressKey("G");
       mockInput.pressEnter();
       const jumped = await settleUntil(
         "jumped to lib.ts line 3",

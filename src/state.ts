@@ -2570,6 +2570,7 @@ function createState() {
     setSearchIndex,
     setSearchQuery,
     setSearchScrollTop,
+    setSearchSelection,
     setSessionBase,
     setSidebarOpen,
     setTerminalHeight,

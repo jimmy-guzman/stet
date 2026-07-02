@@ -221,6 +221,48 @@ export function createKeyHandler(host: HostEffects) {
           }
           return;
         }
+        if (key.name === "g" && !key.shift) {
+          const first = items.findIndex(isNavigableSearchItem);
+          if (first !== -1) {
+            state.setSearchSelection(first);
+          }
+          return;
+        }
+        if (key.name === "G" || (key.name === "g" && key.shift)) {
+          const last = items.findLastIndex(isNavigableSearchItem);
+          if (last !== -1) {
+            state.setSearchSelection(last);
+          }
+          return;
+        }
+        // E/o and y retarget from the hidden viewer to the selected result: open
+        // It in the editor, or copy its reference (a match carries its column).
+        if (key.name === "e" || key.name === "o") {
+          const item = items[state.searchIndex()];
+          if (item !== undefined && item.kind !== "gap") {
+            void host.openInEditor(
+              item.path,
+              item.kind === "line" ? item.line : undefined,
+              key.name === "e" ? "terminal" : "ide",
+            );
+          }
+          return;
+        }
+        if (key.name === "y" && !key.shift) {
+          const item = items[state.searchIndex()];
+          if (item?.kind === "header") {
+            state.copy(formatCopyReference({ path: item.path }));
+          } else if (item?.kind === "line") {
+            state.copy(
+              formatCopyReference({
+                column: item.match?.column,
+                line: item.line,
+                path: item.path,
+              }),
+            );
+          }
+          return;
+        }
         // Unhandled in results focus: fall through to the global bindings.
       }
 
@@ -376,13 +418,15 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       // Tabs. ctrl-t/ctrl-w must precede the plain t (theme) and w (worktree)
-      // Handlers below, which match on name without excluding ctrl.
-      if (key.ctrl && key.name === "t") {
+      // Handlers below, which match on name without excluding ctrl. Both gate on
+      // The file view: they mutate a tab strip the search view hides (the pure
+      // Navigations { and } stay live, since cycling reveals the file view).
+      if (key.ctrl && key.name === "t" && state.mainView() === "file") {
         state.togglePinActiveTab();
         return;
       }
 
-      if (key.ctrl && key.name === "w") {
+      if (key.ctrl && key.name === "w" && state.mainView() === "file") {
         state.closeActiveTab();
         return;
       }
@@ -431,7 +475,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "z") {
+      if (key.name === "z" && state.mainView() === "file") {
         const wrapping = state.overflow() === "wrap";
         state.setOverflow(wrapping ? "scroll" : "wrap");
         state.notify(wrapping ? "wrap off" : "wrap on");
@@ -458,7 +502,17 @@ export function createKeyHandler(host: HostEffects) {
 
       const selectedPath = state.selectedPath();
 
-      if (key.name === "v" && state.selectedFile() !== undefined && selectedPath !== undefined) {
+      // File-view keys act only while the file view is on screen: with the
+      // Search view up they would mutate or read a viewer the user cannot see
+      // (the results branch above retargets e/o/y to the selected result).
+      const fileViewShowing = state.mainView() === "file";
+
+      if (
+        key.name === "v" &&
+        fileViewShowing &&
+        state.selectedFile() !== undefined &&
+        selectedPath !== undefined
+      ) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         if (lineNumber !== undefined) {
@@ -481,19 +535,19 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "f" && selectedPath !== undefined) {
+      if (key.name === "f" && fileViewShowing && selectedPath !== undefined) {
         state.loadFullContent();
         return;
       }
 
-      if (key.name === "e" && selectedPath !== undefined) {
+      if (key.name === "e" && fileViewShowing && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "terminal");
         return;
       }
 
-      if (key.name === "o" && selectedPath !== undefined) {
+      if (key.name === "o" && fileViewShowing && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "ide");
@@ -502,26 +556,26 @@ export function createKeyHandler(host: HostEffects) {
 
       // Go to definition of the symbol under the caret (IDE-standard F12). The action reads the
       // Caret from state and guards itself, so it's safe to dispatch globally.
-      if (key.name === "f12" && !key.shift) {
+      if (key.name === "f12" && !key.shift && fileViewShowing) {
         void state.goToDefinition();
         return;
       }
 
       // Find references to the symbol under the caret (IDE-standard Shift+F12). Opens the
       // Results overlay; the action reads the caret from state and guards itself.
-      if (key.name === "f12" && key.shift) {
+      if (key.name === "f12" && key.shift && fileViewShowing) {
         void state.findReferences();
         return;
       }
 
       // Hover (type + docs) for the symbol under the caret, in a caret-anchored card
       // (Shift+K, the established LSP hover key). The action reads the caret and guards itself.
-      if (key.name === "K" || (key.name === "k" && key.shift)) {
+      if ((key.name === "K" || (key.name === "k" && key.shift)) && fileViewShowing) {
         void state.showHover();
         return;
       }
 
-      if (key.name === "Y" || (key.name === "y" && key.shift)) {
+      if ((key.name === "Y" || (key.name === "y" && key.shift)) && fileViewShowing) {
         state.copyFileContents();
         return;
       }
@@ -534,7 +588,7 @@ export function createKeyHandler(host: HostEffects) {
           }
           return;
         }
-        if (selectedPath !== undefined) {
+        if (selectedPath !== undefined && fileViewShowing) {
           const line = state.navigableLines()[state.cursorIndex()];
           const lineNumber = line?.newLine ?? line?.oldLine;
           state.copy(

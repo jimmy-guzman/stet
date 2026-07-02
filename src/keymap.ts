@@ -149,121 +149,140 @@ export function createKeyHandler(host: HostEffects) {
           state.setSearchFocus(order[(at + step + order.length) % order.length] ?? "query");
           return;
         }
-        if (key.ctrl && key.name === "a") {
-          state.toggleSearchScope();
-          return;
-        }
+        // Toggle chords live on keys the input's readline set does not own
+        // (ctrl-a/ctrl-e stay line home/end for editing): ctrl-r regex,
+        // Ctrl-x exact case, ctrl-g changes<->repo, ctrl-s the scope picker.
         if (key.ctrl && key.name === "r") {
           state.toggleSearchRegex();
           return;
         }
-        if (key.ctrl && key.name === "e") {
+        if (key.ctrl && key.name === "x") {
           state.toggleSearchCase();
+          return;
+        }
+        if (key.ctrl && key.name === "g") {
+          state.toggleSearchScope();
+          return;
+        }
+        // The diff scope (which changes "changed" means) is pickable without
+        // Leaving the pane; the ScopeMenu branch earlier in the chain owns the
+        // Keys once open, and a pick reruns the search via the git-model dep.
+        if (key.ctrl && key.name === "s") {
+          state.setScopeMenuIndex(Math.max(0, scopeKinds.indexOf(state.scope().kind)));
+          state.setScopeMenuOpen(true);
           return;
         }
         if (state.searchFocus() !== "results") {
           // Query/glob focus: down enters the results; ctrl-b still reaches the
-          // Sidebar (chords are never typed text); everything else is the input's.
+          // Sidebar (VS Code precedent, preventDefault stops the input's
+          // Move-left); ctrl-p falls through to the palette; everything else
+          // Is the input's (its readline chords included).
           if (key.name === "down" || (key.ctrl && key.name === "n")) {
             state.setSearchFocus("results");
             return;
           }
           if (key.ctrl && key.name === "b") {
+            key.preventDefault();
             state.toggleSidebar();
+            return;
           }
-          return;
-        }
-        const items = state.searchItems();
-        if (key.name === "j" || key.name === "down" || (key.ctrl && key.name === "n")) {
-          state.moveSearchSelection(1);
-          return;
-        }
-        if (key.name === "k" || key.name === "up" || (key.ctrl && key.name === "p")) {
-          // At the first navigable row, up returns to the query field.
-          const current = state.searchIndex();
-          const previous = items.findLastIndex(
-            (item, index) => index < current && isNavigableSearchItem(item),
-          );
-          if (previous === -1) {
-            state.setSearchFocus("query");
-          } else {
-            state.moveSearchSelection(-1);
+          if (!(key.ctrl && key.name === "p")) {
+            return;
           }
-          return;
         }
-        if (key.ctrl && key.name === "d") {
-          state.pageSearchSelection(1);
-          return;
-        }
-        if (key.ctrl && key.name === "u") {
-          state.pageSearchSelection(-1);
-          return;
-        }
-        if (key.name === "return") {
-          const item = items[state.searchIndex()];
-          if (item?.kind === "header") {
-            state.toggleSearchGroup(item.path);
-          } else {
-            state.jumpToSearchItem(state.searchIndex());
+        if (state.searchFocus() === "results") {
+          const items = state.searchItems();
+          if (key.name === "j" || key.name === "down" || (key.ctrl && key.name === "n")) {
+            state.moveSearchSelection(1);
+            return;
           }
-          return;
-        }
-        if (key.name === "h" || key.name === "left" || key.name === "l" || key.name === "right") {
-          const item = items[state.searchIndex()];
-          if (item !== undefined && item.kind !== "gap") {
-            const collapse = key.name === "h" || key.name === "left";
-            // A visible line row means its group is expanded; only headers can
-            // Already be collapsed.
-            const collapsed = item.kind === "header" && item.collapsed;
-            if (collapse !== collapsed) {
-              state.toggleSearchGroup(item.path);
+          if (key.name === "k" || key.name === "up" || (key.ctrl && key.name === "p")) {
+            // At the first navigable row, up returns to the query field.
+            const current = state.searchIndex();
+            const previous = items.findLastIndex(
+              (item, index) => index < current && isNavigableSearchItem(item),
+            );
+            if (previous === -1) {
+              state.setSearchFocus("query");
+            } else {
+              state.moveSearchSelection(-1);
             }
+            return;
           }
-          return;
-        }
-        if (key.name === "g" && !key.shift) {
-          const first = items.findIndex(isNavigableSearchItem);
-          if (first !== -1) {
-            state.setSearchSelection(first);
+          if (key.ctrl && key.name === "d") {
+            state.pageSearchSelection(1);
+            return;
           }
-          return;
-        }
-        if (key.name === "G" || (key.name === "g" && key.shift)) {
-          const last = items.findLastIndex(isNavigableSearchItem);
-          if (last !== -1) {
-            state.setSearchSelection(last);
+          if (key.ctrl && key.name === "u") {
+            state.pageSearchSelection(-1);
+            return;
           }
-          return;
-        }
-        // E/o and y retarget from the hidden viewer to the selected result: open
-        // It in the editor, or copy its reference (a match carries its column).
-        if (key.name === "e" || key.name === "o") {
-          const item = items[state.searchIndex()];
-          if (item !== undefined && item.kind !== "gap") {
-            void host.openInEditor(
-              item.path,
-              item.kind === "line" ? item.line : undefined,
-              key.name === "e" ? "terminal" : "ide",
-            );
+          if (key.name === "return") {
+            const item = items[state.searchIndex()];
+            if (item?.kind === "header") {
+              state.toggleSearchGroup(item.path);
+            } else {
+              state.jumpToSearchItem(state.searchIndex());
+            }
+            return;
           }
-          return;
-        }
-        if (key.name === "y" && !key.shift) {
-          const item = items[state.searchIndex()];
-          if (item?.kind === "header") {
-            state.copy(formatCopyReference({ path: item.path }));
-          } else if (item?.kind === "line") {
-            state.copy(
-              formatCopyReference({
-                column: item.match?.column,
-                line: item.line,
-                path: item.path,
-              }),
-            );
+          if (key.name === "h" || key.name === "left" || key.name === "l" || key.name === "right") {
+            const item = items[state.searchIndex()];
+            if (item !== undefined && item.kind !== "gap") {
+              const collapse = key.name === "h" || key.name === "left";
+              // A visible line row means its group is expanded; only headers can
+              // Already be collapsed.
+              const collapsed = item.kind === "header" && item.collapsed;
+              if (collapse !== collapsed) {
+                state.toggleSearchGroup(item.path);
+              }
+            }
+            return;
           }
-          return;
+          if (key.name === "g" && !key.shift) {
+            const first = items.findIndex(isNavigableSearchItem);
+            if (first !== -1) {
+              state.setSearchSelection(first);
+            }
+            return;
+          }
+          if (key.name === "G" || (key.name === "g" && key.shift)) {
+            const last = items.findLastIndex(isNavigableSearchItem);
+            if (last !== -1) {
+              state.setSearchSelection(last);
+            }
+            return;
+          }
+          // E/o and y retarget from the hidden viewer to the selected result: open
+          // It in the editor, or copy its reference (a match carries its column).
+          if (key.name === "e" || key.name === "o") {
+            const item = items[state.searchIndex()];
+            if (item !== undefined && item.kind !== "gap") {
+              void host.openInEditor(
+                item.path,
+                item.kind === "line" ? item.line : undefined,
+                key.name === "e" ? "terminal" : "ide",
+              );
+            }
+            return;
+          }
+          if (key.name === "y" && !key.shift) {
+            const item = items[state.searchIndex()];
+            if (item?.kind === "header") {
+              state.copy(formatCopyReference({ path: item.path }));
+            } else if (item?.kind === "line") {
+              state.copy(
+                formatCopyReference({
+                  column: item.match?.column,
+                  line: item.line,
+                  path: item.path,
+                }),
+              );
+            }
+            return;
+          }
+          // Unhandled in results focus: fall through to the global bindings.
         }
-        // Unhandled in results focus: fall through to the global bindings.
       }
 
       // The references overlay owns the keyboard while open. It has no input, so Enter

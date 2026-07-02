@@ -9,8 +9,10 @@ import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { activeThemeName } from "@/theme/active";
 import { useTheme } from "@/theme/context";
+import { createDoubleClickGuard } from "@/utils/double-click";
 import { fileIcon } from "@/utils/file-icon";
 import { truncate } from "@/utils/text";
+import { isNavigableSearchItem } from "@/viewer/search-items";
 import type { SearchItem } from "@/viewer/search-items";
 
 // A contiguous run of line rows (one excerpt): highlighted as a block so Shiki
@@ -55,7 +57,15 @@ export function SearchPane() {
   const theme = useTheme();
 
   const innerWidth = () => Math.max(1, state.terminalWidth() - state.sidebarWidth() - 2);
-  const scopeLabel = () => (state.searchScope() === "changed" ? "changes" : "repo");
+  // The cell names the *effective* universe: widened -> repo; otherwise the
+  // Active diff scope, so a staged/session lens is never misread as all changes.
+  const scopeLabel = () => {
+    if (state.searchScope() === "repo") {
+      return "repo";
+    }
+    const kind = state.scope().kind;
+    return kind === "all" ? "changes" : kind === "last-commit" ? "last commit" : kind;
+  };
   const focusIn = (target: "query" | "glob") =>
     state.focusedPane() === "search" && state.searchFocus() === target;
 
@@ -225,6 +235,10 @@ export function SearchPane() {
     }
   };
 
+  // A single click selects (a focus-intent click must never navigate the whole
+  // View away, mirroring the diff where a click only moves the cursor); a
+  // Double click opens. Headers keep single-click collapse (non-destructive).
+  const isDoubleClick = createDoubleClickGuard();
   const clickRow = (item: SearchItem, index: number) => {
     batch(() => {
       state.setFocusedPane("search");
@@ -233,8 +247,20 @@ export function SearchPane() {
         state.toggleSearchGroup(item.path);
         return;
       }
-      if (item.kind === "line") {
+      if (item.kind !== "line") {
+        return;
+      }
+      if (isDoubleClick(item.id)) {
         state.jumpToSearchItem(index);
+        return;
+      }
+      // Select the clicked row, or the nearest navigable one above a context row.
+      const items = state.searchItems();
+      const selected = items.findLastIndex(
+        (candidate, candidateIndex) => candidateIndex <= index && isNavigableSearchItem(candidate),
+      );
+      if (selected !== -1) {
+        state.setSearchSelection(selected);
       }
     });
   };
@@ -340,7 +366,7 @@ export function SearchPane() {
                     </text>
                     <text fg={theme.colors.text.faint}>
                       {state.searchScope() === "changed"
-                        ? "in changed files · ctrl-a for the whole repo"
+                        ? `in ${scopeLabel()} · ctrl-g for the whole repo`
                         : "across the whole repo"}
                     </text>
                   </>
@@ -448,7 +474,7 @@ export function SearchPane() {
           {truncate(
             state.searchFocus() === "results"
               ? "⏎ open · e editor · y copy · h/l fold · g/G ends · esc"
-              : "⏎ open · ↓ results · ctrl-r regex · ctrl-e case · ctrl-a scope · esc",
+              : "⏎ open · ↓ results · ctrl-r regex · ctrl-x case · ctrl-g repo · ctrl-s scope · esc",
             Math.max(8, innerWidth() - 2),
           )}
         </text>

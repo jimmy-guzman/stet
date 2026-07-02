@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
+import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
@@ -40,9 +41,9 @@ describe("project content search", () => {
       expect(changed).toContain("src/a.ts");
       expect(changed).not.toContain("src/lib.ts");
 
-      // Widening to the whole repo with ctrl-a adds the unchanged lib.ts, with
+      // Widening to the whole repo with ctrl-g adds the unchanged lib.ts, with
       // Context lines around each match.
-      mockInput.pressKey("a", { ctrl: true });
+      mockInput.pressKey("g", { ctrl: true });
       const repo = await settleUntil("repo-scope results", (frame) =>
         frame.includes("2 matches in 2 files"),
       );
@@ -83,6 +84,20 @@ describe("project content search", () => {
 
       await mockInput.typeText(" !src/lib*");
       await settleUntil("exclude wins", (frame) => frame.includes("no matches"), 1, 300);
+
+      // Readline stays the input's: shift-tab back to the query, ctrl-a moves
+      // The caret home (no scope flip), and typing lands at the line start.
+      mockInput.pressTab({ shift: true });
+      mockInput.pressKey("a", { ctrl: true });
+      await mockInput.typeText("x");
+      const homed = await settleUntil("caret homed", (frame) => frame.includes("xneedle"));
+      expect(homed).toContain("[repo]");
+
+      // Ctrl-p falls through from the query to the go-to-file palette.
+      mockInput.pressKey("p", { ctrl: true });
+      await settleUntil("palette over pane", (frame) => frame.includes("go to file…"));
+      mockInput.pressEscape();
+      await settleUntil("palette closed", (frame) => !frame.includes("go to file…"));
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
@@ -141,10 +156,13 @@ describe("project content search", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } = await testRender(
+      () => <App />,
+      {
+        height: 34,
+        width: 120,
+      },
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -154,6 +172,30 @@ describe("project content search", () => {
       await mockInput.typeText("needle");
       const results = await settleUntil("results", (frame) => frame.includes("1 match in 1 file"));
       expect(results).toContain("needle = 2");
+
+      // Ctrl-s opens the scope picker without leaving the pane; esc returns.
+      mockInput.pressKey("s", { ctrl: true });
+      await settleUntil("scope picker over pane", (frame) => frame.includes("switch scope"));
+      mockInput.pressEscape();
+      await settleUntil("picker closed, pane intact", (frame) => !frame.includes("switch scope"));
+
+      // A single click on the match row selects it (the pane must not navigate
+      // Away on a focus-intent click): the footer flips to the results variant
+      // And the results stay on screen. Rows: header y=5, context y=6, match y=7.
+      const matchRowY = 7;
+      await mockMouse.click(state.sidebarWidth() + 10, matchRowY);
+      const clicked = await settleUntil("click selects", (frame) => frame.includes("g/G ends"));
+      expect(clicked).toContain("1 match in 1 file");
+
+      // Past the double-click window, two rapid clicks read as a double: open.
+      await settleUntil("double-click window elapsed", () => true, 45);
+      await mockMouse.click(state.sidebarWidth() + 10, matchRowY);
+      await mockMouse.click(state.sidebarWidth() + 10, matchRowY);
+      await settleUntil("double click opens", (frame) => frame.includes("ln 2:7"));
+
+      // Back into the pane for the states below.
+      mockInput.pressKey("f", { ctrl: true });
+      await settleUntil("pane restored", (frame) => frame.includes("1 match in 1 file"));
 
       // A bad extended regex fails the grep but keeps the prior results on
       // Screen under an error notice.

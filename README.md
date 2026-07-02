@@ -155,9 +155,10 @@ counter tracks your place, and `esc` clears the search.
 
 Press `ctrl-f` to open the project search pane in the main viewer area. Results
 group by file with syntax-highlighted context around each match; `ctrl-r`
-toggles regex, `ctrl-e` toggles case sensitivity, a filter field narrows by
-glob (`!` excludes, e.g. `src/ !*.test.ts`), and `ctrl-a` toggles between the
-changed files and the whole tree. Jumping to a
+toggles regex, `ctrl-x` toggles case sensitivity, a filter field narrows by
+glob (`!` excludes, e.g. `src/ !*.test.ts`), `ctrl-g` toggles between the
+changed files and the whole tree, and `ctrl-s` picks the scope without leaving
+the pane. Jumping to a
 match keeps your query and results, so `ctrl-f` brings them right back.
 
 ![project content search listing matches for a term across several files in the repo](assets/screenshots/search.png)
@@ -283,9 +284,9 @@ Press `?` anytime to see the full list in the app:
 The keyboard drives everything, but the mouse works too. Click a file to open
 it, a folder to expand or collapse it, a diff line to move the cursor there, or
 a problem to jump to it. Double-click a file in the tree, or a tab in the strip,
-to pin it as a tab. Clicks also work in the overlays and the search pane: a go-to-file or
-search result, a worktree to switch to, or a theme to apply (hovering a theme
-previews it live). Clicking a pane focuses it, and the wheel scrolls whichever
+to pin it as a tab. Clicks also work in the overlays and the search pane: a go-to-file result, a
+worktree to switch to, or a theme to apply (hovering a theme previews it
+live); a click on a search result selects it and a double-click opens it. Clicking a pane focuses it, and the wheel scrolls whichever
 pane the pointer is over.
 
 ## Configuration

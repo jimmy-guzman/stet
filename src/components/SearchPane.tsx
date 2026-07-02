@@ -9,6 +9,7 @@ import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { activeThemeName } from "@/theme/active";
 import { useTheme } from "@/theme/context";
+import { fileIcon } from "@/utils/file-icon";
 import { truncate } from "@/utils/text";
 import type { SearchItem } from "@/viewer/search-items";
 
@@ -377,18 +378,39 @@ export function SearchPane() {
                       paddingLeft={1}
                       paddingRight={1}
                     >
-                      <text
-                        fg={
-                          row().index === state.searchIndex()
-                            ? theme.colors.text.selected
-                            : theme.colors.text.strong
-                        }
-                      >
-                        {truncate(
-                          `${header().collapsed ? "▸" : "▾"} ${header().path}`,
-                          Math.max(8, innerWidth() - 6),
-                        )}
-                      </text>
+                      <box flexDirection="row">
+                        <text
+                          fg={
+                            row().index === state.searchIndex()
+                              ? theme.colors.text.selected
+                              : theme.colors.text.strong
+                          }
+                        >
+                          {`${header().collapsed ? "▸" : "▾"} `}
+                        </text>
+                        {/* Fixed 2-cell icon box, the tree-row pattern: Nerd Font
+                            glyphs can be double-width, so the box keeps the path
+                            column steady across file types. */}
+                        <Show when={state.iconsEnabled()}>
+                          <box width={2} overflow="hidden">
+                            <text fg={theme.colors.text.muted}>
+                              {fileIcon(header().path.split("/").at(-1) ?? header().path)}
+                            </text>
+                          </box>
+                        </Show>
+                        <text
+                          fg={
+                            row().index === state.searchIndex()
+                              ? theme.colors.text.selected
+                              : theme.colors.text.strong
+                          }
+                        >
+                          {truncate(
+                            header().path,
+                            Math.max(8, innerWidth() - (state.iconsEnabled() ? 10 : 8)),
+                          )}
+                        </text>
+                      </box>
                       <text fg={theme.colors.text.muted}>{String(header().count)}</text>
                     </box>
                   )}

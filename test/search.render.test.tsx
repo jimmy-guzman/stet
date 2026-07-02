@@ -173,9 +173,12 @@ describe("project content search", () => {
       await settleUntil("results again", (frame) => frame.includes("1 match in 1 file"), 1, 300);
       mockInput.pressKey("n", { ctrl: true });
       mockInput.pressEnter();
+      // The header carries a file-type icon between the collapse glyph and the
+      // Path, so match the parts rather than the literal run.
       const collapsed = await settleUntil(
         "collapsed group",
-        (frame) => frame.includes("▸ src/a.ts") && !frame.includes("needle = 2"),
+        (frame) =>
+          frame.includes("▸") && frame.includes("src/a.ts") && !frame.includes("needle = 2"),
       );
       expect(collapsed).toContain("1 match in 1 file");
 
@@ -186,7 +189,7 @@ describe("project content search", () => {
       mockInput.pressEscape();
       await settleUntil(
         "help closed, pane intact",
-        (frame) => !frame.includes("keyboard shortcuts") && frame.includes("▸ src/a.ts"),
+        (frame) => !frame.includes("keyboard shortcuts") && frame.includes("▸"),
       );
     } finally {
       renderer.destroy();

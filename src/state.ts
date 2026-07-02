@@ -317,6 +317,7 @@ function createState() {
   );
   const [sidebarOpen, setSidebarOpen] = createSignal(true);
   const [sidebarWidthOverride, setSidebarWidthOverride] = createSignal<number | null>(null);
+  const [sidebarScrollTop, setSidebarScrollTop] = createSignal(0);
   const [problemsOpen, setProblemsOpen] = createSignal(false);
   const [problemIndex, setProblemIndex] = createSignal(0);
   const [fileComboboxOpen, setFileComboboxOpen] = createSignal(false);
@@ -486,6 +487,37 @@ function createState() {
   // Index the flat row list by node id so cursor moves are O(1) rather than O(rows).
   const treeRowsById = createMemo(() => new Map(treeRows().map((row) => [row.node.id, row.index])));
   const focusedRowIndex = createMemo(() => treeRowsById().get(focusedNodeId()) ?? 0);
+
+  // The sidebar renders only the rows inside [sidebarScrollTop, +paneHeight), so
+  // The renderable count is bounded by the viewport, not the repo. This follow
+  // Effect keeps the cursor framed (editor-style scrolloff) tracking only the
+  // Cursor and viewport; rows and the current offset are read untracked so a
+  // Background refresh tick never snaps a wheel-scrolled viewport back to the
+  // Cursor. Expand/collapse still re-frames because focusedRowIndex shifts.
+  createEffect(() => {
+    const top = focusedRowIndex();
+    const viewport = paneHeight();
+    const current = untrack(sidebarScrollTop);
+    const next = followScrollTop({
+      current,
+      height: 1,
+      margin: 2,
+      maxScroll: Math.max(0, untrack(treeRows).length - viewport),
+      top,
+      viewport,
+    });
+    if (next !== current) {
+      setSidebarScrollTop(next);
+    }
+  });
+  // Clamp the window when the row list shrinks under it (a collapse, a scope
+  // Change), so the pane never shows past the last row.
+  createEffect(() => {
+    const maxScroll = Math.max(0, treeRows().length - paneHeight());
+    if (untrack(sidebarScrollTop) > maxScroll) {
+      setSidebarScrollTop(maxScroll);
+    }
+  });
 
   // The default tree is the whole repo, so it stays empty until the deferred
   // RepoFiles poll fills it. parseRepoFiles always folds repoRoot into the key, so
@@ -2573,6 +2605,7 @@ function createState() {
     setSearchSelection,
     setSessionBase,
     setSidebarOpen,
+    setSidebarScrollTop,
     setTerminalHeight,
     setTerminalWidth,
     setThemeComboboxIndex,
@@ -2586,6 +2619,7 @@ function createState() {
     showFileContent,
     showHover,
     sidebarOpen,
+    sidebarScrollTop,
     sidebarWidth,
     status,
     statusHint,

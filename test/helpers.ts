@@ -107,6 +107,7 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setSearchGlob("");
     state.setSearchIndex(0);
     state.setSearchScrollTop(0);
+    state.setSidebarScrollTop(0);
     if (state.searchRegex()) {
       state.toggleSearchRegex();
     }

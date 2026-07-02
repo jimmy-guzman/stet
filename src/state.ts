@@ -19,6 +19,7 @@ import { PROBLEMS_HEIGHT, SIDEBAR_MIN_WIDTH, SIDEBAR_VIEWER_MIN } from "./consta
 import {
   allFindings,
   countBySeverity,
+  directorySummaries,
   findingsLineMap,
   initialCheckerState,
   markPending,
@@ -36,6 +37,7 @@ import { contentToContextPatch } from "./file/content";
 import type { FileContent } from "./file/content";
 import { File } from "./file/service";
 import {
+  directoryRecency,
   emptyActivityLog,
   lastChangedAt,
   latestActivity,
@@ -526,6 +528,10 @@ function createState() {
   // For that window instead of flashing the empty state.
   const repoFilesLoading = createMemo(() => gitModel().repoFilesKey === "");
   const recencyByPath = createMemo(() => lastChangedAt(activityLog()));
+  // Per-directory aggregates, one pass each, so collapsed directory rows do O(1)
+  // Lookups instead of scanning every entry per row per render.
+  const directoryRecencyByPath = createMemo(() => directoryRecency(recencyByPath()));
+  const directorySummariesByPath = createMemo(() => directorySummaries(checkerState()));
   const problems = createMemo(() => allFindings(checkerState()));
   const counts = createMemo(() => countBySeverity(problems()));
   const lineMap = createMemo(() => {
@@ -2471,6 +2477,8 @@ function createState() {
     cursorLineNumber,
     cycleTab,
     diffView,
+    directoryRecencyByPath,
+    directorySummariesByPath,
     editorTemplate,
     expandedDirectories,
     fileComboboxIndex,

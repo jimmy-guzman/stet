@@ -1,7 +1,7 @@
 import type { MouseEvent } from "@opentui/core";
 import { batch, createMemo, Show } from "solid-js";
 
-import { checkerSummary, directorySummary } from "@/diagnostics/checker";
+import { checkerSummary, emptyDirectorySummary } from "@/diagnostics/checker";
 import { recencyFraction } from "@/git/activity";
 import type { DirectoryNode, FileNode, FileTreeRow } from "@/git/tree";
 import { levelGlyph } from "@/log/levels";
@@ -63,10 +63,14 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
   };
 
   const isExpanded = () => state.expandedDirectories().has(props.node.id);
+  // The directory dot tracks its most recently changed descendant; the dot itself
+  // Decides freshness from the timestamp, so an aged-out value simply yields no dot.
   const recencyAt = () =>
-    directoryRecencyAt(props.node, state.expandedDirectories(), state.recencyByPath());
+    isExpanded() ? undefined : state.directoryRecencyByPath().get(props.node.path);
   const summary = createMemo(() =>
-    isExpanded() ? null : directorySummary(props.node.path, state.checkerState()),
+    isExpanded()
+      ? null
+      : (state.directorySummariesByPath().get(props.node.path) ?? emptyDirectorySummary),
   );
   const nameFg = () =>
     focused()
@@ -296,26 +300,4 @@ export function RecencyDot(props: { at: number | undefined }) {
       : lerpHex(theme.colors.recency.fresh, theme.colors.recency.aged, fraction);
   };
   return <Show when={color()}>{(fg) => <text fg={fg()}> ●</text>}</Show>;
-}
-
-// The directory dot tracks its most recently changed descendant; the dot itself
-// Decides freshness from the timestamp, so an aged-out value simply yields no dot.
-function directoryRecencyAt(
-  node: DirectoryNode,
-  expandedDirectories: Set<string>,
-  recencyByPath: Map<string, number>,
-): number | undefined {
-  if (expandedDirectories.has(node.id)) {
-    return undefined;
-  }
-
-  const prefix = `${node.path}/`;
-  let latest: number | undefined;
-  for (const [path, at] of recencyByPath) {
-    if (path.startsWith(prefix) && (latest === undefined || at > latest)) {
-      latest = at;
-    }
-  }
-
-  return latest;
 }

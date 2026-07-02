@@ -322,6 +322,7 @@ function createState() {
   const [sidebarScrollTop, setSidebarScrollTop] = createSignal(0);
   const [problemsOpen, setProblemsOpen] = createSignal(false);
   const [problemIndex, setProblemIndex] = createSignal(0);
+  const [problemsScrollTop, setProblemsScrollTop] = createSignal(0);
   const [fileComboboxOpen, setFileComboboxOpen] = createSignal(false);
   const [fileComboboxQuery, setFileComboboxQuery] = createSignal("");
   const [fileComboboxIndex, setFileComboboxIndex] = createSignal(0);
@@ -540,12 +541,44 @@ function createState() {
       ? new Map<number, Diagnostic[]>()
       : findingsLineMap(path, checkerState());
   });
-  const allProblemItems = createMemo(() => buildProblemItems(checkerState()));
+  // Reuse the `problems` memo's sorted findings so one checker update pays the
+  // AllFindings sort once, not once here and once inside buildProblemItems.
+  const allProblemItems = createMemo(() => buildProblemItems(checkerState(), problems()));
   // The first row the problems cursor can land on; headers and help sub-lines are
   // Skipped so opening the panel never parks the cursor on a non-navigable row.
   const firstNavigableProblemIndex = createMemo(() => {
     const index = allProblemItems().findIndex(isNavigableProblemItem);
     return index === -1 ? 0 : index;
+  });
+
+  // The problems panel windows to its fixed viewport like the sidebar: the
+  // Follow effect keeps the cursor framed (reading rows/offset untracked so a
+  // Wheel-scrolled window is never snapped back by a checker update), and the
+  // Clamp bounds the window when the item list shrinks.
+  const problemsViewport = PROBLEMS_HEIGHT - 2;
+  createEffect(() => {
+    if (!problemsOpen()) {
+      return;
+    }
+    const top = problemIndex();
+    const current = untrack(problemsScrollTop);
+    const next = followScrollTop({
+      current,
+      height: 1,
+      margin: 2,
+      maxScroll: Math.max(0, untrack(allProblemItems).length - problemsViewport),
+      top,
+      viewport: problemsViewport,
+    });
+    if (next !== current) {
+      setProblemsScrollTop(next);
+    }
+  });
+  createEffect(() => {
+    const maxScroll = Math.max(0, allProblemItems().length - problemsViewport);
+    if (untrack(problemsScrollTop) > maxScroll) {
+      setProblemsScrollTop(maxScroll);
+    }
   });
   // The go-to-file universe: repoFiles plus changed-only paths (staged
   // Deletions), the same universe the tree renders. Every dependency is
@@ -2560,6 +2593,7 @@ function createState() {
     problemIndex,
     problems,
     problemsOpen,
+    problemsScrollTop,
     recencyByPath,
     referencesIndex,
     referencesLabel,
@@ -2628,6 +2662,7 @@ function createState() {
     setPendingRestore,
     setProblemIndex,
     setProblemsOpen,
+    setProblemsScrollTop,
     setReferencesIndex,
     setRepoRoot,
     setScope,

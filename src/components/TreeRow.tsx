@@ -94,7 +94,6 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
   const maxNameLen = () => contentWidth() - indent().length - 2 - (hasBadges() ? 14 : 0);
   return (
     <box
-      id={props.node.id}
       width="100%"
       height={1}
       overflow="hidden"
@@ -212,7 +211,6 @@ function FileRow(props: {
 
   return (
     <box
-      id={props.node.id}
       width="100%"
       height={1}
       overflow="hidden"

@@ -5,6 +5,8 @@ import { Process } from "@/process";
 import type { CommandError } from "@/process";
 
 import { GitError } from "./errors";
+import { buildFilePatch, classifySideBytes, fileDiffSides, readWorktreeSide } from "./file-patch";
+import type { FilePatch, PatchSide, SideContent } from "./file-patch";
 import {
   assembleChanged,
   assembleModel,
@@ -95,26 +97,69 @@ export const GitLive = Layer.effect(
           ),
           Effect.mapError(toGitError),
         ),
-      fileDiff: (repoRoot, scope, file) =>
-        (file.kind === "untracked"
-          ? process.run(untrackedDiffArgs(file.path), repoRoot, {
-              allowedExitCodes: [0, 1],
-            })
-          : process.run(
-              [
-                ...diffArgs(scope),
-                "--",
-                ...(file.oldPath === undefined ? [file.path] : [file.oldPath, file.path]),
-              ],
-              repoRoot,
-              {
-                allowedExitCodes: [0, 1],
-              },
-            )
-        ).pipe(
-          Effect.map((result) => result.stdout),
-          Effect.mapError(toGitError),
-        ),
+      // The per-file patch is computed in-process from the scope's two endpoints
+      // (blob/worktree reads), never via `git diff <ref> -- <path>`: in very large
+      // Repos git's pathspec-limited diff-index walks the whole index (seconds per
+      // Invocation, #188), while a blob read stays O(path depth). The pathspec
+      // Invocation survives only as the fallback for sides an in-process diff
+      // Can't reproduce faithfully (submodules, eol conversion, oversized files).
+      fileDiff: (repoRoot, scope, file) => {
+        if (file.kind === "untracked") {
+          return process
+            .run(untrackedDiffArgs(file.path), repoRoot, { allowedExitCodes: [0, 1] })
+            .pipe(
+              Effect.map((result) => result.stdout),
+              Effect.mapError(toGitError),
+            );
+        }
+
+        // Numstat already flagged it binary; the render is a model-driven
+        // Placeholder, so skip both side fetches.
+        if (file.binary) {
+          return Effect.succeed("");
+        }
+
+        const pathspecDiff = process
+          .run(
+            [
+              ...diffArgs(scope),
+              "--",
+              ...(file.oldPath === undefined ? [file.path] : [file.oldPath, file.path]),
+            ],
+            repoRoot,
+            { allowedExitCodes: [0, 1] },
+          )
+          .pipe(
+            Effect.map((result) => result.stdout),
+            Effect.mapError(toGitError),
+          );
+
+        // No retryTransient on `git show`: a bad spec (submodule gitlink, ref gone
+        // Mid-flight) should fail fast into the fallback, not retry.
+        const fetchSide = (side: PatchSide): Effect.Effect<SideContent, CommandError> => {
+          if (side.kind === "git") {
+            return process
+              .run(["git", "show", side.spec], repoRoot)
+              .pipe(Effect.map((result) => classifySideBytes(result.stdoutBytes)));
+          }
+          if (side.kind === "worktree") {
+            return Effect.promise(() => readWorktreeSide(repoRoot, file.path));
+          }
+          return Effect.succeed({ kind: "text", text: "" });
+        };
+
+        const { newSide, oldSide } = fileDiffSides(scope, file);
+
+        return Effect.all([fetchSide(oldSide), fetchSide(newSide)], {
+          concurrency: "unbounded",
+        }).pipe(
+          Effect.map(([oldContent, newContent]) => buildFilePatch(file, oldContent, newContent)),
+          Effect.catch(() => Effect.succeed<FilePatch>({ kind: "fallback" })),
+          Effect.flatMap((built) =>
+            built.kind === "patch" ? Effect.succeed(built.patch) : pathspecDiff,
+          ),
+        );
+      },
       // The per-worktree git dir, absolute. In a linked worktree this resolves
       // Outside the worktree tree (to <main>/.git/worktrees/<name>), so the watcher
       // Watches it as a second root to catch staging/commit/checkout there.

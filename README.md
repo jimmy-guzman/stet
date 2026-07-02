@@ -155,8 +155,9 @@ counter tracks your place, and `esc` clears the search.
 
 Press `ctrl-f` to open the project search pane in the main viewer area. Results
 group by file with syntax-highlighted context around each match; `ctrl-r`
-toggles regex, `ctrl-e` toggles case sensitivity, a glob field narrows by path,
-and `ctrl-a` toggles between the changed files and the whole tree. Jumping to a
+toggles regex, `ctrl-e` toggles case sensitivity, a filter field narrows by
+glob (`!` excludes, e.g. `src/ !*.test.ts`), and `ctrl-a` toggles between the
+changed files and the whole tree. Jumping to a
 match keeps your query and results, so `ctrl-f` brings them right back.
 
 ![project content search listing matches for a term across several files in the repo](assets/screenshots/search.png)

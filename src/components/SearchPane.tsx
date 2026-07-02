@@ -74,7 +74,7 @@ export function SearchPane() {
         return state.searchResults().length === 0 ? "searching…" : `${summary()} · searching…`;
       }
       case "error": {
-        return `${levelGlyph("error")} invalid pattern or search failed`;
+        return `${levelGlyph("error")} search failed · check the pattern`;
       }
       default: {
         return state.searchResults().length === 0 ? "no matches" : summary();
@@ -268,7 +268,7 @@ export function SearchPane() {
             }}
             focused={focusIn("query")}
             width="100%"
-            placeholder={`search in ${scopeLabel()}…`}
+            placeholder="search…"
             {...inputColors}
             onInput={onQueryInput}
             onSubmit={submit}
@@ -299,7 +299,7 @@ export function SearchPane() {
             }}
             focused={focusIn("glob")}
             width="100%"
-            placeholder="all files (globs, space-separated)"
+            placeholder="src/ *.ts !*.test.ts"
             {...inputColors}
             onInput={onGlobInput}
             onSubmit={submit}
@@ -339,11 +339,9 @@ export function SearchPane() {
                           : "type to search"}
                     </text>
                     <text fg={theme.colors.text.faint}>
-                      {state.searchStatus() === "ready" && state.searchScope() === "changed"
-                        ? "searched changed files · ctrl-a searches the repo"
-                        : state.searchStatus() === "ready"
-                          ? "searched the whole repo"
-                          : "matches appear as you type"}
+                      {state.searchScope() === "changed"
+                        ? "in changed files · ctrl-a for the whole repo"
+                        : "across the whole repo"}
                     </text>
                   </>
                 }
@@ -442,10 +440,15 @@ export function SearchPane() {
           </Index>
         </Show>
       </box>
+      {/* Contextual per sub-focus, naming only the keys that focus honors: the
+          inputs surface the query toggles, the results surface the result
+          actions. Both fit narrower panes than one exhaustive line would. */}
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
         <text fg={theme.colors.text.muted}>
           {truncate(
-            "↑↓ navigate · ⏎ open · tab focus · ctrl-r regex · ctrl-e case · ctrl-a scope · esc close",
+            state.searchFocus() === "results"
+              ? "⏎ open · e editor · y copy · h/l fold · g/G ends · esc"
+              : "⏎ open · ↓ results · ctrl-r regex · ctrl-e case · ctrl-a scope · esc",
             Math.max(8, innerWidth() - 2),
           )}
         </text>

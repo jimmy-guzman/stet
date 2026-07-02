@@ -10,6 +10,19 @@ export interface SearchOptions {
   caseSensitive: boolean;
 }
 
+// The pane's filter field as git pathspecs: whitespace-separated globs include,
+// A `!` prefix excludes (ripgrep's -g convention, mapped to git's `:(exclude)`),
+// And anything else passes verbatim so raw pathspec magic still works. Includes
+// Union and excludes subtract; a list of only excludes matches everything else.
+export function filterPathspecs(field: string): string[] | undefined {
+  const tokens = field
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token !== "" && token !== "!")
+    .map((token) => (token.startsWith("!") ? `:(exclude)${token.slice(1)}` : token));
+  return tokens.length === 0 ? undefined : tokens;
+}
+
 // `git grep` over working-tree content. `-F` keeps the query literal unless the
 // Regex toggle is on (`-E`, the extended dialect IDEs speak); smart-case mirrors
 // The in-buffer find unless the case toggle forces sensitivity. `--untracked`

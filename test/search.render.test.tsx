@@ -30,7 +30,7 @@ describe("project content search", () => {
       await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5);
 
       mockInput.pressKey("f", { ctrl: true });
-      await settleUntil("search pane", (frame) => frame.includes("search in changes…"));
+      await settleUntil("search pane", (frame) => frame.includes("search…"));
 
       // Changed scope sees only the modified a.ts, not the unchanged lib.ts.
       await mockInput.typeText("needle");
@@ -57,7 +57,7 @@ describe("project content search", () => {
       mockInput.pressEnter();
       const jumped = await settleUntil(
         "jumped to lib.ts line 3",
-        (frame) => frame.includes("ln 3:14") && !frame.includes("tab focus"),
+        (frame) => frame.includes("ln 3:14") && !frame.includes("g/G ends"),
       );
       expect(jumped).toContain("ln 3:14");
 
@@ -69,7 +69,8 @@ describe("project content search", () => {
       expect(restored).toContain("needle");
       expect(restored).toContain("src/lib.ts");
 
-      // The glob field narrows by pathspec: only lib.ts matches src/l*.
+      // The glob field narrows by pathspec: only lib.ts matches src/l*, and a
+      // ! token excludes it again (excludes subtract from includes).
       mockInput.pressTab();
       await mockInput.typeText("src/l*");
       const globbed = await settleUntil(
@@ -79,6 +80,9 @@ describe("project content search", () => {
         300,
       );
       expect(globbed).toContain("src/lib.ts");
+
+      await mockInput.typeText(" !src/lib*");
+      await settleUntil("exclude wins", (frame) => frame.includes("no matches"), 1, 300);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
@@ -113,7 +117,7 @@ describe("project content search", () => {
       // Seeded on aaa.ts; the only needle match is line 50 of the changed zzz.ts.
       await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5);
       mockInput.pressKey("f", { ctrl: true });
-      await settleUntil("search pane", (frame) => frame.includes("search in changes…"));
+      await settleUntil("search pane", (frame) => frame.includes("search…"));
       await mockInput.typeText("needle");
       await settleUntil("result", (frame) => frame.includes("1 match in 1 file"));
 
@@ -146,7 +150,7 @@ describe("project content search", () => {
     try {
       await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5);
       mockInput.pressKey("f", { ctrl: true });
-      await settleUntil("search pane", (frame) => frame.includes("search in changes…"));
+      await settleUntil("search pane", (frame) => frame.includes("search…"));
       await mockInput.typeText("needle");
       const results = await settleUntil("results", (frame) => frame.includes("1 match in 1 file"));
       expect(results).toContain("needle = 2");
@@ -156,7 +160,7 @@ describe("project content search", () => {
       mockInput.pressKey("r", { ctrl: true });
       await mockInput.typeText("(");
       const errored = await settleUntil("error keeps results", (frame) =>
-        frame.includes("invalid pattern or search failed"),
+        frame.includes("search failed · check the pattern"),
       );
       expect(errored).toContain("src/a.ts");
 

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { Effect, Layer } from "effect";
 
-import { parseSearchOutput, searchArgs } from "@/git/search";
+import { filterPathspecs, parseSearchOutput, searchArgs } from "@/git/search";
 import { Git, GitLive } from "@/git/service";
 import { ProcessLive } from "@/process";
 
@@ -50,6 +50,38 @@ describe("searchArgs", () => {
   test("changed-scope search limits to the given paths", () => {
     const args = searchArgs("needle", ["src/a.ts", "src/b.ts"], literal);
     expect(args.slice(args.indexOf("--"))).toEqual(["--", "src/a.ts", "src/b.ts"]);
+  });
+});
+
+describe("filterPathspecs", () => {
+  test("globs pass through as pathspecs", () => {
+    expect(filterPathspecs("src/ *.ts")).toEqual(["src/", "*.ts"]);
+  });
+
+  test("a ! prefix maps to a git exclude pathspec", () => {
+    expect(filterPathspecs("!*.test.ts")).toEqual([":(exclude)*.test.ts"]);
+  });
+
+  test("includes and excludes mix in one field", () => {
+    expect(filterPathspecs("src/ !src/vendor *.ts")).toEqual([
+      "src/",
+      ":(exclude)src/vendor",
+      "*.ts",
+    ]);
+  });
+
+  test("a bare ! is dropped", () => {
+    expect(filterPathspecs("! src/")).toEqual(["src/"]);
+  });
+
+  test("raw pathspec magic passes verbatim", () => {
+    expect(filterPathspecs(":(exclude)dist")).toEqual([":(exclude)dist"]);
+  });
+
+  test("blank input means no filter", () => {
+    expect(filterPathspecs("")).toBeUndefined();
+    expect(filterPathspecs("  ")).toBeUndefined();
+    expect(filterPathspecs("!")).toBeUndefined();
   });
 });
 
@@ -143,6 +175,22 @@ test("Git.search limits to the changed pathspec and is smart-case", async () => 
 
     const cased = await runSearch(repo, "NEEDLE", undefined);
     expect(cased).toEqual([]);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("Git.search subtracts exclude pathspecs, including an exclude-only list", async () => {
+  const repo = createFixtureRepo("git-search-exclude-", {
+    "src/a.test.ts": "const needle = 1\n",
+    "src/a.ts": "const needle = 2\n",
+  });
+  try {
+    const mixed = await runSearch(repo, "needle", ["src/", ":(exclude)*.test.ts"]);
+    expect(mixed.map((match) => match.path)).toEqual(["src/a.ts"]);
+
+    const excludeOnly = await runSearch(repo, "needle", [":(exclude)*.test.ts"]);
+    expect(excludeOnly.map((match) => match.path)).toEqual(["src/a.ts"]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

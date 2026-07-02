@@ -45,6 +45,7 @@ import {
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
 import { changedPathsDiffer, EMPTY_TREE_SHA, mergeChanged } from "./git/model";
 import type { ChangedFile, GitModel, Worktree } from "./git/model";
+import { filterPathspecs } from "./git/search";
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
 import {
@@ -676,8 +677,7 @@ function createState() {
     const query = searchQuery();
     const root = repoRoot();
     const options = { caseSensitive: searchCaseSensitive(), regex: searchRegex() };
-    const glob = searchGlob().trim();
-    const globTokens = glob === "" ? undefined : glob.split(/\s+/);
+    const globTokens = filterPathspecs(searchGlob());
     // Track the git model itself (not the set-equal `changedPaths` memo, and in
     // Every scope): a content-only edit to an already-changed file keeps the
     // Path-set identical but moves matches and line numbers, so the grep must

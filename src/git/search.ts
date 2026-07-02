@@ -45,8 +45,8 @@ export function searchArgs(
 // 1-based *byte* offset while the caret model speaks UTF-16 code units, so the
 // Parse works on raw bytes: slice the prefix at the byte offset (always a match
 // Boundary), then decode. Decoding first would let invalid UTF-8 skew the
-// Column — a lone Latin-1 byte is 1 byte to git but a 3-byte replacement char
-// After a string round-trip.
+// Column, since a lone Latin-1 byte is 1 byte to git but a 3-byte replacement
+// Char after a string round-trip.
 export function parseSearchOutput(stdout: Uint8Array): SearchMatch[] {
   const decoder = new TextDecoder();
   return splitRecords(stdout).flatMap((record) => {

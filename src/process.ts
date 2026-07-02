@@ -90,16 +90,23 @@ export const ProcessLive = Layer.succeed(Process)({
             }),
           try: (signal) => {
             signal.addEventListener("abort", () => child.kill(), { once: true });
+            // ArrayBuffer() + an explicit Uint8Array view, never `.bytes()`: Bun
+            // 1.3.14's runtime returns an ArrayBuffer from `bytes()` on a stream
+            // (despite the Uint8Array typing, and unlike `bun test`, whose
+            // Spec-correct Response masks it), which silently breaks every
+            // Byte-level consumer downstream.
             return Promise.all([
-              new Response(child.stdout).bytes(),
+              new Response(child.stdout).arrayBuffer(),
               new Response(child.stderr).text(),
               child.exited,
             ]);
           },
         }).pipe(
-          // Decode stdout for string consumers, but keep the raw bytes so the File
-          // Service can run byte-level binary/size guards on git-show output.
-          Effect.flatMap(([stdoutBytes, stderr, exitCode]) => {
+          // Decode stdout for string consumers, but keep the raw bytes so
+          // Byte-level consumers (git-show binary guards, the search column
+          // Parse) never trust a lossy decode.
+          Effect.flatMap(([stdoutBuffer, stderr, exitCode]) => {
+            const stdoutBytes = new Uint8Array(stdoutBuffer);
             const stdout = new TextDecoder().decode(stdoutBytes);
             if ((options?.allowedExitCodes ?? [0]).includes(exitCode)) {
               return Effect.succeed({ exitCode, stderr, stdout, stdoutBytes });

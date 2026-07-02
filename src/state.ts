@@ -631,7 +631,7 @@ function createState() {
   function readSearchLines(root: string, matches: readonly SearchMatch[], signal: AbortSignal) {
     // TextContent already stripped the single trailing newline, so a plain split
     // Is line-exact: no phantom empty last line, and a genuine final blank line
-    // (a file ending in two newlines) is kept — git grep can match on it.
+    // (a file ending in two newlines) is kept, since git grep can match on it.
     const contentLines = (content: FileContent) =>
       content.kind === "text" ? content.content.split(/\r?\n/) : undefined;
     const paths = [...new Set(matches.map((match) => match.path))];
@@ -681,8 +681,9 @@ function createState() {
     // Track the git model itself (not the set-equal `changedPaths` memo, and in
     // Every scope): a content-only edit to an already-changed file keeps the
     // Path-set identical but moves matches and line numbers, so the grep must
-    // Re-run on each model commit or results, context, and jump targets go stale
-    // Against the working tree — the agent-edits-while-you-watch core scenario.
+    // Re-run on each model commit or results, context, and jump targets go
+    // Stale against the working tree, the agent-edits-while-you-watch core
+    // Scenario.
     const model = gitModel();
     const changedScopePaths =
       searchScope() === "changed" ? model.changed.map((file) => file.path) : undefined;
@@ -799,7 +800,7 @@ function createState() {
   }
 
   // Half-page the selection by *visual* rows (the viewport unit ctrl-d/ctrl-u
-  // Promise), then snap to the nearest navigable row in the travel direction —
+  // Promise), then snap to the nearest navigable row in the travel direction;
   // Counting navigable hops instead would overshoot by each match's context
   // Rows and headers.
   function pageSearchSelection(direction: number) {

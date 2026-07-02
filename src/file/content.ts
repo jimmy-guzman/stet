@@ -62,7 +62,6 @@ export async function loadFileContentAsync(
   options: { full: boolean },
 ): Promise<FileContent> {
   const absolutePath = `${repoRoot}/${path}`;
-  let size: number;
   try {
     const stat = await lstat(absolutePath);
     // Git stores a symlink's content as its target path text, never the dereferenced
@@ -73,16 +72,9 @@ export async function loadFileContentAsync(
     if (!stat.isFile()) {
       return { kind: "binary" };
     }
-    size = stat.size;
-  } catch {
-    return { kind: "missing" };
-  }
-
-  if (size > MAX_FILE_BYTES && !options.full) {
-    return { bytes: size, kind: "too-large" };
-  }
-
-  try {
+    if (stat.size > MAX_FILE_BYTES && !options.full) {
+      return { bytes: stat.size, kind: "too-large" };
+    }
     return classifyFileBytes(await readFile(absolutePath), options);
   } catch {
     return { kind: "missing" };

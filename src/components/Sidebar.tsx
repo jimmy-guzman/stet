@@ -1,4 +1,3 @@
-import type { MouseEvent } from "@opentui/core";
 import { createMemo, Index, Show } from "solid-js";
 
 import { state } from "@/state";
@@ -6,8 +5,7 @@ import { useTheme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 
 import { TreeRow } from "./TreeRow";
-
-const WHEEL_STEP = 3;
+import { windowWheelHandler } from "./wheel";
 
 export function Sidebar() {
   const theme = useTheme();
@@ -25,26 +23,12 @@ export function Sidebar() {
     return state.treeRows().slice(start, start + state.paneHeight());
   });
 
-  const onWheel = (event: MouseEvent) => {
-    const direction = event.scroll?.direction;
-    if (direction !== "up" && direction !== "down") {
-      return;
-    }
-    const delta = event.scroll?.delta ?? 1;
-    const maxScroll = Math.max(0, state.treeRows().length - state.paneHeight());
-    state.setSidebarScrollTop(
-      Math.max(
-        0,
-        Math.min(
-          state.sidebarScrollTop() + (direction === "down" ? 1 : -1) * delta * WHEEL_STEP,
-          maxScroll,
-        ),
-      ),
-    );
-    if (event.scroll !== undefined) {
-      event.scroll.delta = 0;
-    }
-  };
+  const onWheel = windowWheelHandler({
+    rowCount: () => state.treeRows().length,
+    scrollTop: state.sidebarScrollTop,
+    setScrollTop: state.setSidebarScrollTop,
+    viewport: state.paneHeight,
+  });
 
   return (
     <box

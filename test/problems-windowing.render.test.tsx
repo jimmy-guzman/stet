@@ -25,7 +25,7 @@ describe("problems panel windowing", () => {
         checker: "diagnostics",
         column: 1,
         line: 1 + index,
-        message: `synthetic finding ${index}`,
+        message: `synthetic finding ${String(index).padStart(2, "0")}`,
         path: `${repoRoot}/src/file${index % 10}.ts`,
         severity: "warning",
         source: "probe",
@@ -39,16 +39,16 @@ describe("problems panel windowing", () => {
       ),
     });
 
-    const { renderer, mockInput, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 30,
-      width: 100,
-    });
+    const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      { height: 30, width: 100 },
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) => current.includes("a.ts"));
 
     mockInput.pressKey("p");
     await renderOnce();
-    await settleUntil("panel open", (current) => current.includes("synthetic finding 0"));
+    await settleUntil("panel open", (current) => current.includes("synthetic finding 00"));
 
     for (let i = 0; i < 30; i += 1) {
       mockInput.pressKey("j");
@@ -60,7 +60,38 @@ describe("problems panel windowing", () => {
     const summary = focused?.kind === "problem" ? focused.summary : "";
     expect(summary).not.toBe("");
     expect(captureCharFrame()).toContain(summary);
-    expect(captureCharFrame()).not.toContain("synthetic finding 0 ");
+    expect(captureCharFrame()).not.toContain("synthetic finding 00");
+
+    // A wheel scroll moves the window away from the cursor; a checker update
+    // Landing while it is away must not snap it back until the cursor moves.
+    for (let i = 0; i < 5; i += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
+      await mockMouse.scroll(50, 24, "up");
+      // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
+      await renderOnce();
+    }
+    await renderOnce();
+    expect(captureCharFrame()).not.toContain(summary);
+    state.setCheckerState({
+      diagnostics: stateForResolvedChecker(
+        "diagnostics",
+        model.changed,
+        makeDiagnostics(60),
+        repoRoot,
+      ),
+    });
+    await renderOnce();
+    await renderOnce();
+    expect(captureCharFrame()).not.toContain(summary);
+
+    // The next keypress re-frames the cursor.
+    mockInput.pressKey("j");
+    await renderOnce();
+    await renderOnce();
+    const refocused = state.allProblemItems()[state.problemIndex()];
+    expect(refocused?.kind === "problem" && captureCharFrame().includes(refocused.summary)).toBe(
+      true,
+    );
 
     // A diagnostics update while the panel is open must keep rendering rows.
     state.setCheckerState({

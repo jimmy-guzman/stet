@@ -9,10 +9,11 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { truncate } from "@/utils/text";
 
+import { windowWheelHandler } from "./wheel";
+
 const INDENT = 2;
 const ICON = 2;
 const MIN_SUMMARY = 12;
-const WHEEL_STEP = 3;
 
 // Every ProblemItem is exactly one terminal row (group spacing is an explicit
 // Spacer item), so the panel windows to its fixed viewport like the sidebar:
@@ -56,26 +57,12 @@ export function ProblemsPanel() {
         ? theme.colors.severity.warning
         : theme.colors.severity.info;
 
-  const onWheel = (event: MouseEvent) => {
-    const direction = event.scroll?.direction;
-    if (direction !== "up" && direction !== "down") {
-      return;
-    }
-    const delta = event.scroll?.delta ?? 1;
-    const maxScroll = Math.max(0, state.allProblemItems().length - viewport);
-    state.setProblemsScrollTop(
-      Math.max(
-        0,
-        Math.min(
-          state.problemsScrollTop() + (direction === "down" ? 1 : -1) * delta * WHEEL_STEP,
-          maxScroll,
-        ),
-      ),
-    );
-    if (event.scroll !== undefined) {
-      event.scroll.delta = 0;
-    }
-  };
+  const onWheel = windowWheelHandler({
+    rowCount: () => state.allProblemItems().length,
+    scrollTop: state.problemsScrollTop,
+    setScrollTop: state.setProblemsScrollTop,
+    viewport: () => viewport,
+  });
 
   // Clicking reproduces the keyboard outcome for the row: a problem opens its
   // Location, a failure line just takes the cursor, decorations do nothing.

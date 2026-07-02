@@ -491,35 +491,59 @@ function createState() {
   const treeRowsById = createMemo(() => new Map(treeRows().map((row) => [row.node.id, row.index])));
   const focusedRowIndex = createMemo(() => treeRowsById().get(focusedNodeId()) ?? 0);
 
-  // The sidebar renders only the rows inside [sidebarScrollTop, +paneHeight), so
-  // The renderable count is bounded by the viewport, not the repo. This follow
-  // Effect keeps the cursor framed (editor-style scrolloff) tracking only the
-  // Cursor and viewport; rows and the current offset are read untracked so a
-  // Background refresh tick never snaps a wheel-scrolled viewport back to the
-  // Cursor. Expand/collapse still re-frames because focusedRowIndex shifts.
-  createEffect(() => {
-    const top = focusedRowIndex();
-    const viewport = paneHeight();
-    const current = untrack(sidebarScrollTop);
-    const next = followScrollTop({
-      current,
-      height: 1,
-      margin: 2,
-      maxScroll: Math.max(0, untrack(treeRows).length - viewport),
-      top,
-      viewport,
+  // A windowed uniform-row list (the sidebar, the problems panel) renders only
+  // The rows inside [scrollTop, +viewport), so its renderable count is bounded
+  // By the viewport, not the content. This registers the shared glue: a follow
+  // Effect keeping the cursor framed (editor-style scrolloff) that tracks only
+  // The cursor, viewport, and gate, while rows and the current offset are read
+  // Untracked so a background refresh tick never snaps a wheel-scrolled window
+  // Back to the cursor; and a clamp effect bounding the window when the row
+  // List shrinks under it. The search pane deliberately does not use this: its
+  // Follow is action-driven (setSearchSelection), so a results update never
+  // Re-frames a wheel-scrolled window.
+  function followListWindow(options: {
+    cursor: () => number;
+    viewport: () => number;
+    rowCount: () => number;
+    scrollTop: () => number;
+    setScrollTop: (next: number) => void;
+    active?: () => boolean;
+  }) {
+    createEffect(() => {
+      if (options.active !== undefined && !options.active()) {
+        return;
+      }
+      const top = options.cursor();
+      const viewport = options.viewport();
+      const current = untrack(options.scrollTop);
+      const next = followScrollTop({
+        current,
+        height: 1,
+        margin: 2,
+        maxScroll: Math.max(0, untrack(options.rowCount) - viewport),
+        top,
+        viewport,
+      });
+      if (next !== current) {
+        options.setScrollTop(next);
+      }
     });
-    if (next !== current) {
-      setSidebarScrollTop(next);
-    }
-  });
-  // Clamp the window when the row list shrinks under it (a collapse, a scope
-  // Change), so the pane never shows past the last row.
-  createEffect(() => {
-    const maxScroll = Math.max(0, treeRows().length - paneHeight());
-    if (untrack(sidebarScrollTop) > maxScroll) {
-      setSidebarScrollTop(maxScroll);
-    }
+    createEffect(() => {
+      const maxScroll = Math.max(0, options.rowCount() - options.viewport());
+      if (untrack(options.scrollTop) > maxScroll) {
+        options.setScrollTop(maxScroll);
+      }
+    });
+  }
+
+  followListWindow({
+    cursor: focusedRowIndex,
+    rowCount: () => treeRows().length,
+    scrollTop: sidebarScrollTop,
+    setScrollTop: setSidebarScrollTop,
+    // A thunk, not the memo itself: paneHeight is declared later in this root,
+    // And the effects only run after the whole root body has executed.
+    viewport: () => paneHeight(),
   });
 
   // The default tree is the whole repo, so it stays empty until the deferred
@@ -551,34 +575,14 @@ function createState() {
     return index === -1 ? 0 : index;
   });
 
-  // The problems panel windows to its fixed viewport like the sidebar: the
-  // Follow effect keeps the cursor framed (reading rows/offset untracked so a
-  // Wheel-scrolled window is never snapped back by a checker update), and the
-  // Clamp bounds the window when the item list shrinks.
-  const problemsViewport = PROBLEMS_HEIGHT - 2;
-  createEffect(() => {
-    if (!problemsOpen()) {
-      return;
-    }
-    const top = problemIndex();
-    const current = untrack(problemsScrollTop);
-    const next = followScrollTop({
-      current,
-      height: 1,
-      margin: 2,
-      maxScroll: Math.max(0, untrack(allProblemItems).length - problemsViewport),
-      top,
-      viewport: problemsViewport,
-    });
-    if (next !== current) {
-      setProblemsScrollTop(next);
-    }
-  });
-  createEffect(() => {
-    const maxScroll = Math.max(0, allProblemItems().length - problemsViewport);
-    if (untrack(problemsScrollTop) > maxScroll) {
-      setProblemsScrollTop(maxScroll);
-    }
+  // The `active` gate is tracked, so opening the panel frames the cursor at once.
+  followListWindow({
+    active: problemsOpen,
+    cursor: problemIndex,
+    rowCount: () => allProblemItems().length,
+    scrollTop: problemsScrollTop,
+    setScrollTop: setProblemsScrollTop,
+    viewport: () => PROBLEMS_HEIGHT - 2,
   });
   // The go-to-file universe: repoFiles plus changed-only paths (staged
   // Deletions), the same universe the tree renders. Every dependency is

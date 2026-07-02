@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.5...sideye-v0.4.0) (2026-07-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **search:** 💥 the file tree sidebar toggle moved from `b` to `ctrl-b`
+
+### Features
+
+* **diagnostics:** ✨ register JSON & YAML language servers ([#170](https://github.com/jimmy-guzman/sideye/issues/170)) ([27213aa](https://github.com/jimmy-guzman/sideye/commit/27213aa7f5929fc033c9dd853862996497b1aef7))
+* **intel:** ✨ find references via LSP (Shift+F12) ([#172](https://github.com/jimmy-guzman/sideye/issues/172)) ([4346b21](https://github.com/jimmy-guzman/sideye/commit/4346b21024e8fe254f36322f608355a6b444088e)), closes [#131](https://github.com/jimmy-guzman/sideye/issues/131)
+* **search:** ✨ full-view project search pane ([#185](https://github.com/jimmy-guzman/sideye/issues/185)) ([c850430](https://github.com/jimmy-guzman/sideye/commit/c8504303745c0604127e8b1424ab9352ce82efe4)), closes [#184](https://github.com/jimmy-guzman/sideye/issues/184)
+
+
+### Bug Fixes
+
+* **git:** 🐛 sanitize inherited GIT_* env vars in subprocess calls ([#176](https://github.com/jimmy-guzman/sideye/issues/176)) ([c3ebc37](https://github.com/jimmy-guzman/sideye/commit/c3ebc379bd2bb47d28445e4d47ba87447df0f366))
+* **status:** 🐛 keep the recent file's name when its path is long ([#175](https://github.com/jimmy-guzman/sideye/issues/175)) ([6367e90](https://github.com/jimmy-guzman/sideye/commit/6367e9065ee23ea785fb411dae1ebcec45902b33))
+* **viewer:** 🐛 restore and dedup history on jump navigation ([#177](https://github.com/jimmy-guzman/sideye/issues/177)) ([b272d62](https://github.com/jimmy-guzman/sideye/commit/b272d62109f7710735760204401e57ab10f09f46))
+
 ## [0.3.5](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.4...sideye-v0.3.5) (2026-07-01)
 
 

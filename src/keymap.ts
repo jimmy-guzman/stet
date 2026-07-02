@@ -8,6 +8,7 @@ import { latestActivity } from "./git/activity";
 import { firstFileInNode } from "./git/tree";
 import { state } from "./state";
 import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
+import { isNavigableSearchItem } from "./viewer/search-items";
 
 /**
  * The injection seam for the keymap's irreversible host side-effects (`quit` tears down the
@@ -126,25 +127,86 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // The search panel owns the keyboard while open: nav + scope toggle here,
-      // Text and submit (the jump) are the input element's job (like the palette).
-      if (state.searchComboboxOpen()) {
+      // The search view owns the keyboard while it is the focused pane: sub-focus
+      // Cycling, result navigation, and the query toggles live here; text and
+      // Submit (the jump) are the input elements' job (like the palette). With
+      // The tree focused, keys fall through to the tree branch while the view
+      // Stays on screen.
+      if (state.mainView() === "search" && state.focusedPane() === "search") {
         if (key.name === "escape") {
-          state.setSearchComboboxOpen(false);
-        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
-          state.setSearchComboboxIndex(
-            Math.min(
-              state.searchComboboxIndex() + 1,
-              Math.max(0, state.searchComboboxResults().length - 1),
-            ),
-          );
-        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
-          state.setSearchComboboxIndex(Math.max(state.searchComboboxIndex() - 1, 0));
-        } else if (key.ctrl && key.name === "a") {
-          state.setSearchComboboxScope(
-            state.searchComboboxScope() === "changed" ? "repo" : "changed",
-          );
-          state.setSearchComboboxIndex(0);
+          state.closeSearch();
+          return;
+        }
+        if (key.name === "tab") {
+          // The focused input would swallow the tab as text otherwise.
+          key.preventDefault();
+          const order = ["query", "glob", "results"] as const;
+          const step = key.shift ? -1 : 1;
+          const at = order.indexOf(state.searchFocus());
+          state.setSearchFocus(order[(at + step + order.length) % order.length] ?? "query");
+          return;
+        }
+        if (key.ctrl && key.name === "a") {
+          state.toggleSearchScope();
+          return;
+        }
+        if (key.ctrl && key.name === "r") {
+          state.toggleSearchRegex();
+          return;
+        }
+        if (key.ctrl && key.name === "e") {
+          state.toggleSearchCase();
+          return;
+        }
+        if (state.searchFocus() === "results") {
+          const items = state.searchItems();
+          const halfPage = Math.max(1, Math.floor(state.searchListHeight() / 2));
+          if (key.name === "j" || key.name === "down" || (key.ctrl && key.name === "n")) {
+            state.moveSearchSelection(1);
+          } else if (key.name === "k" || key.name === "up" || (key.ctrl && key.name === "p")) {
+            // At the first navigable row, up returns to the query field.
+            const current = state.searchIndex();
+            const previous = items.findLastIndex(
+              (item, index) => index < current && isNavigableSearchItem(item),
+            );
+            if (previous === -1) {
+              state.setSearchFocus("query");
+            } else {
+              state.moveSearchSelection(-1);
+            }
+          } else if (key.ctrl && key.name === "d") {
+            state.moveSearchSelection(halfPage);
+          } else if (key.ctrl && key.name === "u") {
+            state.moveSearchSelection(-halfPage);
+          } else if (key.name === "return") {
+            const item = items[state.searchIndex()];
+            if (item?.kind === "header") {
+              state.toggleSearchGroup(item.path);
+            } else {
+              state.jumpToSearchItem(state.searchIndex());
+            }
+          } else if (
+            key.name === "h" ||
+            key.name === "left" ||
+            key.name === "l" ||
+            key.name === "right"
+          ) {
+            const item = items[state.searchIndex()];
+            if (item !== undefined && item.kind !== "gap") {
+              const collapse = key.name === "h" || key.name === "left";
+              // A visible line row means its group is expanded; only headers can
+              // Already be collapsed.
+              const collapsed = item.kind === "header" && item.collapsed;
+              if (collapse !== collapsed) {
+                state.toggleSearchGroup(item.path);
+              }
+            }
+          }
+          return;
+        }
+        // Query/glob focus: down enters the results; everything else is the input's.
+        if (key.name === "down" || (key.ctrl && key.name === "n")) {
+          state.setSearchFocus("results");
         }
         return;
       }
@@ -210,10 +272,10 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // Opens (or refocuses) the search view; the query and results persist, so
+      // Reopening after a jump restores the result set instead of clearing it.
       if (key.ctrl && key.name === "f") {
-        state.setSearchComboboxOpen(true);
-        state.setSearchComboboxQuery("");
-        state.setSearchComboboxIndex(0);
+        state.openSearch();
         return;
       }
 
@@ -233,6 +295,12 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "escape") {
+        // The search view is on screen with the tree focused: esc dismisses the
+        // View (back to the file), not the app.
+        if (state.mainView() === "search") {
+          state.closeSearch();
+          return;
+        }
         if (state.problemsOpen()) {
           state.setProblemsOpen(false);
           if (state.focusedPane() === "problems") {
@@ -245,7 +313,14 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "tab") {
-        state.setFocusedPane(state.focusedPane() === "diff" ? "tree" : "diff");
+        // From the tree, tab lands on whichever view the main area shows.
+        state.setFocusedPane(
+          state.focusedPane() === "tree"
+            ? state.mainView() === "search"
+              ? "search"
+              : "diff"
+            : "tree",
+        );
         return;
       }
 

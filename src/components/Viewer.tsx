@@ -1,5 +1,5 @@
 import type { InputRenderable } from "@opentui/core";
-import { batch, createEffect, on, Show } from "solid-js";
+import { batch, createEffect, Match, on, Show, Switch } from "solid-js";
 
 import { firstWord, wordAt } from "@/diff/words";
 import { state } from "@/state";
@@ -7,6 +7,7 @@ import { useTheme } from "@/theme/context";
 import { nearestNavigableIndex, placeholderText, viewerStats } from "@/ui-helpers";
 
 import { DiffView } from "./diff/DiffView";
+import { SearchPane } from "./SearchPane";
 import { Tabs } from "./Tabs";
 
 // The caret offset for a 1-based jump column: snap to the word that owns it, else
@@ -134,7 +135,7 @@ export function Viewer() {
     state.setJumpTarget(undefined);
   });
 
-  const focused = () => state.focusedPane() === "diff";
+  const focused = () => state.focusedPane() === "diff" || state.focusedPane() === "search";
   const displayedFile = () => {
     const view = state.diffView();
     return view === undefined ? undefined : state.gitModel().changedByPath.get(view.path);
@@ -199,147 +200,159 @@ export function Viewer() {
       flexDirection="column"
       borderStyle="single"
       borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
-      onMouseDown={() => state.setFocusedPane("diff")}
+      onMouseDown={() => state.setFocusedPane(state.mainView() === "search" ? "search" : "diff")}
     >
-      <Show
-        when={state.findOpen() || state.findActive()}
-        fallback={
-          <box
-            height={1}
-            flexDirection="row"
-            justifyContent="space-between"
-            paddingLeft={1}
-            paddingRight={1}
-          >
-            {/* The strip earns the row only once a tab is pinned; a lone preview
+      {/* The main-area view switch: exactly one view owns the pane interior.
+          The file view keeps its header/body/truncated rows as before; the
+          search pane brings its own chrome. Future views extend the union. */}
+      <Switch>
+        <Match when={state.mainView() === "search"}>
+          <SearchPane />
+        </Match>
+        <Match when={state.mainView() === "file"}>
+          <Show
+            when={state.findOpen() || state.findActive()}
+            fallback={
+              <box
+                height={1}
+                flexDirection="row"
+                justifyContent="space-between"
+                paddingLeft={1}
+                paddingRight={1}
+              >
+                {/* The strip earns the row only once a tab is pinned; a lone preview
                 shows the path as before. */}
-            <Show
-              when={state.tabItems().some((tab) => !tab.preview)}
-              fallback={<text fg={theme.colors.text.primary}>{state.selectedPath() ?? ""}</text>}
-            >
-              <Tabs />
-            </Show>
-            <box flexDirection="row">
-              {/* Keep the active scope legible at the diff, so a staged/unstaged
-                  view is never misread as the whole change. */}
-              <Show when={state.scope().kind !== "all"}>
-                <text
-                  fg={
-                    state.scope().kind === "staged"
-                      ? theme.colors.stage.staged
-                      : theme.colors.stage.unstaged
+                <Show
+                  when={state.tabItems().some((tab) => !tab.preview)}
+                  fallback={
+                    <text fg={theme.colors.text.primary}>{state.selectedPath() ?? ""}</text>
                   }
                 >
-                  {`${state.scope().kind} · `}
-                </text>
-              </Show>
-              <text fg={theme.colors.text.muted}>
-                {[
-                  viewerStats(
-                    displayedFile(),
-                    state.diffView()?.showFileContent ?? false,
-                    state.diffView()?.fileContent,
-                  ),
-                  state.cursorLineNumber() === undefined
-                    ? ""
-                    : state.caretColumn() === undefined
-                      ? `ln ${state.cursorLineNumber()}`
-                      : `ln ${state.cursorLineNumber()}:${state.caretColumn()}`,
-                ]
-                  .filter((part) => part !== "")
-                  .join(" · ")}
-              </text>
-            </box>
-          </box>
-        }
-      >
-        {/* While searching, the title row becomes a full-width find bar. */}
-        <box
-          height={1}
-          flexDirection="row"
-          paddingLeft={1}
-          paddingRight={1}
-          backgroundColor={theme.colors.surface.panel}
-        >
-          <text fg={theme.colors.accent.primary}>{"/ "}</text>
-          <box flexGrow={1}>
-            <input
-              ref={(el: InputRenderable) => (findInputRef = el)}
-              focused={state.findOpen()}
-              width="100%"
+                  <Tabs />
+                </Show>
+                <box flexDirection="row">
+                  {/* Keep the active scope legible at the diff, so a staged/unstaged
+                  view is never misread as the whole change. */}
+                  <Show when={state.scope().kind !== "all"}>
+                    <text
+                      fg={
+                        state.scope().kind === "staged"
+                          ? theme.colors.stage.staged
+                          : theme.colors.stage.unstaged
+                      }
+                    >
+                      {`${state.scope().kind} · `}
+                    </text>
+                  </Show>
+                  <text fg={theme.colors.text.muted}>
+                    {[
+                      viewerStats(
+                        displayedFile(),
+                        state.diffView()?.showFileContent ?? false,
+                        state.diffView()?.fileContent,
+                      ),
+                      state.cursorLineNumber() === undefined
+                        ? ""
+                        : state.caretColumn() === undefined
+                          ? `ln ${state.cursorLineNumber()}`
+                          : `ln ${state.cursorLineNumber()}:${state.caretColumn()}`,
+                    ]
+                      .filter((part) => part !== "")
+                      .join(" · ")}
+                  </text>
+                </box>
+              </box>
+            }
+          >
+            {/* While searching, the title row becomes a full-width find bar. */}
+            <box
+              height={1}
+              flexDirection="row"
+              paddingLeft={1}
+              paddingRight={1}
               backgroundColor={theme.colors.surface.panel}
-              focusedBackgroundColor={theme.colors.surface.panel}
-              textColor={theme.colors.text.primary}
-              focusedTextColor={theme.colors.text.primary}
-              cursorColor={theme.colors.accent.primary}
-              onInput={onFindInput}
-              onSubmit={onFindSubmit}
-            />
-          </box>
-          <text fg={theme.colors.text.muted}>
-            {findCounter() === "" ? "" : `${findCounter()}  `}
-          </text>
-          <text fg={theme.colors.text.faint}>esc</text>
-        </box>
-      </Show>
-      {/* Nothing is selectable (an empty repository, or selection cleared):
+            >
+              <text fg={theme.colors.accent.primary}>{"/ "}</text>
+              <box flexGrow={1}>
+                <input
+                  ref={(el: InputRenderable) => (findInputRef = el)}
+                  focused={state.findOpen()}
+                  width="100%"
+                  backgroundColor={theme.colors.surface.panel}
+                  focusedBackgroundColor={theme.colors.surface.panel}
+                  textColor={theme.colors.text.primary}
+                  focusedTextColor={theme.colors.text.primary}
+                  cursorColor={theme.colors.accent.primary}
+                  onInput={onFindInput}
+                  onSubmit={onFindSubmit}
+                />
+              </box>
+              <text fg={theme.colors.text.muted}>
+                {findCounter() === "" ? "" : `${findCounter()}  `}
+              </text>
+              <text fg={theme.colors.text.faint}>esc</text>
+            </box>
+          </Show>
+          {/* Nothing is selectable (an empty repository, or selection cleared):
           author that void instead of a blank pane. A selected-but-not-yet-loaded
           file keeps rendering the diff surface below, so a load never flashes
           this; that is why the guard is selectedPath, not the async diffView. */}
-      <Show
-        when={state.selectedPath() !== undefined}
-        fallback={
-          <box
-            height={state.viewerHeight()}
-            flexDirection="column"
-            justifyContent="center"
-            alignItems="center"
+          <Show
+            when={state.selectedPath() !== undefined}
+            fallback={
+              <box
+                height={state.viewerHeight()}
+                flexDirection="column"
+                justifyContent="center"
+                alignItems="center"
+              >
+                <text fg={theme.colors.text.muted}>nothing to inspect</text>
+                <text fg={theme.colors.text.faint}>
+                  {state.gitModel().repoFiles.length === 0
+                    ? "this repository has no files yet"
+                    : "select a file to inspect"}
+                </text>
+              </box>
+            }
           >
-            <text fg={theme.colors.text.muted}>nothing to inspect</text>
-            <text fg={theme.colors.text.faint}>
-              {state.gitModel().repoFiles.length === 0
-                ? "this repository has no files yet"
-                : "select a file to inspect"}
-            </text>
-          </box>
-        }
-      >
-        <Show
-          when={!isPlaceholder()}
-          fallback={
-            <box height={state.viewerHeight()} paddingLeft={1}>
-              <text fg={theme.colors.text.muted}>
-                {placeholderText(state.diffView()?.fileContent)}
-              </text>
-            </box>
-          }
-        >
-          <DiffView />
-        </Show>
-      </Show>
-      {/* A partially-loaded file reserves this row (viewerHeight already shrank by
+            <Show
+              when={!isPlaceholder()}
+              fallback={
+                <box height={state.viewerHeight()} paddingLeft={1}>
+                  <text fg={theme.colors.text.muted}>
+                    {placeholderText(state.diffView()?.fileContent)}
+                  </text>
+                </box>
+              }
+            >
+              <DiffView />
+            </Show>
+          </Show>
+          {/* A partially-loaded file reserves this row (viewerHeight already shrank by
           it) rather than crowding the transient status bar: the affordance sits at
           the content it describes. The whole row loads the rest, mirroring the `f`
           key. */}
-      <Show when={state.truncated()}>
-        <box
-          // Non-selectable so a click/double-click on the row never starts a text
-          // Selection (a stray highlight); it is chrome, not content (mirrors Tabs).
-          ref={(el) => (el.selectable = false)}
-          height={1}
-          flexDirection="row"
-          paddingLeft={1}
-          paddingRight={1}
-          backgroundColor={theme.colors.surface.panel}
-          onMouseDown={() => state.loadFullContent()}
-        >
-          <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.muted}>
-            {`⋯ ${state.truncatedHidden()} more ${
-              state.truncatedHidden() === 1 ? "line" : "lines"
-            } · f to load`}
-          </text>
-        </box>
-      </Show>
+          <Show when={state.truncated()}>
+            <box
+              // Non-selectable so a click/double-click on the row never starts a text
+              // Selection (a stray highlight); it is chrome, not content (mirrors Tabs).
+              ref={(el) => (el.selectable = false)}
+              height={1}
+              flexDirection="row"
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={theme.colors.surface.panel}
+              onMouseDown={() => state.loadFullContent()}
+            >
+              <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.muted}>
+                {`⋯ ${state.truncatedHidden()} more ${
+                  state.truncatedHidden() === 1 ? "line" : "lines"
+                } · f to load`}
+              </text>
+            </box>
+          </Show>
+        </Match>
+      </Switch>
     </box>
   );
 }

@@ -7,9 +7,9 @@ import { useTheme } from "@/theme/context";
 import { truncate } from "@/utils/text";
 
 // A query-less palette-family overlay: the results list for `textDocument/references`
-// (and go-to-definition's multi-result case). Mirrors SearchCombobox's chrome minus the
-// Input; every status (loading/empty/error/ready) is a designed screen so it never shows
-// A blank pane, and the box grows in place rather than reflowing the diff beneath it.
+// (and go-to-definition's multi-result case). Mirrors the FileCombobox's chrome minus
+// The input; every status (loading/empty/error/ready) is a designed screen so it never
+// Shows a blank pane, and the box grows in place rather than reflowing the diff beneath it.
 export function ReferencesOverlay() {
   const theme = useTheme();
   let listRef: ScrollBoxRenderable | undefined;

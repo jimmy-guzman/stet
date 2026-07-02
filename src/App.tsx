@@ -12,7 +12,6 @@ import { HelpDialog } from "./components/HelpDialog";
 import { ProblemsPanel } from "./components/ProblemsPanel";
 import { ReferencesOverlay } from "./components/ReferencesOverlay";
 import { ScopeMenu } from "./components/ScopeMenu";
-import { SearchCombobox } from "./components/SearchCombobox";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { ThemeCombobox } from "./components/ThemeCombobox";
@@ -70,7 +69,9 @@ export function App() {
   createEffect(() => {
     const inputFocused =
       state.fileComboboxOpen() ||
-      state.searchComboboxOpen() ||
+      (state.mainView() === "search" &&
+        state.focusedPane() === "search" &&
+        state.searchFocus() !== "results") ||
       state.themeComboboxOpen() ||
       state.worktreeComboboxOpen() ||
       state.findOpen();
@@ -205,9 +206,6 @@ export function App() {
       <StatusBar />
       <Show when={state.fileComboboxOpen()}>
         <FileCombobox />
-      </Show>
-      <Show when={state.searchComboboxOpen()}>
-        <SearchCombobox />
       </Show>
       <Show when={state.referencesOpen()}>
         <ReferencesOverlay />

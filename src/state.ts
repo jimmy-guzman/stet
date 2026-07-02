@@ -2,7 +2,16 @@ import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
 import { Effect, Queue, Stream } from "effect";
-import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js";
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createRoot,
+  createSignal,
+  on,
+  onCleanup,
+  untrack,
+} from "solid-js";
 
 import type { DiffScope, ScopeKind } from "./cli";
 import { Clipboard } from "./clipboard/service";
@@ -20,6 +29,7 @@ import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
+import { followScrollTop } from "./diff/follow";
 import type { RenderSpan } from "./diff/hast";
 import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { contentToContextPatch } from "./file/content";
@@ -80,6 +90,7 @@ import {
   unpinTab,
 } from "./viewer/navigation";
 import type { Location, NavState } from "./viewer/navigation";
+import { buildSearchItems, isNavigableSearchItem } from "./viewer/search-items";
 import { Watcher } from "./watcher/service";
 
 interface JumpTarget {
@@ -180,8 +191,11 @@ interface DiffBase {
 const DIFF_MAX_LINES = 1600;
 
 // Bounds the search result list so a broad query in a large repo can't flood the
-// Panel; hitting the cap sets `searchComboboxTruncated`, surfaced as a trailing "+".
+// Pane; hitting the cap sets `searchTruncated`, surfaced as a trailing "+".
 const SEARCH_RESULT_CAP = 500;
+
+// Lines of surrounding context shown on each side of a search match.
+const SEARCH_CONTEXT_LINES = 2;
 
 const emptyModel: GitModel = {
   changed: [],
@@ -297,7 +311,9 @@ function createState() {
   const [fileView, setFileView] = createSignal(false);
   const [fullContentPaths, setFullContentPaths] = createSignal(new Set<string>());
   const [focusedNodeId, setFocusedNodeId] = createSignal("");
-  const [focusedPane, setFocusedPane] = createSignal<"tree" | "diff" | "problems">("tree");
+  const [focusedPane, setFocusedPane] = createSignal<"tree" | "diff" | "problems" | "search">(
+    "tree",
+  );
   const [sidebarOpen, setSidebarOpen] = createSignal(true);
   const [sidebarWidthOverride, setSidebarWidthOverride] = createSignal<number | null>(null);
   const [problemsOpen, setProblemsOpen] = createSignal(false);
@@ -305,12 +321,24 @@ function createState() {
   const [fileComboboxOpen, setFileComboboxOpen] = createSignal(false);
   const [fileComboboxQuery, setFileComboboxQuery] = createSignal("");
   const [fileComboboxIndex, setFileComboboxIndex] = createSignal(0);
-  const [searchComboboxOpen, setSearchComboboxOpen] = createSignal(false);
-  const [searchComboboxQuery, setSearchComboboxQuery] = createSignal("");
-  const [searchComboboxIndex, setSearchComboboxIndex] = createSignal(0);
-  const [searchComboboxScope, setSearchComboboxScope] = createSignal<"changed" | "repo">("changed");
-  const [searchComboboxResults, setSearchComboboxResults] = createSignal<SearchMatch[]>([]);
-  const [searchComboboxTruncated, setSearchComboboxTruncated] = createSignal(false);
+  // Which view occupies the main area. A union (not per-view booleans) so exactly
+  // One view is ever active; future panes extend it.
+  const [mainView, setMainView] = createSignal<"file" | "search">("file");
+  const [searchQuery, setSearchQuery] = createSignal("");
+  const [searchGlob, setSearchGlob] = createSignal("");
+  const [searchRegex, setSearchRegex] = createSignal(false);
+  const [searchCaseSensitive, setSearchCaseSensitive] = createSignal(false);
+  const [searchScope, setSearchScope] = createSignal<"changed" | "repo">("changed");
+  const [searchFocus, setSearchFocus] = createSignal<"query" | "glob" | "results">("query");
+  const [searchIndex, setSearchIndex] = createSignal(0);
+  const [searchScrollTop, setSearchScrollTop] = createSignal(0);
+  const [searchCollapsed, setSearchCollapsed] = createSignal(new Set<string>());
+  const [searchResults, setSearchResults] = createSignal<SearchMatch[]>([]);
+  const [searchFileLines, setSearchFileLines] = createSignal(new Map<string, string[]>());
+  const [searchTruncated, setSearchTruncated] = createSignal(false);
+  const [searchStatus, setSearchStatus] = createSignal<"idle" | "searching" | "ready" | "error">(
+    "idle",
+  );
   const [referencesOpen, setReferencesOpen] = createSignal(false);
   const [referencesStatus, setReferencesStatus] = createSignal<
     "loading" | "ready" | "empty" | "error"
@@ -597,57 +625,125 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
+  // Read each matched file once (bounded, never `full`) so results can show
+  // Context lines and feed the highlighter; a binary or oversized file yields no
+  // Lines and its matches degrade to grep-text-only rows.
+  function readSearchLines(root: string, matches: readonly SearchMatch[], signal: AbortSignal) {
+    // A trailing newline splits into a phantom empty last line; drop it so an
+    // End-of-file match never shows a blank context row.
+    const contentLines = (content: FileContent) => {
+      if (content.kind !== "text") {
+        return undefined;
+      }
+      const lines = content.content.split(/\r?\n/);
+      return lines.at(-1) === "" ? lines.slice(0, -1) : lines;
+    };
+    const paths = [...new Set(matches.map((match) => match.path))];
+    return runtime.runPromise(
+      File.use((file) =>
+        Effect.all(
+          paths.map((path) =>
+            file
+              .content(root, path, { full: false })
+              .pipe(Effect.map((content) => [path, contentLines(content)] as const)),
+          ),
+          { concurrency: "unbounded" },
+        ),
+      ).pipe(
+        Effect.map(
+          (entries) =>
+            new Map(
+              entries.flatMap(([path, lines]) =>
+                lines === undefined ? [] : [[path, lines] as const],
+              ),
+            ),
+        ),
+      ),
+      { signal },
+    );
+  }
+
   // Project content search: debounced git grep over the changed set (honoring the
-  // Active scope, since `changed` already reflects it) or the whole repo. Holds
-  // The previous results until the new query resolves; cleanup aborts the prior
+  // Active scope, since `changed` already reflects it), the whole repo, or the
+  // Glob pathspecs. The snapshot (results + file lines + truncation) commits as
+  // One batch and holds until the next query resolves; cleanup aborts the prior
   // Grep and cancels a not-yet-fired keystroke, the same restart-on-rekey pattern
-  // As the diff pipeline.
+  // As the diff pipeline. Leaving the search view returns early *without*
+  // Clearing, so toggling back restores the results with no flash.
   const SEARCH_DEBOUNCE_MS = 120;
   createEffect(() => {
-    const query = searchComboboxQuery();
-    const paths =
-      searchComboboxScope() === "changed" ? gitModel().changed.map((file) => file.path) : undefined;
+    if (mainView() !== "search") {
+      return;
+    }
+    const query = searchQuery();
     const root = repoRoot();
-    if (
-      !searchComboboxOpen() ||
-      query === "" ||
-      root === "" ||
-      (paths !== undefined && paths.length === 0)
-    ) {
+    const options = { caseSensitive: searchCaseSensitive(), regex: searchRegex() };
+    const glob = searchGlob().trim();
+    const globTokens = glob === "" ? undefined : glob.split(/\s+/);
+    const changedScopePaths =
+      searchScope() === "changed" ? gitModel().changed.map((file) => file.path) : undefined;
+    if (query === "" || root === "") {
       batch(() => {
-        setSearchComboboxResults([]);
-        setSearchComboboxTruncated(false);
+        setSearchResults([]);
+        setSearchFileLines(new Map());
+        setSearchTruncated(false);
+        setSearchStatus("idle");
       });
       return;
     }
+    if (
+      changedScopePaths !== undefined &&
+      changedScopePaths.length === 0 &&
+      globTokens === undefined
+    ) {
+      batch(() => {
+        setSearchResults([]);
+        setSearchFileLines(new Map());
+        setSearchTruncated(false);
+        setSearchStatus("ready");
+      });
+      return;
+    }
+    // A glob narrows via pathspecs; under the changed scope the glob drives the
+    // Grep and the changed set filters after (pathspecs union, never intersect).
+    const paths = globTokens ?? changedScopePaths;
+    const changedSet =
+      globTokens !== undefined && changedScopePaths !== undefined
+        ? new Set(changedScopePaths)
+        : undefined;
+    setSearchStatus("searching");
     const controller = new AbortController();
     const timer = setTimeout(() => {
       runtime
         .runPromise(
-          Git.use((git) => git.search(root, query, paths)),
+          Git.use((git) => git.search(root, query, paths, options)),
           {
             signal: controller.signal,
           },
         )
-        // Drop a superseded query's results: a search can resolve just as a newer
-        // Keystroke aborts its controller, so guard the write the same way.
-        .then((matches) => {
+        .then(async (all) => {
+          const inScope =
+            changedSet === undefined ? all : all.filter((match) => changedSet.has(match.path));
+          const matches = inScope.slice(0, SEARCH_RESULT_CAP);
+          const linesByPath = await readSearchLines(root, matches, controller.signal);
+          // Drop a superseded query's results: a search can resolve just as a newer
+          // Keystroke aborts its controller, so guard the write the same way.
           if (controller.signal.aborted) {
             return;
           }
           batch(() => {
-            setSearchComboboxResults(matches.slice(0, SEARCH_RESULT_CAP));
-            setSearchComboboxTruncated(matches.length > SEARCH_RESULT_CAP);
+            setSearchResults(matches);
+            setSearchFileLines(linesByPath);
+            setSearchTruncated(inScope.length > SEARCH_RESULT_CAP);
+            setSearchStatus("ready");
           });
         })
-        // A genuine grep failure clears stale results; our own cancellation (the
-        // Aborted controller on re-query) must leave the prior results in place.
+        // A genuine grep failure (a half-typed regex) keeps the prior results in
+        // Place under an error status, so an unfinished pattern never blanks the
+        // Pane; our own cancellation (the aborted controller) changes nothing.
         .catch(() => {
           if (!controller.signal.aborted) {
-            batch(() => {
-              setSearchComboboxResults([]);
-              setSearchComboboxTruncated(false);
-            });
+            setSearchStatus("error");
           }
         });
     }, SEARCH_DEBOUNCE_MS);
@@ -656,6 +752,177 @@ function createState() {
       controller.abort();
     });
   });
+
+  const searchItems = createMemo(() =>
+    buildSearchItems({
+      collapsed: searchCollapsed(),
+      context: SEARCH_CONTEXT_LINES,
+      linesByPath: searchFileLines(),
+      matches: searchResults(),
+    }),
+  );
+
+  // Move the selection and keep it in the results viewport, mirroring the diff
+  // Cursor's follow-scroll (margin rows of context, never glued to the edge).
+  function setSearchSelection(index: number) {
+    batch(() => {
+      setSearchIndex(index);
+      setSearchScrollTop(
+        followScrollTop({
+          current: searchScrollTop(),
+          height: 1,
+          margin: 2,
+          maxScroll: Math.max(0, searchItems().length - searchListHeight()),
+          top: index,
+          viewport: searchListHeight(),
+        }),
+      );
+    });
+  }
+
+  // Hop the selection across navigable rows (matches and file headers), skipping
+  // Context lines and gaps; |steps| > 1 is the half-page jump.
+  function moveSearchSelection(steps: number) {
+    const items = searchItems();
+    const landed = Array.from({ length: Math.abs(steps) }).reduce<number>((current) => {
+      const next =
+        steps > 0
+          ? items.findIndex((item, index) => index > current && isNavigableSearchItem(item))
+          : items.findLastIndex((item, index) => index < current && isNavigableSearchItem(item));
+      return next === -1 ? current : next;
+    }, searchIndex());
+    setSearchSelection(landed);
+  }
+
+  // Keep the selection on a navigable row as the item list changes underneath it
+  // (new results, a collapse, a filter), and the scroll inside shrunken content.
+  createEffect(() => {
+    const items = searchItems();
+    const index = untrack(searchIndex);
+    const item = items[index];
+    if (item === undefined || !isNavigableSearchItem(item)) {
+      const bounded = Math.min(index, items.length - 1);
+      const previous = items.findLastIndex(
+        (candidate, candidateIndex) =>
+          candidateIndex <= bounded && isNavigableSearchItem(candidate),
+      );
+      setSearchIndex(
+        previous === -1 ? Math.max(0, items.findIndex(isNavigableSearchItem)) : previous,
+      );
+    }
+    const maxScroll = Math.max(0, items.length - searchListHeight());
+    if (untrack(searchScrollTop) > maxScroll) {
+      setSearchScrollTop(maxScroll);
+    }
+  });
+
+  function openSearch() {
+    batch(() => {
+      setMainView("search");
+      setFocusedPane("search");
+      setSearchFocus("query");
+    });
+  }
+
+  // Closing the view keeps every search signal (query, snapshot, selection,
+  // Collapsed groups): persistence across jumps is the point of the pane.
+  function closeSearch() {
+    batch(() => {
+      setMainView("file");
+      if (focusedPane() === "search") {
+        setFocusedPane("diff");
+      }
+    });
+  }
+
+  // Open a result row (Enter or a click): a match line lands the caret on its
+  // Exact column; a context line lands line-level. Both route through the same
+  // JumpTarget path as problems/references navigation.
+  function jumpToSearchItem(index: number) {
+    const item = searchItems()[index];
+    if (item === undefined || item.kind !== "line") {
+      return;
+    }
+    batch(() => {
+      setSearchIndex(index);
+      selectFile(item.path, { column: item.match?.column, escalate: true, line: item.line });
+      closeSearch();
+    });
+  }
+
+  function resetSearchSelection() {
+    batch(() => {
+      setSearchIndex(0);
+      setSearchScrollTop(0);
+    });
+  }
+
+  function toggleSearchRegex() {
+    setSearchRegex((enabled) => !enabled);
+    resetSearchSelection();
+  }
+
+  function toggleSearchCase() {
+    setSearchCaseSensitive((enabled) => !enabled);
+    resetSearchSelection();
+  }
+
+  function toggleSearchScope() {
+    setSearchScope((current) => (current === "changed" ? "repo" : "changed"));
+    resetSearchSelection();
+  }
+
+  function toggleSearchGroup(path: string) {
+    batch(() => {
+      setSearchCollapsed((current) => {
+        const next = new Set(current);
+        if (!next.delete(path)) {
+          next.add(path);
+        }
+        return next;
+      });
+      const header = searchItems().findIndex(
+        (item) => item.kind === "header" && item.path === path,
+      );
+      if (header !== -1) {
+        setSearchSelection(header);
+      }
+    });
+  }
+
+  // Any navigation to a file (the tree, the palette, recency, a search jump)
+  // Leaves the search view: the main area shows the file that was just selected.
+  createEffect(
+    on(
+      selectedPath,
+      () => {
+        if (mainView() === "search") {
+          closeSearch();
+        }
+      },
+      { defer: true },
+    ),
+  );
+
+  // Search results are repo-specific paths: a worktree switch (or the deleted-
+  // Worktree recovery) invalidates them. Clear the snapshot but keep the query,
+  // The same drift rule as the references overlay.
+  createEffect(
+    on(
+      repoRoot,
+      () => {
+        batch(() => {
+          setSearchResults([]);
+          setSearchFileLines(new Map());
+          setSearchTruncated(false);
+          setSearchStatus("idle");
+          setSearchCollapsed(new Set<string>());
+          resetSearchSelection();
+        });
+      },
+      { defer: true },
+    ),
+  );
 
   const navigableLines = createMemo(() => diffView()?.render.navigable ?? []);
   const truncated = createMemo(() => {
@@ -722,6 +989,9 @@ function createState() {
   // Content shrinks by it; DiffView derives its whole windowing from this height,
   // So the single subtraction keeps the slice and scroll math correct.
   const viewerHeight = createMemo(() => Math.max(1, paneHeight() - 1 - (truncated() ? 1 : 0)));
+  // The search view's results band: the pane interior minus its four fixed chrome
+  // Rows (query, filter, summary, footer). Fixed chrome, so no state ever shifts it.
+  const searchListHeight = createMemo(() => Math.max(1, paneHeight() - 4));
   // A manual width is stored raw and only clamped here, so it never overflows a
   // Shrunken terminal yet is restored intact when the terminal grows back. The
   // Responsive default and a manual override share the same clamp, so the
@@ -2128,6 +2398,7 @@ function createState() {
     checksRunning,
     closeActiveTab,
     closeReferences,
+    closeSearch,
     closeThemePicker,
     closeViewerDecoration,
     collapseSidebar,
@@ -2169,16 +2440,20 @@ function createState() {
     ideTemplate,
     jumpTarget,
     jumpToReference,
+    jumpToSearchItem,
     lineMap,
     loadFullContent,
     loadWorktrees,
+    mainView,
     mainWorktreePath,
     moveFocus,
+    moveSearchSelection,
     navState,
     navigableLines,
     notify,
     now,
     nudgeSidebarWidth,
+    openSearch,
     openThemePicker,
     openViewerDecoration,
     overflow,
@@ -2205,12 +2480,19 @@ function createState() {
     scope,
     scopeMenuIndex,
     scopeMenuOpen,
-    searchComboboxIndex,
-    searchComboboxOpen,
-    searchComboboxQuery,
-    searchComboboxResults,
-    searchComboboxScope,
-    searchComboboxTruncated,
+    searchCaseSensitive,
+    searchFocus,
+    searchGlob,
+    searchIndex,
+    searchItems,
+    searchListHeight,
+    searchQuery,
+    searchRegex,
+    searchResults,
+    searchScope,
+    searchScrollTop,
+    searchStatus,
+    searchTruncated,
     seedNav,
     selectFile,
     selectScope,
@@ -2256,10 +2538,11 @@ function createState() {
     setScope,
     setScopeMenuIndex,
     setScopeMenuOpen,
-    setSearchComboboxIndex,
-    setSearchComboboxOpen,
-    setSearchComboboxQuery,
-    setSearchComboboxScope,
+    setSearchFocus,
+    setSearchGlob,
+    setSearchIndex,
+    setSearchQuery,
+    setSearchScrollTop,
     setSessionBase,
     setSidebarOpen,
     setTerminalHeight,
@@ -2289,6 +2572,10 @@ function createState() {
     themeComboboxOrigin,
     themeComboboxResults,
     togglePinActiveTab,
+    toggleSearchCase,
+    toggleSearchGroup,
+    toggleSearchRegex,
+    toggleSearchScope,
     treeRows,
     truncated,
     truncatedHidden,

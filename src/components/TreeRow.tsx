@@ -204,7 +204,14 @@ function FileRow(props: {
   const pending = () => changed() !== undefined && summary().pending;
   const hasBadges = () => {
     const s = summary();
-    return changed() !== undefined || s.failed || s.errors > 0 || s.warnings > 0 || s.pending;
+    return (
+      changed() !== undefined ||
+      s.failed ||
+      s.errors > 0 ||
+      s.warnings > 0 ||
+      s.info > 0 ||
+      s.pending
+    );
   };
   const maxNameLen = () =>
     contentWidth() - indent().length - (state.iconsEnabled() ? 2 : 0) - (hasBadges() ? 14 : 0);

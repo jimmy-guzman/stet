@@ -221,10 +221,11 @@ export const GitLive = Layer.effect(
             Effect.map((result) => result.stdout.trim() || EMPTY_TREE_SHA),
             Effect.mapError(toGitError),
           ),
-      // Empty on a commitless repo (exit 0, no output) rather than an error, so
-      // The picker shows its empty state instead of a failure notice.
+      // Exit 128 is a commitless repo (unborn HEAD): `git log` has no output, so
+      // Allow it and parse the empty stdout to an empty list, letting the picker
+      // Show its empty state instead of a failure notice (same as parentRef).
       recentCommits: (repoRoot, limit) =>
-        process.run(logArgs(limit), repoRoot).pipe(
+        process.run(logArgs(limit), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
           retryTransient,
           Effect.map((result) => parseLog(result.stdout)),
           Effect.mapError(toGitError),

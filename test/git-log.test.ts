@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Effect, Layer } from "effect";
@@ -98,6 +99,18 @@ test("Git.recentCommits returns commits newest-first, root based on the empty tr
   expect(commits.map((commit) => commit.subject)).toEqual(["third", "second", "fixture"]);
   expect(commits.at(-1)?.parent).toBe(EMPTY_TREE_SHA);
   expect(commits[0]?.parent).toBe(commits[1]?.sha);
+});
+
+test("Git.recentCommits returns no commits for a commitless repo (unborn HEAD)", async () => {
+  // `git log` exits 128 with no output here; it must surface as an empty list, not
+  // An error, so the picker shows its empty state.
+  const repo = mkdtempSync(join(tmpdir(), "git-log-empty-"));
+  try {
+    runGit(repo, ["init"]);
+    expect(await runRecentCommits(repo, 30)).toEqual([]);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
 });
 
 test("Git.recentCommits caps at the limit", async () => {

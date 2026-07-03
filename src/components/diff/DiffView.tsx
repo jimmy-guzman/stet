@@ -338,6 +338,19 @@ export function DiffView() {
     });
   });
 
+  // A viewer menu with no on-screen anchor (the caret is scrolled out of view) would
+  // Render nothing yet still gate the keyboard, so Shift+F10 on an off-screen caret
+  // Would trap it. Close it instead, so opening an unanchorable menu is a no-op.
+  createEffect(() => {
+    if (
+      state.commandMenuOpen() &&
+      state.commandMenuContext() === "viewer" &&
+      commandAnchor() === undefined
+    ) {
+      state.closeCommandMenu();
+    }
+  });
+
   // Keep the caret word in view as it hops along a long line (scroll mode only;
   // Wrap mode has no horizontal scroll). Reads scrollX untracked, like the vertical
   // Follow, so free horizontal wheel scrolling is never snapped back.

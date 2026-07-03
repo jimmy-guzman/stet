@@ -46,7 +46,7 @@ describe("context command menu", () => {
       expect(state.commandMenuOpen()).toBe(true);
       expect(state.commandMenuContext()).toBe("tree");
       // Every file action, the selection caret, and the shared footer hint render.
-      for (const label of ["Open", "Pin as tab", "Copy path", "Open in editor", "Open in IDE"]) {
+      for (const label of ["Pin as tab", "Copy path", "Open in editor", "Open in IDE"]) {
         expect(frame).toContain(label);
       }
       expect(frame).toContain("▸");
@@ -204,6 +204,85 @@ describe("context command menu", () => {
       // Caret, so the menu closes on its own.
       state.setCursorRow(0);
       await settleUntil("viewer menu closed", (frame) => !frame.includes("↑↓ navigate"));
+      expect(state.commandMenuOpen()).toBe(false);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("tree Pin as tab opens and pins the right-clicked file, not the viewed one", async () => {
+    const repoRoot = createFixtureRepo("sideye-cmd-pin-", {
+      "a.txt": "alpha\n",
+      "b.txt": "beta\n",
+    });
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    const model = await loadModel(repoRoot, scope);
+    seedState(model, scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockMouse, mockInput } = await testRender(
+      () => <App />,
+      { height: 24, width: 100 },
+    );
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("tree shows the files", (frame) => frame.includes("b.txt"));
+      // The seeded selection is the first file, so the viewer shows a.txt.
+      expect(state.selectedPath()).toBe("a.txt");
+
+      // Right-click b.txt (row 3) and run its first item, "Pin as tab".
+      await mockMouse.click(5, 3, MouseButton.RIGHT);
+      await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
+      expect(state.commandMenuItems()[0]?.label).toBe("Pin as tab");
+      mockInput.pressEnter();
+
+      await settleUntil("b.txt opened", () => state.selectedPath() === "b.txt");
+      // The right-clicked file was opened and pinned, not the previously-viewed a.txt.
+      expect(state.selectedPath()).toBe("b.txt");
+      const active = state.tabItems().find((tab) => tab.active);
+      expect(active?.path).toBe("b.txt");
+      expect(active?.preview).toBe(false);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("opening the viewer menu on an off-screen caret does not trap the keyboard", async () => {
+    const lines = Array.from({ length: 120 }, (_, i) => `const line_${i + 1} = ${i + 1}`);
+    const repoRoot = createFixtureRepo("sideye-cmd-offscreen-", {
+      "long.ts": `${lines.join("\n")}\n`,
+    });
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    const model = await loadModel(repoRoot, scope);
+    seedState(model, scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
+      height: 34,
+      useMouse: true,
+      width: 120,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("file content", (frame) => frame.includes("line_1 ="), 5);
+
+      // Wheel-scroll deep so the top-line caret leaves the viewport (the wheel moves
+      // The window, not the caret, and the follow never snaps it back).
+      await mockMouse.moveTo(90, 20);
+      for (let tick = 0; tick < 20; tick += 1) {
+        // oxlint-disable-next-line no-await-in-loop -- one wheel tick per render pass
+        await mockMouse.scroll(90, 20, "down");
+        // oxlint-disable-next-line no-await-in-loop -- one wheel tick per render pass
+        await renderOnce();
+      }
+      expect(state.viewerScrollTop()).toBeGreaterThan(0);
+
+      // The caret is now off-screen, so the viewer menu cannot anchor: opening it must
+      // Not leave it stuck open (which would swallow every key until escape).
+      state.openCommandMenu("viewer");
+      await settleUntil("menu did not stay open", () => !state.commandMenuOpen());
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();

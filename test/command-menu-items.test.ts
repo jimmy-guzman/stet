@@ -118,6 +118,12 @@ describe("buildCommandMenuItems", () => {
       mode: "terminal",
       path: "src/foo.ts",
     });
+    // Pin as tab carries the node's own path so it opens+pins that file, not the
+    // Currently-viewed one.
+    expect(items.find((item) => item.label === "Pin as tab")?.action).toEqual({
+      kind: "pinTab",
+      path: "src/foo.ts",
+    });
   });
 
   test("tree directory node offers only its path (no expand/collapse)", () => {

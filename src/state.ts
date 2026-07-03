@@ -1229,9 +1229,10 @@ function createState() {
     };
   };
   // Both the render (CommandMenu) and the dispatch (keymap/click) read this one list,
-  // So the highlighted index always maps to the same action.
+  // So the highlighted index always maps to the same action. Gated on the menu being
+  // Open so it does not rebuild on every caret move or tree refresh while closed.
   const commandMenuItems = createMemo(() =>
-    buildCommandMenuItems(commandMenuInput(commandMenuContext())),
+    commandMenuOpen() ? buildCommandMenuItems(commandMenuInput(commandMenuContext())) : [],
   );
   const cursorFindings = createMemo(() => {
     const line = cursorLine();
@@ -2240,6 +2241,9 @@ function createState() {
         return;
       }
       case "pinTab": {
+        // Open the right-clicked file, then pin it (the double-click gesture): the
+        // Menu is anchored on that node, not on whatever the viewer currently shows.
+        selectFile(action.path);
         pinActiveTab();
         return;
       }

@@ -16,7 +16,7 @@ export type CommandAction =
   | { kind: "copyReference"; path: string; line: number | undefined; column: number | undefined }
   | { kind: "copyFileContents" }
   | { kind: "loadFullContent" }
-  | { kind: "pinTab" }
+  | { kind: "pinTab"; path: string }
   | { kind: "openEditor"; mode: "terminal" | "ide"; path: string; line: number | undefined };
 
 export interface CommandMenuItem {
@@ -95,7 +95,7 @@ function treeItems(input: CommandMenuInput): CommandMenuItem[] {
     return [copyPath];
   }
   return [
-    { action: { kind: "pinTab" }, label: "Pin as tab" },
+    { action: { kind: "pinTab", path: node.path }, label: "Pin as tab" },
     copyPath,
     {
       action: { kind: "openEditor", line: undefined, mode: "terminal", path: node.path },

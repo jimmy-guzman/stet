@@ -1,9 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
+import { join } from "node:path";
 
 import { batch } from "solid-js";
 
 import type { Commit } from "@/git/log";
 import { state } from "@/state";
+
+import { createFixtureRepo, loadModel, loadWorktrees, runGit, seedState } from "./helpers";
 
 const commit = (n: number, subject: string): Commit => ({
   author: "Jimmy",
@@ -51,5 +54,33 @@ test("commitScopeLabel follows the pinned commit after the list reloads", () => 
 test("selecting out of range is a no-op", () => {
   state.setCommits(three);
   state.selectCommit(9);
+  expect(state.scope()).toEqual({ kind: "all", ref: "HEAD" });
+});
+
+// The rebaselineScope commit branch is reached only through switchWorktree (the
+// Helper isn't exported and shouldn't be exposed just to test it). A .txt-only
+// Fixture keeps runChecks from spawning an LSP server into the shared runtime.
+test("switching worktrees while viewing a commit resets the scope to all", async () => {
+  const repoRoot = createFixtureRepo("sideye-commit-rebaseline-", { "notes.txt": "one\n" });
+  const linkedRoot = join(repoRoot, ".wt");
+  runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
+
+  const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+  seedState(model, { kind: "all", ref: "HEAD" });
+
+  // Pin a commit scope, as selecting a commit does. Its SHA has no meaning in the
+  // Target worktree, so the switch must fall back to the all scope.
+  state.setScope({ headRef: "deadbeef", kind: "commit", ref: "cafebabe" });
+
+  const worktrees = await loadWorktrees(repoRoot);
+  const linked = worktrees.find((worktree) => worktree.branch === "side-branch");
+  if (linked === undefined) {
+    throw new Error("linked worktree missing");
+  }
+
+  await state.switchWorktree(linked);
+
+  // Without the commit branch, rebaselineScope would fall through and leave the
+  // Scope as `commit`; resetting to `all` proves the branch ran.
   expect(state.scope()).toEqual({ kind: "all", ref: "HEAD" });
 });

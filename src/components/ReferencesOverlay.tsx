@@ -46,6 +46,10 @@ export function ReferencesOverlay() {
     setSpanCache(new Map());
   });
   createEffect(() => {
+    // Re-highlight on a theme flip too: the clear effect above empties the cache
+    // On `activeThemeName()`, and this effect must re-run to refill it (it reads no
+    // Cache signal that would otherwise retrigger it), or previews strand on plain.
+    activeThemeName();
     if (state.referencesStatus() !== "ready") {
       return;
     }

@@ -143,6 +143,39 @@ describe("context command menu", () => {
     }
   }, 20_000);
 
+  test("the tree menu closes when the sidebar scrolls its anchor row away", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 30; i += 1) {
+      files[`f${String(i).padStart(2, "0")}.txt`] = `content ${i}\n`;
+    }
+    const repoRoot = createFixtureRepo("sideye-cmd-scroll-", files);
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    const model = await loadModel(repoRoot, scope);
+    seedState(model, scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
+      height: 24,
+      width: 100,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("tree shows the files", (frame) => frame.includes("f01.txt"));
+      await mockMouse.click(5, 3, MouseButton.RIGHT);
+      await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
+      expect(state.commandMenuOpen()).toBe(true);
+
+      // Scrolling the sidebar moves the anchored row while the focused node stays the
+      // Same, so the menu (pinned at a now-stale screen cell) must dismiss.
+      state.setSidebarScrollTop(3);
+      await settleUntil("menu closed", (frame) => !frame.includes("Pin as tab"));
+      expect(state.commandMenuOpen()).toBe(false);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
   test("the viewer menu closes when the caret moves off the symbol it opened on", async () => {
     const repoRoot = createFixtureRepo("sideye-cmd-drift-", {
       "package.json": `${JSON.stringify({ name: "cmd-drift" })}\n`,

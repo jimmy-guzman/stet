@@ -75,7 +75,12 @@ export function CommandMenu(props: {
               const highlighted = () => index === state.commandMenuIndex();
               return (
                 <box
-                  ref={(el) => (el.selectable = false)}
+                  ref={(el) => {
+                    // Chrome, not an input: keep the row out of text selection and
+                    // Keyboard focus (the keymap owns menu navigation).
+                    el.selectable = false;
+                    el.focusable = false;
+                  }}
                   width="100%"
                   height={1}
                   paddingLeft={1}

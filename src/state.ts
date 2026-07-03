@@ -165,12 +165,13 @@ interface DecorationAnchor {
 // The context the command menu was opened against; a clear effect closes the menu
 // The moment any of it drifts, so the open state can never outlive the anchored
 // Render (a click away moves the caret/focus and dismisses the menu). The tree menu
-// Tracks its focused node, the viewer menu its caret and scroll.
+// Tracks its focused node and sidebar scroll, the viewer menu its caret and scroll.
 interface CommandMenuGuard {
   context: "tree" | "viewer";
   focusedPane: "tree" | "diff" | "problems" | "search";
   path: string | undefined;
   focusedNodeId: string;
+  sidebarScrollTop: number;
   cursorIndex: number;
   cursorColumn: number;
   caretLineLevel: boolean;
@@ -2170,6 +2171,7 @@ function createState() {
         scope: scopeIdentity(),
         scrollTop: viewerScrollTop(),
         scrollX: viewerScrollX(),
+        sidebarScrollTop: sidebarScrollTop(),
       });
       setCommandMenuOpen(true);
     });
@@ -2197,7 +2199,7 @@ function createState() {
       scopeIdentity() !== guard.scope ||
       repoRoot() !== guard.repoRoot ||
       (guard.context === "tree"
-        ? focusedNodeId() !== guard.focusedNodeId
+        ? focusedNodeId() !== guard.focusedNodeId || sidebarScrollTop() !== guard.sidebarScrollTop
         : cursorIndex() !== guard.cursorIndex ||
           cursorColumn() !== guard.cursorColumn ||
           caretLineLevel() !== guard.caretLineLevel ||

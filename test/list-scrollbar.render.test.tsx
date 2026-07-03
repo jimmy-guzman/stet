@@ -107,25 +107,27 @@ describe("list scrollbar", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) => current.includes("a.ts"));
 
-    mockInput.pressKey("p");
-    await renderOnce();
-    await settleUntil("panel open", (current) => current.includes("synthetic finding 00"));
-
-    // 60 findings overflow the panel viewport, so its reserved column paints a
-    // Thumb; the sidebar has one file, so this thumb is the panel's.
-    const topRow = thumbRowAnywhere(captureCharFrame());
-    expect(topRow).toBeGreaterThanOrEqual(0);
-
-    for (let i = 0; i < 30; i += 1) {
-      mockInput.pressKey("j");
-      // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
+    try {
+      mockInput.pressKey("p");
       await renderOnce();
-    }
-    await renderOnce();
-    expect(thumbRowAnywhere(captureCharFrame())).toBeGreaterThan(topRow);
+      await settleUntil("panel open", (current) => current.includes("synthetic finding 00"));
 
-    renderer.destroy();
-    rmSync(repoRoot, { force: true, recursive: true });
+      // 60 findings overflow the panel viewport, so its reserved column paints a
+      // Thumb; the sidebar has one file, so this thumb is the panel's.
+      const topRow = thumbRowAnywhere(captureCharFrame());
+      expect(topRow).toBeGreaterThanOrEqual(0);
+
+      for (let i = 0; i < 30; i += 1) {
+        mockInput.pressKey("j");
+        // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
+        await renderOnce();
+      }
+      await renderOnce();
+      expect(thumbRowAnywhere(captureCharFrame())).toBeGreaterThan(topRow);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
   });
 
   test("shows a thumb in the search results and tracks scroll", async () => {

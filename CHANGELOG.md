@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.3](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.4.2...sideye-v0.4.3) (2026-07-03)
+
+
+### Features
+
+* **icons:** ✨ add icons for astro, pdf, video, & license files ([#204](https://github.com/jimmy-guzman/sideye/issues/204)) ([1f88fa0](https://github.com/jimmy-guzman/sideye/commit/1f88fa0b7043334d1542d7c233eecd9baaab9cb6))
+* **scope:** ✨ view any recent commit as its own diff ([#199](https://github.com/jimmy-guzman/sideye/issues/199)) ([bad3be4](https://github.com/jimmy-guzman/sideye/commit/bad3be43942fd8cdd81fbd3a519a37d5dc4e8ed8))
+
+
+### Bug Fixes
+
+* **highlight:** 🐛 resolve languages by basename ([#201](https://github.com/jimmy-guzman/sideye/issues/201)) ([be84fd8](https://github.com/jimmy-guzman/sideye/commit/be84fd8789a6b018278081cea78ec28fccf10a89))
+* **upgrade:** 🐛 stack the release notice ([#205](https://github.com/jimmy-guzman/sideye/issues/205)) ([d29f214](https://github.com/jimmy-guzman/sideye/commit/d29f214b74c463f60c66e599a6fb7dac536d63fd))
+
 ## [0.4.2](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.4.1...sideye-v0.4.2) (2026-07-03)
 
 

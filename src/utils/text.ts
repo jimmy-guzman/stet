@@ -56,11 +56,17 @@ export function truncateAroundMatch(text: string, matched: number[], max: number
     return window(tailStart, chars.length, true, false);
   }
 
-  // The match sits before the tail window, so anchor the window at it instead;
-  // Its start is < tailStart, so the tail is always clipped (trailing …).
-  const lead = firstMatch > 0;
-  const width = max - (lead ? 1 : 0) - 1;
-  return window(firstMatch, firstMatch + width, lead, true);
+  // The match sits before the tail window, so the head is clipped. Cover the
+  // Whole matched span when it fits the budget; when the span is wider than the
+  // Window (e.g. two terms matched far apart, a leading dir and the basename),
+  // Keep its basename-side end visible rather than its head, since that is the
+  // More identifying match.
+  const lastMatch = matched[matched.length - 1];
+  const inner = max - 2;
+  const start = lastMatch - firstMatch < inner ? firstMatch : lastMatch + 1 - inner;
+  const lead = start > 0;
+  const end = start + max - (lead ? 1 : 0) - 1;
+  return window(start, end, lead, end < chars.length);
 }
 
 export function truncateName(name: string, max: number) {

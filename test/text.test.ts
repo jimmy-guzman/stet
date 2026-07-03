@@ -42,11 +42,26 @@ describe("truncateAroundMatch", () => {
     expect(visibleMatch(result)).toBe("XXXX");
   });
 
-  test("shows the start of a match wider than the budget", () => {
+  test("keeps the basename-side end of a match wider than the budget", () => {
     const result = truncateAroundMatch("abcdefghijklmnop", rangeFrom(2, 12), 6);
 
     expect(toCodePoints(result.text).length).toBeLessThanOrEqual(6);
-    expect(result.text.startsWith("…c")).toBe(true);
-    expect(visibleMatch(result).startsWith("c")).toBe(true);
+    expect(result.text.startsWith("…")).toBe(true);
+    // The last matched chars (nearest the basename) stay visible, not the head.
+    expect(visibleMatch(result).endsWith("n")).toBe(true);
+  });
+
+  test("keeps the later run of a two-term match visible when both cannot fit", () => {
+    // "…aaa/references/error-patterns" style: a leading-dir run and a basename
+    // Run too far apart to both fit; the basename-side run must survive.
+    const text = "leaddir/aaaaaaaaaaaaaaaaaaaaaa/error-patterns.md";
+    const leadRun = rangeFrom(0, 4); // "lead"
+    const tailStart = text.indexOf("patterns");
+    const tailRun = rangeFrom(tailStart, "patterns".length);
+    const result = truncateAroundMatch(text, [...leadRun, ...tailRun], 24);
+
+    expect(toCodePoints(result.text).length).toBeLessThanOrEqual(24);
+    expect(result.text).toContain("patterns");
+    expect(visibleMatch(result)).toContain("patterns");
   });
 });

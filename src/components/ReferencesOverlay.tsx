@@ -1,10 +1,15 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
-import { createEffect, createMemo, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 
+import { highlightSnippet, languageForPath } from "@/diff/engine";
+import type { RenderSpan } from "@/diff/hast";
 import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
+import { activeThemeName } from "@/theme/active";
 import { useTheme } from "@/theme/context";
-import { truncate } from "@/utils/text";
+
+import { CodeLine } from "./CodeLine";
+import { FileIcon } from "./FileIcon";
 
 // A query-less palette-family overlay: the results list for `textDocument/references`
 // (and go-to-definition's multi-result case). Mirrors the FileCombobox's chrome minus
@@ -29,6 +34,41 @@ export function ReferencesOverlay() {
     const count = results().length;
     return `${count} ${state.referencesLabel()} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
   };
+
+  // Each preview is one scattered source line, so it highlights as a standalone
+  // Snippet keyed by result index; a new result set or a theme flip clears the
+  // Cache, and rows upgrade plain -> highlighted in place (identical text, so the
+  // Swap never shifts layout), the same contract the search pane uses.
+  const [spanCache, setSpanCache] = createSignal(new Map<number, RenderSpan[]>());
+  createEffect(() => {
+    results();
+    activeThemeName();
+    setSpanCache(new Map());
+  });
+  createEffect(() => {
+    // Re-highlight on a theme flip too: the clear effect above empties the cache
+    // On `activeThemeName()`, and this effect must re-run to refill it (it reads no
+    // Cache signal that would otherwise retrigger it), or previews strand on plain.
+    activeThemeName();
+    if (state.referencesStatus() !== "ready") {
+      return;
+    }
+    const cancelled = { current: false };
+    onCleanup(() => {
+      cancelled.current = true;
+    });
+    results().forEach((match, index) => {
+      void highlightSnippet(match.text, languageForPath(match.path)).then((lines) => {
+        if (!cancelled.current) {
+          setSpanCache((previous) =>
+            new Map(previous).set(index, lines[0] ?? [{ text: match.text }]),
+          );
+        }
+      });
+    });
+  });
+  const rowSpans = (index: number, text: string): RenderSpan[] =>
+    spanCache().get(index) ?? [{ text }];
 
   return (
     <box
@@ -82,7 +122,8 @@ export function ReferencesOverlay() {
             {(match, index) => (
               <box width="100%" flexDirection="column">
                 <Show when={index() === 0 || results()[index() - 1]?.path !== match.path}>
-                  <box paddingLeft={1} paddingRight={1}>
+                  <box flexDirection="row" paddingLeft={1} paddingRight={1}>
+                    <FileIcon name={match.path.split("/").at(-1) ?? match.path} />
                     <text fg={theme.colors.text.strong}>{match.path}</text>
                   </box>
                 </Show>
@@ -105,15 +146,10 @@ export function ReferencesOverlay() {
                   <text fg={theme.colors.text.muted}>
                     {`${`${match.line}:${match.column}`.padEnd(locWidth())}  `}
                   </text>
-                  <text
-                    fg={
-                      index() === state.referencesIndex()
-                        ? theme.colors.text.selected
-                        : theme.colors.text.secondary
-                    }
-                  >
-                    {truncate(match.text, Math.max(8, state.overlayWidth() - locWidth() - 6))}
-                  </text>
+                  <CodeLine
+                    spans={() => rowSpans(index(), match.text)}
+                    width={() => Math.max(8, state.overlayWidth() - locWidth() - 6)}
+                  />
                 </box>
               </box>
             )}

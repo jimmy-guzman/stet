@@ -5,6 +5,7 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { kindLetter } from "@/ui-helpers";
 
+import { FileIcon } from "./FileIcon";
 import { RecencyDot } from "./TreeRow";
 
 export function FileCombobox() {
@@ -112,6 +113,7 @@ export function FileCombobox() {
                   onMouseDown={() => openPath(path())}
                 >
                   <box flexDirection="row">
+                    <FileIcon name={path().split("/").at(-1) ?? path()} />
                     <text fg={nameFg()}>{path()}</text>
                     <RecencyDot at={state.recencyByPath().get(path())} />
                   </box>

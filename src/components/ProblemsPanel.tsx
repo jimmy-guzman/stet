@@ -9,6 +9,7 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { truncate } from "@/utils/text";
 
+import { FileIcon } from "./FileIcon";
 import { ListScrollbar } from "./ListScrollbar";
 import { windowWheelHandler } from "./wheel";
 
@@ -174,12 +175,21 @@ export function ProblemsPanel() {
                           paddingLeft={1}
                           paddingRight={1}
                         >
-                          <text fg={theme.colors.text.strong}>
-                            {truncate(
-                              item().path,
-                              Math.max(0, contentWidth() - 2 - counts().length * 4),
-                            )}
-                          </text>
+                          <box flexDirection="row">
+                            <FileIcon name={item().path.split("/").at(-1) ?? item().path} />
+                            <text fg={theme.colors.text.strong}>
+                              {truncate(
+                                item().path,
+                                Math.max(
+                                  0,
+                                  contentWidth() -
+                                    2 -
+                                    counts().length * 4 -
+                                    (state.iconsEnabled() ? 2 : 0),
+                                ),
+                              )}
+                            </text>
+                          </box>
                           <box flexDirection="row">
                             <Index each={counts()}>
                               {(count) => (

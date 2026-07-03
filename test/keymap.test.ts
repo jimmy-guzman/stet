@@ -6,7 +6,7 @@ import { batch } from "solid-js";
 import { createKeyHandler } from "@/keymap";
 import { state } from "@/state";
 
-const keyEvent = (overrides: { ctrl?: boolean; name: string }) =>
+const keyEvent = (overrides: { ctrl?: boolean; name: string; shift?: boolean }) =>
   new KeyEvent({
     ctrl: false,
     eventType: "press",
@@ -24,6 +24,8 @@ describe("createKeyHandler", () => {
   const noop = async () => {};
 
   afterEach(() => {
+    state.closeCommandMenu();
+    state.setFocusedPane("tree");
     state.seedNav(undefined);
   });
 
@@ -156,6 +158,68 @@ describe("createKeyHandler", () => {
     } finally {
       state.showHover = realShowHover;
     }
+  });
+
+  test("Shift+F10 opens the viewer context menu on the first item", () => {
+    batch(() => {
+      state.seedNav("src/foo.ts");
+      state.setFocusedPane("diff");
+    });
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ name: "f10", shift: true }));
+
+    expect(state.commandMenuOpen()).toBe(true);
+    expect(state.commandMenuContext()).toBe("viewer");
+    // With no diff loaded the caret sits on no symbol, so the intel actions are
+    // Omitted and the highlight opens on "Copy reference".
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
+  });
+
+  test("the command menu owns the keyboard: j moves the highlight, esc closes, keys don't fall through", () => {
+    batch(() => {
+      state.seedNav("src/foo.ts");
+      state.setFocusedPane("diff");
+    });
+    let quitCount = 0;
+    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    handle(keyEvent({ name: "f10", shift: true }));
+
+    // A plain q is swallowed while the menu is open (no fall-through to global quit).
+    handle(keyEvent({ name: "q" }));
+    expect(quitCount).toBe(0);
+    expect(state.commandMenuOpen()).toBe(true);
+
+    handle(keyEvent({ name: "j" }));
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy file contents");
+
+    handle(keyEvent({ name: "escape" }));
+    expect(state.commandMenuOpen()).toBe(false);
+  });
+
+  test("return on an editor item routes through the host and closes the menu", () => {
+    batch(() => {
+      state.seedNav("src/foo.ts");
+      state.setFocusedPane("diff");
+    });
+    const calls: [string, number | undefined, string][] = [];
+    const handle = createKeyHandler({
+      openInEditor: async (path, line, mode) => {
+        calls.push([path, line, mode]);
+      },
+      quit: noop,
+    });
+    handle(keyEvent({ name: "f10", shift: true }));
+
+    // Step from "Copy reference" (0) to "Open in editor" (2).
+    handle(keyEvent({ name: "j" }));
+    handle(keyEvent({ name: "j" }));
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Open in editor");
+
+    handle(keyEvent({ name: "return" }));
+
+    expect(calls).toEqual([["src/foo.ts", undefined, "terminal"]]);
+    expect(state.commandMenuOpen()).toBe(false);
   });
 
   test("escape closes an open caret-anchored decoration and is swallowed before quit", () => {

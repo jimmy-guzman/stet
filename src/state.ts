@@ -14,7 +14,10 @@ import {
 } from "solid-js";
 
 import type { DiffScope, ScopeKind } from "./cli";
+import { formatCopyReference } from "./clipboard/reference";
 import { Clipboard } from "./clipboard/service";
+import { buildCommandMenuItems } from "./components/command-menu/items";
+import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
 import { PROBLEMS_HEIGHT, SIDEBAR_MIN_WIDTH, SIDEBAR_VIEWER_MIN } from "./constants";
 import {
   allFindings,
@@ -157,6 +160,25 @@ interface DecorationAnchor {
   // Leaves caret/scroll/path/scope untouched yet restyles the diff, so a stale
   // Card must close rather than keep the old palette.
   theme: string;
+}
+
+// The context the command menu was opened against; a clear effect closes the menu
+// The moment any of it drifts, so the open state can never outlive the anchored
+// Render (a click away moves the caret/focus and dismisses the menu). The tree menu
+// Tracks its focused node and sidebar scroll, the viewer menu its caret and scroll.
+interface CommandMenuGuard {
+  context: "tree" | "viewer";
+  focusedPane: "tree" | "diff" | "problems" | "search";
+  path: string | undefined;
+  focusedNodeId: string;
+  sidebarScrollTop: number;
+  cursorIndex: number;
+  cursorColumn: number;
+  caretLineLevel: boolean;
+  scrollTop: number;
+  scrollX: number;
+  scope: string;
+  repoRoot: string;
 }
 
 // A one-shot request to place the cursor and scroll once the diff for `path`
@@ -306,6 +328,15 @@ function createState() {
   const [sessionBase, setSessionBase] = createSignal("HEAD");
   const [scopeMenuOpen, setScopeMenuOpen] = createSignal(false);
   const [scopeMenuIndex, setScopeMenuIndex] = createSignal(0);
+  // The context menu: shared open/index state across the tree and viewer instances
+  // (only one is ever open, gated by `commandMenuContext`). The anchor is the global
+  // Terminal cell the tree menu opens at; the viewer instance derives its own from
+  // The caret, so it stays undefined there.
+  const [commandMenuOpen, setCommandMenuOpen] = createSignal(false);
+  const [commandMenuIndex, setCommandMenuIndex] = createSignal(0);
+  const [commandMenuContext, setCommandMenuContext] = createSignal<"tree" | "viewer">("tree");
+  const [commandMenuAnchor, setCommandMenuAnchor] = createSignal<{ x: number; y: number }>();
+  const [commandMenuGuard, setCommandMenuGuard] = createSignal<CommandMenuGuard>();
   const [iconsEnabled, setIconsEnabled] = createSignal(true);
   const [overflow, setOverflow] = createSignal<"scroll" | "wrap">("scroll");
   const [changesOnly, setChangesOnly] = createSignal(false);
@@ -1170,6 +1201,39 @@ function createState() {
   // By line-level alone (not `caretWord`), so a diagnostic jump that lands in a gap
   // Still reports its precise column instead of falling back to line-only.
   const caretColumn = createMemo(() => (caretLineLevel() ? undefined : cursorColumn() + 1));
+  // The context menu's inputs, gathered from the caret (viewer) or the focused node
+  // (tree). Taking `context` as an argument (not the signal) lets `openCommandMenu`
+  // Read a context's items before committing it, sidestepping the stale-memo read a
+  // Same-batch signal write would cause.
+  const commandMenuInput = (context: "tree" | "viewer"): CommandMenuInput => {
+    if (context === "viewer") {
+      return {
+        caretColumn: caretColumn(),
+        caretLine: cursorLineNumber(),
+        context: "viewer",
+        hasSymbol: caretWord() !== undefined,
+        selectedPath: selectedPath(),
+        treeNode: undefined,
+        truncated: truncated(),
+      };
+    }
+    const node = treeRows()[focusedRowIndex()]?.node;
+    return {
+      caretColumn: undefined,
+      caretLine: undefined,
+      context: "tree",
+      hasSymbol: false,
+      selectedPath: selectedPath(),
+      treeNode: node === undefined ? undefined : { id: node.id, kind: node.type, path: node.path },
+      truncated: false,
+    };
+  };
+  // Both the render (CommandMenu) and the dispatch (keymap/click) read this one list,
+  // So the highlighted index always maps to the same action. Gated on the menu being
+  // Open so it does not rebuild on every caret move or tree refresh while closed.
+  const commandMenuItems = createMemo(() =>
+    commandMenuOpen() ? buildCommandMenuItems(commandMenuInput(commandMenuContext())) : [],
+  );
   const cursorFindings = createMemo(() => {
     const line = cursorLine();
     return line?.newLine === undefined ? undefined : lineMap().get(line.newLine);
@@ -2077,6 +2141,115 @@ function createState() {
     setFullContentPaths(new Set(fullContentPaths()).add(path));
   }
 
+  // Open the context menu on a pane. A right-click passes its exact cell as `anchor`;
+  // The keyboard trigger omits it, so the tree menu falls back to the focused row and
+  // The viewer menu derives its anchor from the caret (stored as none). A no-op when
+  // The context has no items (defensive: every real context has one).
+  function openCommandMenu(context: "tree" | "viewer", anchor?: { x: number; y: number }) {
+    const items = buildCommandMenuItems(commandMenuInput(context));
+    if (items.length === 0) {
+      return;
+    }
+    batch(() => {
+      setCommandMenuContext(context);
+      setCommandMenuAnchor(
+        context === "viewer"
+          ? undefined
+          : (anchor ?? { x: 2, y: 2 + focusedRowIndex() - sidebarScrollTop() }),
+      );
+      setCommandMenuIndex(0);
+      // Snapshot the context so the clear effect can dismiss the menu the moment a
+      // Click or refresh drifts the caret/focus/file it was opened against.
+      setCommandMenuGuard({
+        caretLineLevel: caretLineLevel(),
+        context,
+        cursorColumn: cursorColumn(),
+        cursorIndex: cursorIndex(),
+        focusedNodeId: focusedNodeId(),
+        focusedPane: focusedPane(),
+        path: selectedPath(),
+        repoRoot: repoRoot(),
+        scope: scopeIdentity(),
+        scrollTop: viewerScrollTop(),
+        scrollX: viewerScrollX(),
+        sidebarScrollTop: sidebarScrollTop(),
+      });
+      setCommandMenuOpen(true);
+    });
+  }
+
+  function closeCommandMenu() {
+    batch(() => {
+      setCommandMenuOpen(false);
+      setCommandMenuGuard(undefined);
+    });
+  }
+
+  // Dismiss the menu the instant its opening context drifts (a click elsewhere moves
+  // The caret or focus, a scope/worktree change reloads the diff), so its open state
+  // Can never outlive the anchored render and trap the keyboard. Mirrors the hover
+  // Card's clear effect.
+  createEffect(() => {
+    const guard = commandMenuGuard();
+    if (guard === undefined) {
+      return;
+    }
+    if (
+      focusedPane() !== guard.focusedPane ||
+      selectedPath() !== guard.path ||
+      scopeIdentity() !== guard.scope ||
+      repoRoot() !== guard.repoRoot ||
+      (guard.context === "tree"
+        ? focusedNodeId() !== guard.focusedNodeId || sidebarScrollTop() !== guard.sidebarScrollTop
+        : cursorIndex() !== guard.cursorIndex ||
+          cursorColumn() !== guard.cursorColumn ||
+          caretLineLevel() !== guard.caretLineLevel ||
+          viewerScrollTop() !== guard.scrollTop ||
+          viewerScrollX() !== guard.scrollX)
+    ) {
+      closeCommandMenu();
+    }
+  });
+
+  // Run a menu item's action by dispatching to the existing state action. `openEditor`
+  // Is excluded: it needs the renderer, so the keymap (host) and the row click
+  // (useRenderer) run it themselves; every other action is pure state.
+  function dispatchCommandAction(action: Exclude<CommandAction, { kind: "openEditor" }>) {
+    switch (action.kind) {
+      case "goToDefinition": {
+        void goToDefinition();
+        return;
+      }
+      case "findReferences": {
+        void findReferences();
+        return;
+      }
+      case "showHover": {
+        void showHover();
+        return;
+      }
+      case "copyReference": {
+        copy(formatCopyReference({ column: action.column, line: action.line, path: action.path }));
+        return;
+      }
+      case "copyFileContents": {
+        copyFileContents();
+        return;
+      }
+      case "loadFullContent": {
+        loadFullContent();
+        return;
+      }
+      case "pinTab": {
+        // Open the right-clicked file, then pin it (the double-click gesture): the
+        // Menu is anchored on that node, not on whatever the viewer currently shows.
+        selectFile(action.path);
+        pinActiveTab();
+        return;
+      }
+    }
+  }
+
   function loadWorktrees(root: string) {
     runtime
       .runPromise(Git.use((git) => git.worktrees(root)))
@@ -2525,11 +2698,17 @@ function createState() {
     checkerState,
     checksRunning,
     closeActiveTab,
+    closeCommandMenu,
     closeReferences,
     closeSearch,
     closeThemePicker,
     closeViewerDecoration,
     collapseSidebar,
+    commandMenuAnchor,
+    commandMenuContext,
+    commandMenuIndex,
+    commandMenuItems,
+    commandMenuOpen,
     copy,
     copyFileContents,
     counts,
@@ -2543,6 +2722,7 @@ function createState() {
     diffView,
     directoryRecencyByPath,
     directorySummariesByPath,
+    dispatchCommandAction,
     editorTemplate,
     expandedDirectories,
     fileComboboxIndex,
@@ -2583,6 +2763,7 @@ function createState() {
     notify,
     now,
     nudgeSidebarWidth,
+    openCommandMenu,
     openFileCombobox,
     openSearch,
     openThemePicker,
@@ -2636,6 +2817,7 @@ function createState() {
     setChangesOnly,
     setCheckerState,
     setCliBaseRef,
+    setCommandMenuIndex,
     setCurrentWorktreeDeleted,
     setCursorColumn,
     setCursorIndex,

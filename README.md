@@ -268,12 +268,13 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 
 ### app
 
-| Key         | Action                                       |
-| ----------- | -------------------------------------------- |
-| `e`         | open file in terminal editor (suspends TUI)  |
-| `o`         | open file in GUI / IDE (renderer stays live) |
-| `?`         | show all keybindings                         |
-| `q` / `esc` | quit (esc closes the problems panel first)   |
+| Key         | Action                                                 |
+| ----------- | ------------------------------------------------------ |
+| `e`         | open file in terminal editor (suspends TUI)            |
+| `o`         | open file in GUI / IDE (renderer stays live)           |
+| `Shift+F10` | context menu for the focused tree row or viewer symbol |
+| `?`         | show all keybindings                                   |
+| `q` / `esc` | quit (esc closes the problems panel first)             |
 
 Press `?` anytime to see the full list in the app:
 
@@ -287,7 +288,9 @@ a problem to jump to it. Double-click a file in the tree, or a tab in the strip,
 to pin it as a tab. Clicks also work in the overlays and the search pane: a go-to-file result, a
 worktree to switch to, or a theme to apply (hovering a theme previews it
 live); a click on a search result selects it and a double-click opens it. Clicking a pane focuses it, and the wheel scrolls whichever
-pane the pointer is over.
+pane the pointer is over. Right-click a tree row or a viewer symbol for a context
+menu of the actions that apply there (go to definition, find references, hover,
+copy, open in editor), the same menu `Shift+F10` opens on the focused pane.
 
 ## Configuration
 

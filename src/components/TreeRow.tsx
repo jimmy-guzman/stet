@@ -13,6 +13,7 @@ import { folderIcon } from "@/utils/file-icon";
 import { truncate, truncateName } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
+import { isRightClick } from "./mouse";
 
 // Fine-grained reactivity replaces React.memo: only the rows whose focus,
 // Selection, or checker state actually change re-evaluate. Under the sidebar's
@@ -48,9 +49,18 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
 
   // Clicking a directory row reproduces the keyboard outcome: move the cursor
   // There and toggle its expansion (collapsing `l`/`h` into one click).
-  // StopPropagation keeps the Sidebar's focus-only handler from also firing.
+  // StopPropagation keeps the Sidebar's focus-only handler from also firing. A
+  // Right-click instead focuses the row and opens the context menu at the cell.
   const onMouseDown = (event: MouseEvent) => {
     event.stopPropagation();
+    if (isRightClick(event)) {
+      batch(() => {
+        state.setFocusedPane("tree");
+        state.setFocusedNodeId(props.node.id);
+      });
+      state.openCommandMenu("tree", { x: event.x, y: event.y });
+      return;
+    }
     batch(() => {
       state.setFocusedPane("tree");
       state.setFocusedNodeId(props.node.id);
@@ -181,9 +191,18 @@ function FileRow(props: {
 
   // Clicking a file row reproduces the keyboard outcome: select and open (like
   // `enter`), and double-clicking pins it as a tab. stopPropagation keeps the
-  // Sidebar's focus-only handler from also firing.
+  // Sidebar's focus-only handler from also firing. A right-click instead focuses
+  // The row (without opening it) and opens the context menu at the cell.
   const onMouseDown = (event: MouseEvent) => {
     event.stopPropagation();
+    if (isRightClick(event)) {
+      batch(() => {
+        state.setFocusedPane("tree");
+        state.setFocusedNodeId(props.node.id);
+      });
+      state.openCommandMenu("tree", { x: event.x, y: event.y });
+      return;
+    }
     batch(() => {
       state.setFocusedPane("tree");
       state.selectFile(props.node.path);

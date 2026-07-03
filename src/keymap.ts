@@ -92,6 +92,31 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // The context menu owns the keyboard while open (it can cover either pane, so
+      // It gates ahead of the pane-specific branches). j/k/arrows move the highlight;
+      // Return runs the highlighted action (editor opens through the host, like e/o).
+      if (state.commandMenuOpen()) {
+        const items = state.commandMenuItems();
+        if (key.name === "escape") {
+          state.closeCommandMenu();
+        } else if (key.name === "j" || key.name === "down") {
+          state.setCommandMenuIndex(Math.min(state.commandMenuIndex() + 1, items.length - 1));
+        } else if (key.name === "k" || key.name === "up") {
+          state.setCommandMenuIndex(Math.max(state.commandMenuIndex() - 1, 0));
+        } else if (key.name === "return") {
+          const item = items[state.commandMenuIndex()];
+          if (item !== undefined) {
+            if (item.action.kind === "openEditor") {
+              void host.openInEditor(item.action.path, item.action.line, item.action.mode);
+            } else {
+              state.dispatchCommandAction(item.action);
+            }
+          }
+          state.closeCommandMenu();
+        }
+        return;
+      }
+
       if (state.fileComboboxOpen()) {
         if (key.name === "escape") {
           state.setFileComboboxOpen(false);
@@ -514,6 +539,19 @@ export function createKeyHandler(host: HostEffects) {
 
       if (key.name === ">") {
         state.goForward();
+        return;
+      }
+
+      // Open the context menu on the focused pane (Shift+F10, the IDE-standard "show
+      // Context menu" key). The tree menu works from tree focus; the viewer menu only
+      // While the file view is on screen (its intel/copy actions need a caret).
+      if (key.name === "f10" && key.shift) {
+        const pane = state.focusedPane();
+        if (pane === "tree") {
+          state.openCommandMenu("tree");
+        } else if (pane === "diff" && state.mainView() === "file") {
+          state.openCommandMenu("viewer");
+        }
         return;
       }
 

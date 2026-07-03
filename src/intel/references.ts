@@ -20,6 +20,10 @@ export type ReferenceRow =
 // One row per match. The match keeps its `results` index (the cursor space), so the windowed
 // List drives selection and scroll off row position while jumps still address results directly.
 // Pure like `attachReferencePreviews`, so the window math unit-tests without a renderer.
+//
+// Precondition: `results` must already be grouped by path (a header opens on every path change,
+// Comparing only the previous element), so unsorted input would emit duplicate headers for the
+// Same file. Callers sort with `toSorted(byReferenceOrder)` before `attachReferencePreviews`.
 export function buildReferenceRows(results: ReferenceResult[]): ReferenceRow[] {
   return results.flatMap((match, index) =>
     index === 0 || results[index - 1]?.path !== match.path

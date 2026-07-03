@@ -120,8 +120,8 @@ export function scopeLabel(scope: DiffScope) {
     return "last commit";
   }
 
-  // The header shows the richer "commit N of M ·" label via commitScopeLabel;
-  // This is the fallback for any other caller (e.g. the search pane).
+  // The header shows the commit's subject via commitScopeLabel; this short
+  // Sha form is the fallback for any other caller (e.g. the search pane).
   if (scope.kind === "commit") {
     return `commit ${scope.headRef?.slice(0, 7) ?? ""}`;
   }

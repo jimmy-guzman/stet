@@ -22,7 +22,9 @@ export function ScopeMenu() {
   });
 
   const commitsView = () => state.scopeMenuView() === "commits";
-  const nowSeconds = () => Math.floor(state.now() / 1000);
+  // Wall-clock captured at drill-in (state.now() is the recency clock, which freezes
+  // While the repo is idle and would render every commit age as "now").
+  const nowSeconds = () => state.commitsNow();
   const marker = (active: boolean, current: boolean) =>
     `${active ? "▸" : " "}${current ? "●" : " "} `;
   const rowBackground = (active: boolean) =>
@@ -154,8 +156,9 @@ export function ScopeMenu() {
                     paddingRight={1}
                     backgroundColor={rowBackground(active())}
                     onMouseDown={() => {
-                      state.selectCommit(index);
-                      state.setScopeMenuOpen(false);
+                      if (state.selectCommit(index)) {
+                        state.setScopeMenuOpen(false);
+                      }
                     }}
                   >
                     {/* Pinned to one line (wrapMode none + height 1): subjects run long

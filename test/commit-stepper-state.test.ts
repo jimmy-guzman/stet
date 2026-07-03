@@ -40,14 +40,14 @@ test("commitScopeLabel is the active commit's subject", () => {
   expect(state.commitScopeLabel()).toBe("newest");
 });
 
-test("commitScopeLabel follows the pinned commit after the list reloads", () => {
+test("commitScopeLabel follows the pinned commit even after it ages out of the list", () => {
   state.setCommits(three);
-  state.selectCommit(1); // The "middle" commit (sha1)
+  state.selectCommit(1); // Pin the "middle" commit (sha1).
 
-  // A newer commit lands and the drill-down reloads: the snapshot shifts down.
-  state.setCommits([{ ...commit(0, "brand new"), sha: "shaNEW" }, ...three]);
+  // Enough new commits land that the reloaded window no longer contains the pinned
+  // Commit at all (it fell past LOG_LIMIT). The label must still name it, not degrade.
+  state.setCommits([{ ...commit(0, "brand new"), sha: "shaNEW" }]);
 
-  // The label still names the pinned commit (sha1), not whatever now sits at index 1.
   expect(state.commitScopeLabel()).toBe("middle");
 });
 

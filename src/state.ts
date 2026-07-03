@@ -336,6 +336,12 @@ function createState() {
   const [commitsStatus, setCommitsStatus] = createSignal<"loading" | "ready" | "empty" | "error">(
     "loading",
   );
+  // The commit pinned by the active `commit` scope (its subject drives the header
+  // Label, so it survives even after the commit ages out of the reloaded list).
+  const [selectedCommit, setSelectedCommit] = createSignal<Commit | undefined>(undefined);
+  // Wall-clock captured when the commits drill-down opens, for the rows' relative
+  // Dates. Not `now` (the recency clock), which freezes while the repo is idle.
+  const [commitsNow, setCommitsNow] = createSignal(0);
   // The context menu: shared open/index state across the tree and viewer instances
   // (only one is ever open, gated by `commandMenuContext`). The anchor is the global
   // Terminal cell the tree menu opens at; the viewer instance derives its own from
@@ -1974,8 +1980,10 @@ function createState() {
   });
 
   // The active scope's identity, so a scope switch that leaves the path unchanged
-  // Still drifts the anchor off the now-different diff.
-  const scopeIdentity = () => `${scope().kind}:${scope().ref}`;
+  // Still drifts the anchor off the now-different diff. Includes headRef (the pinned
+  // Sha for a commit scope), or two sibling commits sharing a first-parent would read
+  // As the same scope and never drift the hover card / command menu (mirrors scopeKey).
+  const scopeIdentity = () => `${scope().kind}:${scope().ref}:${scope().headRef ?? ""}`;
 
   // Open a caret-anchored decoration, capturing the caret/scroll/file it describes.
   function openViewerDecoration(content: ViewerDecoration) {
@@ -2367,7 +2375,11 @@ function createState() {
   let commitsLoad = 0;
   function loadCommits(root: string) {
     const token = (commitsLoad += 1);
+    // Clear the prior snapshot so nothing can select a stale row while the reload
+    // Is in flight (the "loading" view hides the list, so this never flashes).
+    setCommits([]);
     setCommitsStatus("loading");
+    setCommitsNow(Math.floor(Date.now() / 1000));
     runtime
       .runPromise(Git.use((git) => git.recentCommits(root, LOG_LIMIT)))
       .then((loaded) => {
@@ -2386,21 +2398,27 @@ function createState() {
 
   // Pin the viewer to one commit shown as its own diff (its first parent..the
   // Commit), reusing the range-scope pipeline. Synchronous: the parent came with
-  // The log, so no ref resolution is needed.
+  // The log, so no ref resolution is needed. Returns whether a commit was pinned
+  // (false for an out-of-range index, e.g. an empty/loading list), so the caller
+  // Only closes the picker on a real selection. Bumps the async-scope token so a
+  // Pending last-commit resolution can't clobber the commit just pinned.
   function selectCommit(index: number) {
     const commit = commits()[index];
     if (commit === undefined) {
-      return;
+      return false;
     }
+    scopeSelection += 1;
+    setSelectedCommit(commit);
     setScope({ headRef: commit.sha, kind: "commit", ref: commit.parent });
+    return true;
   }
 
   // The header names the active commit by its subject alone (the sha lives in the
   // Picker); the "commit ·" scope marker at the diff already says it is a commit.
-  // Resolved from the pinned sha, not a list position, so a reload that shifts the
-  // Snapshot can never make the label follow the wrong commit.
+  // Read from the commit captured at selection, so the label holds even after the
+  // Commit ages out of the reloaded list.
   const commitScopeLabel = createMemo(() => {
-    const commit = commits().find((entry) => entry.sha === scope().headRef);
+    const commit = selectedCommit();
     if (commit === undefined) {
       return "commit";
     }
@@ -2771,6 +2789,7 @@ function createState() {
     commandMenuOpen,
     commitScopeLabel,
     commits,
+    commitsNow,
     commitsStatus,
     copy,
     copyFileContents,

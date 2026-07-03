@@ -101,7 +101,8 @@ export function createKeyHandler(host: HostEffects) {
           } else {
             state.setScopeMenuOpen(false);
           }
-        } else if (key.name === "s" && !inCommits) {
+        } else if (key.name === "s") {
+          // `s` opened the picker, so it closes it from either level.
           state.setScopeMenuOpen(false);
         } else if (key.name === "j" || key.name === "down") {
           state.setScopeMenuIndex(Math.min(state.scopeMenuIndex() + 1, lastIndex));
@@ -114,14 +115,17 @@ export function createKeyHandler(host: HostEffects) {
           state.loadCommits(state.gitModel().repoRoot);
         } else if (key.name === "return") {
           if (inCommits) {
-            state.selectCommit(state.scopeMenuIndex());
+            // Only close on a real selection; Enter on a loading/empty list is a no-op.
+            if (state.selectCommit(state.scopeMenuIndex())) {
+              state.setScopeMenuOpen(false);
+            }
           } else {
             const kind = scopeKinds[state.scopeMenuIndex()];
             if (kind !== undefined) {
               state.selectScope(kind);
             }
+            state.setScopeMenuOpen(false);
           }
-          state.setScopeMenuOpen(false);
         }
         return;
       }

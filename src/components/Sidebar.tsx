@@ -4,6 +4,7 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 
+import { ListScrollbar } from "./ListScrollbar";
 import { TreeRow } from "./TreeRow";
 import { windowWheelHandler } from "./wheel";
 
@@ -40,47 +41,54 @@ export function Sidebar() {
       backgroundColor={theme.colors.surface.base}
       onMouseDown={() => state.setFocusedPane("tree")}
     >
-      <box
-        ref={(el) => {
-          // A click activates a row; it must never start a text selection.
-          el.selectable = false;
-        }}
-        width="100%"
-        height={state.paneHeight()}
-        flexDirection="column"
-        onMouseScroll={onWheel}
-      >
-        <Show
-          when={state.treeRows().length > 0}
-          fallback={
-            // No rows yet. During the deferred repoFiles load, render nothing: the
-            // Window is already a fixed paneHeight, so the pane stays blank and
-            // Reserved on its own. Only a genuinely loaded, file-less repo gets
-            // The real empty state.
-            <Show when={!state.repoFilesLoading()}>
-              <box
-                id="tree-empty"
-                width="100%"
-                height={state.paneHeight()}
-                flexDirection="column"
-                justifyContent="center"
-                alignItems="center"
-                backgroundColor={theme.colors.surface.base}
-              >
-                <text fg={theme.colors.text.muted}>
-                  {state.changesOnly() ? "no changes" : "no files"}
-                </text>
-                <text fg={theme.colors.text.faint}>
-                  {state.changesOnly() ? "press c to show all" : "this repository has no files yet"}
-                </text>
-              </box>
-            </Show>
-          }
+      <box width="100%" height={state.paneHeight()} flexDirection="row" onMouseScroll={onWheel}>
+        <box
+          ref={(el) => {
+            // A click activates a row; it must never start a text selection.
+            el.selectable = false;
+          }}
+          flexGrow={1}
+          flexDirection="column"
         >
-          <Index each={visibleRows()}>
-            {(row) => <TreeRow row={row()} isDoubleClick={isDoubleFileClick} />}
-          </Index>
-        </Show>
+          <Show
+            when={state.treeRows().length > 0}
+            fallback={
+              // No rows yet. During the deferred repoFiles load, render nothing: the
+              // Window is already a fixed paneHeight, so the pane stays blank and
+              // Reserved on its own. Only a genuinely loaded, file-less repo gets
+              // The real empty state.
+              <Show when={!state.repoFilesLoading()}>
+                <box
+                  id="tree-empty"
+                  width="100%"
+                  height={state.paneHeight()}
+                  flexDirection="column"
+                  justifyContent="center"
+                  alignItems="center"
+                  backgroundColor={theme.colors.surface.base}
+                >
+                  <text fg={theme.colors.text.muted}>
+                    {state.changesOnly() ? "no changes" : "no files"}
+                  </text>
+                  <text fg={theme.colors.text.faint}>
+                    {state.changesOnly()
+                      ? "press c to show all"
+                      : "this repository has no files yet"}
+                  </text>
+                </box>
+              </Show>
+            }
+          >
+            <Index each={visibleRows()}>
+              {(row) => <TreeRow row={row()} isDoubleClick={isDoubleFileClick} />}
+            </Index>
+          </Show>
+        </box>
+        <ListScrollbar
+          rowCount={() => state.treeRows().length}
+          viewport={state.paneHeight}
+          scrollTop={state.sidebarScrollTop}
+        />
       </box>
     </box>
   );

@@ -153,6 +153,55 @@ function findLastPositions(queryLower: string[], pathLower: string[]): number[] 
   return positions;
 }
 
+// The rightmost start index where `needle` occurs contiguously in `haystack`,
+// Or -1. Rightmost so a term is highlighted on its basename occurrence, not an
+// Earlier parent-directory one.
+function lastSubsequenceRun(haystack: string[], needle: string[]): number {
+  for (let start = haystack.length - needle.length; start >= 0; start -= 1) {
+    if (needle.every((char, offset) => haystack[start + offset] === char)) {
+      return start;
+    }
+  }
+  return -1;
+}
+
+// The matched character offsets (ascending, deduped) for highlighting a result
+// And keeping the match visible when its path is truncated. Runs each
+// Whitespace term independently and unions their positions, mirroring the
+// Ranker's per-term AND. A term is matched as a contiguous run when it appears
+// As one (the common case: typing a real path fragment), which keeps the
+// Highlight tight and preferring the rightmost run keeps it on the basename;
+// It falls back to the scattered subsequence alignment only when the term is
+// Not contiguous. Returns [] for an empty or non-matching query.
+export function matchIndices(query: string, text: string): number[] {
+  const terms = queryTerms(query);
+  if (terms.length === 0) {
+    return [];
+  }
+
+  const textLower = toChars(text).map((char) => char.toLowerCase());
+  const matched = new Set<number>();
+  for (const term of terms) {
+    const termLower = toChars(term).map((char) => char.toLowerCase());
+    const run = lastSubsequenceRun(textLower, termLower);
+    if (run >= 0) {
+      for (let offset = 0; offset < termLower.length; offset += 1) {
+        matched.add(run + offset);
+      }
+      continue;
+    }
+    const positions = findLastPositions(termLower, textLower);
+    if (positions === undefined) {
+      return [];
+    }
+    for (const position of positions) {
+      matched.add(position);
+    }
+  }
+
+  return [...matched].toSorted((a, b) => a - b);
+}
+
 const BASE_DISTANCE_PENALTY = 0.6;
 const ADDITIONAL_DISTANCE_PENALTY = 0.05;
 const MIN_DISTANCE_PENALTY = 0.2;

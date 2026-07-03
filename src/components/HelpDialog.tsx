@@ -93,6 +93,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
     entries: [
       ["e", "open in terminal editor (suspends TUI, --editor template)"],
       ["o", "open in GUI / IDE (renderer stays live, --ide template)"],
+      ["Shift+F10", "context menu for the focused row or symbol (or right-click)"],
       ["?", "show all keybindings"],
       ["q / esc", "quit (esc closes panels first)"],
     ],

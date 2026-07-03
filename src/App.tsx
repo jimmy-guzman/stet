@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 
 import type { ThemeMode } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
-import { Effect } from "effect";
 import { createEffect, onCleanup, Show } from "solid-js";
 
+import { CommandMenu } from "./components/CommandMenu";
 import { FileCombobox } from "./components/FileCombobox";
 import { HeaderBar } from "./components/HeaderBar";
 import { HelpDialog } from "./components/HelpDialog";
@@ -17,13 +17,11 @@ import { StatusBar } from "./components/StatusBar";
 import { ThemeCombobox } from "./components/ThemeCombobox";
 import { Viewer } from "./components/Viewer";
 import { WorktreeCombobox } from "./components/WorktreeCombobox";
-import { buildEditorCommand } from "./editor/reference";
-import { Editor } from "./editor/service";
+import { openInEditor } from "./editor/open";
 import type { Worktree } from "./git/model";
 import { createKeyHandler } from "./keymap";
 import type { LogLevel } from "./log/levels";
 import { log } from "./log/terminal";
-import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { useTheme } from "./theme/context";
@@ -136,55 +134,12 @@ export function App() {
     quit({ level: "warning", text: "sideye: worktree deleted, nothing left to inspect" });
   });
 
-  async function openInEditor(
-    filePath: string,
-    line: number | undefined,
-    mode: "terminal" | "ide",
-  ) {
-    const template = mode === "ide" ? state.ideTemplate() : state.editorTemplate();
-    if (template === undefined) {
-      state.notify(
-        mode === "ide"
-          ? "no IDE configured; set 'ide' or --ide"
-          : "no editor configured; set 'editor' or --editor",
-      );
-      return;
-    }
-    const absolutePath = join(state.gitModel().repoRoot, filePath);
-    const argv = buildEditorCommand(template, absolutePath, line);
-    if (argv.length === 0) {
-      return;
-    }
-    const cwd = state.gitModel().repoRoot;
-    if (mode === "terminal") {
-      renderer.suspend();
-      try {
-        await runtime.runPromise(Editor.use((editor) => editor.openTerminal(argv, cwd)));
-      } catch (error) {
-        state.notify(
-          `couldn't open the editor: ${error instanceof Error ? error.message : String(error)}`,
-          "error",
-        );
-      } finally {
-        renderer.resume();
-      }
-    } else {
-      runtime.runFork(
-        Editor.use((editor) => editor.openIde(argv, cwd)).pipe(
-          Effect.tap((code) =>
-            code !== 0
-              ? Effect.sync(() => state.notify("IDE exited with an error", "warning"))
-              : Effect.void,
-          ),
-          Effect.catchTag("EditorError", (error) =>
-            Effect.sync(() => state.notify(`couldn't open the IDE: ${error.message}`, "error")),
-          ),
-        ),
-      );
-    }
-  }
-
-  useKeyboard(createKeyHandler({ openInEditor, quit: quitWithUpdateNotice }));
+  useKeyboard(
+    createKeyHandler({
+      openInEditor: (path, line, mode) => openInEditor(renderer, path, line, mode),
+      quit: quitWithUpdateNotice,
+    }),
+  );
 
   return (
     <box
@@ -215,6 +170,18 @@ export function App() {
       </Show>
       <Show when={state.scopeMenuOpen()}>
         <ScopeMenu />
+      </Show>
+      {/* The tree context menu anchors in global terminal coordinates (the viewer's
+          own instance lives inside DiffView, in viewer-content space). */}
+      <Show when={state.commandMenuOpen() && state.commandMenuContext() === "tree"}>
+        <CommandMenu
+          anchor={() => {
+            const at = state.commandMenuAnchor();
+            return at === undefined ? undefined : { col: at.x, row: at.y };
+          }}
+          viewportWidth={state.terminalWidth}
+          viewportHeight={state.terminalHeight}
+        />
       </Show>
       <Show when={state.themeComboboxOpen()}>
         <ThemeCombobox />

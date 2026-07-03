@@ -12,7 +12,10 @@ import { visibleWindow, visibleWindowVariable } from "@/diff/windowing";
 import { wordAt } from "@/diff/words";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
+import { caretCell } from "@/viewer/anchor";
 
+import { CommandMenu } from "../CommandMenu";
+import { isRightClick } from "../mouse";
 import { CaretCard } from "./CaretCard";
 import { createLineMeasurer } from "./line-measure";
 
@@ -314,6 +317,27 @@ export function DiffView() {
   // Space the card's absolute left/clamp live in.
   const innerWidth = () => contentWidth() + gutterWidth();
 
+  // The caret's on-screen cell, in viewer-content coordinates, for the context menu
+  // (the same geometry the CaretCard anchors against). A line-level caret (a gutter
+  // Click, no word) has no `caretRange`, so fall back to the line start rather than
+  // Leaving the open menu unanchored and invisible. Undefined only when there is no
+  // Cursor line or it is scrolled out of view, which hides the menu.
+  const commandAnchor = createMemo(() => {
+    const top = cursorTop();
+    if (top === undefined) {
+      return undefined;
+    }
+    return caretCell({
+      caretFrom: caretRange()?.from ?? 0,
+      contentLeft: gutterWidth() + 1,
+      cursorTop: top,
+      scrollTop: state.viewerScrollTop(),
+      scrollX: state.viewerScrollX(),
+      viewportHeight: state.viewerHeight(),
+      viewportWidth: innerWidth(),
+    });
+  });
+
   // Keep the caret word in view as it hops along a long line (scroll mode only;
   // Wrap mode has no horizontal scroll). Reads scrollX untracked, like the vertical
   // Follow, so free horizontal wheel scrolling is never snapped back.
@@ -466,6 +490,12 @@ export function DiffView() {
                         state.setCaretLineLevel(true);
                       }
                     });
+                    // A right-click opens the context menu on the symbol just landed
+                    // On (outside the batch above so the caret memos are fresh when the
+                    // Menu reads them); a left-click leaves today's caret-move behavior.
+                    if (isRightClick(event)) {
+                      state.openCommandMenu("viewer");
+                    }
                   }}
                 >
                   <text fg={gutterNumberColor(line())} bg={gutterBackground(line())}>
@@ -493,6 +523,13 @@ export function DiffView() {
         contentLeft={() => gutterWidth() + 1}
         innerWidth={innerWidth}
       />
+      <Show when={state.commandMenuOpen() && state.commandMenuContext() === "viewer"}>
+        <CommandMenu
+          anchor={commandAnchor}
+          viewportWidth={innerWidth}
+          viewportHeight={state.viewerHeight}
+        />
+      </Show>
     </box>
   );
 }

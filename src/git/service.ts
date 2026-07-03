@@ -154,7 +154,10 @@ export const GitLive = Layer.effect(
           concurrency: "unbounded",
         }).pipe(
           Effect.map(([oldContent, newContent]) => buildFilePatch(file, oldContent, newContent)),
-          Effect.catch(() => Effect.succeed<FilePatch>({ kind: "fallback" })),
+          // A `git show` failure (submodule gitlink, ref gone mid-flight) falls
+          // Back to the pathspec diff; scoped to CommandError so nothing else is
+          // Swallowed into a fallback.
+          Effect.catchTag("CommandError", () => Effect.succeed<FilePatch>({ kind: "fallback" })),
           Effect.flatMap((built) =>
             built.kind === "patch" ? Effect.succeed(built.patch) : pathspecDiff,
           ),

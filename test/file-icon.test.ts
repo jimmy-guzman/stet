@@ -65,6 +65,12 @@ describe("fileIcon", () => {
     expect(fileIcon("build.gradle.kts")).not.toBe(fileIcon("script.kts"));
   });
 
+  test("marks .conf files with the config glyph", () => {
+    expect(fileIcon("nginx.conf")).toBe("\u{e615}");
+    expect(fileIcon("redis.conf")).toBe("\u{e615}");
+    expect(fileIcon("nginx.conf")).toBe(fileIcon(".editorconfig"));
+  });
+
   test("falls back to a config glyph for unmatched dotfiles", () => {
     expect(fileIcon(".editorconfig")).toBe("\u{e615}");
     expect(fileIcon(".npmrc")).toBe("\u{e615}");

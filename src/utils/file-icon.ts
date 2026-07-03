@@ -16,7 +16,7 @@
  * dev-scala, gradle dev-gradle (also build/settings.gradle(.kts), gradlew(.bat),
  * gradle.properties), maven seti-maven (pom.xml), node dev-nodejs_small, tsconfig seti-tsconfig,
  * bun dev-bun (also bunfig.toml), docker dev-docker, make seti-makefile, license seti-license (also
- * NOTICE), git dev-git, config/env seti-config (also the dotfile fallback), book fa-book, csv
+ * NOTICE), git dev-git, config/env/conf seti-config (also the dotfile fallback), book fa-book, csv
  * seti-csv, http fa-paper_plane, symlink oct-file_symlink_file.
  */
 
@@ -78,6 +78,7 @@ const BY_SUFFIX = new Map([
   ["bash", "\u{ebca}"],
   ["zsh", "\u{ebca}"],
   ["toml", "\u{e6b2}"],
+  ["conf", CONFIG],
   ["yml", "\u{e8eb}"],
   ["yaml", "\u{e8eb}"],
   ["lock", "\u{f023}"],

@@ -16,8 +16,9 @@
  * dev-scala, gradle dev-gradle (also build/settings.gradle(.kts), gradlew(.bat),
  * gradle.properties), maven seti-maven (pom.xml), node dev-nodejs_small, tsconfig seti-tsconfig,
  * bun dev-bun (also bunfig.toml), docker dev-docker, make seti-makefile, license seti-license (also
- * NOTICE), git dev-git, config/env/conf seti-config (also the dotfile fallback), book fa-book, csv
- * seti-csv, http fa-paper_plane, symlink oct-file_symlink_file.
+ * NOTICE and license-style filenames), git dev-git, config/env/conf seti-config (also the dotfile
+ * fallback), book fa-book, csv seti-csv, http fa-paper_plane, astro custom-astro, pdf
+ * fa-file_pdf_o, video fa-file_video_o, symlink oct-file_symlink_file.
  */
 
 const DEFAULT_FILE = "\u{ea7b}";
@@ -37,8 +38,6 @@ const BY_STEM = new Map([
   ["bunfig.toml", "\u{e76f}"],
   ["dockerfile", "\u{e7b0}"],
   ["makefile", "\u{e673}"],
-  ["license", LICENSE],
-  ["notice", LICENSE],
   [".gitignore", "\u{e702}"],
   [".env", CONFIG],
   ["readme.md", "\u{f02d}"],
@@ -71,6 +70,8 @@ const BY_SUFFIX = new Map([
   ["csv", "\u{e64a}"],
   ["html", "\u{e736}"],
   ["http", "\u{f1d8}"],
+  ["astro", "\u{e6b3}"],
+  ["pdf", "\u{f1c1}"],
   ["rs", "\u{e7a8}"],
   ["py", "\u{e73c}"],
   ["go", "\u{e724}"],
@@ -89,6 +90,11 @@ const BY_SUFFIX = new Map([
   ["webp", "\u{f1c5}"],
   ["ico", "\u{f1c5}"],
   ["svg", "\u{f1c5}"],
+  ["mp4", "\u{f1c8}"],
+  ["mov", "\u{f1c8}"],
+  ["mkv", "\u{f1c8}"],
+  ["webm", "\u{f1c8}"],
+  ["avi", "\u{f1c8}"],
   ["java", JAVA],
   ["jar", JAVA],
   ["class", JAVA],
@@ -101,11 +107,44 @@ const BY_SUFFIX = new Map([
   ["gradle", GRADLE],
 ]);
 
+// Bare SPDX ids that appear as standalone license filenames; the prefix rules below
+// Cover LICENSE*/COPYING and the whole Creative Commons family (cc-by*, cc0*).
+const SPDX_LICENSE_STEMS = new Set([
+  "copying",
+  "unlicense",
+  "notice",
+  "mit",
+  "isc",
+  "apache-2.0",
+  "bsd-2-clause",
+  "bsd-3-clause",
+  "gpl-2.0",
+  "gpl-3.0",
+  "lgpl-3.0",
+  "agpl-3.0",
+  "mpl-2.0",
+]);
+
+/** License-style filenames win over any extension, the way an IDE marks a license file. */
+function isLicenseFile(lower: string) {
+  return (
+    lower.startsWith("license") ||
+    lower.startsWith("licence") ||
+    lower.startsWith("cc-by") ||
+    lower.startsWith("cc0") ||
+    SPDX_LICENSE_STEMS.has(lower)
+  );
+}
+
 export function fileIcon(name: string) {
   const lower = name.toLowerCase();
   const stem = BY_STEM.get(lower);
   if (stem !== undefined) {
     return stem;
+  }
+
+  if (isLicenseFile(lower)) {
+    return LICENSE;
   }
 
   const dot = lower.lastIndexOf(".");

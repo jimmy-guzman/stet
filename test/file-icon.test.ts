@@ -24,6 +24,29 @@ describe("fileIcon", () => {
     expect(fileIcon("NOTICE")).toBe(fileIcon("LICENSE"));
   });
 
+  test("marks license-style filenames with the license glyph, beating any extension", () => {
+    expect(fileIcon("LICENSE.md")).toBe("\u{e60a}");
+    expect(fileIcon("LICENSE.txt")).toBe("\u{e60a}");
+    expect(fileIcon("COPYING")).toBe("\u{e60a}");
+    expect(fileIcon("UNLICENSE")).toBe("\u{e60a}");
+    expect(fileIcon("MIT")).toBe("\u{e60a}");
+    // Creative Commons license files, including the reported CC-BY-NC-SA-4.0.
+    expect(fileIcon("CC-BY-NC-SA-4.0")).toBe("\u{e60a}");
+    expect(fileIcon("CC0-1.0")).toBe("\u{e60a}");
+    // A License name beats its extension, not the other way around.
+    expect(fileIcon("LICENSE.md")).not.toBe(fileIcon("readme.md"));
+  });
+
+  test("matches astro, pdf, and video files by extension", () => {
+    expect(fileIcon("index.astro")).toBe("\u{e6b3}");
+    expect(fileIcon("report.pdf")).toBe("\u{f1c1}");
+    expect(fileIcon("clip.mp4")).toBe("\u{f1c8}");
+    expect(fileIcon("clip.mkv")).toBe(fileIcon("clip.mp4"));
+    expect(fileIcon("clip.webm")).toBe(fileIcon("clip.mp4"));
+    // Webp stays an image, not a video.
+    expect(fileIcon("hero.webp")).not.toBe(fileIcon("clip.mp4"));
+  });
+
   test("shares one image glyph across image formats", () => {
     expect(fileIcon("photo.jpeg")).toBe("\u{f1c5}");
     expect(fileIcon("anim.gif")).toBe("\u{f1c5}");

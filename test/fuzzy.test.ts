@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { fuzzyMatch, rankFiles } from "@/utils/fuzzy";
+import { fuzzyMatch, matchIndices, rankFiles } from "@/utils/fuzzy";
 
 const noContext = {
   changed: new Set<string>(),
@@ -107,6 +107,45 @@ describe("multi-term queries", () => {
     const exactSecondTerm = fuzzyMatch("Tree tsx", "src/Tree.tsx");
     const wrongCaseSecondTerm = fuzzyMatch("Tree tsx", "src/tree.tsx");
     expect(exactSecondTerm ?? 0).toBeGreaterThan(wrongCaseSecondTerm ?? 0);
+  });
+});
+
+describe("matchIndices", () => {
+  test("empty or non-matching query yields no indices", () => {
+    expect(matchIndices("", "src/App.tsx")).toEqual([]);
+    expect(matchIndices("   ", "src/App.tsx")).toEqual([]);
+    expect(matchIndices("xyz", "src/App.tsx")).toEqual([]);
+  });
+
+  test("prefers the rightmost (basename) alignment", () => {
+    // "app" occurs in both "src/app" and the "app.tsx" basename; the returned
+    // Offsets must land on the basename occurrence, not the earlier directory.
+    const path = "src/app/app.tsx";
+    const indices = matchIndices("app", path);
+    expect(indices.map((index) => path[index]).join("")).toBe("app");
+    expect(Math.min(...indices)).toBeGreaterThan(path.indexOf("/app/"));
+  });
+
+  test("resolves a directory-only match to that directory", () => {
+    const path = ".agents/skills/effect-best-practices/references/error-patterns.md";
+    const indices = matchIndices("references", path);
+    const start = path.indexOf("references");
+    expect(indices).toEqual(
+      Array.from({ length: "references".length }, (_, offset) => start + offset),
+    );
+  });
+
+  test("returns ascending offsets for a non-contiguous match", () => {
+    const indices = matchIndices("ep", "error-patterns.md");
+    expect(indices).toEqual(indices.toSorted((a, b) => a - b));
+    expect(indices.map((index) => "error-patterns.md"[index]).join("")).toBe("ep");
+  });
+
+  test("unions the offsets of every whitespace term", () => {
+    const path = "src/git/tree.ts";
+    const indices = matchIndices("git tree", path);
+    expect(indices).toContain(path.indexOf("git"));
+    expect(indices).toContain(path.indexOf("tree"));
   });
 });
 

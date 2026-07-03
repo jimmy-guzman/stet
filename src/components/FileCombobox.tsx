@@ -1,10 +1,12 @@
-import type { ScrollBoxRenderable } from "@opentui/core";
+import type { ScrollBoxRenderable, TextRenderable } from "@opentui/core";
+import { fg, StyledText } from "@opentui/core";
 import { batch, createEffect, Index, Show } from "solid-js";
 
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { kindLetter } from "@/ui-helpers";
-import { truncateLeft } from "@/utils/text";
+import { matchIndices } from "@/utils/fuzzy";
+import { toCodePoints, truncateAroundMatch } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
 import { RecencyDot } from "./TreeRow";
@@ -121,7 +123,13 @@ export function FileCombobox() {
                 >
                   <box flexDirection="row">
                     <FileIcon name={path().split("/").at(-1) ?? path()} />
-                    <text fg={nameFg()}>{truncateLeft(path(), maxPathLen())}</text>
+                    <HighlightedPath
+                      path={path}
+                      query={() => state.fileComboboxQuery()}
+                      max={maxPathLen}
+                      fg={nameFg}
+                      matchFg={() => theme.colors.accent.primary}
+                    />
                     <RecencyDot at={state.recencyByPath().get(path())} />
                   </box>
                   {changed() === undefined ? null : (
@@ -140,4 +148,46 @@ export function FileCombobox() {
       </box>
     </box>
   );
+}
+
+// The result path on one line: truncated so the fuzzy match stays visible (its
+// Matched characters are never clipped) and rendered as a single StyledText so
+// Those characters can be accent-colored without one <text> per run. Mirrors
+// CodeLine's imperative StyledText pattern; the row's overflow="hidden" is the
+// Structural backstop against any wrap.
+function HighlightedPath(props: {
+  path: () => string;
+  query: () => string;
+  max: () => number;
+  fg: () => string;
+  matchFg: () => string;
+}) {
+  let ref: TextRenderable | undefined;
+  createEffect(() => {
+    if (ref === undefined) {
+      return;
+    }
+    const display = truncateAroundMatch(
+      props.path(),
+      matchIndices(props.query(), props.path()),
+      props.max(),
+    );
+    const highlighted = new Set(display.matched);
+    const spans: { fg: string; text: string }[] = [];
+    for (const [index, char] of toCodePoints(display.text).entries()) {
+      const color = highlighted.has(index) ? props.matchFg() : props.fg();
+      const last = spans.at(-1);
+      if (last !== undefined && last.fg === color) {
+        last.text += char;
+      } else {
+        spans.push({ fg: color, text: char });
+      }
+    }
+    ref.content = new StyledText(
+      (spans.length === 0 ? [{ fg: props.fg(), text: "" }] : spans).map((span) =>
+        fg(span.fg)(span.text),
+      ),
+    );
+  });
+  return <text ref={(el) => (ref = el)} wrapMode="none" height={1} />;
 }

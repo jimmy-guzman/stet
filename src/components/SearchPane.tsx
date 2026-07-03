@@ -1,20 +1,19 @@
-import { fg, StyledText } from "@opentui/core";
-import type { InputRenderable, TextRenderable } from "@opentui/core";
+import type { InputRenderable } from "@opentui/core";
 import { batch, createEffect, createMemo, createSignal, Index, onCleanup, Show } from "solid-js";
 
 import { highlightSnippet, languageForPath } from "@/diff/engine";
 import type { RenderSpan } from "@/diff/hast";
-import { sliceSpansWindow } from "@/diff/spans";
 import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { activeThemeName } from "@/theme/active";
 import { useTheme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
-import { fileIcon } from "@/utils/file-icon";
 import { truncate } from "@/utils/text";
 import { isNavigableSearchItem } from "@/viewer/search-items";
 import type { SearchItem } from "@/viewer/search-items";
 
+import { CodeLine } from "./CodeLine";
+import { FileIcon } from "./FileIcon";
 import { ListScrollbar } from "./ListScrollbar";
 import { windowWheelHandler } from "./wheel";
 
@@ -29,26 +28,6 @@ interface Excerpt {
 
 const asHeader = (item: SearchItem) => (item.kind === "header" ? item : undefined);
 const asLine = (item: SearchItem) => (item.kind === "line" ? item : undefined);
-
-// One result code line as a single StyledText buffer (the diff's StyledLine
-// Pattern): per-token colors without one <text> per token, set imperatively
-// Because StyledText is not a typed JSX child.
-function CodeText(props: { spans: () => RenderSpan[]; width: () => number }) {
-  const theme = useTheme();
-  let ref: TextRenderable | undefined;
-  createEffect(() => {
-    if (ref === undefined) {
-      return;
-    }
-    const windowed = sliceSpansWindow(props.spans(), 0, props.width());
-    ref.content = new StyledText(
-      (windowed.length === 0 ? [{ text: "" }] : windowed).map((span) =>
-        fg(span.fg ?? theme.colors.text.primary)(span.text),
-      ),
-    );
-  });
-  return <text ref={(el) => (ref = el)} wrapMode="none" height={1} />;
-}
 
 /**
  * The full-view project search pane: it swaps in for the file view inside the Viewer's border
@@ -399,16 +378,7 @@ export function SearchPane() {
                           >
                             {`${header().collapsed ? "▸" : "▾"} `}
                           </text>
-                          {/* Fixed 2-cell icon box, the tree-row pattern: Nerd Font
-                            glyphs can be double-width, so the box keeps the path
-                            column steady across file types. */}
-                          <Show when={state.iconsEnabled()}>
-                            <box width={2} overflow="hidden">
-                              <text fg={theme.colors.text.muted}>
-                                {fileIcon(header().path.split("/").at(-1) ?? header().path)}
-                              </text>
-                            </box>
-                          </Show>
+                          <FileIcon name={header().path.split("/").at(-1) ?? header().path} />
                           <text
                             fg={
                               row().index === state.searchIndex()
@@ -438,7 +408,7 @@ export function SearchPane() {
                         >
                           {` ${String(line().line).padStart(line().lineWidth)} `}
                         </text>
-                        <CodeText
+                        <CodeLine
                           spans={() => rowSpans(line(), row().index)}
                           width={() => Math.max(1, resultsWidth() - line().lineWidth - 2)}
                         />

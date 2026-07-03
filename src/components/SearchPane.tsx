@@ -15,6 +15,7 @@ import { truncate } from "@/utils/text";
 import { isNavigableSearchItem } from "@/viewer/search-items";
 import type { SearchItem } from "@/viewer/search-items";
 
+import { ListScrollbar } from "./ListScrollbar";
 import { windowWheelHandler } from "./wheel";
 
 // A contiguous run of line rows (one excerpt): highlighted as a block so Shiki
@@ -59,6 +60,9 @@ export function SearchPane() {
   const theme = useTheme();
 
   const innerWidth = () => Math.max(1, state.terminalWidth() - state.sidebarWidth() - 2);
+  // The results band reserves a width-1 scrollbar column; the full-width chrome
+  // Rows (inputs, status, footer) keep `innerWidth`.
+  const resultsWidth = () => Math.max(1, innerWidth() - 1);
   // The cell names the *effective* universe: widened -> repo; otherwise the
   // Active diff scope, so a staged/session lens is never misread as all changes.
   const scopeLabel = () => {
@@ -325,133 +329,135 @@ export function SearchPane() {
       <box height={1} paddingLeft={1} paddingRight={1}>
         <text fg={statusColor()}>{truncate(statusText(), Math.max(8, innerWidth() - 2))}</text>
       </box>
-      <box
-        ref={(el) => (el.selectable = false)}
-        flexGrow={1}
-        flexDirection="column"
-        onMouseScroll={onWheel}
-      >
-        <Show
-          when={state.searchItems().length > 0}
-          fallback={
-            <box
-              height={state.searchListHeight()}
-              flexDirection="column"
-              justifyContent="center"
-              alignItems="center"
-            >
-              <Show
-                when={state.searchStatus() === "error"}
-                fallback={
-                  <>
-                    <text fg={theme.colors.text.muted}>
-                      {state.searchStatus() === "searching"
-                        ? "searching…"
-                        : state.searchStatus() === "ready"
-                          ? "no matches"
-                          : "type to search"}
-                    </text>
-                    <text fg={theme.colors.text.faint}>
-                      {state.searchScope() === "changed"
-                        ? `in ${scopeLabel()} · ctrl-g for the whole repo`
-                        : "across the whole repo"}
-                    </text>
-                  </>
-                }
-              >
-                <text fg={levelColor(theme.colors, "error")}>
-                  {`${levelGlyph("error")} search failed`}
-                </text>
-                <text fg={theme.colors.text.faint}>
-                  {state.searchRegex() ? "check the pattern · ctrl-r for literal" : "try again"}
-                </text>
-              </Show>
-            </box>
-          }
-        >
-          <Index each={visibleItems()}>
-            {(row) => (
+      <box flexGrow={1} flexDirection="row" onMouseScroll={onWheel}>
+        <box ref={(el) => (el.selectable = false)} flexGrow={1} flexDirection="column">
+          <Show
+            when={state.searchItems().length > 0}
+            fallback={
               <box
-                ref={(el) => (el.selectable = false)}
-                height={1}
-                width="100%"
-                flexDirection="row"
-                backgroundColor={rowBackground(row().item, row().index)}
-                onMouseDown={() => clickRow(row().item, row().index)}
+                height={state.searchListHeight()}
+                flexDirection="column"
+                justifyContent="center"
+                alignItems="center"
               >
-                <Show when={asHeader(row().item)}>
-                  {(header) => (
-                    <box
-                      height={1}
-                      flexGrow={1}
-                      flexDirection="row"
-                      justifyContent="space-between"
-                      paddingLeft={1}
-                      paddingRight={1}
-                    >
-                      <box flexDirection="row">
-                        <text
-                          fg={
-                            row().index === state.searchIndex()
-                              ? theme.colors.text.selected
-                              : theme.colors.text.strong
-                          }
-                        >
-                          {`${header().collapsed ? "▸" : "▾"} `}
-                        </text>
-                        {/* Fixed 2-cell icon box, the tree-row pattern: Nerd Font
-                            glyphs can be double-width, so the box keeps the path
-                            column steady across file types. */}
-                        <Show when={state.iconsEnabled()}>
-                          <box width={2} overflow="hidden">
-                            <text fg={theme.colors.text.muted}>
-                              {fileIcon(header().path.split("/").at(-1) ?? header().path)}
-                            </text>
-                          </box>
-                        </Show>
-                        <text
-                          fg={
-                            row().index === state.searchIndex()
-                              ? theme.colors.text.selected
-                              : theme.colors.text.strong
-                          }
-                        >
-                          {truncate(
-                            header().path,
-                            Math.max(8, innerWidth() - (state.iconsEnabled() ? 10 : 8)),
-                          )}
-                        </text>
-                      </box>
-                      <text fg={theme.colors.text.muted}>{String(header().count)}</text>
-                    </box>
-                  )}
-                </Show>
-                <Show when={asLine(row().item)}>
-                  {(line) => (
+                <Show
+                  when={state.searchStatus() === "error"}
+                  fallback={
                     <>
-                      <text
-                        fg={
-                          line().match === undefined
-                            ? theme.colors.text.faint
-                            : theme.colors.text.muted
-                        }
-                      >
-                        {` ${String(line().line).padStart(line().lineWidth)} `}
+                      <text fg={theme.colors.text.muted}>
+                        {state.searchStatus() === "searching"
+                          ? "searching…"
+                          : state.searchStatus() === "ready"
+                            ? "no matches"
+                            : "type to search"}
                       </text>
-                      <CodeText
-                        spans={() => rowSpans(line(), row().index)}
-                        width={() => Math.max(1, innerWidth() - line().lineWidth - 2)}
-                      />
+                      <text fg={theme.colors.text.faint}>
+                        {state.searchScope() === "changed"
+                          ? `in ${scopeLabel()} · ctrl-g for the whole repo`
+                          : "across the whole repo"}
+                      </text>
                     </>
-                  )}
-                </Show>
-                <Show when={row().item.kind === "gap"}>
-                  <text fg={theme.colors.text.faint}>{" ⋯"}</text>
+                  }
+                >
+                  <text fg={levelColor(theme.colors, "error")}>
+                    {`${levelGlyph("error")} search failed`}
+                  </text>
+                  <text fg={theme.colors.text.faint}>
+                    {state.searchRegex() ? "check the pattern · ctrl-r for literal" : "try again"}
+                  </text>
                 </Show>
               </box>
-            )}
-          </Index>
-        </Show>
+            }
+          >
+            <Index each={visibleItems()}>
+              {(row) => (
+                <box
+                  ref={(el) => (el.selectable = false)}
+                  height={1}
+                  width="100%"
+                  flexDirection="row"
+                  backgroundColor={rowBackground(row().item, row().index)}
+                  onMouseDown={() => clickRow(row().item, row().index)}
+                >
+                  <Show when={asHeader(row().item)}>
+                    {(header) => (
+                      <box
+                        height={1}
+                        flexGrow={1}
+                        flexDirection="row"
+                        justifyContent="space-between"
+                        paddingLeft={1}
+                        paddingRight={1}
+                      >
+                        <box flexDirection="row">
+                          <text
+                            fg={
+                              row().index === state.searchIndex()
+                                ? theme.colors.text.selected
+                                : theme.colors.text.strong
+                            }
+                          >
+                            {`${header().collapsed ? "▸" : "▾"} `}
+                          </text>
+                          {/* Fixed 2-cell icon box, the tree-row pattern: Nerd Font
+                            glyphs can be double-width, so the box keeps the path
+                            column steady across file types. */}
+                          <Show when={state.iconsEnabled()}>
+                            <box width={2} overflow="hidden">
+                              <text fg={theme.colors.text.muted}>
+                                {fileIcon(header().path.split("/").at(-1) ?? header().path)}
+                              </text>
+                            </box>
+                          </Show>
+                          <text
+                            fg={
+                              row().index === state.searchIndex()
+                                ? theme.colors.text.selected
+                                : theme.colors.text.strong
+                            }
+                          >
+                            {truncate(
+                              header().path,
+                              Math.max(8, resultsWidth() - (state.iconsEnabled() ? 10 : 8)),
+                            )}
+                          </text>
+                        </box>
+                        <text fg={theme.colors.text.muted}>{String(header().count)}</text>
+                      </box>
+                    )}
+                  </Show>
+                  <Show when={asLine(row().item)}>
+                    {(line) => (
+                      <>
+                        <text
+                          fg={
+                            line().match === undefined
+                              ? theme.colors.text.faint
+                              : theme.colors.text.muted
+                          }
+                        >
+                          {` ${String(line().line).padStart(line().lineWidth)} `}
+                        </text>
+                        <CodeText
+                          spans={() => rowSpans(line(), row().index)}
+                          width={() => Math.max(1, resultsWidth() - line().lineWidth - 2)}
+                        />
+                      </>
+                    )}
+                  </Show>
+                  <Show when={row().item.kind === "gap"}>
+                    <text fg={theme.colors.text.faint}>{" ⋯"}</text>
+                  </Show>
+                </box>
+              )}
+            </Index>
+          </Show>
+        </box>
+        <ListScrollbar
+          rowCount={() => state.searchItems().length}
+          viewport={state.searchListHeight}
+          scrollTop={state.searchScrollTop}
+        />
       </box>
       {/* Contextual per sub-focus, naming only the keys that focus honors: the
           inputs surface the query toggles, the results surface the result

@@ -7,6 +7,8 @@ import type { CommandError } from "@/process";
 import { GitError } from "./errors";
 import { buildFilePatch, classifySideBytes, fileDiffSides, readWorktreeSide } from "./file-patch";
 import type { FilePatch, PatchSide, SideContent } from "./file-patch";
+import { logArgs, parseLog } from "./log";
+import type { Commit } from "./log";
 import {
   assembleChanged,
   assembleModel,
@@ -55,6 +57,8 @@ export class Git extends Context.Service<
     readonly loadModel: (repoRoot: string, scope: DiffScope) => Effect.Effect<GitModel, GitError>;
     /** HEAD's parent SHA, or the empty tree on a root commit. */
     readonly parentRef: (repoRoot: string) => Effect.Effect<string, GitError>;
+    /** The most recent commits (newest first), capped at `limit`. */
+    readonly recentCommits: (repoRoot: string, limit: number) => Effect.Effect<Commit[], GitError>;
     readonly repoFiles: (
       repoRoot: string,
     ) => Effect.Effect<Pick<GitModel, "repoFiles" | "repoFilesKey">, GitError>;
@@ -217,6 +221,14 @@ export const GitLive = Layer.effect(
             Effect.map((result) => result.stdout.trim() || EMPTY_TREE_SHA),
             Effect.mapError(toGitError),
           ),
+      // Empty on a commitless repo (exit 0, no output) rather than an error, so
+      // The picker shows its empty state instead of a failure notice.
+      recentCommits: (repoRoot, limit) =>
+        process.run(logArgs(limit), repoRoot).pipe(
+          retryTransient,
+          Effect.map((result) => parseLog(result.stdout)),
+          Effect.mapError(toGitError),
+        ),
       repoFiles: (repoRoot) =>
         Effect.all(
           [

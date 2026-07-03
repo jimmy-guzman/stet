@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.2](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.4.1...sideye-v0.4.2) (2026-07-03)
+
+
+### Features
+
+* **ui:** ✨ context-aware command menu ([#195](https://github.com/jimmy-guzman/sideye/issues/195)) ([7159306](https://github.com/jimmy-guzman/sideye/commit/715930664dd13eaa32ab9205eeac4176f26b2d4f)), closes [#183](https://github.com/jimmy-guzman/sideye/issues/183)
+* **ui:** ✨ highlight file finder matches on single-line rows ([#197](https://github.com/jimmy-guzman/sideye/issues/197)) ([61e0497](https://github.com/jimmy-guzman/sideye/commit/61e0497c750e5ae20b174f014be4186044a772b4))
+* **ui:** ✨ spread file icons & syntax highlighting across lists ([#196](https://github.com/jimmy-guzman/sideye/issues/196)) ([97f6f73](https://github.com/jimmy-guzman/sideye/commit/97f6f73b9ebafceded24a1f46488ce9280520513))
+
+
+### Bug Fixes
+
+* 🐛 bump deps ([#194](https://github.com/jimmy-guzman/sideye/issues/194)) ([384c247](https://github.com/jimmy-guzman/sideye/commit/384c24708f535d4914d3c5ba32fd7b0c107b8475))
+* **references:** 🐛 follow the cursor when navigating the results ([#198](https://github.com/jimmy-guzman/sideye/issues/198)) ([429a3b6](https://github.com/jimmy-guzman/sideye/commit/429a3b6f0655aed27e12903e9be447ae58fb4c76))
+* **ui:** 🐛 restore the scrollbar for windowed lists ([#192](https://github.com/jimmy-guzman/sideye/issues/192)) ([17e56d5](https://github.com/jimmy-guzman/sideye/commit/17e56d590fb117fe84e2918cf79b2f17ed417ab0))
+
+
+### Performance Improvements
+
+* **diff:** ⚡️ compute per-file diffs in-process ([#190](https://github.com/jimmy-guzman/sideye/issues/190)) ([50a09c8](https://github.com/jimmy-guzman/sideye/commit/50a09c8d431f852eb17e39ba27433f46a25592f5)), closes [#188](https://github.com/jimmy-guzman/sideye/issues/188)
+
 ## [0.4.1](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.4.0...sideye-v0.4.1) (2026-07-02)
 
 

@@ -29,13 +29,23 @@ test("selectCommit pins a range scope of the commit's parent against its sha", (
   state.selectCommit(1);
 
   expect(state.scope()).toEqual({ headRef: "sha1", kind: "commit", ref: "p1" });
-  expect(state.commitIndex()).toBe(1);
 });
 
 test("commitScopeLabel is the active commit's subject", () => {
   state.setCommits(three);
   state.selectCommit(0);
   expect(state.commitScopeLabel()).toBe("newest");
+});
+
+test("commitScopeLabel follows the pinned commit after the list reloads", () => {
+  state.setCommits(three);
+  state.selectCommit(1); // The "middle" commit (sha1)
+
+  // A newer commit lands and the drill-down reloads: the snapshot shifts down.
+  state.setCommits([{ ...commit(0, "brand new"), sha: "shaNEW" }, ...three]);
+
+  // The label still names the pinned commit (sha1), not whatever now sits at index 1.
+  expect(state.commitScopeLabel()).toBe("middle");
 });
 
 test("selecting out of range is a no-op", () => {

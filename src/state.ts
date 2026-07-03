@@ -336,8 +336,6 @@ function createState() {
   const [commitsStatus, setCommitsStatus] = createSignal<"loading" | "ready" | "empty" | "error">(
     "loading",
   );
-  // The active commit's position in the loaded list, for stepping and the label.
-  const [commitIndex, setCommitIndex] = createSignal(0);
   // The context menu: shared open/index state across the tree and viewer instances
   // (only one is ever open, gated by `commandMenuContext`). The anchor is the global
   // Terminal cell the tree menu opens at; the viewer instance derives its own from
@@ -2394,14 +2392,15 @@ function createState() {
     if (commit === undefined) {
       return;
     }
-    setCommitIndex(index);
     setScope({ headRef: commit.sha, kind: "commit", ref: commit.parent });
   }
 
   // The header names the active commit by its subject alone (the sha lives in the
   // Picker); the "commit ·" scope marker at the diff already says it is a commit.
+  // Resolved from the pinned sha, not a list position, so a reload that shifts the
+  // Snapshot can never make the label follow the wrong commit.
   const commitScopeLabel = createMemo(() => {
-    const commit = commits()[commitIndex()];
+    const commit = commits().find((entry) => entry.sha === scope().headRef);
     if (commit === undefined) {
       return "commit";
     }
@@ -2770,7 +2769,6 @@ function createState() {
     commandMenuIndex,
     commandMenuItems,
     commandMenuOpen,
-    commitIndex,
     commitScopeLabel,
     commits,
     commitsStatus,

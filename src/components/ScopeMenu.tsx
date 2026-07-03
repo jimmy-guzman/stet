@@ -141,8 +141,9 @@ export function ScopeMenu() {
             <Index each={state.commits()}>
               {(commit, index) => {
                 const active = () => index === state.scopeMenuIndex();
-                const current = () =>
-                  state.scope().kind === "commit" && index === state.commitIndex();
+                // Marked by the pinned sha, not a list position, so a reload can't
+                // Drift the ● onto the wrong row.
+                const current = () => commit().sha === state.scope().headRef;
                 return (
                   <box
                     id={`scope-menu-${index}`}

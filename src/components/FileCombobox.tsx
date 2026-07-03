@@ -4,6 +4,7 @@ import { batch, createEffect, Index, Show } from "solid-js";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { kindLetter } from "@/ui-helpers";
+import { truncateLeft } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
 import { RecencyDot } from "./TreeRow";
@@ -97,10 +98,16 @@ export function FileCombobox() {
                   : changed() === undefined
                     ? theme.colors.text.secondary
                     : theme.colors.kind[changed()!.kind];
+              // Keep the path on one line: the tail (filename + nearest dirs) is
+              // The meaningful part of a match, so left-truncate to the overlay's
+              // Interior width less border, padding, icon, and trailing badges.
+              const maxPathLen = () => state.overlayWidth() - 7 - (state.iconsEnabled() ? 2 : 0);
               return (
                 <box
                   id={`file-combobox-${index}`}
                   width="100%"
+                  height={1}
+                  overflow="hidden"
                   flexDirection="row"
                   justifyContent="space-between"
                   paddingLeft={1}
@@ -114,7 +121,7 @@ export function FileCombobox() {
                 >
                   <box flexDirection="row">
                     <FileIcon name={path().split("/").at(-1) ?? path()} />
-                    <text fg={nameFg()}>{path()}</text>
+                    <text fg={nameFg()}>{truncateLeft(path(), maxPathLen())}</text>
                     <RecencyDot at={state.recencyByPath().get(path())} />
                   </box>
                   {changed() === undefined ? null : (

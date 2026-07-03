@@ -221,15 +221,19 @@ function attach(lang: string) {
   return promise;
 }
 
-// `.gradle` is the Groovy build DSL; @pierre/diffs doesn't map it, so it would
-// Fall back to plain text. `.gradle.kts` already resolves to kts via its
-// Extension, so only the bare `.gradle` case needs the override.
+// Resolve against the basename, not the full repo-relative path: the library's
+// Extensionless filename keys (`Dockerfile`, `Makefile`, ...) match by exact
+// String equality, so a `docker/Dockerfile` would otherwise miss and fall back to
+// Plain text. `.gradle` is the Groovy build DSL, which @pierre/diffs doesn't map;
+// `.gradle.kts` already resolves to kts via its extension, so only bare `.gradle`
+// Needs the override.
 /**
  * The Shiki language a file highlights as, shared by the diff and any surface that renders code
  * from that file (search results), so their colors agree.
  */
 export function languageForPath(name: string) {
-  return name.endsWith(".gradle") ? "groovy" : getFiletypeFromFileName(name);
+  const base = name.slice(name.lastIndexOf("/") + 1);
+  return base.endsWith(".gradle") ? "groovy" : getFiletypeFromFileName(base);
 }
 
 async function ensureLanguages(meta: { name: string; prevName?: string }) {
@@ -272,7 +276,11 @@ async function compute(input: RenderInput): Promise<DiffRender> {
   let addSpans: RenderSpan[][] = [];
   let delSpans: RenderSpan[][] = [];
   try {
-    const target = meta.name.endsWith(".gradle") ? setLanguageOverride(meta, "groovy") : meta;
+    // The library re-derives the language from `meta.name` (the full path) internally,
+    // So force the basename-resolved grammar; a no-op for extension files that already
+    // Match, the fix for extensionless names in a subdirectory.
+    const lang = languageForPath(meta.name);
+    const target = lang === "text" ? meta : setLanguageOverride(meta, lang);
     const themed = renderDiffWithHighlighter(target, hl, { ...RENDER_OPTIONS, theme: themeName });
     addSpans = themed.code.additionLines.map(flattenLineSpans);
     delSpans = themed.code.deletionLines.map(flattenLineSpans);

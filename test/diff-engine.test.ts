@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { renderDiff } from "@/diff/engine";
+import { languageForPath, renderDiff } from "@/diff/engine";
 import { isLineRow } from "@/diff/rows";
 
 const patch = `diff --git a/foo.ts b/foo.ts
@@ -110,6 +110,28 @@ index 1111111..2222222 100644
     }
   });
 
+  test("renders a subdirectory Dockerfile with syntax highlighting", async () => {
+    // An extensionless filename key resolves only against the basename; before that fix a
+    // Dockerfile in any directory fell through to plain text.
+    const dockerPatch = `diff --git a/docker/Dockerfile b/docker/Dockerfile
+index 1111111..2222222 100644
+--- a/docker/Dockerfile
++++ b/docker/Dockerfile
+@@ -1,1 +1,1 @@
+-FROM node:18
++FROM oven/bun:1
+`;
+    const render = await renderDiff({ full: false, maxLines: 1600, patch: dockerPatch });
+
+    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    if (added === undefined) {
+      throw new Error("expected an addition row");
+    }
+    expect(added.spans.map((span) => span.text).join("")).toBe("FROM oven/bun:1");
+    expect(added.spans.length).toBeGreaterThan(1);
+    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+  });
+
   test("renders an unknown extension as plain text without throwing", async () => {
     const unknownPatch = `diff --git a/notes.zzzz b/notes.zzzz
 index 1111111..2222222 100644
@@ -126,5 +148,22 @@ index 1111111..2222222 100644
       throw new Error("expected an addition row");
     }
     expect(added.spans.map((span) => span.text).join("")).toBe("new line here");
+  });
+});
+
+describe("languageForPath", () => {
+  test("resolves extensionless filename keys against the basename in any directory", () => {
+    expect(languageForPath("Dockerfile")).toBe("dockerfile");
+    expect(languageForPath("docker/Dockerfile")).toBe("dockerfile");
+    expect(languageForPath("infra/backend/Makefile")).toBe("makefile");
+  });
+
+  test("resolves extension-based files, including nested paths", () => {
+    expect(languageForPath("src/index.ts")).toBe("typescript");
+    expect(languageForPath("nginx.conf")).toBe("nginx");
+  });
+
+  test("keeps the .gradle Groovy override on the basename", () => {
+    expect(languageForPath("app/build.gradle")).toBe("groovy");
   });
 });

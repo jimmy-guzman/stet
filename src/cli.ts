@@ -2,13 +2,15 @@ import util from "node:util";
 
 export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit" | "commit";
 
-// Picker order, also the single source of truth for the scope list. `commit` is
-// Absent: it is entered through the picker's commit drill-down, never applied as a
+// Picker order, also the single source of truth for the scope list. Grouped for the
+// Menu: the "changes" scopes (all/staged/unstaged) then the "history" scopes
+// (session/last-commit); the menu draws its section headers off this split. `commit`
+// Is absent: it is entered through the picker's commit drill-down, never applied as a
 // Top-level row (so `indexOf` a `commit` scope is a benign -1).
 export const scopeKinds: readonly ScopeKind[] = [
-  "unstaged",
-  "staged",
   "all",
+  "staged",
+  "unstaged",
   "session",
   "last-commit",
 ];
@@ -126,7 +128,7 @@ export function scopeLabel(scope: DiffScope) {
     return `commit ${scope.headRef?.slice(0, 7) ?? ""}`;
   }
 
-  return `worktree vs ${scope.ref}`;
+  return `uncommitted vs ${scope.ref}`;
 }
 
 // Ref-agnostic row labels for the scope picker (the active scope's full,
@@ -137,7 +139,7 @@ export function scopeMenuLabel(kind: ScopeKind) {
   }
 
   if (kind === "all") {
-    return "all changes";
+    return "uncommitted";
   }
 
   if (kind === "session") {

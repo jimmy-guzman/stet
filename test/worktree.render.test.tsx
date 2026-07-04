@@ -56,10 +56,10 @@ describe("worktree picker", () => {
       mockInput.pressEnter();
       const switched = await settleUntil(
         "linked worktree loaded",
-        (frame) => frame.includes("side-only.ts") && frame.includes(".wt · worktree vs HEAD"),
+        (frame) => frame.includes("side-only.ts") && frame.includes(".wt · uncommitted vs HEAD"),
       );
       expect(switched).toContain("side-only.ts");
-      expect(switched).toContain(".wt · worktree vs HEAD");
+      expect(switched).toContain(".wt · uncommitted vs HEAD");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

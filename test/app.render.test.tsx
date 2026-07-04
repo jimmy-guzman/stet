@@ -22,7 +22,7 @@ describe("App rendering", () => {
     const frame = await settleUntil("app chrome", (current) => current.includes("sideye"));
 
     expect(frame).toContain("sideye");
-    expect(frame).toContain("worktree vs HEAD");
+    expect(frame).toContain("uncommitted vs HEAD");
     expect(frame).toContain("src");
     expect(frame).toContain("q quit");
 

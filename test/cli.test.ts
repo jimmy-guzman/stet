@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { helpText, parseArgs, parseCommand, scopeKinds, scopeLabel, scopeMenuLabel } from "@/cli";
 
 describe("parseArgs", () => {
-  test("defaults to all changes vs HEAD", () => {
+  test("defaults to uncommitted vs HEAD", () => {
     expect(parseArgs([]).scope).toEqual({ kind: "all", ref: "HEAD" });
   });
 
@@ -135,13 +135,13 @@ describe("parseCommand", () => {
 
 describe("scopeKinds", () => {
   test("lists the scopes in picker order", () => {
-    expect(scopeKinds).toEqual(["unstaged", "staged", "all", "session", "last-commit"]);
+    expect(scopeKinds).toEqual(["all", "staged", "unstaged", "session", "last-commit"]);
   });
 });
 
 describe("scopeLabel", () => {
   test("labels each scope", () => {
-    expect(scopeLabel({ kind: "all", ref: "HEAD" })).toBe("worktree vs HEAD");
+    expect(scopeLabel({ kind: "all", ref: "HEAD" })).toBe("uncommitted vs HEAD");
     expect(scopeLabel({ kind: "staged", ref: "main" })).toBe("staged vs main");
     expect(scopeLabel({ kind: "unstaged", ref: "HEAD" })).toBe("unstaged");
     expect(scopeLabel({ kind: "session", ref: "abc123" })).toBe("since session start");
@@ -153,7 +153,7 @@ describe("scopeMenuLabel", () => {
   test("gives a ref-agnostic label per kind", () => {
     expect(scopeMenuLabel("unstaged")).toBe("unstaged");
     expect(scopeMenuLabel("staged")).toBe("staged");
-    expect(scopeMenuLabel("all")).toBe("all changes");
+    expect(scopeMenuLabel("all")).toBe("uncommitted");
     expect(scopeMenuLabel("session")).toBe("since session start");
     expect(scopeMenuLabel("last-commit")).toBe("last commit");
   });

@@ -38,13 +38,18 @@ describe("gap expansion", () => {
       );
       expect(collapsed).not.toContain("const l10 = 10");
 
-      // Expand the gap nearest the caret: its source lines are loaded and revealed.
+      // Put the caret on the last line (below the gap), then expand the gap above it.
+      // The revealed lines are inserted above the caret; it must stay on line 20, not
+      // Shift up by the number of revealed lines once the async source load lands.
       mockInput.pressTab();
+      mockInput.pressKey("G");
+      await settleUntil("caret on last line", (frame) => /ln 20:\d/.test(frame));
       mockInput.pressKey("z");
       const expanded = await settleUntil("gap expanded", (frame) =>
         frame.includes("const l10 = 10"),
       );
       expect(expanded).toContain("const l10 = 10");
+      expect(expanded).toMatch(/ln 20:\d/);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

@@ -1851,11 +1851,23 @@ function createState() {
         if (selectedPath() !== path) {
           return;
         }
-        setGapSource(
-          content.kind === "text"
-            ? { lines: content.text.replace(/\r?\n$/, "").split(/\r?\n/), path, status: "loaded" }
-            : { path, status: "error" },
-        );
+        if (content.kind !== "text") {
+          setGapSource({ path, status: "error" });
+          return;
+        }
+        // Revealing lines shifts the index of everything below them; keep the caret on
+        // Its file line across the async load. The synchronous toggle could not remap
+        // Yet (the source was not loaded, so it revealed nothing), so do it here.
+        batch(() => {
+          const previous = navigableLines();
+          const anchor = cursorIndex();
+          setGapSource({
+            lines: content.text.replace(/\r?\n$/, "").split(/\r?\n/),
+            path,
+            status: "loaded",
+          });
+          setCursorRow(remapCursorAfterToggle(previous, anchor, navigableLines()));
+        });
       })
       .catch(() => {
         if (selectedPath() === path) {

@@ -133,6 +133,12 @@ export function applyCollapsedRegions(rows: DiffRow[], options: ApplyOptions) {
       const key = `gap:${gapOrdinal}`;
       gapOrdinal += 1;
       const following = nextLineRow(rows, index + 1);
+      // A gap can sit inside a fold region that spans an elided middle (edits at both
+      // Ends of a block); hide it with the folded body. Its ordinal stays reserved
+      // Above so the remaining gap keys don't shift when the region unfolds.
+      if (following !== undefined && following.navIndex <= skipUntil) {
+        continue;
+      }
       const canReveal =
         options.expandedGaps.has(key) &&
         options.gapSource !== undefined &&

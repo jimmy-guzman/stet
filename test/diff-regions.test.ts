@@ -99,6 +99,30 @@ describe("applyCollapsedRegions folds", () => {
     expect(result.navigable.map((navigable) => navigable.newLine)).toEqual([1, 4, 5]);
   });
 
+  test("hides a git gap that sits inside a folded region", () => {
+    // A folded block can span an elided middle (edits at both ends), so its fold region
+    // Covers a separator; folding must hide that gap marker too, not leak it in the fold.
+    const spanning: DiffRow[] = [
+      line(0, 1, "function foo() {"),
+      line(1, 2, "  const a = 1"),
+      { count: 3, kind: "separator", text: "3 unmodified lines" },
+      line(2, 6, "  const b = 2"),
+      line(3, 7, "}"),
+    ];
+    const result = applyCollapsedRegions(spanning, {
+      expandedGaps: new Set(),
+      folded: new Set(["fold:n1"]),
+    });
+    expect(result.rows).toEqual([
+      line(0, 1, "function foo() {"),
+      { collapsed: true, count: 2, key: "fold:n1", kind: "marker", regionKind: "fold" },
+      line(1, 7, "}"),
+    ]);
+    expect(result.rows.some((row) => row.kind === "marker" && row.regionKind === "gap")).toBe(
+      false,
+    );
+  });
+
   test("skips a nested fold marker when its parent is folded", () => {
     const nested = [
       line(0, 1, "class C {"),

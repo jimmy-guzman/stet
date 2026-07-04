@@ -1,9 +1,10 @@
 /**
  * On-demand read-only code-intelligence pulls (`textDocument/definition`,
- * `textDocument/references`) over the warm `LanguageServers` pool. Each call is a one-shot
- * open/request/close bracket on the first acquired server that advertises the needed capability
- * (oxlint, which advertises none, drops out; typescript answers). The seam the diagnostics push
- * flow lacks; #130/#131.
+ * `textDocument/references`, hover, document symbols, and the two-step call hierarchy) over the
+ * warm `LanguageServers` pool. Each call is an open/request/close bracket on the first acquired
+ * server that advertises the needed capability (oxlint, which advertises none, drops out;
+ * typescript answers). Call hierarchy adds a second `prepare` → resolve round-trip inside the one
+ * open document. The seam the diagnostics push flow lacks; #130/#131.
  */
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
@@ -16,8 +17,11 @@ import type { Capability } from "@/diagnostics/servers";
 import { relativize } from "@/utils/path";
 
 import {
+  firstHierarchyItem,
   normalizeDefinition,
   normalizeDocumentSymbols,
+  normalizeIncomingCalls,
+  normalizeOutgoingCalls,
   normalizeReferences,
   parseHover,
 } from "./protocol";
@@ -69,6 +73,12 @@ export class Intel extends Context.Service<
       repoRoot: string,
       path: string,
     ) => Effect.Effect<NormalizedSymbol[], IntelRequestError>;
+    readonly callHierarchy: (
+      repoRoot: string,
+      path: string,
+      position: Position,
+      direction: "incoming" | "outgoing",
+    ) => Effect.Effect<NormalizedLocation[], IntelRequestError>;
   }
 >()("sideye/Intel") {}
 
@@ -168,6 +178,70 @@ export const IntelLive = Layer.effect(
       );
     }
 
+    // The two-step variant for call hierarchy: `prepare` returns an opaque item, a second request
+    // Resolves its edges. Both share one open document (and one project-load wait), so the prepared
+    // Item stays valid across the resolve and the doc closes once. The prepare reply's item rides
+    // Back to `resolveMethod` verbatim (params are `{ item }`, not `{ textDocument, position }`),
+    // Which is why this is a sibling of `pull` rather than a parameter of it. No item under the caret
+    // (not a callable symbol) short-circuits to empty before the second round-trip.
+    function pullPrepareResolve(
+      repoRoot: string,
+      path: string,
+      position: Position,
+      capability: Capability,
+      prepareMethod: string,
+      resolveMethod: string,
+      normalize: (reply: unknown) => NormalizedLocation[],
+    ) {
+      return Effect.scoped(
+        Effect.gen(function* request() {
+          const handle = yield* firstCapableServer(repoRoot, path, capability);
+          if (handle === undefined) {
+            return [];
+          }
+          const absolute = join(repoRoot, path);
+          const text = yield* Effect.promise(() =>
+            Bun.file(absolute)
+              .text()
+              .catch(() => undefined),
+          );
+          if (text === undefined) {
+            return [];
+          }
+          const uri = pathToFileURL(absolute).href;
+          yield* Effect.acquireRelease(
+            handle.connection.openDocument({
+              languageId: lspLanguageId(path),
+              text,
+              uri,
+              version: 1,
+            }),
+            () => handle.connection.closeDocument(uri),
+          );
+          yield* handle.connection.whenProjectLoaded.pipe(
+            Effect.timeout("60 seconds"),
+            Effect.ignore,
+          );
+          // Both round-trips carry the same timeout and degradation; a local send keeps them from
+          // Drifting apart without touching the one-shot `pull`.
+          const send = (method: string, params: Record<string, unknown>) =>
+            handle.connection.request(method, params).pipe(
+              Effect.timeout("5 seconds"),
+              Effect.catchTag("TimeoutError", () =>
+                Effect.fail(new IntelRequestError({ message: "timed out", method })),
+              ),
+              Effect.catchTag("LspRequestError", (error) =>
+                Effect.fail(new IntelRequestError({ message: error.message, method })),
+              ),
+            );
+          const item = firstHierarchyItem(
+            yield* send(prepareMethod, { position, textDocument: { uri } }),
+          );
+          return item === undefined ? [] : normalize(yield* send(resolveMethod, { item }));
+        }),
+      );
+    }
+
     // A location reply's paths are absolute; relativize each to a repo path (a target outside the
     // Repo, e.g. node_modules, stays absolute so the caller can detect and skip it). Both sides are
     // Canonicalized so a symlinked root (macOS /var ↔ /private/var) still matches an in-repo target
@@ -186,6 +260,19 @@ export const IntelLive = Layer.effect(
     }
 
     return {
+      callHierarchy: (repoRoot, path, position, direction) =>
+        pullPrepareResolve(
+          repoRoot,
+          path,
+          position,
+          "callHierarchy",
+          "textDocument/prepareCallHierarchy",
+          direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls",
+          relativizeLocations(
+            repoRoot,
+            direction === "incoming" ? normalizeIncomingCalls : normalizeOutgoingCalls,
+          ),
+        ),
       definition: (repoRoot, path, position) =>
         pull(
           repoRoot,

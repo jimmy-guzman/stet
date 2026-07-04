@@ -39,6 +39,10 @@ export function ReferencesOverlay() {
     const count = results().length;
     return `${count} ${state.referencesLabel()} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
   };
+  // A call hierarchy carries a direction Tab flips; references/definitions don't, so the hint only
+  // Advertises the toggle where it does something.
+  const isHierarchy = () =>
+    state.referencesLabel() !== "references" && state.referencesLabel() !== "definitions";
 
   const viewport = () => state.referencesViewport();
   const visibleRows = createMemo(() => {
@@ -180,7 +184,9 @@ export function ReferencesOverlay() {
         </text>
       </box>
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.muted}>↑↓ navigate · ⏎ open · esc close</text>
+        <text fg={theme.colors.text.muted}>
+          ↑↓ navigate · ⏎ open{isHierarchy() ? " · ⇥ direction" : ""} · esc close
+        </text>
       </box>
     </box>
   );

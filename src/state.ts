@@ -403,9 +403,9 @@ function createState() {
   const [referencesResults, setReferencesResults] = createSignal<ReferenceResult[]>([]);
   const [referencesIndex, setReferencesIndex] = createSignal(0);
   const [referencesScrollTop, setReferencesScrollTop] = createSignal(0);
-  const [referencesLabel, setReferencesLabel] = createSignal<"references" | "definitions">(
-    "references",
-  );
+  const [referencesLabel, setReferencesLabel] = createSignal<
+    "references" | "definitions" | "incoming calls" | "outgoing calls"
+  >("references");
   const [symbolsOpen, setSymbolsOpen] = createSignal(false);
   const [symbolsStatus, setSymbolsStatus] = createSignal<
     "loading" | "ready" | "empty" | "error" | "unsupported"
@@ -1915,6 +1915,7 @@ function createState() {
   }
 
   function resetReferencesState() {
+    hierarchyAnchor = undefined;
     setReferencesOpen(false);
     setReferencesResults([]);
     setReferencesIndex(0);
@@ -1926,8 +1927,24 @@ function createState() {
   // Effect below can close it when a worktree switch moves off that repo.
   let referencesRoot: string | undefined;
 
-  function openReferences(label: "references" | "definitions", results: ReferenceResult[]) {
+  // What produced the open overlay when it is a call hierarchy: the caret it was pulled from plus
+  // The current direction, so `Tab` can re-resolve the other direction against the same symbol.
+  // References/definitions carry no direction, so they leave this undefined and `Tab` is a no-op.
+  interface HierarchyAnchor {
+    root: string;
+    path: string;
+    position: { character: number; line: number };
+    direction: "incoming" | "outgoing";
+  }
+  let hierarchyAnchor: HierarchyAnchor | undefined;
+
+  function openReferences(
+    label: ReturnType<typeof referencesLabel>,
+    results: ReferenceResult[],
+    anchor?: HierarchyAnchor,
+  ) {
     referencesRoot = repoRoot();
+    hierarchyAnchor = anchor;
     batch(() => {
       setReferencesLabel(label);
       setReferencesResults(results);
@@ -1960,6 +1977,9 @@ function createState() {
     intelController = controller;
     const requestRoot = repoRoot();
     referencesRoot = requestRoot;
+    // A plain references pull has no direction, so it clears any hierarchy anchor a prior open left,
+    // Keeping `Tab` a no-op until the next call/type hierarchy sets one.
+    hierarchyAnchor = undefined;
     batch(() => {
       // References takes over the shared intel slot; drop any definition indicator its
       // Superseded pull left behind, since this flow shows progress in the overlay instead.
@@ -2032,6 +2052,95 @@ function createState() {
       closeReferences();
     }
   });
+
+  const hierarchyLabel = (anchor: HierarchyAnchor) =>
+    anchor.direction === "incoming" ? "incoming calls" : "outgoing calls";
+
+  // The driver for the call hierarchy and its direction toggle: a two-step `prepare` → resolve pull
+  // Surfaced through the references overlay, mirroring `findReferences`. `Tab` calls back in with the
+  // Flipped anchor, superseding the prior direction via the shared controller.
+  async function runHierarchy(anchor: HierarchyAnchor) {
+    intelController?.abort();
+    const controller = new AbortController();
+    intelController = controller;
+    const requestRoot = anchor.root;
+    referencesRoot = requestRoot;
+    hierarchyAnchor = anchor;
+    const label = hierarchyLabel(anchor);
+    batch(() => {
+      setIntelStatus(undefined);
+      setReferencesLabel(label);
+      setReferencesResults([]);
+      setReferencesIndex(0);
+      setReferencesStatus("loading");
+      setReferencesOpen(true);
+    });
+    try {
+      const locations = await runtime.runPromise(
+        Intel.use((intel) =>
+          intel.callHierarchy(requestRoot, anchor.path, anchor.position, anchor.direction),
+        ),
+        { signal: controller.signal },
+      );
+      if (intelController !== controller || repoRoot() !== requestRoot) {
+        return;
+      }
+      const inRepo = locations
+        .filter((location) => !isAbsolute(location.path))
+        .toSorted(byReferenceOrder);
+      if (inRepo.length === 0) {
+        setReferencesStatus("empty");
+        return;
+      }
+      const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
+      if (intelController !== controller || repoRoot() !== requestRoot) {
+        return;
+      }
+      openReferences(label, attachReferencePreviews(inRepo, linesByPath), anchor);
+    } catch {
+      if (intelController === controller) {
+        setReferencesStatus("error");
+      }
+    }
+  }
+
+  // Call hierarchy (Shift+H) for the symbol under the caret, opening on incoming calls (who calls
+  // This); `Tab` flips to outgoing. Read-only two-step LSP pull, degrades to a notice, never throws.
+  // The caret guards match definition/references: it must sit on a symbol in the current file's text.
+  function callHierarchy() {
+    intelController?.abort();
+    const path = selectedPath();
+    const line = cursorLineNumber();
+    if (path === undefined || line === undefined) {
+      return;
+    }
+    if (caretWord() === undefined) {
+      notify("no symbol at caret");
+      return;
+    }
+    if (cursorLine()?.newLine === undefined) {
+      notify("can't resolve a removed line");
+      return;
+    }
+    void runHierarchy({
+      direction: "incoming",
+      path,
+      position: { character: cursorColumn(), line: line - 1 },
+      root: repoRoot(),
+    });
+  }
+
+  // Flip the open call hierarchy's direction (incoming↔outgoing) and re-resolve the same symbol. A
+  // No-op when the overlay is references/definitions, which carry no direction.
+  function toggleReferencesDirection() {
+    const anchor = hierarchyAnchor;
+    if (anchor !== undefined) {
+      void runHierarchy({
+        ...anchor,
+        direction: anchor.direction === "incoming" ? "outgoing" : "incoming",
+      });
+    }
+  }
 
   // The symbol outline overlay. Its own controller (not the shared `intelController`), since
   // It owns a separate overlay from definition/references and the two must not clobber each
@@ -2434,6 +2543,10 @@ function createState() {
       }
       case "findReferences": {
         void findReferences();
+        return;
+      }
+      case "callHierarchy": {
+        callHierarchy();
         return;
       }
       case "showHover": {
@@ -2964,6 +3077,7 @@ function createState() {
     activityLog,
     allProblemItems,
     availableUpdate,
+    callHierarchy,
     canGoBack,
     canGoForward,
     caretColumn,
@@ -3195,6 +3309,7 @@ function createState() {
     themeComboboxOrigin,
     themeComboboxResults,
     togglePinActiveTab,
+    toggleReferencesDirection,
     toggleSearchCase,
     toggleSearchGroup,
     toggleSearchRegex,

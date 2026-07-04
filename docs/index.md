@@ -15,7 +15,7 @@ becoming part of the agent loop. It does not review code, approve changes, talk
 to the agent, or manage a workflow. It shows you the repo, the diff, and the
 problems. You decide what to say next.
 
-![sideye showing the repo tree beside a diff of a changed file](assets/screenshots/sideye.png)
+![sideye showing the repo tree beside a diff of a changed file](../assets/screenshots/sideye.png)
 
 ## What it does
 
@@ -37,7 +37,8 @@ problems. You decide what to say next.
 - Marks recent activity and lets you jump to the latest touched file.
 - Shows diagnostics in the tree, in the viewer, and in a problems panel.
 - Navigates code through read-only language-server pulls: go to definition, find
-  references, hover for type and docs, and a symbol outline of the open file.
+  references, find implementations, call hierarchy, hover for type and docs, and a
+  symbol outline of the open file.
 - Copies a reference and snippet to paste back into the agent conversation: the
   file `path` in the tree and `path:line:col` in the viewer (`path:line` after
   clicking a line number).
@@ -45,49 +46,17 @@ problems. You decide what to say next.
 The git-backed file tree renders first. Diagnostics come in later as decorations.
 That keeps the basic view useful even when checks are still running.
 
-## Quickstart
-
-```sh
-# standalone binary (macOS / Linux, no runtime needed)
-curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/sideye/main/install.sh | bash
-
-sideye   # run it in any git repo
-```
-
-npm and Homebrew installs are in [installation](docs/guide/installation.md).
-
 ## Documentation
 
-- Guide: [installation](docs/guide/installation.md),
-  [upgrading](docs/guide/upgrading.md), [usage](docs/guide/usage.md)
-- Features: [reading files](docs/features/reading-files.md),
-  [tabs](docs/features/tabs.md), [go to file](docs/features/go-to-file.md),
-  [find in the viewer](docs/features/find-in-viewer.md),
-  [search](docs/features/search.md), [scopes](docs/features/scopes.md),
-  [worktrees](docs/features/worktrees.md), [themes](docs/features/themes.md),
-  [code intelligence](docs/features/code-intelligence.md),
-  [problems](docs/features/problems.md)
-- Reference: [keybindings](docs/reference/keybindings.md),
-  [mouse](docs/reference/mouse.md),
-  [configuration](docs/reference/configuration.md),
-  [languages](docs/reference/languages.md),
-  [requirements](docs/reference/requirements.md)
-
-## Development
-
-```sh
-bun install
-bun run src/main.tsx     # run from source
-bun run check            # tests + typecheck
-bun run build:dist       # build standalone binaries for all targets
-```
-
-`bun install` also wires up git hooks (via [lefthook](https://lefthook.dev)):
-`pre-commit` formats and lints staged files, `pre-push` re-runs `bun run check`.
-
-## Non-goals
-
-`sideye` is deliberately not an agent integration.
-
-No approvals. No accept/reject protocol. No generated review explanation. No PR
-workflow. No database. The agent never hears from `sideye`, only from you.
+- Guide: [installation](guide/installation.md), [upgrading](guide/upgrading.md),
+  [usage](guide/usage.md)
+- Features: [reading files](features/reading-files.md),
+  [tabs](features/tabs.md), [go to file](features/go-to-file.md),
+  [find in the viewer](features/find-in-viewer.md), [search](features/search.md),
+  [scopes](features/scopes.md), [worktrees](features/worktrees.md),
+  [themes](features/themes.md),
+  [code intelligence](features/code-intelligence.md),
+  [problems](features/problems.md)
+- Reference: [keybindings](reference/keybindings.md), [mouse](reference/mouse.md),
+  [configuration](reference/configuration.md),
+  [languages](reference/languages.md), [requirements](reference/requirements.md)

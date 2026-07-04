@@ -1,0 +1,5 @@
+# Version awareness
+
+- The latest version comes from GitHub Releases (`tag_name`, strip the leading `v`), the canonical source the install script, the brew tap, and npm all derive from. The lookup is a plain `fetch` (`src/upgrade/release.ts`) with a required `User-Agent` header, bounded by a timeout, and resolves to `undefined` on any failure. There is no cache: the check runs on every launch and fresh on every `upgrade`.
+- The background check runs once on launch, non-blocking and independent of the git load. A newer release is held in `availableUpdate` and printed once on a clean keyboard quit (`q`/`esc`/ctrl-c), after the alt-screen is restored. It never prints on a crash or external kill (those backstops do not route through `quit`), and never interrupts the running session.
+- `sideye upgrade` compares the current version against the latest before spawning: when the latest is not newer it prints `sideye X.Y.Z is already up to date` and exits without running the channel update; when the check fails (no network) it falls through to the channel update, leaving each tool to resolve `@latest` itself.

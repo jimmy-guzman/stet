@@ -2,6 +2,21 @@
 
 The viewer is a set of tabs, each an ordered history of Locations (a Location is what restores the view: path, cursor file-line, caret column, scroll, and the `v`/`f` toggles). The pure model lives in `src/viewer/navigation.ts`; `state` keeps the live signals (`selectedPath`/`cursorIndex`/scroll) as the source of truth and the history as an orthogonal recorder that captures a Location on leave and applies one on arrive.
 
+Tab lifecycle, with at most one ephemeral preview tab:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Preview
+    Preview --> Preview: browse coalesces or a jump pushes history
+    Preview --> Pinned: ctrl-t pins
+    Pinned --> Preview: ctrl-t unpins
+    Pinned --> Pinned: navigate within tab
+    note right of Pinned
+        navigating to a file already in a
+        pinned tab focuses it, never duplicates
+    end note
+```
+
 - **One preview tab.** At most one tab is the ephemeral _preview_ (rendered italic, the standard ephemeral-tab cue, which frees the color channel so a previewed changed file still shows its diff tint). All navigation — tree browse, jumps, palette, search, problems, `.` recency — targets the preview tab and replaces it in place: continuous tree browsing coalesces into one history entry, a deliberate jump pushes (truncating forward entries, browser semantics). Browsing never spawns or duplicates tabs; this is the calm single-buffer feel by default. The strip renders in the viewer's title row only when more than one tab is open; with one tab the row shows the path.
 - **Pin/unpin (`ctrl-t`).** Toggles the active tab. Pinning the preview makes it persistent and the next navigation opens a fresh preview; unpinning a pinned tab reverts it to the (sole) preview, discarding any stale preview so exactly one exists. Navigating to a file already open in a _pinned_ tab focuses that tab rather than previewing it, so a file is never in both the preview and a pinned tab. Double-clicking a tab in the strip or a file in the tree pins it too (pin-only, never unpins, unlike `ctrl-t`'s toggle); OpenTUI has no double-click event, so it is detected from successive mouse-downs.
 - **History and tabs (`<`/`>`, `{`/`}`, `ctrl-w`).** `<`/`>` move back/forward within the _active_ tab's own history (no truncation), restoring that entry's exact cursor and scroll. `{`/`}` cycle tabs with wrap; `ctrl-w` closes the active tab — closing the sole remaining tab reverts it to the preview (a view always exists, so the floor is the ephemeral preview).

@@ -1,5 +1,21 @@
 # Code intelligence
 
+The read-only pull bracket, refcounted per document and shared with the diagnostics flow:
+
+```mermaid
+sequenceDiagram
+    participant Pull as intel pull
+    participant Tx as transport
+    participant Srv as server
+    Pull->>Tx: openDocument(uri)
+    Tx->>Srv: didOpen (first holder only)
+    Pull->>Srv: await whenProjectLoaded
+    Pull->>Srv: textDocument request
+    Srv-->>Pull: reply, relativized to repo path
+    Pull->>Tx: closeDocument(uri)
+    Tx->>Srv: didClose (last holder only)
+```
+
 - Beyond the push-diagnostics poll, sideye makes on-demand read-only `textDocument/*` pull requests over the same warm `LanguageServers` pool (`src/intel/`). A pull is a `didOpen` → request → `didClose` bracket on the first acquired server that advertises the matching capability, parsed from the server's `initialize` reply into a capability set on the `ServerHandle` (so oxlint, which advertises none, drops out and `typescript-language-server` answers). Most pulls send one request; call hierarchy sends two (a `prepare` then a resolve) inside the one open document, sharing a single project-load wait and one close. Reads only, exactly like `publishDiagnostics`: no edit, format, or rename request is ever sent.
 - A location reply carries absolute `uri`s; the service relativizes each to a repo path (reusing `relativize`, the same boundary the diagnostics checker uses). A target outside the repo (a definition in `node_modules`) stays absolute, and the caller skips it rather than opening an out-of-tree path. The pull bracket is generic over the reply shape: the location callers relativize inside their own `normalize`, while hover returns plain text and skips that step.
 - A pull shares the pooled connection with the diagnostics flow, so its open/close bracket could race a concurrent open of the same document (a poll mid-settle, or a second pull). The transport refcounts each document per `uri` (`openDocument`/`closeDocument`): `didOpen` is sent only for the first holder and `didClose` only when the last holder releases, so a second open no longer resets the server's view of a doc another holder still needs, nor drops one out from under it. Both the intel bracket and the diagnostics open/settle/close go through it.

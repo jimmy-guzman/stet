@@ -3,3 +3,14 @@
 `w` switches the active worktree in place and re-points the tree, diffs, refresh (watcher and poll), and checks at it, with no restart. The switch reseeds diagnostics from the new worktree's changed set, so the prior worktree's findings (including cross-file ones the server reported outside the changed set) never carry across. The switch loads only the changed set up front (the same shape startup seeds), so it re-points the instant the cheap diff commands resolve rather than blocking on a full `git ls-files --stage` over the worktree; the full tracked-file tree fills in on the repoFiles refresh (triggered on the re-key, then whenever the changed path-set shifts, plus a slow floor), exactly as at startup. The picker lists worktrees from `git worktree list --porcelain -z` (bare entries excluded) and marks prunable ones.
 
 If the active worktree is deleted out from under sideye mid-session, the always-on refresh heartbeat is the detector: a git failure where the worktree root, or the repository's main worktree, no longer exists flags the deletion (every subprocess fails fast with a clear "working directory no longer exists" message rather than a raw `posix_spawn` error, because `Process` guards `cwd` existence before spawning). sideye then auto-switches to the main worktree. The main worktree is resolved once at startup from the common dir (`git rev-parse --git-common-dir`, the `<main>/.git` whose parent is the main worktree) and lives outside any linked worktree's tree, so it survives that worktree's deletion without needing to be re-queried. When the main worktree itself is gone, the repository is gone (every linked worktree's git points into the deleted `<main>/.git`), so sideye exits cleanly with a one-line message instead of looping on the dead directory.
+
+Deleted-worktree recovery:
+
+```mermaid
+flowchart TD
+    hb["refresh heartbeat<br/>watcher + poll"] --> chk{"worktree cwd exists?"}
+    chk -- yes --> ok["keep running"]
+    chk -- no --> main{"main worktree exists?"}
+    main -- yes --> switch["auto-switch to main worktree"]
+    main -- no --> exit["repo is gone<br/>exit cleanly with a message"]
+```

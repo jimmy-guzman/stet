@@ -1,5 +1,19 @@
 # Viewer
 
+The diff commits in two structure-identical phases:
+
+```mermaid
+sequenceDiagram
+    participant Sel as selection change
+    participant Eng as diff engine
+    participant View as viewer
+    Sel->>Eng: fork load, abortable
+    Eng-->>View: phase 1 plain rows (parse only, instant)
+    Note over View: previous snapshot held until phase 1 resolves
+    Eng-->>View: phase 2 Shiki-highlighted rows
+    Note over View: same row count and gutter width, no layout shift
+```
+
 - Unchanged files render full content read-only. `v` toggles a changed file between diff and full content.
 - Full files render through the diff viewer as synthesized all-context patches.
 - Per-file diffs are computed in-process, not via `git diff <ref> -- <path>`: `fileDiffSides` (`src/git/file-patch.ts`) resolves the scope's two endpoints (a `git show <ref>:<path>` / `:<path>` blob read on each committed/indexed side, a raw worktree read on the worktree side), and jsdiff builds the git-shaped unified patch the viewer already parses. In very large repos git's pathspec-limited diff-index walks the whole index (seconds per open), while a blob read stays O(path depth). The pathspec `git diff` invocation survives only as a fallback for the cases an in-process diff can't reproduce faithfully: a side that is missing/oversized, a jsdiff timeout, one-sided CRLF (git may eol-convert the worktree before diffing), or zero hunks against non-zero numstat counts. Binary files (flagged by numstat) skip both fetches and render the model-driven placeholder; untracked files keep the existing `git diff --no-index /dev/null <path>` path.

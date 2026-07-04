@@ -36,6 +36,7 @@ import {
 import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
+import { serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -406,9 +407,9 @@ function createState() {
     "references",
   );
   const [symbolsOpen, setSymbolsOpen] = createSignal(false);
-  const [symbolsStatus, setSymbolsStatus] = createSignal<"loading" | "ready" | "empty" | "error">(
-    "loading",
-  );
+  const [symbolsStatus, setSymbolsStatus] = createSignal<
+    "loading" | "ready" | "empty" | "error" | "unsupported"
+  >("loading");
   const [symbolsResults, setSymbolsResults] = createSignal<NormalizedSymbol[]>([]);
   const [symbolsIndex, setSymbolsIndex] = createSignal(0);
   const [symbolsScrollTop, setSymbolsScrollTop] = createSignal(0);
@@ -2039,6 +2040,10 @@ function createState() {
   let symbolsController: AbortController | undefined;
   let symbolsPath: string | undefined;
   let symbolsRoot: string | undefined;
+  // The open file's ChangedFile identity when the outline was requested. A same-path content
+  // Reload mints a new reference, so drifting off it closes the outline before its captured
+  // Line:col positions go stale (the outline shows no source preview to reveal the mismatch).
+  let symbolsFile: ReturnType<typeof selectedFile>;
 
   function resetSymbolsState() {
     setSymbolsOpen(false);
@@ -2054,11 +2059,15 @@ function createState() {
     batch(resetSymbolsState);
   }
 
-  // Fill the overlay with a ready result set, capturing the file/repo it belongs to so the drift
-  // Effect can close it when either moves. Mirrors `openReferences`.
+  // Fill the overlay with a ready result set, anchoring it to the file/repo/content it belongs to
+  // So the drift effect closes it when any of those move. `goToSymbol` only reaches here once its
+  // Guard has confirmed the selection did not move during the pull, so these live reads match the
+  // Request; a direct caller (tests injecting results) anchors to the current selection. Mirrors
+  // `openReferences`.
   function openSymbols(results: NormalizedSymbol[]) {
     symbolsPath = selectedPath();
     symbolsRoot = repoRoot();
+    symbolsFile = selectedFile();
     batch(() => {
       setSymbolsResults(results);
       setSymbolsIndex(0);
@@ -2078,11 +2087,27 @@ function createState() {
     if (path === undefined) {
       return;
     }
+    // Capture the anchor once, up front, so every drift/staleness check keys off the file the
+    // Request belongs to rather than a later live value.
+    symbolsPath = path;
+    symbolsRoot = repoRoot();
+    symbolsFile = selectedFile();
+    // No server advertises `documentSymbol` for this language, so a pull would return `[]` and read
+    // As "no symbols" (a false claim). Short-circuit to a distinct state without issuing a request.
+    if (serversProviding(path, "documentSymbol").length === 0) {
+      symbolsController = undefined;
+      batch(() => {
+        setSymbolsResults([]);
+        setSymbolsIndex(0);
+        setSymbolsScrollTop(0);
+        setSymbolsStatus("unsupported");
+        setSymbolsOpen(true);
+      });
+      return;
+    }
     const controller = new AbortController();
     symbolsController = controller;
-    const requestRoot = repoRoot();
-    symbolsPath = path;
-    symbolsRoot = requestRoot;
+    const requestRoot = symbolsRoot;
     batch(() => {
       setSymbolsResults([]);
       setSymbolsIndex(0);
@@ -2095,9 +2120,15 @@ function createState() {
         Intel.use((intel) => intel.symbols(requestRoot, path)),
         { signal: controller.signal },
       );
-      // A superseding request or a worktree switch drops this result: the newer request owns
-      // The overlay, and a stale root would jump into the wrong repo.
-      if (symbolsController !== controller || repoRoot() !== requestRoot) {
+      // A superseding request, a worktree switch, or a same-repo file switch drops this result: the
+      // Newer request owns the overlay, a stale root would jump into the wrong repo, and a stale
+      // Path would bind this file's outline to a different open file (the guard closes the race
+      // Window before the drift effect has flushed).
+      if (
+        symbolsController !== controller ||
+        repoRoot() !== requestRoot ||
+        selectedPath() !== path
+      ) {
         return;
       }
       if (symbols.length === 0) {
@@ -2130,10 +2161,16 @@ function createState() {
     });
   }
 
-  // The outline belongs to one file in one repo, so it goes stale the moment either drifts (a
-  // Worktree switch, or navigating to another file); close it, aborting any in-flight pull.
+  // The outline belongs to one file's content in one repo, so it goes stale the moment any of those
+  // Drifts (a worktree switch, navigating to another file, or the open file's own content
+  // Reloading); close it, aborting any in-flight pull.
   createEffect(() => {
-    if (symbolsOpen() && (repoRoot() !== symbolsRoot || selectedPath() !== symbolsPath)) {
+    if (
+      symbolsOpen() &&
+      (repoRoot() !== symbolsRoot ||
+        selectedPath() !== symbolsPath ||
+        selectedFile() !== symbolsFile)
+    ) {
       closeSymbols();
     }
   });

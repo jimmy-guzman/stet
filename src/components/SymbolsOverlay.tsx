@@ -63,6 +63,11 @@ export function SymbolsOverlay() {
           <text fg={theme.colors.text.muted}>no symbols</text>
         </box>
       </Show>
+      <Show when={state.symbolsStatus() === "unsupported"}>
+        <box height={1} paddingLeft={1} paddingRight={1}>
+          <text fg={theme.colors.text.muted}>no symbol support for this file type</text>
+        </box>
+      </Show>
       <Show when={state.symbolsStatus() === "error"}>
         <box height={1} paddingLeft={1} paddingRight={1}>
           <text

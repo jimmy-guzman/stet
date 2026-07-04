@@ -185,6 +185,21 @@ describe("createKeyHandler", () => {
     }
   });
 
+  test("Shift+S falls through to the scope picker outside the file view", () => {
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    try {
+      // With the search view up (tree focused), go-to-symbol is inapplicable, so Shift+S must
+      // Reach the scope picker even on a terminal that reports it as { name: "s", shift: true }.
+      state.openSearch();
+      state.setFocusedPane("tree");
+      handle(keyEvent({ name: "s", shift: true }));
+      expect(state.scopeMenuOpen()).toBe(true);
+    } finally {
+      state.setScopeMenuOpen(false);
+      state.closeSearch();
+    }
+  });
+
   test("Shift+F10 opens the viewer context menu on the first item", () => {
     batch(() => {
       state.seedNav("src/foo.ts");

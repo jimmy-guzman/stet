@@ -10,12 +10,13 @@ import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
-// A `.txt` fixture has no language server advertising `documentSymbol`, so the pull resolves
-// Empty without spawning one (the same reasoning as references.render.test.tsx). These tests
-// Exercise the overlay surface: it opens on the request, renders each state with the shared
-// Footer, follows the cursor when the list overflows, and closes on escape or repo/file drift.
+// A `.txt` fixture has no server advertising `documentSymbol`, so `goToSymbol` resolves to the
+// Unsupported state without a request or a spawned server (the same reasoning as the references
+// Render test). These tests exercise the overlay surface: it opens on the request, renders each
+// State with the shared footer, follows the cursor when the list overflows, and closes on escape
+// Or repo/file/content drift.
 describe("symbols overlay", () => {
-  test("opens on go-to-symbol, renders the empty screen, and closes on escape", async () => {
+  test("opens on go-to-symbol, renders the unsupported screen, and closes on escape", async () => {
     const repoRoot = createFixtureRepo("sideye-symbols-", {
       "notes.txt": "alpha beta\n",
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
@@ -34,11 +35,16 @@ describe("symbols overlay", () => {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
       void state.goToSymbol();
-      const empty = await settleUntil("empty screen", (frame) => frame.includes("no symbols"));
-      expect(empty).toContain("↑↓ navigate");
+      const unsupported = await settleUntil("unsupported screen", (frame) =>
+        frame.includes("no symbol support"),
+      );
+      expect(unsupported).toContain("↑↓ navigate");
 
       mockInput.pressEscape();
-      const closed = await settleUntil("overlay closed", (frame) => !frame.includes("no symbols"));
+      const closed = await settleUntil(
+        "overlay closed",
+        (frame) => !frame.includes("no symbol support"),
+      );
       expect(closed).not.toContain("↑↓ navigate");
     } finally {
       renderer.destroy();
@@ -66,18 +72,56 @@ describe("symbols overlay", () => {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
       void state.goToSymbol();
-      await settleUntil("overlay open", (frame) => frame.includes("no symbols"));
+      await settleUntil("overlay open", (frame) => frame.includes("no symbol support"));
 
       state.setRepoRoot(otherRoot);
       const closed = await settleUntil(
         "overlay closed by the repo change",
-        (frame) => !frame.includes("no symbols"),
+        (frame) => !frame.includes("no symbol support"),
       );
       expect(closed).not.toContain("↑↓ navigate");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
       rmSync(otherRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("closes when the open file's content reloads under it", async () => {
+    const repoRoot = createFixtureRepo("sideye-symbols-", {
+      "notes.txt": "alpha beta\n",
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+    });
+    writeFileSync(join(repoRoot, "notes.txt"), "alpha beta\ngamma delta\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
+
+      void state.goToSymbol();
+      await settleUntil("overlay open", (frame) => frame.includes("no symbol support"));
+
+      // The open file's content reloads (an edit the watcher picks up), minting a new ChangedFile
+      // Identity for the same path, so the outline's captured positions are stale and it must close.
+      writeFileSync(join(repoRoot, "notes.txt"), "alpha beta\ngamma delta\nepsilon zeta\n");
+      const refreshed = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+      state.setGitModel(refreshed);
+
+      const closed = await settleUntil(
+        "overlay closed by the content reload",
+        (frame) => !frame.includes("no symbol support"),
+      );
+      expect(closed).not.toContain("↑↓ navigate");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 

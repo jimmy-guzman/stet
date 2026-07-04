@@ -549,9 +549,18 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // Plain `s` only: Shift+S is go-to-symbol (handled in the file-view block), so it must
-      // Fall through rather than open the scope picker.
-      if (key.name === "s" && !key.shift) {
+      // Go to symbol in the open file, an outline overlay. A bare uppercase S ("Symbols"), not the
+      // IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift across terminals (a bare
+      // 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so the Shift is lost, whereas a
+      // Plain letter always arrives. It sits immediately ahead of the plain-s scope picker so it
+      // Wins Shift+S where a terminal reports it as { name: "s", shift }; a plain s, or a Shift+S
+      // Outside the file view, falls through to the scope picker below. The action guards itself.
+      if ((key.name === "S" || (key.name === "s" && key.shift)) && state.mainView() === "file") {
+        void state.goToSymbol();
+        return;
+      }
+
+      if (key.name === "s") {
         openScopeMenu();
         return;
       }
@@ -681,16 +690,6 @@ export function createKeyHandler(host: HostEffects) {
       // (Shift+K, the established LSP hover key). The action reads the caret and guards itself.
       if ((key.name === "K" || (key.name === "k" && key.shift)) && fileViewShowing) {
         void state.showHover();
-        return;
-      }
-
-      // Go to symbol in the open file, an outline overlay. A bare uppercase S ("Symbols"), not the
-      // IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift across terminals (a bare
-      // 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so the Shift is lost, whereas a
-      // Plain letter always arrives. Mirrors the K hover binding, and sits ahead of the plain-s
-      // Scope handler. Needs no caret, only a viewed file; the action reads state and guards itself.
-      if ((key.name === "S" || (key.name === "s" && key.shift)) && fileViewShowing) {
-        void state.goToSymbol();
         return;
       }
 

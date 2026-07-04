@@ -40,9 +40,11 @@ describe("commit drill-down", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      // From `all` (index 2) step down to the commits drill-down row (index 5), then enter.
+      // From `uncommitted` (index 0) step down to the commits drill-down row (index 5), then enter.
       mockInput.pressKey("s");
       await settleUntil("scope picker opens", (frame) => frame.includes("switch scope"));
+      mockInput.pressKey("j");
+      mockInput.pressKey("j");
       mockInput.pressKey("j");
       mockInput.pressKey("j");
       mockInput.pressKey("j");

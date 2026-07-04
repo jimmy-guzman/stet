@@ -37,13 +37,13 @@ describe("scope switching", () => {
         400,
       );
 
-      // `s` opens the picker on the active scope (all, index 2); `k` moves up to
-      // Staged (index 1); `return` selects it. Nothing is staged, so the new
+      // `s` opens the picker on the active scope (uncommitted, index 0); `j` moves
+      // Down to staged (index 1); `return` selects it. Nothing is staged, so the new
       // Changed set is empty and the recheck runs against it: the change indicator
-      // Must disappear, which a stale all-scope frame cannot satisfy.
+      // Must disappear, which a stale uncommitted-scope frame cannot satisfy.
       mockInput.pressKey("s");
-      await settleUntil("scope picker opens", (frame) => frame.includes("all changes"));
-      mockInput.pressKey("k");
+      await settleUntil("scope picker opens", (frame) => frame.includes("switch scope"));
+      mockInput.pressKey("j");
       // Let the cursor move commit before enter, as a real key cadence would.
       await settleUntil("picker cursor moved", () => true, 2);
       mockInput.pressEnter();
@@ -80,22 +80,25 @@ describe("scope switching", () => {
     try {
       mockInput.pressKey("s");
       const open = await settleUntil(
-        "picker lists all scopes",
+        "picker lists all scopes under their group headers",
         (frame) =>
+          frame.includes("uncommitted") &&
           frame.includes("unstaged") &&
           // Word-bounded so the "unstaged" row can't satisfy the staged check.
           /\bstaged\b/.test(frame) &&
-          frame.includes("all changes") &&
           frame.includes("since session start") &&
-          frame.includes("last commit"),
+          frame.includes("last commit") &&
+          // The two group headers.
+          frame.includes("changes") &&
+          frame.includes("history"),
       );
-      // The active scope (all) carries the ● marker.
-      expect(open).toContain("● all changes");
+      // The active scope (uncommitted) carries the ● marker.
+      expect(open).toContain("● uncommitted");
 
       mockInput.pressEscape();
       const closed = await settleUntil(
         "escape closes the picker",
-        (frame) => !frame.includes("● all changes"),
+        (frame) => !frame.includes("● uncommitted"),
       );
       expect(closed).not.toContain("since session start");
     } finally {
@@ -120,18 +123,20 @@ describe("scope switching", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("all scope is active", (frame) => frame.includes("worktree vs HEAD"));
+      await settleUntil("all scope is active", (frame) => frame.includes("uncommitted vs HEAD"));
 
-      // From all (index 2), `j` moves down to session (index 3); `return` selects.
+      // From uncommitted (index 0), `j` three times reaches session (index 3); `return` selects.
       mockInput.pressKey("s");
       await settleUntil("scope picker opens", (frame) => frame.includes("since session start"));
+      mockInput.pressKey("j");
+      mockInput.pressKey("j");
       mockInput.pressKey("j");
       // Let the cursor move commit before enter, as a real key cadence would.
       await settleUntil("picker cursor moved", () => true, 2);
       mockInput.pressEnter();
       const after = await settleUntil(
         "header shows the session scope",
-        (frame) => frame.includes("since session start") && !frame.includes("worktree vs HEAD"),
+        (frame) => frame.includes("since session start") && !frame.includes("uncommitted vs HEAD"),
       );
       // Session base defaults to HEAD here, so the unstaged change is still in view.
       expect(after).toContain("since session start");
@@ -162,11 +167,13 @@ describe("scope switching", () => {
 
     try {
       // The working tree is clean, so all shows nothing changed.
-      await settleUntil("all scope is active", (frame) => frame.includes("worktree vs HEAD"));
+      await settleUntil("all scope is active", (frame) => frame.includes("uncommitted vs HEAD"));
 
-      // From all (index 2), `j` twice reaches last-commit (index 4); `return` selects.
+      // From uncommitted (index 0), `j` four times reaches last-commit (index 4); `return` selects.
       mockInput.pressKey("s");
       await settleUntil("scope picker opens", (frame) => frame.includes("last commit"));
+      mockInput.pressKey("j");
+      mockInput.pressKey("j");
       mockInput.pressKey("j");
       mockInput.pressKey("j");
       await settleUntil("picker cursor moved", () => true, 2);

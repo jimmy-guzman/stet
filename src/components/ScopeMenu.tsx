@@ -37,6 +37,13 @@ export function ScopeMenu() {
       foregroundColor: theme.colors.scrollbar.thumb,
     },
   };
+  // Non-selectable section labels; the cursor (scopeMenuIndex) never lands on them,
+  // So they carry no id or handler and outdent left of the marker-prefixed rows.
+  const groupHeader = (label: string) => (
+    <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
+      <text fg={theme.colors.text.muted}>{label}</text>
+    </box>
+  );
 
   return (
     <box
@@ -58,32 +65,38 @@ export function ScopeMenu() {
         <scrollbox
           ref={(el) => (scopeMenuRef = el)}
           width="100%"
-          height={scopeKinds.length + 1}
+          height={scopeKinds.length + 3}
           scrollY
           viewportCulling
           scrollbarOptions={scrollbarOptions}
         >
-          {/* Id-by-index is required: reordering must never change a live renderable's id */}
+          {/* Id-by-index is required: reordering must never change a live renderable's id.
+              The "changes"/"history" section labels are interleaved off the grouped
+              scopeKinds order (headers before the first row and the "session" row). */}
           <Index each={scopeKinds}>
             {(kind, index) => {
               const active = () => index === state.scopeMenuIndex();
               const current = () => kind() === state.scope().kind;
               return (
-                <box
-                  id={`scope-menu-${index}`}
-                  width="100%"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={rowBackground(active())}
-                  onMouseDown={() => {
-                    state.selectScope(kind());
-                    state.setScopeMenuOpen(false);
-                  }}
-                >
-                  <text
-                    fg={rowFg(active())}
-                  >{`${marker(active(), current())}${scopeMenuLabel(kind())}`}</text>
-                </box>
+                <>
+                  <Show when={index === 0}>{groupHeader("changes")}</Show>
+                  <Show when={kind() === "session"}>{groupHeader("history")}</Show>
+                  <box
+                    id={`scope-menu-${index}`}
+                    width="100%"
+                    paddingLeft={1}
+                    paddingRight={1}
+                    backgroundColor={rowBackground(active())}
+                    onMouseDown={() => {
+                      state.selectScope(kind());
+                      state.setScopeMenuOpen(false);
+                    }}
+                  >
+                    <text
+                      fg={rowFg(active())}
+                    >{`${marker(active(), current())}${scopeMenuLabel(kind())}`}</text>
+                  </box>
+                </>
               );
             }}
           </Index>

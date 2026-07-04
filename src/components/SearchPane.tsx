@@ -43,7 +43,7 @@ export function SearchPane() {
   // Rows (inputs, status, footer) keep `innerWidth`.
   const resultsWidth = () => Math.max(1, innerWidth() - 1);
   // The cell names the *effective* universe: widened -> repo; otherwise the
-  // Active diff scope, so a staged/session lens is never misread as all changes.
+  // Active diff scope, so a staged/session lens is never misread as uncommitted.
   const scopeLabel = () => {
     if (state.searchScope() === "repo") {
       return "repo";

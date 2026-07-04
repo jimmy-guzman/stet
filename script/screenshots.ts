@@ -218,7 +218,7 @@ const screens = [
      * and line:col column. The long sleep waits out tsserver's project load before documentSymbol
      * answers (same order as the hover/problems shots).
      */
-    name: "go-to-symbol",
+    name: "find-symbols",
     steps: [
       "Ctrl+P",
       'Type "src/state"',

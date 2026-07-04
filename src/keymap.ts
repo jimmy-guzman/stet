@@ -549,14 +549,14 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // Go to symbol in the open file, an outline overlay. A bare uppercase S ("Symbols"), not the
+      // Find symbols in the open file, an outline overlay. A bare uppercase S ("Symbols"), not the
       // IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift across terminals (a bare
       // 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so the Shift is lost, whereas a
       // Plain letter always arrives. It sits immediately ahead of the plain-s scope picker so it
       // Wins Shift+S where a terminal reports it as { name: "s", shift }; a plain s, or a Shift+S
       // Outside the file view, falls through to the scope picker below. The action guards itself.
       if ((key.name === "S" || (key.name === "s" && key.shift)) && state.mainView() === "file") {
-        void state.goToSymbol();
+        void state.findSymbols();
         return;
       }
 

@@ -2060,7 +2060,7 @@ function createState() {
   }
 
   // Fill the overlay with a ready result set, anchoring it to the file/repo/content it belongs to
-  // So the drift effect closes it when any of those move. `goToSymbol` only reaches here once its
+  // So the drift effect closes it when any of those move. `findSymbols` only reaches here once its
   // Guard has confirmed the selection did not move during the pull, so these live reads match the
   // Request; a direct caller (tests injecting results) anchors to the current selection. Mirrors
   // `openReferences`.
@@ -2081,7 +2081,7 @@ function createState() {
   // Unlike definition/references this needs no caret, only a viewed file: the whole document is
   // The query. Opens at once in a loading state, then resolves to the list, an empty screen, or
   // An error; read-only, degrades in place, never throws.
-  async function goToSymbol() {
+  async function findSymbols() {
     symbolsController?.abort();
     const path = selectedPath();
     if (path === undefined) {
@@ -2440,8 +2440,8 @@ function createState() {
         void showHover();
         return;
       }
-      case "goToSymbol": {
-        void goToSymbol();
+      case "findSymbols": {
+        void findSymbols();
         return;
       }
       case "copyReference": {
@@ -3019,6 +3019,7 @@ function createState() {
     findOpen,
     findQuery,
     findReferences,
+    findSymbols,
     firstNavigableProblemIndex,
     focusedNodeId,
     focusedPane,
@@ -3028,7 +3029,6 @@ function createState() {
     goBack,
     goForward,
     goToDefinition,
-    goToSymbol,
     helpDialogOpen,
     iconsEnabled,
     ideTemplate,

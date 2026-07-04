@@ -33,7 +33,7 @@ describe("buildCommandMenuItems", () => {
       "Go to definition",
       "Find references",
       "Quick info",
-      "Go to symbol",
+      "Find symbols",
       "Copy reference",
       "Copy file contents",
       "Open in editor",
@@ -41,9 +41,9 @@ describe("buildCommandMenuItems", () => {
     ]);
   });
 
-  test("viewer without a symbol omits the caret-intel actions but keeps go-to-symbol and the rest", () => {
+  test("viewer without a symbol omits the caret-intel actions but keeps find-symbols and the rest", () => {
     expect(labels(viewer({ caretColumn: undefined, hasSymbol: false }))).toEqual([
-      "Go to symbol",
+      "Find symbols",
       "Copy reference",
       "Copy file contents",
       "Open in editor",

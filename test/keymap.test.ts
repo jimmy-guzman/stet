@@ -162,8 +162,8 @@ describe("createKeyHandler", () => {
 
   test("S lists the open file's symbols", () => {
     let calls = 0;
-    const realGoToSymbol = state.goToSymbol;
-    state.goToSymbol = async () => {
+    const realFindSymbols = state.findSymbols;
+    state.findSymbols = async () => {
       calls += 1;
     };
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
@@ -171,7 +171,7 @@ describe("createKeyHandler", () => {
       handle(keyEvent({ name: "S" }));
       expect(calls).toBe(1);
     } finally {
-      state.goToSymbol = realGoToSymbol;
+      state.findSymbols = realFindSymbols;
     }
   });
 
@@ -188,7 +188,7 @@ describe("createKeyHandler", () => {
   test("Shift+S falls through to the scope picker outside the file view", () => {
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
     try {
-      // With the search view up (tree focused), go-to-symbol is inapplicable, so Shift+S must
+      // With the search view up (tree focused), find-symbols is inapplicable, so Shift+S must
       // Reach the scope picker even on a terminal that reports it as { name: "s", shift: true }.
       state.openSearch();
       state.setFocusedPane("tree");
@@ -212,8 +212,8 @@ describe("createKeyHandler", () => {
     expect(state.commandMenuOpen()).toBe(true);
     expect(state.commandMenuContext()).toBe("viewer");
     // With no diff loaded the caret sits on no symbol, so the caret-intel actions are
-    // Omitted; "Go to symbol" needs no caret, so the highlight opens on it.
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Go to symbol");
+    // Omitted; "Find symbols" needs no caret, so the highlight opens on it.
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Find symbols");
   });
 
   test("the command menu owns the keyboard: j moves the highlight, esc closes, keys don't fall through", () => {
@@ -251,7 +251,7 @@ describe("createKeyHandler", () => {
     });
     handle(keyEvent({ name: "f10", shift: true }));
 
-    // Step from "Go to symbol" (0) to "Open in editor" (3).
+    // Step from "Find symbols" (0) to "Open in editor" (3).
     handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));

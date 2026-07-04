@@ -59,7 +59,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
       ["F12", "go to definition of the symbol under the caret"],
       ["Shift+F12", "find references to the symbol under the caret"],
       ["K", "hover: type and docs for the symbol under the caret"],
-      ["S", "go to symbol: outline of the open file"],
+      ["S", "find symbols: outline of the open file"],
       ["< / >", "back / forward through viewer history"],
       ["y", "copy path (tree), path:line:col (viewer), or the selected search result"],
       ["Y", "copy the entire contents of the viewed file"],

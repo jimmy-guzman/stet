@@ -193,7 +193,7 @@ The card clears as soon as you move the caret, scroll, switch files, or press
 
 ![hover card anchored at the caret showing a syntax-highlighted type signature above its docs](assets/screenshots/hover.png)
 
-### Go to symbol
+### Find symbols
 
 Press `S` to list the open file's symbols in a palette-family overlay:
 classes, functions, methods, and the rest, each with its kind icon and
@@ -202,7 +202,7 @@ click jumps to a symbol, `esc` closes. Unlike go-to-definition it needs no
 caret, only an open file. Same read-only LSP request family, over the same
 servers.
 
-![symbol outline overlay listing the open file's functions and methods with kind icons and line:col](assets/screenshots/go-to-symbol.png)
+![symbol outline overlay listing the open file's functions and methods with kind icons and line:col](assets/screenshots/find-symbols.png)
 
 ### Problems
 
@@ -249,7 +249,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `F12`       | go to definition of the symbol under the caret      |
 | `Shift+F12` | find references to the symbol under the caret       |
 | `K`         | hover: type and docs for the symbol under the caret |
-| `S`         | go to symbol: outline of the open file              |
+| `S`         | find symbols: outline of the open file              |
 | `<` / `>`   | back / forward through viewer history               |
 | `y`         | copy `path`, `path:line`, or `path:line:col`        |
 | `Y`         | copy the entire contents of the viewed file         |

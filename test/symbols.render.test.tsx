@@ -10,13 +10,13 @@ import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
-// A `.txt` fixture has no server advertising `documentSymbol`, so `goToSymbol` resolves to the
+// A `.txt` fixture has no server advertising `documentSymbol`, so `findSymbols` resolves to the
 // Unsupported state without a request or a spawned server (the same reasoning as the references
 // Render test). These tests exercise the overlay surface: it opens on the request, renders each
 // State with the shared footer, follows the cursor when the list overflows, and closes on escape
 // Or repo/file/content drift.
 describe("symbols overlay", () => {
-  test("opens on go-to-symbol, renders the unsupported screen, and closes on escape", async () => {
+  test("opens on find-symbols, renders the unsupported screen, and closes on escape", async () => {
     const repoRoot = createFixtureRepo("sideye-symbols-", {
       "notes.txt": "alpha beta\n",
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
@@ -34,7 +34,7 @@ describe("symbols overlay", () => {
     try {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
-      void state.goToSymbol();
+      void state.findSymbols();
       const unsupported = await settleUntil("unsupported screen", (frame) =>
         frame.includes("no symbol support"),
       );
@@ -71,7 +71,7 @@ describe("symbols overlay", () => {
     try {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
-      void state.goToSymbol();
+      void state.findSymbols();
       await settleUntil("overlay open", (frame) => frame.includes("no symbol support"));
 
       state.setRepoRoot(otherRoot);
@@ -105,7 +105,7 @@ describe("symbols overlay", () => {
     try {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
-      void state.goToSymbol();
+      void state.findSymbols();
       await settleUntil("overlay open", (frame) => frame.includes("no symbol support"));
 
       // The open file's content reloads (an edit the watcher picks up), minting a new ChangedFile

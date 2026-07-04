@@ -160,6 +160,21 @@ describe("createKeyHandler", () => {
     }
   });
 
+  test("Ctrl+Shift+O lists the open file's symbols", () => {
+    let calls = 0;
+    const realGoToSymbol = state.goToSymbol;
+    state.goToSymbol = async () => {
+      calls += 1;
+    };
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    try {
+      handle(keyEvent({ ctrl: true, name: "o", shift: true }));
+      expect(calls).toBe(1);
+    } finally {
+      state.goToSymbol = realGoToSymbol;
+    }
+  });
+
   test("Shift+F10 opens the viewer context menu on the first item", () => {
     batch(() => {
       state.seedNav("src/foo.ts");
@@ -171,9 +186,9 @@ describe("createKeyHandler", () => {
 
     expect(state.commandMenuOpen()).toBe(true);
     expect(state.commandMenuContext()).toBe("viewer");
-    // With no diff loaded the caret sits on no symbol, so the intel actions are
-    // Omitted and the highlight opens on "Copy reference".
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
+    // With no diff loaded the caret sits on no symbol, so the caret-intel actions are
+    // Omitted; "Go to symbol" needs no caret, so the highlight opens on it.
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Go to symbol");
   });
 
   test("the command menu owns the keyboard: j moves the highlight, esc closes, keys don't fall through", () => {
@@ -191,7 +206,7 @@ describe("createKeyHandler", () => {
     expect(state.commandMenuOpen()).toBe(true);
 
     handle(keyEvent({ name: "j" }));
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy file contents");
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
 
     handle(keyEvent({ name: "escape" }));
     expect(state.commandMenuOpen()).toBe(false);
@@ -211,7 +226,8 @@ describe("createKeyHandler", () => {
     });
     handle(keyEvent({ name: "f10", shift: true }));
 
-    // Step from "Copy reference" (0) to "Open in editor" (2).
+    // Step from "Go to symbol" (0) to "Open in editor" (3).
+    handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));
     expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Open in editor");

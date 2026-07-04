@@ -15,8 +15,13 @@ import { LanguageServers, lspLanguageId, serversProviding } from "@/diagnostics/
 import type { Capability } from "@/diagnostics/servers";
 import { relativize } from "@/utils/path";
 
-import { normalizeDefinition, normalizeReferences, parseHover } from "./protocol";
-import type { HoverSegment, NormalizedLocation } from "./protocol";
+import {
+  normalizeDefinition,
+  normalizeDocumentSymbols,
+  normalizeReferences,
+  parseHover,
+} from "./protocol";
+import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./protocol";
 
 /**
  * Canonicalize to realpath so a symlinked repo root and a server-resolved target compare in the
@@ -60,6 +65,10 @@ export class Intel extends Context.Service<
       path: string,
       position: Position,
     ) => Effect.Effect<HoverSegment[], IntelRequestError>;
+    readonly symbols: (
+      repoRoot: string,
+      path: string,
+    ) => Effect.Effect<NormalizedSymbol[], IntelRequestError>;
   }
 >()("sideye/Intel") {}
 
@@ -92,7 +101,7 @@ export const IntelLive = Layer.effect(
     function pull<T>(
       repoRoot: string,
       path: string,
-      position: Position,
+      position: Position | undefined,
       capability: Capability,
       method: string,
       extraParams: Record<string, unknown>,
@@ -138,7 +147,13 @@ export const IntelLive = Layer.effect(
             Effect.ignore,
           );
           const reply = yield* handle.connection
-            .request(method, { position, textDocument: { uri }, ...extraParams })
+            .request(method, {
+              textDocument: { uri },
+              // `documentSymbol` addresses the whole document, so it carries no position; other
+              // Pulls resolve at the caret. Omit the key entirely when absent rather than send null.
+              ...(position === undefined ? {} : { position }),
+              ...extraParams,
+            })
             .pipe(
               Effect.timeout("5 seconds"),
               Effect.catchTag("TimeoutError", () =>
@@ -193,6 +208,17 @@ export const IntelLive = Layer.effect(
           "textDocument/references",
           { context: { includeDeclaration: true } },
           relativizeLocations(repoRoot, normalizeReferences),
+          [],
+        ),
+      symbols: (repoRoot, path) =>
+        pull(
+          repoRoot,
+          path,
+          undefined,
+          "documentSymbol",
+          "textDocument/documentSymbol",
+          {},
+          normalizeDocumentSymbols,
           [],
         ),
     };

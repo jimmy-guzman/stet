@@ -23,6 +23,7 @@ import {
   REFERENCES_MAX_ROWS,
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_VIEWER_MIN,
+  SYMBOLS_MAX_ROWS,
 } from "./constants";
 import {
   allFindings,
@@ -66,7 +67,7 @@ import {
   expandAncestorsForPath,
   flattenTree,
 } from "./git/tree";
-import type { HoverSegment, NormalizedLocation } from "./intel/protocol";
+import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./intel/protocol";
 import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from "./intel/references";
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
@@ -404,6 +405,13 @@ function createState() {
   const [referencesLabel, setReferencesLabel] = createSignal<"references" | "definitions">(
     "references",
   );
+  const [symbolsOpen, setSymbolsOpen] = createSignal(false);
+  const [symbolsStatus, setSymbolsStatus] = createSignal<"loading" | "ready" | "empty" | "error">(
+    "loading",
+  );
+  const [symbolsResults, setSymbolsResults] = createSignal<NormalizedSymbol[]>([]);
+  const [symbolsIndex, setSymbolsIndex] = createSignal(0);
+  const [symbolsScrollTop, setSymbolsScrollTop] = createSignal(0);
   const [findOpen, setFindOpen] = createSignal(false);
   const [findActive, setFindActive] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal("");
@@ -657,6 +665,20 @@ function createState() {
     scrollTop: referencesScrollTop,
     setScrollTop: setReferencesScrollTop,
     viewport: referencesViewport,
+  });
+  // The symbol outline overlay windows the same way. It has no header rows (one file's
+  // Symbols, not a per-file grouping), so `symbolsIndex` is already the row index and the
+  // Follow tracks it directly rather than mapping through a rows list.
+  const symbolsViewport = createMemo(() =>
+    Math.min(SYMBOLS_MAX_ROWS, Math.max(1, symbolsResults().length)),
+  );
+  followListWindow({
+    active: symbolsOpen,
+    cursor: symbolsIndex,
+    rowCount: () => symbolsResults().length,
+    scrollTop: symbolsScrollTop,
+    setScrollTop: setSymbolsScrollTop,
+    viewport: symbolsViewport,
   });
   // The go-to-file universe: repoFiles plus changed-only paths (staged
   // Deletions), the same universe the tree renders. Every dependency is
@@ -2010,6 +2032,112 @@ function createState() {
     }
   });
 
+  // The symbol outline overlay. Its own controller (not the shared `intelController`), since
+  // It owns a separate overlay from definition/references and the two must not clobber each
+  // Other's in-flight pull; captured `symbolsPath`/`symbolsRoot` scope the result to the file
+  // And repo it was requested for, so a mid-request file switch or worktree switch drops it.
+  let symbolsController: AbortController | undefined;
+  let symbolsPath: string | undefined;
+  let symbolsRoot: string | undefined;
+
+  function resetSymbolsState() {
+    setSymbolsOpen(false);
+    setSymbolsResults([]);
+    setSymbolsIndex(0);
+    setSymbolsScrollTop(0);
+    setSymbolsStatus("loading");
+  }
+
+  function closeSymbols() {
+    symbolsController?.abort();
+    symbolsController = undefined;
+    batch(resetSymbolsState);
+  }
+
+  // Fill the overlay with a ready result set, capturing the file/repo it belongs to so the drift
+  // Effect can close it when either moves. Mirrors `openReferences`.
+  function openSymbols(results: NormalizedSymbol[]) {
+    symbolsPath = selectedPath();
+    symbolsRoot = repoRoot();
+    batch(() => {
+      setSymbolsResults(results);
+      setSymbolsIndex(0);
+      setSymbolsScrollTop(0);
+      setSymbolsStatus("ready");
+      setSymbolsOpen(true);
+    });
+  }
+
+  // List the open file's symbols via `textDocument/documentSymbol` and open the outline overlay.
+  // Unlike definition/references this needs no caret, only a viewed file: the whole document is
+  // The query. Opens at once in a loading state, then resolves to the list, an empty screen, or
+  // An error; read-only, degrades in place, never throws.
+  async function goToSymbol() {
+    symbolsController?.abort();
+    const path = selectedPath();
+    if (path === undefined) {
+      return;
+    }
+    const controller = new AbortController();
+    symbolsController = controller;
+    const requestRoot = repoRoot();
+    symbolsPath = path;
+    symbolsRoot = requestRoot;
+    batch(() => {
+      setSymbolsResults([]);
+      setSymbolsIndex(0);
+      setSymbolsScrollTop(0);
+      setSymbolsStatus("loading");
+      setSymbolsOpen(true);
+    });
+    try {
+      const symbols = await runtime.runPromise(
+        Intel.use((intel) => intel.symbols(requestRoot, path)),
+        { signal: controller.signal },
+      );
+      // A superseding request or a worktree switch drops this result: the newer request owns
+      // The overlay, and a stale root would jump into the wrong repo.
+      if (symbolsController !== controller || repoRoot() !== requestRoot) {
+        return;
+      }
+      if (symbols.length === 0) {
+        setSymbolsStatus("empty");
+        return;
+      }
+      openSymbols(symbols);
+    } catch {
+      if (symbolsController === controller) {
+        setSymbolsStatus("error");
+      }
+    }
+  }
+
+  // Jump to a symbol (Enter or a click) and dismiss the overlay. The outline is always the
+  // Currently open file, so it jumps within `symbolsPath` (captured on open) rather than a
+  // Result-carried path; escalate flips to full-file view when the line is outside the diff.
+  function jumpToSymbol(index: number) {
+    const target = symbolsResults()[index];
+    if (target === undefined || symbolsPath === undefined) {
+      return;
+    }
+    const path = symbolsPath;
+    symbolsController?.abort();
+    symbolsController = undefined;
+    batch(() => {
+      selectFile(path, { column: target.column, escalate: true, line: target.line });
+      setFocusedPane("diff");
+      resetSymbolsState();
+    });
+  }
+
+  // The outline belongs to one file in one repo, so it goes stale the moment either drifts (a
+  // Worktree switch, or navigating to another file); close it, aborting any in-flight pull.
+  createEffect(() => {
+    if (symbolsOpen() && (repoRoot() !== symbolsRoot || selectedPath() !== symbolsPath)) {
+      closeSymbols();
+    }
+  });
+
   // The active scope's identity, so a scope switch that leaves the path unchanged
   // Still drifts the anchor off the now-different diff. Includes headRef (the pinned
   // Sha for a commit scope), or two sibling commits sharing a first-parent would read
@@ -2273,6 +2401,10 @@ function createState() {
       }
       case "showHover": {
         void showHover();
+        return;
+      }
+      case "goToSymbol": {
+        void goToSymbol();
         return;
       }
       case "copyReference": {
@@ -2810,6 +2942,7 @@ function createState() {
     closeCommandMenu,
     closeReferences,
     closeSearch,
+    closeSymbols,
     closeThemePicker,
     closeViewerDecoration,
     collapseSidebar,
@@ -2858,12 +2991,14 @@ function createState() {
     goBack,
     goForward,
     goToDefinition,
+    goToSymbol,
     helpDialogOpen,
     iconsEnabled,
     ideTemplate,
     jumpTarget,
     jumpToReference,
     jumpToSearchItem,
+    jumpToSymbol,
     lineMap,
     loadCommits,
     loadFullContent,
@@ -2881,6 +3016,7 @@ function createState() {
     openFileCombobox,
     openReferences,
     openSearch,
+    openSymbols,
     openThemePicker,
     openViewerDecoration,
     overflow,
@@ -2986,6 +3122,8 @@ function createState() {
     setSessionBase,
     setSidebarOpen,
     setSidebarScrollTop,
+    setSymbolsIndex,
+    setSymbolsScrollTop,
     setTerminalHeight,
     setTerminalWidth,
     setThemeComboboxIndex,
@@ -3006,6 +3144,12 @@ function createState() {
     statusRight,
     statusRightLevel,
     switchWorktree,
+    symbolsIndex,
+    symbolsOpen,
+    symbolsResults,
+    symbolsScrollTop,
+    symbolsStatus,
+    symbolsViewport,
     tabItems,
     terminalHeight,
     terminalWidth,

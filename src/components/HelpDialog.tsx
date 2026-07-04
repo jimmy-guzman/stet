@@ -5,8 +5,10 @@ import { useTheme } from "@/theme/context";
 
 // Fixed width of the combo column box; the action text wraps in whatever remains
 // Of the overlay row after it. A reserved-width box (not string padding) keeps the
-// Action column aligned even on rows whose description wraps to a second line.
-const COMBO_WIDTH = 11;
+// Action column aligned even on rows whose description wraps to a second line. Must
+// Fit the widest combo (`Ctrl+Shift+O`) on one line, or the combo itself wraps and
+// The height calc (which counts only description wraps) undercounts and clips a row.
+const COMBO_WIDTH = 12;
 
 // Word-wrapped line count of `text` at display `width` (matches OpenTUI's word
 // Wrap). Widths are display columns via `Bun.stringWidth`, not code units, so a
@@ -57,6 +59,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
       ["F12", "go to definition of the symbol under the caret"],
       ["Shift+F12", "find references to the symbol under the caret"],
       ["K", "hover: type and docs for the symbol under the caret"],
+      ["Ctrl+Shift+O", "go to symbol: outline of the open file"],
       ["< / >", "back / forward through viewer history"],
       ["y", "copy path (tree), path:line:col (viewer), or the selected search result"],
       ["Y", "copy the entire contents of the viewed file"],

@@ -198,3 +198,145 @@ export function parseHover(reply: unknown): HoverSegment[] {
   const items = Array.isArray(contents) ? contents : [contents];
   return items.flatMap(segmentsFromItem).filter((segment) => segment.lines.length > 0);
 }
+
+/**
+ * LSP `SymbolKind` (the numeric enum from the spec). Kept as a plain object of named constants
+ * rather than a TS `enum` so it stays a pure value with no emit; the overlay maps each number to a
+ * codicon/label without importing anything runtime-heavy.
+ */
+export const SymbolKind = {
+  Array: 18,
+  Boolean: 17,
+  Class: 5,
+  Constant: 14,
+  Constructor: 9,
+  Enum: 10,
+  EnumMember: 22,
+  Event: 24,
+  Field: 8,
+  File: 1,
+  Function: 12,
+  Interface: 11,
+  Key: 20,
+  Method: 6,
+  Module: 2,
+  Namespace: 3,
+  Null: 21,
+  Number: 16,
+  Object: 19,
+  Operator: 25,
+  Package: 4,
+  Property: 7,
+  String: 15,
+  Struct: 23,
+  TypeParameter: 26,
+  Variable: 13,
+} as const;
+
+/** One flattened outline entry: a symbol with its 1-based name position and its nesting depth. */
+export interface NormalizedSymbol {
+  name: string;
+  /**
+   * The LSP `SymbolKind` number (see `SymbolKind`); an unknown kind renders with the fallback
+   * glyph.
+   */
+  kind: number;
+  /** 1-based line of the symbol's name (LSP positions are 0-based). */
+  line: number;
+  /** 1-based start column of the symbol's name. */
+  column: number;
+  /** Nesting level in the outline; 0 for a top-level symbol, +1 per parent. */
+  depth: number;
+}
+
+interface LspDocumentSymbol {
+  name: string;
+  kind: number;
+  range: LspRange;
+  selectionRange: LspRange;
+  children?: unknown;
+}
+
+interface LspSymbolInformation {
+  name: string;
+  kind: number;
+  location: LspLocation;
+}
+
+function isDocumentSymbol(value: unknown): value is LspDocumentSymbol {
+  return (
+    isObject(value) &&
+    typeof value.name === "string" &&
+    typeof value.kind === "number" &&
+    isRange(value.range) &&
+    isRange(value.selectionRange)
+  );
+}
+
+function isSymbolInformation(value: unknown): value is LspSymbolInformation {
+  return (
+    isObject(value) &&
+    typeof value.name === "string" &&
+    typeof value.kind === "number" &&
+    isLocation(value.location)
+  );
+}
+
+// Order symbols by their name position: the LSP does not promise document order, and the outline
+// Reads top-to-bottom by where each symbol sits, not by reply order.
+function bySymbolPosition(a: NormalizedSymbol, b: NormalizedSymbol) {
+  return a.line - b.line || a.column - b.column;
+}
+
+function byDocumentSymbolPosition(a: LspDocumentSymbol, b: LspDocumentSymbol) {
+  return (
+    a.selectionRange.start.line - b.selectionRange.start.line ||
+    a.selectionRange.start.character - b.selectionRange.start.character
+  );
+}
+
+// A hierarchical `DocumentSymbol` carries its own name range (`selectionRange`) and may nest
+// Children; flatten pre-order so a parent precedes its members, each child one level deeper.
+// Siblings are sorted by position before recursing, so each subtree stays contiguous and ordered.
+function flattenDocumentSymbol(symbol: LspDocumentSymbol, depth: number): NormalizedSymbol[] {
+  const start = symbol.selectionRange.start;
+  const self: NormalizedSymbol = {
+    column: start.character + 1,
+    depth,
+    kind: symbol.kind,
+    line: start.line + 1,
+    name: symbol.name,
+  };
+  const children = Array.isArray(symbol.children)
+    ? symbol.children.filter(isDocumentSymbol).toSorted(byDocumentSymbolPosition)
+    : [];
+  return [self, ...children.flatMap((child) => flattenDocumentSymbol(child, depth + 1))];
+}
+
+/**
+ * `textDocument/documentSymbol` replies with a hierarchical `DocumentSymbol[]` (nested, the common
+ * case) or a flat `SymbolInformation[]`, or null. Flattened pre-order into a depth-tagged,
+ * position-ordered outline; unrecognized entries are skipped rather than aborting the reply.
+ */
+export function normalizeDocumentSymbols(reply: unknown): NormalizedSymbol[] {
+  if (!Array.isArray(reply)) {
+    return [];
+  }
+  const documentSymbols = reply.filter(isDocumentSymbol);
+  if (documentSymbols.length > 0) {
+    return documentSymbols
+      .toSorted(byDocumentSymbolPosition)
+      .flatMap((symbol) => flattenDocumentSymbol(symbol, 0));
+  }
+  // A flat `SymbolInformation[]` has no nesting; take each at depth 0 in position order.
+  return reply
+    .filter(isSymbolInformation)
+    .map((item) => ({
+      column: item.location.range.start.character + 1,
+      depth: 0,
+      kind: item.kind,
+      line: item.location.range.start.line + 1,
+      name: item.name,
+    }))
+    .toSorted(bySymbolPosition);
+}

@@ -117,6 +117,13 @@ test("handshake parses advertised providers into the capability set", async () =
   // Opting into workDoneProgress is what makes tsserver report project-load begin/end; without it
   // The intel readiness gate never opens.
   expect(initializeParams).toMatchObject({ capabilities: { window: { workDoneProgress: true } } });
+  // The hierarchicalDocumentSymbolSupport flag is what makes a server return the nested
+  // `DocumentSymbol[]`; without it the outline downgrades to a flat `SymbolInformation[]`.
+  expect(initializeParams).toMatchObject({
+    capabilities: {
+      textDocument: { documentSymbol: { hierarchicalDocumentSymbolSupport: true } },
+    },
+  });
 });
 
 test("handshake yields an empty capability set when no providers are advertised", async () => {

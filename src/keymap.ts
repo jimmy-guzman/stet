@@ -368,6 +368,23 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // The symbol outline overlay owns the keyboard while open, mirroring the references
+      // Overlay: no input, so Enter jumps to the highlighted symbol; nav clamps, escape closes.
+      if (state.symbolsOpen()) {
+        if (key.name === "escape") {
+          state.closeSymbols();
+        } else if (key.name === "return") {
+          state.jumpToSymbol(state.symbolsIndex());
+        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
+          state.setSymbolsIndex(
+            Math.min(state.symbolsIndex() + 1, Math.max(0, state.symbolsResults().length - 1)),
+          );
+        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
+          state.setSymbolsIndex(Math.max(state.symbolsIndex() - 1, 0));
+        }
+        return;
+      }
+
       // A caret-anchored decoration (the hover card) is dismiss-on-esc, claiming the
       // Key before the find and global esc handlers; any caret move already closes it.
       if (state.viewerDecoration() !== undefined && key.name === "escape") {
@@ -662,6 +679,14 @@ export function createKeyHandler(host: HostEffects) {
       // (Shift+K, the established LSP hover key). The action reads the caret and guards itself.
       if ((key.name === "K" || (key.name === "k" && key.shift)) && fileViewShowing) {
         void state.showHover();
+        return;
+      }
+
+      // Go to symbol in the open file, an outline overlay (IDE-standard Ctrl+Shift+O). Needs no
+      // Caret, only a viewed file; the action reads `selectedPath` from state and guards itself.
+      // The terminal may report the shifted letter as "o" or "O", so accept both.
+      if (key.ctrl && key.shift && (key.name === "o" || key.name === "O") && fileViewShowing) {
+        void state.goToSymbol();
         return;
       }
 

@@ -108,12 +108,14 @@ supports. Unchanged files open read-only with no diff gutters, just the source.
 
 ### Fold code
 
-Press `z` in the viewer to fold the indented block at the caret behind a `▸ N
-lines folded` marker (the header line stays), so a long file reads by structure
-instead of scrolling; `z` again unfolds it. The same key expands a git-elided gap
-(the `⋯ N unmodified lines` marker) to reveal the unchanged lines around a hunk.
-Click any marker to toggle it. Folding is per file and resets when you switch
-files. (Wrap moved to `x`.)
+Press `z` in the viewer to fold the block at the caret behind a `▸ N lines
+folded` marker (the header line stays), so a long file reads by structure instead
+of scrolling; `z` again unfolds it. Folding follows the file's structure: code
+folds by indentation, and markdown folds by heading section (down to the next
+same-or-higher heading). The same key expands a git-elided gap (the `⋯ N
+unmodified lines` marker) to reveal the unchanged lines around a hunk. Click any
+marker to toggle it. Folding is per file and resets when you switch files. (Wrap
+moved to `x`.)
 
 ![a source diff with a function folded behind a "17 lines folded" marker](assets/screenshots/folding.png)
 

@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
   applyCollapsedRegions,
   computeFoldRegions,
+  computeMarkdownFoldRegions,
   foldKey,
+  foldRegionsFor,
   remapCursorAfterToggle,
 } from "@/diff/regions";
 import { navigableLinesFromRows } from "@/diff/rows";
@@ -202,6 +204,58 @@ describe("remapCursorAfterToggle", () => {
   test("falls back to the fold header when the caret line was hidden", () => {
     const after = [nav(1, "function foo() {"), nav(4, "}")];
     expect(remapCursorAfterToggle(before, 1, after)).toBe(0);
+  });
+});
+
+describe("computeMarkdownFoldRegions", () => {
+  test("heads a region at each ATX heading, bounded by the next same-or-higher heading", () => {
+    const regions = computeMarkdownFoldRegions([
+      nav(1, "# Title"),
+      nav(2, "intro"),
+      nav(3, "## Install"),
+      nav(4, "step 1"),
+      nav(5, "## Usage"),
+      nav(6, "do this"),
+    ]);
+    expect(regions).toEqual([
+      { count: 5, endNavIndex: 5, headerNavIndex: 0, key: "fold:n1" },
+      { count: 1, endNavIndex: 3, headerNavIndex: 2, key: "fold:n3" },
+      { count: 1, endNavIndex: 5, headerNavIndex: 4, key: "fold:n5" },
+    ]);
+  });
+
+  test("ignores a `#` inside a fenced code block", () => {
+    const regions = computeMarkdownFoldRegions([
+      nav(1, "# Title"),
+      nav(2, "```"),
+      nav(3, "# fake heading"),
+      nav(4, "```"),
+      nav(5, "real text"),
+    ]);
+    expect(regions).toEqual([{ count: 4, endNavIndex: 4, headerNavIndex: 0, key: "fold:n1" }]);
+  });
+
+  test("excludes the trailing blank line before the next heading from the section", () => {
+    const regions = computeMarkdownFoldRegions([
+      nav(1, "# Title"),
+      nav(2, "text"),
+      nav(3, ""),
+      nav(4, "# Next"),
+    ]);
+    expect(regions).toEqual([{ count: 1, endNavIndex: 1, headerNavIndex: 0, key: "fold:n1" }]);
+  });
+
+  test("does not head a region for a heading with no body", () => {
+    expect(
+      computeMarkdownFoldRegions([nav(1, "# Title"), nav(2, "text"), nav(3, "## End")]),
+    ).toEqual([{ count: 2, endNavIndex: 2, headerNavIndex: 0, key: "fold:n1" }]);
+  });
+
+  test("foldRegionsFor dispatches markdown vs indent", () => {
+    const lines = [nav(1, "# Heading"), nav(2, "body")];
+    expect(foldRegionsFor(lines, "markdown")).toHaveLength(1);
+    // Indent mode finds nothing here (both lines at column 0).
+    expect(foldRegionsFor(lines, "indent")).toEqual([]);
   });
 });
 

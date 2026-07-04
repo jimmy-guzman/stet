@@ -38,14 +38,14 @@ import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problem
 import { Provisioner } from "./diagnostics/provision";
 import { serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
-import { DiffEngine, highlightSnippet, structureDiff } from "./diff/engine";
+import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
 import { followScrollTop } from "./diff/follow";
 import type { RenderSpan } from "./diff/hast";
 import {
   applyCollapsedRegions,
-  computeFoldRegions,
   foldKey,
+  foldRegionsFor,
   remapCursorAfterToggle,
 } from "./diff/regions";
 import type { GapSource } from "./diff/regions";
@@ -1162,6 +1162,13 @@ function createState() {
     const source = gapSource();
     return source?.status === "loaded" ? { lines: source.lines } : undefined;
   };
+  // Fold by structure: markdown files fold by heading section, everything else by
+  // Indentation. The same `languageForPath` the highlighter uses, so the fold model
+  // Agrees with the rendered language.
+  const foldMode = () => {
+    const language = languageForPath(diffView()?.path ?? "");
+    return language === "markdown" || language === "mdx" ? "markdown" : "indent";
+  };
   // The single "collapsed regions" transform: the raw render folded/gapped for the
   // Current state. `navigableLines` and the viewer's rows both read it, so the caret
   // Indexes only visible lines and can never land inside a collapsed region. Keyed on
@@ -1177,6 +1184,7 @@ function createState() {
       expandedGaps: expandedGaps(),
       folded: foldedRegions(),
       gapSource: loadedGapSource(),
+      mode: foldMode(),
     });
   });
   const navigableLines = createMemo(() => collapsedRender().navigable);
@@ -1192,6 +1200,7 @@ function createState() {
       expandedGaps: gaps,
       folded,
       gapSource: loadedGapSource(),
+      mode: foldMode(),
     }).navigable;
   };
   // Folds shrink `navigableLines`, so the caret can end up past its end; the Viewer's
@@ -1890,7 +1899,7 @@ function createState() {
       toggleFold(foldKey(caret));
       return;
     }
-    const regions = computeFoldRegions(lines);
+    const regions = foldRegionsFor(lines, foldMode());
     const region =
       regions.find((candidate) => candidate.headerNavIndex === index) ??
       regions.find(
@@ -1937,7 +1946,7 @@ function createState() {
     if (rawIndex === -1) {
       return false;
     }
-    const covering = computeFoldRegions(view.render.navigable).filter(
+    const covering = foldRegionsFor(view.render.navigable, foldMode()).filter(
       (region) =>
         region.headerNavIndex < rawIndex &&
         rawIndex <= region.endNavIndex &&

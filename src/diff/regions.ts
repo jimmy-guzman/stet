@@ -78,6 +78,77 @@ export function computeFoldRegions(navigable: NavigableLine[]): FoldRegion[] {
   return regions;
 }
 
+const ATX_HEADING = /^ {0,3}(?<hashes>#{1,6})(?:\s|$)/;
+const CODE_FENCE = /^ {0,3}(?:```|~~~)/;
+
+function headingLevel(content: string) {
+  return ATX_HEADING.exec(content)?.groups?.hashes.length ?? 0;
+}
+
+/**
+ * Heading-based fold regions for markdown. A section headed by an ATX heading (`#`..`######`) folds
+ * down to the last line before the next heading of the same or higher level (or the end); nesting
+ * falls out the same way indent regions nest. Fences are tracked so a `#` inside a code block is
+ * not read as a heading. Same `FoldRegion`/`foldKey` shape as `computeFoldRegions`, so every caller
+ * and the fold `Set` are unchanged. Indent-based folding does almost nothing here (markdown sits at
+ * column 0), so this is the language-aware alternative.
+ */
+export function computeMarkdownFoldRegions(navigable: NavigableLine[]): FoldRegion[] {
+  const inFence: boolean[] = [];
+  let fenced = false;
+  for (let index = 0; index < navigable.length; index += 1) {
+    inFence[index] = fenced;
+    if (CODE_FENCE.test(navigable[index]?.content ?? "")) {
+      fenced = !fenced;
+    }
+  }
+
+  const levelAt = (index: number) => {
+    const line = navigable[index];
+    return line === undefined || inFence[index] ? 0 : headingLevel(line.content);
+  };
+
+  const regions: FoldRegion[] = [];
+  for (let index = 0; index < navigable.length; index += 1) {
+    const level = levelAt(index);
+    if (level === 0) {
+      continue;
+    }
+    let end = index;
+    for (let scan = index + 1; scan < navigable.length; scan += 1) {
+      const scanLevel = levelAt(scan);
+      if (scanLevel > 0 && scanLevel <= level) {
+        break;
+      }
+      end = scan;
+    }
+    // Trailing blank lines belong to the gap before the next heading, not the section.
+    while (end > index && isBlank(navigable[end]?.content ?? "")) {
+      end -= 1;
+    }
+    const header = navigable[index];
+    if (end > index && header !== undefined) {
+      regions.push({
+        count: end - index,
+        endNavIndex: end,
+        headerNavIndex: index,
+        key: foldKey(header),
+      });
+    }
+  }
+
+  return regions;
+}
+
+export type FoldMode = "indent" | "markdown";
+
+/** Pick the region model for a file's language: heading-based for markdown, else indentation. */
+export function foldRegionsFor(navigable: NavigableLine[], mode: FoldMode) {
+  return mode === "markdown"
+    ? computeMarkdownFoldRegions(navigable)
+    : computeFoldRegions(navigable);
+}
+
 function nextLineRow(rows: DiffRow[], from: number) {
   for (let index = from; index < rows.length; index += 1) {
     const row = rows[index];
@@ -92,6 +163,7 @@ interface ApplyOptions {
   folded: ReadonlySet<string>;
   expandedGaps: ReadonlySet<string>;
   gapSource?: GapSource;
+  mode?: FoldMode;
 }
 
 /**
@@ -103,9 +175,10 @@ interface ApplyOptions {
  * they replace.
  */
 export function applyCollapsedRegions(rows: DiffRow[], options: ApplyOptions) {
-  const foldedRegions = computeFoldRegions(navigableLinesFromRows(rows)).filter((region) =>
-    options.folded.has(region.key),
-  );
+  const foldedRegions = foldRegionsFor(
+    navigableLinesFromRows(rows),
+    options.mode ?? "indent",
+  ).filter((region) => options.folded.has(region.key));
   const regionByHeader = new Map(foldedRegions.map((region) => [region.headerNavIndex, region]));
 
   const out: DiffRow[] = [];

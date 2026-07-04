@@ -123,6 +123,30 @@ describe("fileIcon", () => {
     expect(fileIcon("notes.xyz")).toBe("\u{ea7b}");
     expect(fileIcon("AUTHORS")).toBe("\u{ea7b}");
   });
+
+  test("marks test/spec files with one shared glyph, regardless of language", () => {
+    expect(fileIcon("foo.test.ts")).toBe("\u{ea79}");
+    expect(fileIcon("App.spec.tsx")).toBe("\u{ea79}");
+    expect(fileIcon("e2e.cy.js")).toBe("\u{ea79}");
+    expect(fileIcon("foo_test.go")).toBe("\u{ea79}");
+    expect(fileIcon("bar_spec.rb")).toBe("\u{ea79}");
+    expect(fileIcon("test_foo.py")).toBe("\u{ea79}");
+    // A React test is not given its own icon: one glyph means "this is a test".
+    expect(fileIcon("App.test.tsx")).toBe(fileIcon("foo.test.ts"));
+  });
+
+  test("does not treat a bare test/spec filename, or a word ending in test, as a test file", () => {
+    expect(fileIcon("test.ts")).toBe(fileIcon("main.ts"));
+    expect(fileIcon("spec.rb")).toBe(fileIcon("Formula.rb"));
+    expect(fileIcon("latest.ts")).toBe(fileIcon("main.ts"));
+    expect(fileIcon("contest.go")).not.toBe("\u{ea79}");
+  });
+
+  test("marks Storybook story files with the storybook glyph", () => {
+    expect(fileIcon("Button.stories.tsx")).toBe("\u{e8b3}");
+    expect(fileIcon("Button.story.ts")).toBe("\u{e8b3}");
+    expect(fileIcon("Button.stories.tsx")).not.toBe(fileIcon("Button.test.tsx"));
+  });
 });
 
 describe("folderIcon", () => {

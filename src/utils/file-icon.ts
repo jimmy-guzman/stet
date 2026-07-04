@@ -19,7 +19,9 @@
  * seti-makefile, license seti-license (also NOTICE and license-style filenames), git dev-git,
  * config/env/conf seti-config (also the dotfile fallback), book fa-book, csv seti-csv, http
  * fa-paper_plane, astro custom-astro, pdf fa-file_pdf_o, video fa-file_video_o, symlink
- * oct-file_symlink_file.
+ * oct-file_symlink_file, test cod-beaker (any test/spec/cy file, one glyph across every language so
+ * "test-ness" reads the same everywhere rather than mixing a symbol with per-framework brand
+ * logos), storybook dev-storybook (.stories./.story. files).
  */
 
 const DEFAULT_FILE = "\u{ea7b}";
@@ -31,6 +33,8 @@ const JAVA = "\u{e738}";
 const GRADLE = "\u{e7f2}";
 const RUBY = "\u{e739}";
 const LICENSE = "\u{e60a}";
+const TEST = "\u{ea79}";
+const STORYBOOK = "\u{e8b3}";
 
 /** Exact-filename matches, checked before the extension table. */
 const BY_STEM = new Map([
@@ -128,6 +132,29 @@ const SPDX_LICENSE_STEMS = new Set([
   "mpl-2.0",
 ]);
 
+/** Storybook story files, checked before the test check since a story is not a test. */
+function isStorybookFile(base: string) {
+  return base.endsWith(".stories") || base.endsWith(".story");
+}
+
+/**
+ * Test/spec files across languages, matched on the filename stem (the part before the final
+ * extension) so `foo.test.ts`, `foo_test.go`, and `test_foo.py` all resolve the same way. Every
+ * separator is required immediately before "test"/"spec", so `latest.ts` and `contest.go` are not
+ * false positives. `.cy` folds Cypress test files into the same bucket, matching how icon themes
+ * treat them (no dedicated Cypress test-file icon exists; only its config file gets one).
+ */
+function isTestFile(base: string) {
+  return (
+    base.endsWith(".test") ||
+    base.endsWith(".spec") ||
+    base.endsWith("_test") ||
+    base.endsWith("_spec") ||
+    base.endsWith(".cy") ||
+    base.startsWith("test_")
+  );
+}
+
 /** License-style filenames win over any extension, the way an IDE marks a license file. */
 function isLicenseFile(lower: string) {
   return (
@@ -146,6 +173,18 @@ export function fileIcon(name: string) {
     return stem;
   }
 
+  const dot = lower.lastIndexOf(".");
+  const base = dot > 0 ? lower.slice(0, dot) : lower;
+  const ext = dot > 0 ? lower.slice(dot + 1) : "";
+
+  if (isStorybookFile(base)) {
+    return STORYBOOK;
+  }
+
+  if (isTestFile(base)) {
+    return TEST;
+  }
+
   if (isLicenseFile(lower)) {
     return LICENSE;
   }
@@ -155,8 +194,6 @@ export function fileIcon(name: string) {
     return RUBY;
   }
 
-  const dot = lower.lastIndexOf(".");
-  const ext = dot > 0 ? lower.slice(dot + 1) : "";
   const suffix = BY_SUFFIX.get(ext);
   if (suffix !== undefined) {
     return suffix;

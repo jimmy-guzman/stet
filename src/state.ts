@@ -1831,6 +1831,69 @@ function createState() {
     return { line, path };
   }
 
+  // The jump-or-list pull shared by go-to-definition and find-implementations: both resolve the
+  // Caret to locations, then a single in-repo target jumps while several open the references
+  // Overlay to pick from. They differ only in the LSP method, the in-flight status, the overlay
+  // Label, and the notices. The caller owns the abort/controller/caret setup (so the deliberate
+  // "supersede even when a guard no-ops" behavior stays there), and passes a `pull` thunk closing
+  // Over the resolved caret; this owns the status indicator and the result handling.
+  async function resolveAndJump(
+    controller: AbortController,
+    requestRoot: string,
+    statusText: string,
+    label: "definitions" | "implementations",
+    notices: { none: string; outside: string },
+    pull: () => Effect.Effect<NormalizedLocation[], IntelRequestError, Intel>,
+  ) {
+    setIntelStatus(statusText);
+    try {
+      const locations = await runtime.runPromise(pull(), { signal: controller.signal });
+      // A worktree switch mid-request leaves these paths resolving against the old repo, so a jump
+      // Would land on a stale or missing file; drop the result unless the root still matches.
+      if (controller.signal.aborted || repoRoot() !== requestRoot) {
+        return;
+      }
+      if (locations.length === 0) {
+        notify(notices.none);
+        return;
+      }
+      // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
+      // Absolute and the tree can't open it, so jump to the first in-repo result instead.
+      const inRepo = locations
+        .filter((location) => !isAbsolute(location.path))
+        .toSorted(byReferenceOrder);
+      const target = inRepo[0];
+      if (target === undefined) {
+        notify(notices.outside);
+        return;
+      }
+      // More than one result (an overloaded symbol, or an interface with several implementors) is a
+      // Pick, not a jump: read each target's source line and hand the set to the references overlay.
+      if (inRepo.length > 1) {
+        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
+        if (intelController !== controller || repoRoot() !== requestRoot) {
+          return;
+        }
+        openReferences(label, attachReferencePreviews(inRepo, linesByPath));
+        return;
+      }
+      batch(() => {
+        selectFile(target.path, { column: target.column, escalate: true, line: target.line });
+        setFocusedPane("diff");
+      });
+    } catch {
+      if (!controller.signal.aborted) {
+        notify("language server unreachable", "error");
+      }
+    } finally {
+      // A superseding request installs its own controller and indicator, so only the latest
+      // Invocation clears the busy state; the aborted one leaves it alone.
+      if (intelController === controller) {
+        setIntelStatus(undefined);
+      }
+    }
+  }
+
   async function goToDefinition() {
     // A fresh invocation supersedes any in-flight lookup, even when the guard below no-ops, so a
     // Stale result can't land a jump after the user has moved on.
@@ -1842,64 +1905,21 @@ function createState() {
     const { line, path } = caret;
     const controller = new AbortController();
     intelController = controller;
-    setIntelStatus("resolving definition…");
     const requestRoot = repoRoot();
-    try {
-      const locations = await runtime.runPromise(
+    await resolveAndJump(
+      controller,
+      requestRoot,
+      "resolving definition…",
+      "definitions",
+      { none: "no definition", outside: "definition outside repo" },
+      () =>
         Intel.use((intel) =>
           intel.definition(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
         ),
-        { signal: controller.signal },
-      );
-      // A worktree switch mid-request leaves these paths resolving against the old repo, so a jump
-      // Would land on a stale or missing file; drop the result unless the root still matches.
-      if (controller.signal.aborted || repoRoot() !== requestRoot) {
-        return;
-      }
-      if (locations.length === 0) {
-        notify("no definition");
-        return;
-      }
-      // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
-      // Absolute and the tree can't open it, so jump to the first in-repo result instead.
-      const inRepo = locations
-        .filter((location) => !isAbsolute(location.path))
-        .toSorted(byReferenceOrder);
-      const target = inRepo[0];
-      if (target === undefined) {
-        notify("definition outside repo");
-        return;
-      }
-      // More than one definition (e.g. an overloaded symbol) is a pick, not a jump: read
-      // Each target's source line and hand the set to the shared references overlay.
-      if (inRepo.length > 1) {
-        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-        if (intelController !== controller || repoRoot() !== requestRoot) {
-          return;
-        }
-        openReferences("definitions", attachReferencePreviews(inRepo, linesByPath));
-        return;
-      }
-      batch(() => {
-        selectFile(target.path, { column: target.column, escalate: true, line: target.line });
-        setFocusedPane("diff");
-      });
-    } catch {
-      if (!controller.signal.aborted) {
-        notify("language server unreachable", "error");
-      }
-    } finally {
-      // A superseding F12 installs its own controller and indicator, so only the
-      // Latest invocation clears the busy state; the aborted one leaves it alone.
-      if (intelController === controller) {
-        setIntelStatus(undefined);
-      }
-    }
+    );
   }
 
   async function findImplementations() {
-    // Mirrors go-to-definition: a fresh invocation supersedes any in-flight lookup so a stale
-    // Result can't land a jump after the user has moved on.
     intelController?.abort();
     const caret = caretTarget();
     if (caret === undefined) {
@@ -1908,53 +1928,18 @@ function createState() {
     const { line, path } = caret;
     const controller = new AbortController();
     intelController = controller;
-    setIntelStatus("resolving implementations…");
     const requestRoot = repoRoot();
-    try {
-      const locations = await runtime.runPromise(
+    await resolveAndJump(
+      controller,
+      requestRoot,
+      "resolving implementations…",
+      "implementations",
+      { none: "no implementations", outside: "implementations outside repo" },
+      () =>
         Intel.use((intel) =>
           intel.implementation(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
         ),
-        { signal: controller.signal },
-      );
-      if (controller.signal.aborted || repoRoot() !== requestRoot) {
-        return;
-      }
-      if (locations.length === 0) {
-        notify("no implementations");
-        return;
-      }
-      const inRepo = locations
-        .filter((location) => !isAbsolute(location.path))
-        .toSorted(byReferenceOrder);
-      const target = inRepo[0];
-      if (target === undefined) {
-        notify("implementations outside repo");
-        return;
-      }
-      // A concrete symbol collapses to its single implementation and jumps; an interface or abstract
-      // Member with many concrete bodies is a pick, so hand the set to the shared references overlay.
-      if (inRepo.length > 1) {
-        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-        if (intelController !== controller || repoRoot() !== requestRoot) {
-          return;
-        }
-        openReferences("implementations", attachReferencePreviews(inRepo, linesByPath));
-        return;
-      }
-      batch(() => {
-        selectFile(target.path, { column: target.column, escalate: true, line: target.line });
-        setFocusedPane("diff");
-      });
-    } catch {
-      if (!controller.signal.aborted) {
-        notify("language server unreachable", "error");
-      }
-    } finally {
-      if (intelController === controller) {
-        setIntelStatus(undefined);
-      }
-    }
+    );
   }
 
   // Read each referenced file's lines once (keyed by path) so the overlay can show a

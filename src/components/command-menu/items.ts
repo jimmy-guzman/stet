@@ -13,6 +13,7 @@ export type CommandAction =
   | { kind: "goToDefinition" }
   | { kind: "findReferences" }
   | { kind: "showHover" }
+  | { kind: "findSymbols" }
   | { kind: "copyReference"; path: string; line: number | undefined; column: number | undefined }
   | { kind: "copyFileContents" }
   | { kind: "loadFullContent" }
@@ -60,6 +61,8 @@ function viewerItems(input: CommandMenuInput): CommandMenuItem[] {
     : [];
   return [
     ...intel,
+    // Always available: the outline addresses the whole file, so it needs no caret symbol.
+    { action: { kind: "findSymbols" }, label: "Find symbols" },
     {
       action: { column, kind: "copyReference", line: input.caretLine, path },
       label: "Copy reference",

@@ -389,3 +389,90 @@ test("hover returns empty when no acquired server advertises it", async () => {
     expect(result).toEqual([]);
   });
 });
+
+test("symbols opens the file, requests documentSymbol without a position, normalizes, then closes", async () => {
+  await withRepo({ "src/a.ts": "export class Alpha {}\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    const ts = handle(
+      ["documentSymbol"],
+      (method) =>
+        method === "textDocument/documentSymbol"
+          ? Effect.succeed([
+              {
+                kind: 5,
+                name: "Alpha",
+                range: { end: { character: 21, line: 0 }, start: { character: 0, line: 0 } },
+                selectionRange: {
+                  end: { character: 18, line: 0 },
+                  start: { character: 13, line: 0 },
+                },
+              },
+            ])
+          : Effect.succeed(null),
+      log,
+    );
+
+    const result = await Effect.runPromise(
+      Intel.pipe(
+        Effect.flatMap((intel) => intel.symbols(dir, "src/a.ts")),
+        Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+      ),
+    );
+
+    expect(result).toEqual([{ column: 14, depth: 0, kind: 5, line: 1, name: "Alpha" }]);
+    expect(log.map((entry) => entry.method)).toEqual([
+      "textDocument/didOpen",
+      "textDocument/documentSymbol",
+      "textDocument/didClose",
+    ]);
+    // The documentSymbol request addresses the whole document, so it carries no caret position.
+    const request = log[1];
+    expect(request?.params).toMatchObject({
+      textDocument: { uri: pathToFileURL(join(dir, "src/a.ts")).href },
+    });
+    expect(request?.params).not.toHaveProperty("position");
+  });
+});
+
+test("symbols skips a server lacking the capability and returns empty when none provide it", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const servers = fakeServers({
+      oxlint: handle([], () => Effect.succeed(null), []),
+      typescript: handle([], () => Effect.succeed(null), []),
+    });
+    const result = await Effect.runPromise(
+      Intel.pipe(
+        Effect.flatMap((intel) => intel.symbols(dir, "src/a.ts")),
+        Effect.provide(IntelLive.pipe(Layer.provide(servers))),
+      ),
+    );
+    expect(result).toEqual([]);
+  });
+});
+
+test("symbols degrades a server error to IntelRequestError and still closes the document", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    const ts = handle(
+      ["documentSymbol"],
+      (method) => Effect.fail(new LspRequestError({ message: "boom", method })),
+      log,
+    );
+
+    const error = await Effect.runPromise(
+      Intel.pipe(
+        Effect.flatMap((intel) => intel.symbols(dir, "src/a.ts")),
+        Effect.flip,
+        Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+      ),
+    );
+
+    expect(error).toBeInstanceOf(IntelRequestError);
+    expect(error.method).toBe("textDocument/documentSymbol");
+    expect(log.map((entry) => entry.method)).toEqual([
+      "textDocument/didOpen",
+      "textDocument/documentSymbol",
+      "textDocument/didClose",
+    ]);
+  });
+});

@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { normalizeDefinition, normalizeReferences, parseHover } from "@/intel/protocol";
+import {
+  normalizeDefinition,
+  normalizeDocumentSymbols,
+  normalizeReferences,
+  parseHover,
+  SymbolKind,
+} from "@/intel/protocol";
 
 const uri = pathToFileURL("/repo/src/target.ts").href;
 const path = fileURLToPath(uri);
@@ -101,5 +107,76 @@ test("parseHover keeps a multi-line code block and a bare fence has no language"
   const markdown = "```\nline one\nline two\n```";
   expect(parseHover({ contents: { kind: "markdown", value: markdown } })).toEqual([
     { kind: "code", lang: undefined, lines: ["line one", "line two"] },
+  ]);
+});
+
+// A DocumentSymbol carries a whole-declaration `range` and a name-only `selectionRange`; the
+// Normalizer reads the name position, so give the two different starts to prove it picks the latter.
+const documentSymbol = (
+  name: string,
+  kind: number,
+  selectionStart: { line: number; character: number },
+  children?: unknown,
+) => ({
+  children,
+  kind,
+  name,
+  range: {
+    end: { character: 0, line: selectionStart.line + 5 },
+    start: { character: 0, line: selectionStart.line },
+  },
+  selectionRange: {
+    end: { character: selectionStart.character + 3, line: selectionStart.line },
+    start: selectionStart,
+  },
+});
+
+test("normalizeDocumentSymbols returns empty for a non-array reply", () => {
+  expect(normalizeDocumentSymbols(null)).toEqual([]);
+  expect(normalizeDocumentSymbols({ nope: true })).toEqual([]);
+});
+
+test("normalizeDocumentSymbols flattens a hierarchy pre-order, position-sorted, with depth", () => {
+  // Provided out of source order (class before the earlier function; methods reversed) to prove
+  // Both the top-level and per-parent sibling sorts run, and the name position is used.
+  const reply = [
+    documentSymbol("Alpha", SymbolKind.Class, { character: 6, line: 5 }, [
+      documentSymbol("beta", SymbolKind.Method, { character: 2, line: 8 }),
+      documentSymbol("gamma", SymbolKind.Method, { character: 2, line: 6 }),
+    ]),
+    documentSymbol("doThing", SymbolKind.Function, { character: 9, line: 1 }),
+  ];
+  expect(normalizeDocumentSymbols(reply)).toEqual([
+    { column: 10, depth: 0, kind: SymbolKind.Function, line: 2, name: "doThing" },
+    { column: 7, depth: 0, kind: SymbolKind.Class, line: 6, name: "Alpha" },
+    { column: 3, depth: 1, kind: SymbolKind.Method, line: 7, name: "gamma" },
+    { column: 3, depth: 1, kind: SymbolKind.Method, line: 9, name: "beta" },
+  ]);
+});
+
+test("normalizeDocumentSymbols skips malformed entries", () => {
+  const reply = [
+    documentSymbol("Alpha", SymbolKind.Class, { character: 0, line: 0 }),
+    { nope: true },
+    null,
+  ];
+  expect(normalizeDocumentSymbols(reply)).toEqual([
+    { column: 1, depth: 0, kind: SymbolKind.Class, line: 1, name: "Alpha" },
+  ]);
+});
+
+test("normalizeDocumentSymbols reads a flat SymbolInformation[] at depth 0, position-sorted", () => {
+  const symbolInformation = (name: string, kind: number, line: number, character: number) => ({
+    kind,
+    location: { range: { end: { character, line }, start: { character, line } }, uri },
+    name,
+  });
+  const reply = [
+    symbolInformation("second", SymbolKind.Variable, 4, 2),
+    symbolInformation("first", SymbolKind.Function, 1, 0),
+  ];
+  expect(normalizeDocumentSymbols(reply)).toEqual([
+    { column: 1, depth: 0, kind: SymbolKind.Function, line: 2, name: "first" },
+    { column: 3, depth: 0, kind: SymbolKind.Variable, line: 5, name: "second" },
   ]);
 });

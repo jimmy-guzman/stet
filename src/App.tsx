@@ -14,6 +14,7 @@ import { ReferencesOverlay } from "./components/ReferencesOverlay";
 import { ScopeMenu } from "./components/ScopeMenu";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
+import { SymbolsOverlay } from "./components/SymbolsOverlay";
 import { ThemeCombobox } from "./components/ThemeCombobox";
 import { Viewer } from "./components/Viewer";
 import { WorktreeCombobox } from "./components/WorktreeCombobox";
@@ -164,6 +165,9 @@ export function App() {
       </Show>
       <Show when={state.referencesOpen()}>
         <ReferencesOverlay />
+      </Show>
+      <Show when={state.symbolsOpen()}>
+        <SymbolsOverlay />
       </Show>
       <Show when={state.worktreeComboboxOpen()}>
         <WorktreeCombobox />

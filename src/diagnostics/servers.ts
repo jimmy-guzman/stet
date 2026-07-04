@@ -134,7 +134,7 @@ const registry: Record<string, ServerSpec> = {
     args: ["--stdio"],
     binary: "typescript-language-server",
     extensions: codeExtensions,
-    provides: ["definition", "references", "hover"],
+    provides: ["definition", "references", "hover", "documentSymbol"],
     provision: { packages: ["typescript-language-server", "typescript"] },
   },
   yaml: {
@@ -289,10 +289,12 @@ export function performHandshake(
           // (E.g. typescript-language-server) stay silent. The definition/references/hover/symbol
           // Caps are the read-only code-intel pulls, all `textDocument/*` requests. No
           // Edit/format/rename: read-only. linkSupport lets definition reply with `LocationLink`s,
-          // Which carry the symbol's name range.
+          // Which carry the symbol's name range. hierarchicalDocumentSymbolSupport is what makes a
+          // Server return the nested `DocumentSymbol[]` (with `children`); without it it downgrades
+          // To a flat `SymbolInformation[]` and the outline loses all nesting.
           textDocument: {
             definition: { dynamicRegistration: false, linkSupport: true },
-            documentSymbol: { dynamicRegistration: false },
+            documentSymbol: { dynamicRegistration: false, hierarchicalDocumentSymbolSupport: true },
             hover: { dynamicRegistration: false },
             publishDiagnostics: { relatedInformation: true, versionSupport: false },
             references: { dynamicRegistration: false },

@@ -368,6 +368,23 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // The symbol outline overlay owns the keyboard while open, mirroring the references
+      // Overlay: no input, so Enter jumps to the highlighted symbol; nav clamps, escape closes.
+      if (state.symbolsOpen()) {
+        if (key.name === "escape") {
+          state.closeSymbols();
+        } else if (key.name === "return") {
+          state.jumpToSymbol(state.symbolsIndex());
+        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
+          state.setSymbolsIndex(
+            Math.min(state.symbolsIndex() + 1, Math.max(0, state.symbolsResults().length - 1)),
+          );
+        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
+          state.setSymbolsIndex(Math.max(state.symbolsIndex() - 1, 0));
+        }
+        return;
+      }
+
       // A caret-anchored decoration (the hover card) is dismiss-on-esc, claiming the
       // Key before the find and global esc handlers; any caret move already closes it.
       if (state.viewerDecoration() !== undefined && key.name === "escape") {
@@ -529,6 +546,17 @@ export function createKeyHandler(host: HostEffects) {
         state.setWorktreeComboboxQuery("");
         state.setWorktrees(undefined);
         state.loadWorktrees(state.gitModel().repoRoot);
+        return;
+      }
+
+      // Find symbols in the open file, an outline overlay. A bare uppercase S ("Symbols"), not the
+      // IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift across terminals (a bare
+      // 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so the Shift is lost, whereas a
+      // Plain letter always arrives. It sits immediately ahead of the plain-s scope picker so it
+      // Wins Shift+S where a terminal reports it as { name: "s", shift }; a plain s, or a Shift+S
+      // Outside the file view, falls through to the scope picker below. The action guards itself.
+      if ((key.name === "S" || (key.name === "s" && key.shift)) && state.mainView() === "file") {
+        void state.findSymbols();
         return;
       }
 

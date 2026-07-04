@@ -160,6 +160,46 @@ describe("createKeyHandler", () => {
     }
   });
 
+  test("S lists the open file's symbols", () => {
+    let calls = 0;
+    const realFindSymbols = state.findSymbols;
+    state.findSymbols = async () => {
+      calls += 1;
+    };
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    try {
+      handle(keyEvent({ name: "S" }));
+      expect(calls).toBe(1);
+    } finally {
+      state.findSymbols = realFindSymbols;
+    }
+  });
+
+  test("plain s still opens the scope picker", () => {
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    try {
+      handle(keyEvent({ name: "s" }));
+      expect(state.scopeMenuOpen()).toBe(true);
+    } finally {
+      state.setScopeMenuOpen(false);
+    }
+  });
+
+  test("Shift+S falls through to the scope picker outside the file view", () => {
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    try {
+      // With the search view up (tree focused), find-symbols is inapplicable, so Shift+S must
+      // Reach the scope picker even on a terminal that reports it as { name: "s", shift: true }.
+      state.openSearch();
+      state.setFocusedPane("tree");
+      handle(keyEvent({ name: "s", shift: true }));
+      expect(state.scopeMenuOpen()).toBe(true);
+    } finally {
+      state.setScopeMenuOpen(false);
+      state.closeSearch();
+    }
+  });
+
   test("Shift+F10 opens the viewer context menu on the first item", () => {
     batch(() => {
       state.seedNav("src/foo.ts");
@@ -171,9 +211,9 @@ describe("createKeyHandler", () => {
 
     expect(state.commandMenuOpen()).toBe(true);
     expect(state.commandMenuContext()).toBe("viewer");
-    // With no diff loaded the caret sits on no symbol, so the intel actions are
-    // Omitted and the highlight opens on "Copy reference".
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
+    // With no diff loaded the caret sits on no symbol, so the caret-intel actions are
+    // Omitted; "Find symbols" needs no caret, so the highlight opens on it.
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Find symbols");
   });
 
   test("the command menu owns the keyboard: j moves the highlight, esc closes, keys don't fall through", () => {
@@ -191,7 +231,7 @@ describe("createKeyHandler", () => {
     expect(state.commandMenuOpen()).toBe(true);
 
     handle(keyEvent({ name: "j" }));
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy file contents");
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
 
     handle(keyEvent({ name: "escape" }));
     expect(state.commandMenuOpen()).toBe(false);
@@ -211,7 +251,8 @@ describe("createKeyHandler", () => {
     });
     handle(keyEvent({ name: "f10", shift: true }));
 
-    // Step from "Copy reference" (0) to "Open in editor" (2).
+    // Step from "Find symbols" (0) to "Open in editor" (3).
+    handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));
     expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Open in editor");

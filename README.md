@@ -194,6 +194,8 @@ which way you're looking. `↑`/`↓` move, `enter` or a click jumps to a caller
 callee, `esc` closes. It's a two-step read-only LSP request (prepare, then
 resolve the edges), over the same servers as go-to-definition.
 
+![call hierarchy overlay listing the callers of a function grouped by file, each with its source line, and a direction toggle hint in the footer](assets/screenshots/call-hierarchy.png)
+
 ### Hover
 
 Press `K` with the caret on a symbol to show its type and docs in a small card

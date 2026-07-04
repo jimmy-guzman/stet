@@ -405,7 +405,7 @@ function createState() {
   const [referencesIndex, setReferencesIndex] = createSignal(0);
   const [referencesScrollTop, setReferencesScrollTop] = createSignal(0);
   const [referencesLabel, setReferencesLabel] = createSignal<
-    "references" | "definitions" | "incoming calls" | "outgoing calls"
+    "references" | "definitions" | "implementations" | "incoming calls" | "outgoing calls"
   >("references");
   const [symbolsOpen, setSymbolsOpen] = createSignal(false);
   const [symbolsStatus, setSymbolsStatus] = createSignal<
@@ -1897,6 +1897,66 @@ function createState() {
     }
   }
 
+  async function findImplementations() {
+    // Mirrors go-to-definition: a fresh invocation supersedes any in-flight lookup so a stale
+    // Result can't land a jump after the user has moved on.
+    intelController?.abort();
+    const caret = caretTarget();
+    if (caret === undefined) {
+      return;
+    }
+    const { line, path } = caret;
+    const controller = new AbortController();
+    intelController = controller;
+    setIntelStatus("resolving implementations…");
+    const requestRoot = repoRoot();
+    try {
+      const locations = await runtime.runPromise(
+        Intel.use((intel) =>
+          intel.implementation(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
+        ),
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || repoRoot() !== requestRoot) {
+        return;
+      }
+      if (locations.length === 0) {
+        notify("no implementations");
+        return;
+      }
+      const inRepo = locations
+        .filter((location) => !isAbsolute(location.path))
+        .toSorted(byReferenceOrder);
+      const target = inRepo[0];
+      if (target === undefined) {
+        notify("implementations outside repo");
+        return;
+      }
+      // A concrete symbol collapses to its single implementation and jumps; an interface or abstract
+      // Member with many concrete bodies is a pick, so hand the set to the shared references overlay.
+      if (inRepo.length > 1) {
+        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
+        if (intelController !== controller || repoRoot() !== requestRoot) {
+          return;
+        }
+        openReferences("implementations", attachReferencePreviews(inRepo, linesByPath));
+        return;
+      }
+      batch(() => {
+        selectFile(target.path, { column: target.column, escalate: true, line: target.line });
+        setFocusedPane("diff");
+      });
+    } catch {
+      if (!controller.signal.aborted) {
+        notify("language server unreachable", "error");
+      }
+    } finally {
+      if (intelController === controller) {
+        setIntelStatus(undefined);
+      }
+    }
+  }
+
   // Read each referenced file's lines once (keyed by path) so the overlay can show a
   // Source-line preview beside `path:line:col`. Local reads (the LSP resolves against
   // On-disk files); a missing or binary file yields no lines, so its rows show no preview.
@@ -2514,6 +2574,10 @@ function createState() {
         callHierarchy();
         return;
       }
+      case "findImplementations": {
+        void findImplementations();
+        return;
+      }
       case "showHover": {
         void showHover();
         return;
@@ -3093,6 +3157,7 @@ function createState() {
     fileComboboxResults,
     fileView,
     findActive,
+    findImplementations,
     findMatchPos,
     findMatches,
     findOpen,

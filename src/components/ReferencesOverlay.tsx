@@ -37,7 +37,11 @@ export function ReferencesOverlay() {
   );
   const summary = () => {
     const count = results().length;
-    return `${count} ${state.referencesLabel()} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
+    // Every label is a plural noun ("references", "incoming calls", …); drop the trailing "s" for a
+    // Single result so the count reads grammatically ("1 incoming call in 1 file").
+    const label = state.referencesLabel();
+    const noun = count === 1 ? label.replace(/s$/, "") : label;
+    return `${count} ${noun} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
   };
   // A call hierarchy carries a direction Tab flips; references/definitions don't, so the hint only
   // Advertises the toggle where it does something.

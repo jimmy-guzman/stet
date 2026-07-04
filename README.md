@@ -79,7 +79,7 @@ The check is non-blocking and never interrupts the session.
 ## Usage
 
 ```sh
-sideye            # whole repo, worktree vs HEAD
+sideye            # whole repo, uncommitted vs HEAD
 sideye main       # compare against another ref
 sideye --staged   # start in the staged scope
 sideye --unstaged # start in the unstaged scope
@@ -119,11 +119,12 @@ remembered position, and a tab's label is tinted by its diff status.
 
 ### Switch scope
 
-Press `s` to pick what the diff compares: all changes, staged, unstaged,
-everything since sideye launched, or just the last commit. The picker also drills
-into recent commits (`commits →`), so you can view any of them as its own diff.
+Press `s` to pick what the diff compares. The scopes are grouped into changes
+(uncommitted, staged, or unstaged) and history (everything since sideye launched,
+or just the last commit). The picker also drills into recent commits (`commits →`),
+so you can view any of them as its own diff.
 
-![scope picker listing the five diff scopes with the active one marked](assets/screenshots/scope-picker.png)
+![scope picker grouping the diff scopes under changes and history, with the active one marked](assets/screenshots/scope-picker.png)
 
 ### Switch worktrees
 

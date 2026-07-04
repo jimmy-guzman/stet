@@ -104,19 +104,23 @@ export const IntelLive = Layer.effect(
       });
     }
 
-    // The shared open/project-load/request/close bracket. Returns whatever `normalize` makes of the
-    // Reply (locations, hover text, …); `empty` is the result when no capable server answers or the
-    // File vanished. The location callers relativize inside their own `normalize`, so this stays
-    // Generic over the reply shape rather than baking the path mapping in.
-    function pull<T>(
+    // The shared open/project-load/close bracket every intel pull runs inside. Acquires the first
+    // Capable server, reads the file, opens the document (closed atomically on any exit), waits out
+    // The project load, then runs `use` with a request `send` and the document uri; `empty` is the
+    // Result when no capable server answers or the file vanished, before `use` runs. `use` shapes
+    // Its own reply (one request or the two-step prepare/resolve), so this stays generic over it.
+    function withOpenDocument<T>(
       repoRoot: string,
       path: string,
-      position: Position | undefined,
       capability: Capability,
-      method: string,
-      extraParams: Record<string, unknown>,
-      normalize: (reply: unknown) => T,
       empty: T,
+      use: (
+        send: (
+          method: string,
+          params: Record<string, unknown>,
+        ) => Effect.Effect<unknown, IntelRequestError>,
+        uri: string,
+      ) => Effect.Effect<T, IntelRequestError>,
     ) {
       return Effect.scoped(
         Effect.gen(function* request() {
@@ -156,74 +160,8 @@ export const IntelLive = Layer.effect(
             Effect.timeout("60 seconds"),
             Effect.ignore,
           );
-          const reply = yield* handle.connection
-            .request(method, {
-              textDocument: { uri },
-              // `documentSymbol` addresses the whole document, so it carries no position; other
-              // Pulls resolve at the caret. Omit the key entirely when absent rather than send null.
-              ...(position === undefined ? {} : { position }),
-              ...extraParams,
-            })
-            .pipe(
-              Effect.timeout("5 seconds"),
-              Effect.catchTag("TimeoutError", () =>
-                Effect.fail(new IntelRequestError({ message: "timed out", method })),
-              ),
-              Effect.catchTag("LspRequestError", (error) =>
-                Effect.fail(new IntelRequestError({ message: error.message, method })),
-              ),
-            );
-          return normalize(reply);
-        }),
-      );
-    }
-
-    // The two-step variant for call hierarchy: `prepare` returns an opaque item, a second request
-    // Resolves its edges. Both share one open document (and one project-load wait), so the prepared
-    // Item stays valid across the resolve and the doc closes once. The prepare reply's item rides
-    // Back to `resolveMethod` verbatim (params are `{ item }`, not `{ textDocument, position }`),
-    // Which is why this is a sibling of `pull` rather than a parameter of it. No item under the caret
-    // (not a callable symbol) short-circuits to empty before the second round-trip.
-    function pullPrepareResolve(
-      repoRoot: string,
-      path: string,
-      position: Position,
-      capability: Capability,
-      prepareMethod: string,
-      resolveMethod: string,
-      normalize: (reply: unknown) => NormalizedLocation[],
-    ) {
-      return Effect.scoped(
-        Effect.gen(function* request() {
-          const handle = yield* firstCapableServer(repoRoot, path, capability);
-          if (handle === undefined) {
-            return [];
-          }
-          const absolute = join(repoRoot, path);
-          const text = yield* Effect.promise(() =>
-            Bun.file(absolute)
-              .text()
-              .catch(() => undefined),
-          );
-          if (text === undefined) {
-            return [];
-          }
-          const uri = pathToFileURL(absolute).href;
-          yield* Effect.acquireRelease(
-            handle.connection.openDocument({
-              languageId: lspLanguageId(path),
-              text,
-              uri,
-              version: 1,
-            }),
-            () => handle.connection.closeDocument(uri),
-          );
-          yield* handle.connection.whenProjectLoaded.pipe(
-            Effect.timeout("60 seconds"),
-            Effect.ignore,
-          );
-          // Both round-trips carry the same timeout and degradation; a local send keeps them from
-          // Drifting apart without touching the one-shot `pull`.
+          // One request with a 5s timeout, mapping transport failures to `IntelRequestError`. Shared
+          // Across a pull's single request and a hierarchy's prepare + resolve so they can't drift.
           const send = (method: string, params: Record<string, unknown>) =>
             handle.connection.request(method, params).pipe(
               Effect.timeout("5 seconds"),
@@ -234,6 +172,52 @@ export const IntelLive = Layer.effect(
                 Effect.fail(new IntelRequestError({ message: error.message, method })),
               ),
             );
+          return yield* use(send, uri);
+        }),
+      );
+    }
+
+    // A one-shot pull: open the document, send `method` at the caret (or document-wide when
+    // `position` is undefined), and normalize the reply. The location callers relativize inside their
+    // Own `normalize`, so this stays generic over the reply shape rather than baking the mapping in.
+    function pull<T>(
+      repoRoot: string,
+      path: string,
+      position: Position | undefined,
+      capability: Capability,
+      method: string,
+      extraParams: Record<string, unknown>,
+      normalize: (reply: unknown) => T,
+      empty: T,
+    ) {
+      return withOpenDocument(repoRoot, path, capability, empty, (send, uri) =>
+        send(method, {
+          textDocument: { uri },
+          // `documentSymbol` addresses the whole document, so it carries no position; other
+          // Pulls resolve at the caret. Omit the key entirely when absent rather than send null.
+          ...(position === undefined ? {} : { position }),
+          ...extraParams,
+        }).pipe(Effect.map(normalize)),
+      );
+    }
+
+    // The two-step variant for call hierarchy: `prepare` returns an opaque item, a second request
+    // Resolves its edges. Both round-trips share the one open document from `withOpenDocument` (so the
+    // Prepared item stays valid across the resolve and the doc closes once). The prepare reply's item
+    // Rides back to `resolveMethod` verbatim (params are `{ item }`, not `{ textDocument, position }`),
+    // Which is why it needs its own request body rather than `pull`'s. No item under the caret (not a
+    // Callable symbol) short-circuits to empty before the second round-trip.
+    function pullPrepareResolve(
+      repoRoot: string,
+      path: string,
+      position: Position,
+      capability: Capability,
+      prepareMethod: string,
+      resolveMethod: string,
+      normalize: (reply: unknown) => NormalizedLocation[],
+    ) {
+      return withOpenDocument(repoRoot, path, capability, [] as NormalizedLocation[], (send, uri) =>
+        Effect.gen(function* resolve() {
           const item = firstHierarchyItem(
             yield* send(prepareMethod, { position, textDocument: { uri } }),
           );

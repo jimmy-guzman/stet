@@ -486,6 +486,7 @@ export function DiffView() {
               when={asLineRow(row())}
               fallback={
                 <box
+                  ref={(el) => (el.selectable = false)}
                   width="100%"
                   height={1}
                   backgroundColor={theme.colors.surface.panel}

@@ -38,6 +38,9 @@ describe("help overlay", () => {
       // The hover shortcut must be listed, or the height bump alone would pass with it gone.
       expect(help).toContain("hover: type and docs for the symbol under the caret");
       expect(help).toContain("copy the entire contents of the viewed file");
+      // Folding took over `z`; wrap moved to `x`. Both must be listed under their keys.
+      expect(help).toContain("fold / unfold the region at the caret");
+      expect(help).toContain("toggle long-line wrap in the viewer");
       expect(help).toContain("toggle the file tree sidebar");
       expect(help).toContain("open in terminal editor");
       expect(help).toContain("open in GUI / IDE");

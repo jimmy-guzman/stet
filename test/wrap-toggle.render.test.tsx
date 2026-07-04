@@ -11,7 +11,7 @@ import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./help
 // Count the terminal rows the long line occupies: scroll mode keeps it on one
 // Truncated row (the trailing marker is off-screen); wrap mode flows it across
 // Several rows and the marker reappears on a continuation row. A `1 -> auto`
-// Box-height transition used to leave a `z` toggle stuck at one row.
+// Box-height transition used to leave an `x` toggle stuck at one row.
 describe("long-line wrap toggle", () => {
   test("x wraps a long changed line and back un-wraps it", async () => {
     // Distinct tokens so a continuation row is unambiguous, and a trailing marker

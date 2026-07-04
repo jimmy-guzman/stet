@@ -1242,13 +1242,17 @@ function createState() {
   createEffect(on(selectedPath, () => batch(resetFind)));
 
   // Folds/gaps are per file (the #181 v1 decision): a file switch clears them and
-  // Drops any loaded gap source, so a returned-to file opens fully expanded.
+  // Drops any loaded gap source, so a returned-to file opens fully expanded. A scope
+  // Change clears them too, since the gap keys (`gap:N` hunk ordinals) and the loaded
+  // `gapSource` (the scope's new-side text) are both scope-relative, so keeping them
+  // Could reveal mismatched lines from the previous scope's snapshot.
   const resetFolds = () => {
     setFoldedRegions(new Set<string>());
     setExpandedGaps(new Set<string>());
     setGapSource(undefined);
   };
   createEffect(on(selectedPath, () => batch(resetFolds)));
+  createEffect(on(scope, () => batch(resetFolds)));
 
   // Live theme preview: while the picker is open, the highlighted row is the
   // Active selection, so moving (keys, hover, wheel) or filtering re-themes the

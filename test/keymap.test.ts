@@ -160,7 +160,7 @@ describe("createKeyHandler", () => {
     }
   });
 
-  test("Ctrl+Shift+O lists the open file's symbols", () => {
+  test("S lists the open file's symbols", () => {
     let calls = 0;
     const realGoToSymbol = state.goToSymbol;
     state.goToSymbol = async () => {
@@ -168,10 +168,20 @@ describe("createKeyHandler", () => {
     };
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
     try {
-      handle(keyEvent({ ctrl: true, name: "o", shift: true }));
+      handle(keyEvent({ name: "S" }));
       expect(calls).toBe(1);
     } finally {
       state.goToSymbol = realGoToSymbol;
+    }
+  });
+
+  test("plain s still opens the scope picker", () => {
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    try {
+      handle(keyEvent({ name: "s" }));
+      expect(state.scopeMenuOpen()).toBe(true);
+    } finally {
+      state.setScopeMenuOpen(false);
     }
   });
 

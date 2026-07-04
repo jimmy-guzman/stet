@@ -212,6 +212,26 @@ const screens = [
     ].join("\n"),
   },
   {
+    /**
+     * Open a symbol-rich source file, then press S to open the outline overlay. Arrow down a few
+     * rows so the shot shows the selection tint mid-list alongside the kind icons, nesting indent,
+     * and line:col column. The long sleep waits out tsserver's project load before documentSymbol
+     * answers (same order as the hover/problems shots).
+     */
+    name: "go-to-symbol",
+    steps: [
+      "Ctrl+P",
+      'Type "src/state"',
+      "Sleep 500ms",
+      "Enter",
+      "Sleep 1500ms",
+      'Type "S"',
+      "Sleep 16s",
+      "Down@250ms 5",
+      "Sleep 1200ms",
+    ].join("\n"),
+  },
+  {
     // Taller canvas so the full grouped keybindings list shows without scrolling.
     height: 2080,
     name: "keys",

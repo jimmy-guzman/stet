@@ -549,7 +549,9 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "s") {
+      // Plain `s` only: Shift+S is go-to-symbol (handled in the file-view block), so it must
+      // Fall through rather than open the scope picker.
+      if (key.name === "s" && !key.shift) {
         openScopeMenu();
         return;
       }
@@ -682,10 +684,12 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // Go to symbol in the open file, an outline overlay (IDE-standard Ctrl+Shift+O). Needs no
-      // Caret, only a viewed file; the action reads `selectedPath` from state and guards itself.
-      // The terminal may report the shifted letter as "o" or "O", so accept both.
-      if (key.ctrl && key.shift && (key.name === "o" || key.name === "O") && fileViewShowing) {
+      // Go to symbol in the open file, an outline overlay. A bare uppercase S ("Symbols"), not the
+      // IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift across terminals (a bare
+      // 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so the Shift is lost, whereas a
+      // Plain letter always arrives. Mirrors the K hover binding, and sits ahead of the plain-s
+      // Scope handler. Needs no caret, only a viewed file; the action reads state and guards itself.
+      if ((key.name === "S" || (key.name === "s" && key.shift)) && fileViewShowing) {
         void state.goToSymbol();
         return;
       }

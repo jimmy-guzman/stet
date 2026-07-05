@@ -180,7 +180,7 @@ export function DiffView() {
     }
     return max;
   });
-  const maxScrollX = () => Math.max(0, longestLine() - (contentWidth() - 1));
+  const maxScrollX = () => Math.max(0, longestLine() - contentWidth());
 
   // The deepest the viewport can scroll: total content height (sum of per-row
   // Heights — `rows().length` in non-wrap, the wrapped total otherwise) minus the
@@ -402,7 +402,7 @@ export function DiffView() {
       margin: CARET_SCROLL_MARGIN,
       maxScroll: maxScrollX(),
       to: range.to,
-      viewport: contentWidth() - 1,
+      viewport: contentWidth(),
     });
     if (next !== current) {
       setScrollX(next);
@@ -583,7 +583,9 @@ export function DiffView() {
                   }}
                 >
                   <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.faint}>
-                    {`${markerGlyph(row()).padStart(numberWidth())} ${markerLabel(row())}`}
+                    {`${markerGlyph(row())
+                      .padStart(numberWidth() + 1)
+                      .padEnd(gutterWidth())}${markerLabel(row())}`}
                   </text>
                 </box>
               }
@@ -699,7 +701,6 @@ export function DiffView() {
                     flexGrow={1}
                     backgroundColor={contentBackground(line())}
                   >
-
                     <StyledLine
                       row={line()}
                       wrap={wrap()}

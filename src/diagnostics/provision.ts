@@ -77,6 +77,8 @@ export class Provisioner extends Context.Service<
   Provisioner,
   {
     readonly ensure: (language: string, spec: ProvisionSpec) => Effect.Effect<ProvisionState>;
+    /** Languages whose download just began; drains to surface a live "installing…" status. */
+    readonly starts: Queue.Dequeue<string>;
     /** Languages whose install just finished (succeeded or failed); drains to trigger a re-check. */
     readonly completions: Queue.Dequeue<string>;
   }
@@ -101,6 +103,7 @@ export function makeProvisioner(root: string, installTimeout: Duration.Input = I
     const scope = yield* Effect.scope;
     const inFlight = new Set<string>();
     const failures = new Map<string, string>();
+    const starts = yield* Queue.unbounded<string>();
     const completions = yield* Queue.unbounded<string>();
 
     function install(language: string, spec: ProvisionSpec) {
@@ -171,12 +174,13 @@ export function makeProvisioner(root: string, installTimeout: Duration.Input = I
         inFlight.add(language);
         return install(language, spec).pipe(
           Effect.forkIn(scope),
+          Effect.andThen(Queue.offer(starts, language)),
           Effect.as<ProvisionState>({ kind: "installing" }),
         );
       });
     }
 
-    return { completions, ensure } as const;
+    return { completions, ensure, starts } as const;
   });
 }
 

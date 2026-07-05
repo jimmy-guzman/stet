@@ -127,6 +127,29 @@ test("ensure starts one background install and reaches ready when it completes",
   }
 });
 
+test("ensure emits a start when a download begins, for the live installing status", async () => {
+  process.env.SIDEYE_NO_LSP_DOWNLOAD = "";
+  const root = tempRoot();
+  try {
+    const result = await withProvisioner(
+      root,
+      fakeInstaller(),
+      Effect.gen(function* scenario() {
+        const provisioner = yield* Provisioner;
+        yield* provisioner.ensure("typescript", spec);
+        const started = yield* Queue.take(provisioner.starts);
+        const finished = yield* Queue.take(provisioner.completions);
+        return { finished, started };
+      }),
+    );
+
+    expect(result.started).toBe("typescript");
+    expect(result.finished).toBe("typescript");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
 // Records the exact argv so a test can assert the pinned versions reach `npm install`, not just that
 // The provisioner orchestrates an install.
 function capturingInstaller(commands: string[][]) {

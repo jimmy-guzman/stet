@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.4.3...sideye-v0.5.0) (2026-07-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **viewer:** 💥 the viewer's `z` key now folds/expands regions; long-line wrap moved from `z` to `x`
+* **scope:** 💥 the default scope reads "uncommitted" (was "all changes" in the picker and "worktree vs HEAD" in the header)
+
+### Features
+
+* **intel:** ✨ add find implementations ([#213](https://github.com/jimmy-guzman/sideye/issues/213)) ([f224b89](https://github.com/jimmy-guzman/sideye/commit/f224b894fa7980cf37ae14a10ad1c67b25466eb6))
+* **intel:** ✨ call hierarchy via LSP ([#212](https://github.com/jimmy-guzman/sideye/issues/212)) ([907798e](https://github.com/jimmy-guzman/sideye/commit/907798e83c9927700c6e7bef7b0bd8bd06388399)), closes [#178](https://github.com/jimmy-guzman/sideye/issues/178)
+* **ruby:** ✨ highlight & icon .rb.tmpl formula templates ([#206](https://github.com/jimmy-guzman/sideye/issues/206)) ([109b1ba](https://github.com/jimmy-guzman/sideye/commit/109b1bae7a8c7b2fc8648a62b673a5c0e17df510))
+* **scope:** ✨ group the scope menu and unify its labels ([#210](https://github.com/jimmy-guzman/sideye/issues/210)) ([6614a9a](https://github.com/jimmy-guzman/sideye/commit/6614a9a4f794d7276fff595dee34bbaea9abfa62))
+* **tree:** ✨ add test/spec and storybook file icons ([#209](https://github.com/jimmy-guzman/sideye/issues/209)) ([dd5540c](https://github.com/jimmy-guzman/sideye/commit/dd5540c06617fe33405aa8eb1eca72d3677e828b))
+* **viewer:** ✨ add code folding and expandable git gaps ([#214](https://github.com/jimmy-guzman/sideye/issues/214)) ([2e70c3a](https://github.com/jimmy-guzman/sideye/commit/2e70c3a473e85e750bdd070e34e915803fffa4da))
+* **viewer:** ✨ add symbol outline / find symbols ([#208](https://github.com/jimmy-guzman/sideye/issues/208)) ([f516851](https://github.com/jimmy-guzman/sideye/commit/f516851f825ccaf51955e1f0d23a95d1c941f063)), closes [#61](https://github.com/jimmy-guzman/sideye/issues/61)
+
 ## [0.4.3](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.4.2...sideye-v0.4.3) (2026-07-03)
 
 

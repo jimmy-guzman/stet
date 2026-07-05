@@ -649,6 +649,9 @@ export function createKeyHandler(host: HostEffects) {
         if (lineNumber !== undefined) {
           state.setJumpTarget({ escalate: false, line: lineNumber, path: selectedPath });
         }
+        // Diff and file views have different line lists, so a selection anchored in
+        // One is meaningless in the other; drop it as this toggle re-homes the caret.
+        state.setSelectionAnchor(undefined);
         state.setFileView(!state.fileView());
         return;
       }

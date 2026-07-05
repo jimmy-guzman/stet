@@ -111,15 +111,20 @@ export function DiffView() {
   // Pins drag events to the first-captured row, so its own `line()` can't follow the
   // Pointer), then snap to the nearest line row so folds/gaps between rows are skipped.
   let dragOrigin: { rowIndex: number; y: number } | undefined;
-  const navIndexForRow = (rowIndex: number) => {
+  // Nearest line row's navIndex for every `rows()` index (the line at or before it,
+  // Else the first line after), precomputed so a drag tick is an O(1) lookup instead
+  // Of re-scanning rows() each time.
+  const nearestNavByRow = createMemo(() => {
     const all = rows();
-    const nearest =
-      all
-        .slice(0, rowIndex + 1)
-        .toReversed()
-        .find(isLineRow) ?? all.slice(rowIndex + 1).find(isLineRow);
-    return nearest?.navIndex;
-  };
+    let last = all.find(isLineRow)?.navIndex;
+    return all.map((row) => {
+      if (isLineRow(row)) {
+        last = row.navIndex;
+      }
+      return last;
+    });
+  });
+  const navIndexForRow = (rowIndex: number) => nearestNavByRow()[rowIndex];
   const findMatchSet = createMemo(() => new Set(state.findMatches()));
 
   // Row indices of the navigable (line) rows, so a cursor navIndex maps to its

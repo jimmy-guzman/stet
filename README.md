@@ -293,6 +293,8 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `<` / `>`   | back / forward through viewer history                |
 | `y`         | copy `path`, `path:line`, or `path:line:col`         |
 | `Y`         | copy the entire contents of the viewed file          |
+| `Shift+↑/↓` | extend a line selection (drag or shift-click also)   |
+| `C`         | copy the selected lines (or the caret line)          |
 
 ### tabs
 

@@ -1,9 +1,10 @@
 # sideye
 
-`sideye` is a read-only companion TUI with IDE-grade insight into agent changes.
+`sideye` is a read-only companion TUI for inspecting what an agent changed in
+your repo.
 
-The usual workflow is awkward. The agent is in one terminal pane, but you still
-open an editor just to answer basic questions:
+The agent runs in one terminal pane, but you still open an editor just to answer
+basic questions:
 
 - What files are in this repo?
 - What changed?
@@ -114,14 +115,13 @@ of scrolling; `z` again unfolds it. Folding follows the file's structure: code
 folds by indentation, and markdown folds by heading section (down to the next
 same-or-higher heading). The same key expands a git-elided gap (the `⋯ N
 unmodified lines` marker) to reveal the unchanged lines around a hunk. Click any
-marker to toggle it. Folding is per file and resets when you switch files. (Wrap
-moved to `x`.)
+marker to toggle it. Folding is per file and resets when you switch files.
 
 ![a source diff with a function folded behind a "17 lines folded" marker](assets/screenshots/folding.png)
 
 ### Browse, go back, and pin tabs
 
-Browsing the tree previews files in one calm view, so nothing piles up; the
+Browsing the tree previews files in a single view, so nothing piles up; the
 preview shows in italic to mark it as ephemeral. `<` and `>` step back and forward
 through where you've been, restoring each spot's cursor and scroll. When you want
 to keep a file while you look at another, `ctrl-t` pins it as a tab (and `ctrl-t`
@@ -419,7 +419,6 @@ bun run build:dist       # build standalone binaries for all targets
 
 ## Non-goals
 
-`sideye` is deliberately not an agent integration.
-
-No approvals. No accept/reject protocol. No generated review explanation. No PR
-workflow. No database. The agent never hears from `sideye`, only from you.
+`sideye` is deliberately not an agent integration. It has no approvals, no
+accept/reject protocol, no generated review explanations, no PR workflow, and no
+database. The agent never hears from `sideye`, only from you.

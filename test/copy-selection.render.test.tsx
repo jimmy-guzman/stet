@@ -160,28 +160,42 @@ describe("line selection copy", () => {
         (f) => f.includes("const a = 9") && f.includes("const b = 2"),
       );
       mockInput.pressTab();
-      mockInput.pressKey("g");
-      await settleUntil("caret at the top line", () => state.cursorIndex() === 0);
-
-      // Anchor on "before" (index 0), extend down into foo's body so the caret sits
-      // On a foldable line while the anchor stays outside the block.
-      mockInput.pressArrow("down", { shift: true });
-      mockInput.pressArrow("down", { shift: true });
-      await settleUntil("selection spans into foo", () => {
-        const range = state.selectionRange();
-        return range !== undefined && range[0] === 0 && range[1] === 2;
-      });
-
-      // Fold the block at the caret: its body collapses (proving the fold ran, so the
-      // Remap path is exercised) and the caret re-homes to the fold header; the anchor
-      // Must remap the same way instead of clearing.
-      mockInput.pressKey("z");
-      const folded = await settleUntil(
-        "block folded and selection survives",
-        (frame) => !frame.includes("const b = 2") && state.selectionRange() !== undefined,
+      // Full-file view so each line is a single navigable row (a diff would split the
+      // Edited line into a remove + add row and shift the indices under test).
+      mockInput.pressKey("v");
+      await settleUntil(
+        "file view",
+        (f) => f.includes("const a = 9") && !f.includes("const a = 1"),
       );
+
+      // Anchor below the block (on "after"), then extend up so the caret lands inside
+      // Foo's body. Folding then hides the caret line, which re-homes to the fold
+      // Header, and shifts the anchor up, so both endpoints must remap, not just one.
+      mockInput.pressKey("G");
+      await settleUntil("caret on the last line", () =>
+        state.cursorLineContent().includes("after"),
+      );
+      mockInput.pressArrow("up", { shift: true });
+      mockInput.pressArrow("up", { shift: true });
+      mockInput.pressArrow("up", { shift: true });
+      await settleUntil("caret inside foo, anchor on after", () => {
+        const range = state.selectionRange();
+        return state.cursorLineContent().includes("const a = 9") && range?.[1] === 5;
+      });
+      expect(state.selectionRange()).toEqual([2, 5]);
+
+      // Fold the block at the caret: its body collapses (proving the fold ran). The
+      // Caret re-homes to the fold header (index 1) and the anchor shifts up (5 -> 3),
+      // So the full tuple must be [1, 3]; without the anchor remap it would clear.
+      mockInput.pressKey("z");
+      const folded = await settleUntil("block folded and both endpoints remapped", (frame) => {
+        const range = state.selectionRange();
+        return (
+          !frame.includes("const b = 2") && range !== undefined && range[0] === 1 && range[1] === 3
+        );
+      });
       expect(folded).not.toContain("const b = 2");
-      expect(state.selectionRange()?.[0]).toBe(0);
+      expect(state.selectionRange()).toEqual([1, 3]);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

@@ -1,7 +1,6 @@
 # sideye
 
-`sideye` is a read-only companion TUI for inspecting what an agent changed in
-your repo.
+`sideye` is a read-only companion TUI for inspecting an agent's changes.
 
 The agent runs in one terminal pane, but you still open an editor just to answer
 basic questions:

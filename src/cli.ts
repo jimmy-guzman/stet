@@ -154,7 +154,7 @@ export function scopeMenuLabel(kind: ScopeKind) {
 }
 
 export function helpText() {
-  return `sideye - read-only companion TUI with IDE-grade insight into agent changes
+  return `sideye - read-only companion TUI for inspecting an agent's changes
 
 Usage:
   sideye

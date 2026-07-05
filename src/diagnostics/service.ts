@@ -204,7 +204,7 @@ export const DiagnosticsLive = Layer.effect(
         Effect.catchTag("ServerInstalling", (error) =>
           Effect.succeed<LanguageOutcome>({
             kind: "installing",
-            message: `installing the ${error.language} language server…`,
+            message: `installing ${error.language} server…`,
           }),
         ),
         Effect.catch((error) =>

@@ -525,6 +525,11 @@ function createState() {
   >(undefined);
   const [activityLog, setActivityLog] = createSignal<ActivityLog>(emptyActivityLog);
   const [checksRunning, setChecksRunning] = createSignal(false);
+  // Languages whose server is downloading right now, sourced live from the provisioner (not the
+  // Check run), so the status bar shows it promptly and drops it the moment the download resolves.
+  const [provisioningLanguages, setProvisioningLanguages] = createSignal<ReadonlySet<string>>(
+    new Set(),
+  );
   const [now, setNow] = createSignal(Date.now());
   const [terminalWidth, setTerminalWidth] = createSignal(80);
   const [terminalHeight, setTerminalHeight] = createSignal(24);
@@ -1428,6 +1433,17 @@ function createState() {
         ? "n/N next/prev · esc clear find"
         : "? keys · q quit",
   );
+  // A terse, live "installing…" line while servers download. Terse because the status slot is tight:
+  // It shares the line with the activity path and spends a glyph + space on a leveled message.
+  const provisioningStatus = createMemo(() => {
+    const languages = [...provisioningLanguages()].toSorted();
+    if (languages.length === 0) {
+      return undefined;
+    }
+    return languages.length === 1
+      ? `installing ${languages[0]} server…`
+      : `installing ${languages.length} servers…`;
+  });
   const statusRightModel = createMemo(() => {
     // Reserve the left hint plus the bar's two paddings and a gap between the halves;
     // What remains is the right status's, less the leading level glyph + space it prepends.
@@ -1454,7 +1470,10 @@ function createState() {
       };
     }
     const latest = latestActivity(activityLog());
-    const displayStatus = checksRunning() ? "checking…" : status();
+    // A live download outranks the ambient checking/status line but stays below the transient tiers
+    // Above (intel pull, action notice, cursor finding), so it shows for the whole download.
+    const provisioning = provisioningStatus();
+    const displayStatus = provisioning ?? (checksRunning() ? "checking…" : status());
     const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
     const prefix =
       recent === undefined ? "" : `${Math.max(0, Math.round((now() - recent.at) / 1000))}s ago `;
@@ -1473,7 +1492,12 @@ function createState() {
     // A glyph belongs only to an actual status message. Activity alone is ambient
     // And idle is empty, so neither carries a level: the bar renders the text bare,
     // Never a lone glyph.
-    const level = displayStatus === "" ? undefined : checksRunning() ? "info" : statusLevel();
+    const level =
+      displayStatus === ""
+        ? undefined
+        : provisioning !== undefined || checksRunning()
+          ? "info"
+          : statusLevel();
     return { level, text };
   });
   const statusRight = () => statusRightModel().text;
@@ -2043,7 +2067,6 @@ function createState() {
     const prior = checkerState().diagnostics;
     setChecksRunning(true);
     const failures: string[] = [];
-    let installing: string | undefined;
     try {
       await runtime.runPromise(
         Diagnostics.use((diagnostics) =>
@@ -2058,10 +2081,6 @@ function createState() {
                     );
                     break;
                   }
-                  // A pending file carrying a message is a server still downloading.
-                  if (fileState.status === "pending" && fileState.message !== undefined) {
-                    installing ??= fileState.message;
-                  }
                 }
               }),
             ),
@@ -2069,10 +2088,7 @@ function createState() {
         ),
         { signal: controller.signal },
       );
-      report(
-        failures[0] ?? installing ?? "checks passed",
-        failures[0] !== undefined ? "error" : installing !== undefined ? "info" : "success",
-      );
+      report(failures[0] ?? "checks passed", failures[0] !== undefined ? "error" : "success");
     } catch {
       // Interrupted by a newer run or a worktree switch
     } finally {
@@ -2082,11 +2098,31 @@ function createState() {
     }
   }
 
-  // When a language server finishes downloading, re-run checks so its files resolve from pending.
+  // A download starting/finishing drives the live "installing…" status: add on start, drop on
+  // Finish. Finishing also re-runs checks so the language's files resolve from pending.
+  runtime.runFork(
+    Provisioner.use((provisioner) =>
+      Queue.take(provisioner.starts).pipe(
+        Effect.flatMap((language) =>
+          Effect.sync(() => setProvisioningLanguages((current) => new Set(current).add(language))),
+        ),
+        Effect.forever,
+      ),
+    ),
+  );
   runtime.runFork(
     Provisioner.use((provisioner) =>
       Queue.take(provisioner.completions).pipe(
-        Effect.flatMap(() => Effect.sync(() => void runChecks(gitModel()))),
+        Effect.flatMap((language) =>
+          Effect.sync(() => {
+            setProvisioningLanguages((current) => {
+              const next = new Set(current);
+              next.delete(language);
+              return next;
+            });
+            void runChecks(gitModel());
+          }),
+        ),
         Effect.forever,
       ),
     ),
@@ -3613,6 +3649,7 @@ function createState() {
     setProblemIndex,
     setProblemsOpen,
     setProblemsScrollTop,
+    setProvisioningLanguages,
     setReferencesIndex,
     setReferencesScrollTop,
     setRepoRoot,

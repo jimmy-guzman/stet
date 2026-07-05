@@ -9,6 +9,35 @@ afterEach(() => {
   state.setActivityLog(emptyActivityLog);
   state.setNow(Date.now());
   state.setTerminalWidth(80);
+  state.setProvisioningLanguages(new Set<string>());
+});
+
+test("a downloading language server surfaces a live installing status", () => {
+  state.setProvisioningLanguages(new Set(["typescript"]));
+
+  expect(state.statusRight()).toContain("installing typescript server");
+  expect(state.statusRightLevel()).toBe("info");
+});
+
+test("a second downloading server collapses to a count", () => {
+  state.setProvisioningLanguages(new Set(["typescript", "oxlint"]));
+
+  expect(state.statusRight()).toContain("installing 2 servers");
+});
+
+test("the installing status clears once no server is downloading", () => {
+  state.setProvisioningLanguages(new Set(["typescript"]));
+  state.setProvisioningLanguages(new Set<string>());
+
+  expect(state.statusRight()).not.toContain("installing");
+});
+
+test("the installing status keeps its verb when the pane is narrow", () => {
+  state.setTerminalWidth(40);
+  state.setProvisioningLanguages(new Set(["typescript"]));
+
+  // Truncates from the tail (like checking…), but the leading verb survives so the line still reads.
+  expect(state.statusRight().startsWith("installing")).toBe(true);
 });
 
 test("a notice surfaces its text and level on the status line", () => {

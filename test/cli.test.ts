@@ -169,7 +169,7 @@ describe("helpText", () => {
     expect(helpText()).toContain("p          toggle the problems panel");
     expect(helpText()).toContain(".          jump to the most recently changed file");
     expect(helpText()).toContain(
-      "y          copy the focused file's path (tree) or path:line (viewer)",
+      "y          copy path (tree), path:line, or path:line:col (viewer)",
     );
     expect(helpText()).toContain("The view is live");
   });

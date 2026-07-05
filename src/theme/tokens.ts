@@ -39,8 +39,10 @@ export const ThemeSchema = Schema.Struct({
   // Highlight, so it is distinct from `surface.cursor` and `find.matchBg`.
   caret: Schema.Struct({ wordBg: Hex }),
   diff: Schema.Struct({
+    addedBg: Hex,
     addedSign: Hex,
     lineNumberFg: Hex,
+    removedBg: Hex,
     removedSign: Hex,
   }),
   find: Schema.Struct({ matchBg: Hex }),

@@ -465,25 +465,48 @@ export function DiffView() {
       : theme.colors.severity[severity];
   };
 
-  // Backgrounds carry no diff state now (the colored number and sign do that). The only
-  // Line background is a find match, and the cursor lift brightens it rather than
-  // Replacing it, so a selected match stays its own color; every other line falls back
-  // To the neutral cursor highlight (or nothing when it isn't the cursor).
-  const contentState = (row: DiffLineRow) =>
-    findMatchSet().has(row.navIndex)
-      ? {
-          active: theme.rgba.findMatchBgActive,
-          normal: theme.colors.find.matchBg,
-        }
-      : undefined;
+  // Each line's background: a find match wins, else a faint add/remove tint (the change
+  // Bar and colored number carry the diff state; this is just a subtle block cue). The
+  // Cursor lift brightens whatever state the line has rather than replacing it, so a
+  // Selected tinted line stays its own color; a context line falls back to the neutral
+  // Cursor highlight (or nothing when it isn't the cursor).
+  const contentState = (row: DiffLineRow) => {
+    if (findMatchSet().has(row.navIndex)) {
+      return {
+        active: theme.rgba.findMatchBgActive,
+        normal: theme.colors.find.matchBg,
+      };
+    }
+    return row.type === "add"
+      ? { active: theme.rgba.addedBgActive, normal: theme.colors.diff.addedBg }
+      : row.type === "remove"
+        ? {
+            active: theme.rgba.removedBgActive,
+            normal: theme.colors.diff.removedBg,
+          }
+        : undefined;
+  };
 
   const resolveBackground = (
     background: { normal: string; active: RGBA } | undefined,
     cursor: boolean,
   ) => (cursor ? (background?.active ?? theme.colors.surface.cursor) : background?.normal);
 
+  // The gutter shares the line's add/remove tint so a changed line reads as one band edge
+  // To edge. It follows diff state only, not the find match (a search hit stays a
+  // Content-only highlight; the changed-line band stays stable underneath it).
+  const gutterState = (row: DiffLineRow) =>
+    row.type === "add"
+      ? { active: theme.rgba.addedBgActive, normal: theme.colors.diff.addedBg }
+      : row.type === "remove"
+        ? {
+            active: theme.rgba.removedBgActive,
+            normal: theme.colors.diff.removedBg,
+          }
+        : undefined;
+
   const gutterBackground = (row: DiffLineRow) =>
-    resolveBackground(undefined, isCursor(row) || isSelected(row));
+    resolveBackground(gutterState(row), isCursor(row) || isSelected(row));
   const contentBackground = (row: DiffLineRow) =>
     resolveBackground(contentState(row), isCursor(row) || isSelected(row));
 

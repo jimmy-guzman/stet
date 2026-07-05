@@ -7,13 +7,15 @@ import type { Theme } from "./tokens";
 // Rgba.transparent keep working and renders never re-convert
 export interface ResolvedTheme {
   colors: Theme;
-  // `findMatchBgActive` emphasizes the find-match background for the current cursor
-  // Line, so a selected match reads as a stronger version of its own state rather than
+  // The "...Active" variants emphasize a line's background for the current (cursor) line,
+  // So a selected tinted line reads as a stronger version of its own state rather than
   // Being flattened to grey. The emphasis direction follows the surface luminance:
-  // Lift toward white on dark surfaces, darken toward the match's own hue on a light
+  // Lift toward white on dark surfaces, darken toward the line's own hue on a light
   // Surface, where a brighten would clamp to white.
   rgba: {
+    addedBgActive: RGBA;
     findMatchBgActive: RGBA;
+    removedBgActive: RGBA;
     transparent: RGBA;
   };
 }
@@ -45,7 +47,9 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
   return {
     colors: theme,
     rgba: {
+      addedBgActive: active(theme.diff.addedBg),
       findMatchBgActive: active(theme.find.matchBg),
+      removedBgActive: active(theme.diff.removedBg),
       transparent: RGBA.fromValues(0, 0, 0, 0),
     },
   };

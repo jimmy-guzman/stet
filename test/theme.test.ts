@@ -58,7 +58,11 @@ describe("resolveTheme", () => {
 
   const activeVariants = (theme: typeof darkTheme) => {
     const resolved = resolveTheme(theme);
-    return [[resolved.rgba.findMatchBgActive, theme.find.matchBg]] as const;
+    return [
+      [resolved.rgba.addedBgActive, theme.diff.addedBg],
+      [resolved.rgba.removedBgActive, theme.diff.removedBg],
+      [resolved.rgba.findMatchBgActive, theme.find.matchBg],
+    ] as const;
   };
 
   test("dark active variants brighten their base token and stay clamped", () => {

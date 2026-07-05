@@ -222,3 +222,32 @@ test("a hung install times out and degrades to failed", async () => {
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test("a filesystem setup failure degrades to failed, not a stuck install", async () => {
+  process.env.SIDEYE_NO_LSP_DOWNLOAD = "";
+  // A regular file as the cache root makes the server dir's mkdir fail (ENOTDIR), the way an
+  // Unwritable cache or full disk would. That failure must still clear inFlight and offer a
+  // Completion, or the language stays wedged in `installing`.
+  const dir = tempRoot();
+  const rootFile = join(dir, "not-a-dir");
+  writeFileSync(rootFile, "");
+  try {
+    const result = await withProvisioner(
+      rootFile,
+      fakeInstaller(),
+      Effect.gen(function* scenario() {
+        const provisioner = yield* Provisioner;
+        const first = yield* provisioner.ensure("typescript", spec);
+        const finished = yield* Queue.take(provisioner.completions);
+        const second = yield* provisioner.ensure("typescript", spec);
+        return { finished, first: first.kind, second: second.kind };
+      }),
+    );
+
+    expect(result.first).toBe("installing");
+    expect(result.finished).toBe("typescript");
+    expect(result.second).toBe("failed");
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
+});

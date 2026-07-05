@@ -106,12 +106,25 @@ export function makeProvisioner(root: string, installTimeout: Duration.Input = I
     function install(language: string, spec: ProvisionSpec) {
       const dir = serverDir(root, language, provisionKey(spec.packages));
       const command = ["npm", "install", "--no-save", ...spec.packages];
-      return Effect.sync(() => {
-        mkdirSync(dir, { recursive: true });
-        const manifest = join(dir, "package.json");
-        if (!existsSync(manifest)) {
-          writeFileSync(manifest, JSON.stringify({ private: true }));
-        }
+      // Effect.try, not Effect.sync: a failed mkdir/write (unwritable cache, full disk) must be a
+      // Typed failure that flows through onFailure below, or it dies as a defect that bypasses the
+      // InFlight cleanup and completion offer, stranding the language in `installing` forever.
+      return Effect.try({
+        catch: (cause) =>
+          new CommandError({
+            command,
+            exitCode: -1,
+            message: cause instanceof Error ? cause.message : String(cause),
+            stderr: "",
+            stdout: "",
+          }),
+        try: () => {
+          mkdirSync(dir, { recursive: true });
+          const manifest = join(dir, "package.json");
+          if (!existsSync(manifest)) {
+            writeFileSync(manifest, JSON.stringify({ private: true }));
+          }
+        },
       }).pipe(
         Effect.andThen(
           proc.run(command, dir).pipe(

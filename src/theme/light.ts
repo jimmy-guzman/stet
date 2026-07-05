@@ -5,12 +5,8 @@ export const lightTheme: Theme = {
   border: { focused: "#ab3276", unfocused: "#bbbec1" },
   caret: { wordBg: "#cdd4df" },
   diff: {
-    addedBg: "#c9e8cc",
-    addedLineNumberBg: "#a8d9ad",
     addedSign: "#257c3a",
     lineNumberFg: "#8d8f92",
-    removedBg: "#fed2cd",
-    removedLineNumberBg: "#fbb7b0",
     removedSign: "#b64340",
   },
   find: { matchBg: "#b4d6ef" },

@@ -5,12 +5,8 @@ export const darkTheme: Theme = {
   border: { focused: "#ffa7d9", unfocused: "#2c2e30" },
   caret: { wordBg: "#434c5e" },
   diff: {
-    addedBg: "#16301a",
-    addedLineNumberBg: "#183f20",
     addedSign: "#5ab66b",
     lineNumberFg: "#515355",
-    removedBg: "#421c19",
-    removedLineNumberBg: "#5b1e1c",
     removedSign: "#e76761",
   },
   find: { matchBg: "#234155" },

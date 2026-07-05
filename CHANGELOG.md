@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.1](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.5.0...sideye-v0.5.1) (2026-07-05)
+
+
+### Features
+
+* **diagnostics:** ✨ live status while language servers download ([#221](https://github.com/jimmy-guzman/sideye/issues/221)) ([2096be5](https://github.com/jimmy-guzman/sideye/commit/2096be58e272e56c36ab5d43586315d74bbe013a))
+* **ui:** ✨ quiet panel borders with corner-tick focus ([#222](https://github.com/jimmy-guzman/sideye/issues/222)) ([b9c6c21](https://github.com/jimmy-guzman/sideye/commit/b9c6c2194a137c6cdab3c16bded430f6e196d532))
+* **viewer:** ✨ add line selection and copy ([#216](https://github.com/jimmy-guzman/sideye/issues/216)) ([99e52a5](https://github.com/jimmy-guzman/sideye/commit/99e52a52ba973c7b2261e11876bb88306e9a9ba9))
+* **viewer:** ✨ diff gutter w/ a change bar & diagnostic glyphs ([#218](https://github.com/jimmy-guzman/sideye/issues/218)) ([391cc39](https://github.com/jimmy-guzman/sideye/commit/391cc39c3fff12f2500ff5a55319368133d35875))
+
+
+### Bug Fixes
+
+* **diagnostics:** 🐛 pin and bound LSP auto-provisioning ([#220](https://github.com/jimmy-guzman/sideye/issues/220)) ([c609cf8](https://github.com/jimmy-guzman/sideye/commit/c609cf8ebbc6556e460d56eab6b69e33a43bfa25))
+
 ## [0.5.0](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.4.3...sideye-v0.5.0) (2026-07-04)
 
 

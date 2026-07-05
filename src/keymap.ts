@@ -396,13 +396,6 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // A line selection is dismiss-on-esc too, claimed before find/global esc so
-      // Esc clears the band first; the caret stays where the selection's focus was.
-      if (state.selectionAnchor() !== undefined && key.name === "escape") {
-        state.setSelectionAnchor(undefined);
-        return;
-      }
-
       // The find bar owns the keyboard while open: only escape cancels it; text
       // And submit are the input element's job (same split as the palette).
       if (state.findOpen()) {
@@ -429,6 +422,14 @@ export function createKeyHandler(host: HostEffects) {
           cycleFind(-1);
           return;
         }
+      }
+
+      // A line selection is dismiss-on-esc, claimed after the find handlers (so an
+      // Open or committed find dismisses first) but before the global esc, so esc
+      // Clears the band; the caret stays where the selection's focus was.
+      if (state.selectionAnchor() !== undefined && key.name === "escape") {
+        state.setSelectionAnchor(undefined);
+        return;
       }
 
       if (key.ctrl && key.name === "p") {

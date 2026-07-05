@@ -1930,12 +1930,19 @@ function createState() {
         batch(() => {
           const previous = navigableLines();
           const anchor = cursorIndex();
+          const selAnchor = selectionAnchor();
           setGapSource({
             lines: content.text.replace(/\r?\n$/, "").split(/\r?\n/),
             path,
             status: "loaded",
           });
-          setCursorRow(remapCursorAfterToggle(previous, anchor, navigableLines()));
+          const next = navigableLines();
+          setCursorRow(remapCursorAfterToggle(previous, anchor, next));
+          // Restore the anchor remapped (setCursorRow above cleared it) so a live
+          // Selection survives the async reveal as the synchronous toggleGap kept it.
+          if (selAnchor !== undefined) {
+            setSelectionAnchor(remapCursorAfterToggle(previous, selAnchor, next));
+          }
         });
       })
       .catch(() => {
@@ -2717,6 +2724,18 @@ function createState() {
       closeViewerDecoration();
     }
   });
+
+  // Drop the line selection when the viewed content's identity changes (file,
+  // Scope, or worktree): a navIndex anchor is meaningless against a different line
+  // List. This is the structural backstop for every reload path (the scope menu,
+  // A worktree switch, empty-worktree recovery) that does not route through the
+  // Caret/`goToLocation` clears. It deliberately does not track the git model, so a
+  // Background refresh of the same file keeps the selection instead of dropping it.
+  createEffect(
+    on([selectedPath, scopeIdentity, repoRoot], () => setSelectionAnchor(undefined), {
+      defer: true,
+    }),
+  );
 
   function copy(text: string, message = `copied ${text.split("\n")[0]}`) {
     runtime

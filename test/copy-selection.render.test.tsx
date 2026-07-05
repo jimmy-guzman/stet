@@ -201,4 +201,74 @@ describe("line selection copy", () => {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("a scope change clears the selection (content identity drifts)", async () => {
+    const repoRoot = snippetRepo("sideye-sel-scope-");
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("diff shown", (f) => f.includes("beta") && f.includes("gamma"));
+      mockInput.pressTab();
+      mockInput.pressKey("g");
+      mockInput.pressArrow("down", { shift: true });
+      mockInput.pressArrow("down", { shift: true });
+      await settleUntil("selection built", () => state.selectionRange() !== undefined);
+
+      // Switching scope reloads the diff against a different line list, so a navIndex
+      // Anchor is meaningless; the identity-drift effect must drop it even though this
+      // Path never routes through the caret/goToLocation clears.
+      state.selectScope("session");
+      await settleUntil(
+        "selection cleared on scope change",
+        () => state.selectionRange() === undefined && state.selectionAnchor() === undefined,
+      );
+      expect(state.selectionRange()).toBeUndefined();
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("esc closes the find bar before it clears the selection", async () => {
+    const repoRoot = snippetRepo("sideye-sel-find-esc-");
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("diff shown", (f) => f.includes("beta") && f.includes("gamma"));
+      mockInput.pressTab();
+      mockInput.pressKey("g");
+      mockInput.pressArrow("down", { shift: true });
+      mockInput.pressArrow("down", { shift: true });
+      await settleUntil("selection built", () => state.selectionRange() !== undefined);
+
+      // Opening the find bar moves no caret, so the selection persists alongside it.
+      mockInput.pressKey("/");
+      await settleUntil("find bar open", () => state.findOpen());
+      expect(state.selectionRange()).not.toBeUndefined();
+
+      // First esc dismisses the find bar (the more recent modal), not the selection.
+      mockInput.pressEscape();
+      await settleUntil("find closed, selection kept", () => !state.findOpen());
+      expect(state.selectionRange()).not.toBeUndefined();
+
+      // A second esc then clears the selection.
+      mockInput.pressEscape();
+      await settleUntil("selection cleared", () => state.selectionRange() === undefined);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

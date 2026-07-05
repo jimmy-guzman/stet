@@ -154,7 +154,7 @@ export function scopeMenuLabel(kind: ScopeKind) {
 }
 
 export function helpText() {
-  return `sideye - read-only companion TUI with IDE-grade insight into agent changes
+  return `sideye - read-only companion TUI for inspecting an agent's changes
 
 Usage:
   sideye
@@ -212,10 +212,27 @@ File tree:
 Viewer:
   j/down     move cursor down a line
   k/up       move cursor up a line
+  h/left     word-hop the caret to the previous symbol
+  l/right    word-hop the caret to the next symbol
   ctrl-d/u   move cursor half a page
   g/G        jump to first / last line
   /          find in the viewer (n/N cycle matches, escape clears)
-  h/left     return focus to the file tree
+  v          toggle diff <-> full file view
+  z          fold / unfold the region at the caret, or expand a git gap
+  x          toggle long-line wrap in the viewer
+  f          load full content when truncated
+  < / >      step back / forward through viewer history
+  F12        go to definition of the symbol under the caret
+  shift-f12  find references to the symbol under the caret
+  shift-i    find implementations of the symbol under the caret
+  shift-h    call hierarchy of the symbol (tab flips direction)
+  K          hover card: type and docs for the symbol under the caret
+  S          find symbols: outline of the open file
+
+Tabs:
+  ctrl-t     pin / unpin the current file as a tab
+  ctrl-w     close the active tab
+  { / }      previous / next tab
 
 Problems:
   j/down     next problem
@@ -225,20 +242,23 @@ Problems:
 
 Anywhere:
   ctrl-p     open the go-to-file palette (type to fuzzy-search, enter jumps)
-  ctrl-f     open project search (full-view; regex/case/glob/scope toggles, enter jumps)
+  ctrl-f     open project search (full-view; regex/case/glob/scope toggles)
   s          open the scope picker (kinds, or drill into recent commits)
+  t          open the theme switcher (filter, preview live, enter applies)
+  w          switch to another git worktree
   e          open in terminal editor (suspends TUI, --editor template)
   o          open in GUI / IDE (renderer stays live, --ide template)
-  t          open the theme switcher (filter, preview live, enter applies)
   c          toggle changes-only filter for the tree
-  v          toggle diff <-> full file view
-  z          toggle long-line wrap in the viewer
   p          toggle the problems panel
+  ctrl-b     toggle the file tree sidebar
+  [ / ]      shrink / grow the sidebar ( \\ resets its width )
   .          jump to the most recently changed file
-  f          load full content when truncated
-  y          copy the focused file's path (tree) or path:line (viewer)
   n          jump to next file with findings
   r          re-run checks
+  y          copy path (tree), path:line, or path:line:col (viewer)
+  Y          copy the entire contents of the viewed file
+  shift-f10  context menu for the focused tree row or viewer symbol
+  ?          show all keybindings
   q/escape   quit
 
 The whole repo renders as a tree with changes overlaid; open any file

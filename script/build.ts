@@ -130,7 +130,7 @@ if (!single) {
       {
         bin: { [pkg.name]: "./bin/sideye.js" },
         bugs: "https://github.com/jimmy-guzman/sideye/issues",
-        description: "Read-only companion TUI with IDE-grade insight into agent changes",
+        description: pkg.description,
         homepage: "https://github.com/jimmy-guzman/sideye",
         keywords: ["tui", "diff", "git", "code-review", "coding-agent", "terminal"],
         license: "MIT",

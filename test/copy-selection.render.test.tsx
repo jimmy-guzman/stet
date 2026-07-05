@@ -126,4 +126,65 @@ describe("line selection copy", () => {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("a selection survives a fold toggle (anchor remaps like the caret)", async () => {
+    const source = [
+      "export const before = 0",
+      "export function foo() {",
+      "  const a = 1",
+      "  const b = 2",
+      "}",
+      "export const after = 5",
+    ].join("\n");
+    const repoRoot = createFixtureRepo("sideye-sel-fold-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/mod.ts": `${source}\n`,
+    });
+    // A trivial edit makes it a changed file so it auto-opens in the viewer.
+    writeFileSync(
+      join(repoRoot, "src", "mod.ts"),
+      `${source.replace("const a = 1", "const a = 9")}\n`,
+    );
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil(
+        "diff shown",
+        (f) => f.includes("const a = 9") && f.includes("const b = 2"),
+      );
+      mockInput.pressTab();
+      mockInput.pressKey("g");
+      await settleUntil("caret at the top line", () => state.cursorIndex() === 0);
+
+      // Anchor on "before" (index 0), extend down into foo's body so the caret sits
+      // On a foldable line while the anchor stays outside the block.
+      mockInput.pressArrow("down", { shift: true });
+      mockInput.pressArrow("down", { shift: true });
+      await settleUntil("selection spans into foo", () => {
+        const range = state.selectionRange();
+        return range !== undefined && range[0] === 0 && range[1] === 2;
+      });
+
+      // Fold the block at the caret: its body collapses (proving the fold ran, so the
+      // Remap path is exercised) and the caret re-homes to the fold header; the anchor
+      // Must remap the same way instead of clearing.
+      mockInput.pressKey("z");
+      const folded = await settleUntil(
+        "block folded and selection survives",
+        (frame) => !frame.includes("const b = 2") && state.selectionRange() !== undefined,
+      );
+      expect(folded).not.toContain("const b = 2");
+      expect(state.selectionRange()?.[0]).toBe(0);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

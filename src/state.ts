@@ -1864,9 +1864,16 @@ function createState() {
       next.add(key);
     }
     const nextLines = collapsedNavigableFor(next, expandedGaps());
+    // Remap the selection's anchor across the toggle exactly as the caret is, so a
+    // Live selection survives a fold the same way the cursor does (setCursorRow
+    // Clears the anchor, so restore the remapped value after it).
+    const anchor = selectionAnchor();
+    const remappedAnchor =
+      anchor === undefined ? undefined : remapCursorAfterToggle(previous, anchor, nextLines);
     batch(() => {
       setFoldedRegions(next);
       setCursorRow(remapCursorAfterToggle(previous, cursorIndex(), nextLines));
+      setSelectionAnchor(remappedAnchor);
     });
   }
 
@@ -1882,9 +1889,13 @@ function createState() {
       next.delete(key);
     }
     const nextLines = collapsedNavigableFor(foldedRegions(), next);
+    const anchor = selectionAnchor();
+    const remappedAnchor =
+      anchor === undefined ? undefined : remapCursorAfterToggle(previous, anchor, nextLines);
     batch(() => {
       setExpandedGaps(next);
       setCursorRow(remapCursorAfterToggle(previous, cursorIndex(), nextLines));
+      setSelectionAnchor(remappedAnchor);
     });
     if (expanding) {
       ensureGapSource();

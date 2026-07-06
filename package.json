@@ -8,11 +8,17 @@
   "bin": {
     "stet": "./src/main.tsx"
   },
+  "workspaces": [
+    "docs"
+  ],
   "type": "module",
   "scripts": {
     "build": "bun run script/build.ts --single --skip-install",
     "build:dist": "bun script/build.ts",
     "check": "bun run lint && bun run format:check && bun test && bun run typecheck && bun run knip",
+    "docs:build": "bun run --cwd docs build",
+    "docs:check": "bun run --cwd docs check",
+    "docs:dev": "bun run --cwd docs dev",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",

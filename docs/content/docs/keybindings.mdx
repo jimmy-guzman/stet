@@ -1,0 +1,91 @@
+---
+title: Keybindings
+description: Every stet shortcut, grouped by what it acts on. Press ? in the app for the same list.
+---
+
+The keyboard drives everything in stet. Press `?` at any time to see the full
+list inside the app.
+
+## Navigation
+
+| Key       | Action                                           |
+| --------- | ------------------------------------------------ |
+| `j` / `k` | move in the tree, viewer, or problems panel      |
+| `h` / `l` | collapse / expand folders, or word-hop the caret |
+| `tab`     | switch focus between tree and viewer             |
+| `enter`   | open the focused item / jump to a problem        |
+| `ctrl-p`  | go to file: fuzzy-search the whole repo          |
+| `.`       | jump to the most recently changed file           |
+| `n`       | jump to the next file with findings              |
+
+## Viewer
+
+| Key         | Action                                                    |
+| ----------- | --------------------------------------------------------- |
+| `/`         | find in the viewer; `n`/`N` cycle, `esc` clears           |
+| `ctrl-f`    | project search pane; regex/case/glob/scope toggles        |
+| `v`         | toggle diff to full file view for a changed file          |
+| `z`         | fold / unfold the region at the caret, or a git gap       |
+| `x`         | toggle long-line wrap in the viewer                       |
+| `f`         | load full content when truncated                          |
+| `ctrl-d/u`  | half-page cursor movement in the viewer                   |
+| `g` / `G`   | jump to first / last line                                 |
+| `F12`       | go to definition of the symbol under the caret            |
+| `Shift+F12` | find references to the symbol under the caret             |
+| `Shift+I`   | find implementations of the symbol under the caret        |
+| `Shift+H`   | call hierarchy of the symbol (`Tab` flips direction)      |
+| `K`         | hover: type and docs for the symbol under the caret       |
+| `S`         | find symbols: outline of the open file                    |
+| `<` / `>`   | back / forward through viewer history                     |
+| `y`         | copy `path`, `path:line`, or `path:line:col`              |
+| `Y`         | copy the entire contents of the viewed file               |
+| `Shift+↑/↓` | extend a line selection (drag or shift-click also select) |
+| `C`         | copy the selected lines (or the caret line)               |
+
+## Tabs
+
+| Key       | Action                                |
+| --------- | ------------------------------------- |
+| `ctrl-t`  | pin / unpin the current file as a tab |
+| `ctrl-w`  | close the active tab                  |
+| `{` / `}` | previous / next tab                   |
+
+## Workspace
+
+| Key | Action                                            |
+| --- | ------------------------------------------------- |
+| `s` | scope picker: kinds, or drill into recent commits |
+| `t` | theme switcher: filter, live-preview, apply       |
+| `w` | switch to another git worktree                    |
+| `c` | toggle changes-only filter for the tree           |
+| `r` | re-run checks                                     |
+
+## Layout
+
+| Key       | Action                                            |
+| --------- | ------------------------------------------------- |
+| `p`       | toggle the problems panel                         |
+| `ctrl-b`  | toggle the file tree sidebar                      |
+| `[` / `]` | shrink / grow the sidebar (shrink past min hides) |
+| `\`       | reset the sidebar to its default width            |
+
+## App
+
+| Key         | Action                                                 |
+| ----------- | ------------------------------------------------------ |
+| `e`         | open file in terminal editor (suspends TUI)            |
+| `o`         | open file in GUI / IDE (renderer stays live)           |
+| `Shift+F10` | context menu for the focused tree row or viewer symbol |
+| `?`         | show all keybindings                                   |
+| `q` / `esc` | quit (esc closes the problems panel first)             |
+
+## Mouse
+
+The keyboard drives everything, but the mouse works too. Click a file to open
+it, a folder to expand or collapse it, a diff line to move the cursor there, or
+a problem to jump to it. Double-click a file in the tree, or a tab in the strip,
+to pin it as a tab. Clicks also work in the overlays and the search pane, and
+hovering a theme in the switcher previews it live. Clicking a pane focuses it,
+and the wheel scrolls whichever pane the pointer is over. Right-click a tree row
+or a viewer symbol for a context menu of the actions that apply there, the same
+menu `Shift+F10` opens on the focused pane.

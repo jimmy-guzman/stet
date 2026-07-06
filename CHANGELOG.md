@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.5.1...stet-v0.6.0) (2026-07-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* 💥 the binary, npm package (stet), Homebrew formula, config dir (~/.config/stet), cache dir (~/.cache/stet), and env vars (STET_EDITOR, STET_IDE, STET_NO_LSP_DOWNLOAD, STET_INSTALL_DIR) are all renamed; re-point existing config and environment
+
+### Features
+
+* ✨ rename `sideye` to `stet` ([#223](https://github.com/jimmy-guzman/stet/issues/223)) ([8f94f10](https://github.com/jimmy-guzman/stet/commit/8f94f10ea879c1e8337694bd4ea419691e8962dc))
+
 ## [0.5.1](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.5.0...sideye-v0.5.1) (2026-07-05)
 
 

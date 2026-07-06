@@ -36,7 +36,7 @@ import {
 import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import { serversProviding } from "./diagnostics/servers";
+import { intelLanguage, serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -2150,6 +2150,34 @@ function createState() {
   // Single overlay, so a fresh request of either kind supersedes the other's in-flight pull,
   // Rather than two uncoordinated controllers clobbering each other's results.
   let intelController: AbortController | undefined;
+
+  // Keep the intel-capable server for the viewed repo warm across the whole session so the first
+  // Intel action never pays a cold spawn plus project load (the stall). Keyed on the repo and its
+  // Intel language, not the file: the hold establishes on the first capable file view and persists
+  // Across every later file switch and pause (two files in one repo share the pool key, so the
+  // Process is never reaped between them). A worktree switch re-keys `repoRoot` and releases the old
+  // Server; quit disposes the root. `Effect.scoped` holds the acquire until the abort interrupts the
+  // Never-resolving fiber, at which point the scope closes and the pool reference drops.
+  const warmLanguage = createMemo(() => intelLanguage(selectedPath() ?? "", repoRoot()));
+  createEffect(() => {
+    const root = repoRoot();
+    const language = warmLanguage();
+    if (root === "" || language === undefined) {
+      return;
+    }
+    const seedPath = untrack(selectedPath);
+    if (seedPath === undefined) {
+      return;
+    }
+    const controller = new AbortController();
+    runtime
+      .runPromise(Effect.scoped(Intel.use((intel) => intel.warmHold(root, seedPath))), {
+        signal: controller.signal,
+      })
+      .catch(() => {});
+    onCleanup(() => controller.abort());
+  });
+
   // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
   // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
   // The shared precondition for a caret-anchored pull: the caret must sit on a symbol in the

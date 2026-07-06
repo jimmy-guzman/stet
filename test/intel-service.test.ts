@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { Deferred, Effect, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 
 import { LanguageServers, ServerUnavailable } from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
@@ -708,6 +708,52 @@ test("call hierarchy returns empty when no acquired server advertises it", async
       ),
     );
     expect(result).toEqual([]);
+  });
+});
+
+test("warmHold pre-loads the project then closes the doc, holding the server until interrupted", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    let acquired = 0;
+    let released = 0;
+    const ts = handle(["definition"], () => Effect.succeed(null), log);
+    // An acquire that registers a scope finalizer, so releasing the pool reference is observable.
+    const servers = Layer.succeed(LanguageServers)({
+      acquire: () =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            acquired += 1;
+            return ts;
+          }),
+          () => Effect.sync(() => void (released += 1)),
+        ),
+    });
+
+    await Effect.runPromise(
+      Effect.gen(function* warmHoldTest() {
+        const fiber = yield* Effect.forkChild(
+          Effect.scoped(
+            Intel.pipe(Effect.flatMap((intel) => intel.warmHold(dir, "src/a.ts"))),
+          ).pipe(Effect.provide(IntelLive.pipe(Layer.provide(servers)))),
+        );
+        // Wait until the pre-load has opened and then closed the viewed document.
+        while (!log.some((entry) => entry.method === "textDocument/didClose")) {
+          yield* Effect.sleep("1 milli");
+        }
+        // Layer 1 does not hold the doc open (no didChange path): open to trigger the load, then
+        // Close. The server reference is still acquired and held (released stays 0 while parked on
+        // Never), which is what keeps the project warm for the first intel pull.
+        expect(log.map((entry) => entry.method)).toEqual([
+          "textDocument/didOpen",
+          "textDocument/didClose",
+        ]);
+        expect(acquired).toBe(1);
+        expect(released).toBe(0);
+        // Interrupting the fiber closes the caller's scope and releases the pooled server.
+        yield* Fiber.interrupt(fiber);
+        expect(released).toBe(1);
+      }).pipe(Effect.timeout("5 seconds")),
+    );
   });
 });
 

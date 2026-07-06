@@ -203,6 +203,27 @@ export function serversProviding(path: string, capability: Capability): string[]
   );
 }
 
+const intelCapabilities = new Set<Capability>([
+  "definition",
+  "references",
+  "hover",
+  "documentSymbol",
+  "callHierarchy",
+  "implementation",
+]);
+
+/**
+ * The first active server for this file that statically declares any code-intel capability, or
+ * undefined when none does. Drives the warm-hold: it decides whether (and which server) to keep
+ * warm for the viewed file's repo so the first intel pull finds an already-loaded project rather
+ * than paying a cold spawn plus project load.
+ */
+export function intelLanguage(path: string, repoRoot: string): string | undefined {
+  return activeServersForPath(path, repoRoot).find((language) =>
+    (registry[language]?.provides ?? []).some((capability) => intelCapabilities.has(capability)),
+  );
+}
+
 // The LSP `languageId` for `didOpen`, finer-grained than the server key so the server applies the
 // Right grammar (tsx vs ts). Every registry extension needs an entry here, or `didOpen` sends
 // `plaintext` and the server never analyzes the file.

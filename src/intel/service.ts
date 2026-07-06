@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Context, Data, Effect, Layer } from "effect";
+import type { Scope } from "effect";
 
 import { LanguageServers, lspLanguageId, serversProviding } from "@/diagnostics/servers";
 import type { Capability } from "@/diagnostics/servers";
@@ -84,6 +85,13 @@ export class Intel extends Context.Service<
       position: Position,
       direction: "incoming" | "outgoing",
     ) => Effect.Effect<NormalizedLocation[], IntelRequestError>;
+    /**
+     * Hold the intel-capable server for `path`'s repo warm for as long as the caller's scope lives:
+     * acquire it, pre-load the project in the background, then park on `Effect.never`. Interrupting
+     * the fiber releases the pool reference. Run it under `Effect.scoped` so the acquire is held
+     * until interruption, not discharged when the (never-resolving) effect "completes".
+     */
+    readonly warmHold: (repoRoot: string, path: string) => Effect.Effect<never, never, Scope.Scope>;
   }
 >()("stet/Intel") {}
 
@@ -308,6 +316,47 @@ export const IntelLive = Layer.effect(
           normalizeDocumentSymbols,
           [],
         ),
+      warmHold: (repoRoot, path) =>
+        Effect.gen(function* warm() {
+          const handle = yield* firstCapableServer(repoRoot, path, "definition");
+          if (handle === undefined) {
+            return yield* Effect.never;
+          }
+          const absolute = join(repoRoot, path);
+          const text = yield* Effect.promise(() =>
+            Bun.file(absolute)
+              .text()
+              .catch(() => undefined),
+          );
+          if (text !== undefined) {
+            // Open the viewed file and wait out the project load in an inner scope, then close it:
+            // This warms the server process and pre-loads the project (so the first intel pull skips
+            // Both the cold spawn and the load wait) without holding a stale document open. There is
+            // No `didChange` path, so a persistently-open doc would feed later pulls stale text.
+            const uri = pathToFileURL(absolute).href;
+            yield* Effect.scoped(
+              Effect.gen(function* preload() {
+                yield* Effect.acquireRelease(
+                  handle.connection.openDocument({
+                    languageId: lspLanguageId(path),
+                    text,
+                    uri,
+                    version: 1,
+                  }),
+                  () => handle.connection.closeDocument(uri),
+                );
+                yield* handle.connection.whenProjectLoaded.pipe(
+                  Effect.timeout("60 seconds"),
+                  Effect.ignore,
+                );
+              }),
+            );
+          }
+          // The server reference stays held by the caller's scope until it interrupts this fiber
+          // (repo/language re-key or quit), which releases it back to the pool; the 30s idle TTL
+          // Then reaps the server only once nothing else holds it.
+          return yield* Effect.never;
+        }),
     };
   }),
 );

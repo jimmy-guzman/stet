@@ -3,6 +3,7 @@ import { renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  changedContentAdvanced,
   changedPathsDiffer,
   diffArgs,
   EMPTY_TREE_SHA,
@@ -522,5 +523,39 @@ describe("changedPathsDiffer", () => {
 
   test("is true when a path is renamed even at the same count", () => {
     expect(changedPathsDiffer([file("a.ts")], [file("renamed.ts")])).toBe(true);
+  });
+});
+
+describe("changedContentAdvanced", () => {
+  test("is true when a changed file's mtime advances (a real working-tree write)", () => {
+    const prev = model([file("a.ts", { mtimeMs: 1 })]);
+    const next = model([file("a.ts", { mtimeMs: 2 })]);
+    expect(changedContentAdvanced(prev, next)).toBe(true);
+  });
+
+  test("is false when the diff baseline moves without an edit (membership drops, mtimes intact)", () => {
+    // A commit drops a file from the changed set; no file's mtime moves, so this is not an edit.
+    const prev = model([file("a.ts", { mtimeMs: 5 }), file("b.ts", { mtimeMs: 3 })]);
+    const next = model([file("a.ts", { mtimeMs: 5 })]);
+    expect(changedContentAdvanced(prev, next)).toBe(false);
+  });
+
+  test("is false when a baseline move adds a file whose mtime predates the newest change", () => {
+    // A scope re-resolve can pull a file into the set, but with an mtime older than the newest edit.
+    const prev = model([file("a.ts", { mtimeMs: 5 })]);
+    const next = model([file("a.ts", { mtimeMs: 5 }), file("c.ts", { mtimeMs: 3 })]);
+    expect(changedContentAdvanced(prev, next)).toBe(false);
+  });
+
+  test("is false for an idle re-emit with an identical changed set", () => {
+    const prev = model([file("a.ts", { mtimeMs: 7 })]);
+    const next = model([file("a.ts", { mtimeMs: 7 })]);
+    expect(changedContentAdvanced(prev, next)).toBe(false);
+  });
+
+  test("is true when a newly written file enters the set with a newer mtime", () => {
+    const prev = model([file("a.ts", { mtimeMs: 4 })]);
+    const next = model([file("a.ts", { mtimeMs: 4 }), file("b.ts", { mtimeMs: 9 })]);
+    expect(changedContentAdvanced(prev, next)).toBe(true);
   });
 });

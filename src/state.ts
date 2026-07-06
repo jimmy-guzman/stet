@@ -64,7 +64,12 @@ import {
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
 import type { Commit } from "./git/log";
-import { changedPathsDiffer, EMPTY_TREE_SHA, mergeChanged } from "./git/model";
+import {
+  changedContentAdvanced,
+  changedPathsDiffer,
+  EMPTY_TREE_SHA,
+  mergeChanged,
+} from "./git/model";
 import type { ChangedFile, GitModel, Worktree } from "./git/model";
 import { filterPathspecs } from "./git/search";
 import type { SearchMatch } from "./git/search";
@@ -2178,14 +2183,19 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // Drop cached intel replies whenever the working tree changes. `gitModel` re-emits only when the
-  // Changed set's content actually shifts (mtime/additions/deletions), staying stable through quiet
-  // Poll ticks, so this fires on real edits and leaves cache hits intact during the quiet periods
-  // The cache is for. Repo-wide is the safe grain: an edit to one file can move a references or
-  // Call-hierarchy result queried from another.
+  // Drop cached intel replies only on a real working-tree edit, not on diff-baseline churn. The
+  // Cache keys off working-tree file content (what the server reads), but `gitModel` tracks the diff
+  // Vs a baseline, so a commit, scope re-resolve, or staging re-emits it without any content change.
+  // `changedContentAdvanced` gates on a changed file's mtime advancing, so a baseline move leaves
+  // Still-valid entries intact. Repo-wide is the safe grain: an edit to one file can move a
+  // References or call-hierarchy result queried from another.
   createEffect(
-    on(gitModel, (model) => {
-      if (model.repoRoot === "") {
+    on(gitModel, (model, prevModel) => {
+      if (
+        model.repoRoot === "" ||
+        prevModel === undefined ||
+        !changedContentAdvanced(prevModel, model)
+      ) {
         return;
       }
       runtime

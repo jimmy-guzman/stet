@@ -5,6 +5,7 @@ import Link from "next/link";
 import { siteUrl } from "@/lib/site";
 
 import { InstallCommand } from "./install-command";
+import { TerminalFrame } from "./terminal-frame";
 
 const features = [
   {
@@ -43,7 +44,10 @@ export default function Page() {
   return (
     <main className="flex flex-1 flex-col">
       <section className="mx-auto flex w-full max-w-5xl flex-col items-center gap-8 px-4 pt-20 pb-16 text-center sm:pt-28">
-        <p className="font-mono text-sm text-fd-primary">read-only companion TUI</p>
+        <p className="flex items-center justify-center gap-1.5 font-mono text-sm text-fd-primary">
+          read-only companion TUI
+          <span aria-hidden className="stet-caret inline-block h-[1.1em] w-[0.5em] bg-fd-primary" />
+        </p>
         <h1 className="max-w-3xl font-mono text-4xl leading-tight font-bold tracking-tight text-balance sm:text-6xl">
           Inspect an agent's changes as they happen
         </h1>
@@ -69,7 +73,7 @@ export default function Page() {
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 pb-16">
-        <div className="overflow-hidden rounded-xl border border-fd-border bg-fd-card shadow-2xl shadow-black/20">
+        <TerminalFrame label="stet">
           <Image
             src="/screenshots/stet.png"
             alt="stet showing the repository tree beside a diff of a changed file"
@@ -79,12 +83,15 @@ export default function Page() {
             sizes="(max-width: 1152px) 100vw, 1152px"
             className="h-auto w-full"
           />
-        </div>
+        </TerminalFrame>
       </section>
 
       <section className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-px overflow-hidden rounded-xl border border-fd-border bg-fd-border px-0 sm:grid-cols-2 lg:grid-cols-3">
         {features.map((feature) => (
-          <div key={feature.title} className="flex flex-col gap-3 bg-fd-background p-6">
+          <div
+            key={feature.title}
+            className="flex flex-col gap-3 bg-fd-background p-6 transition-colors hover:bg-fd-muted"
+          >
             <feature.icon className="size-5 text-fd-primary" />
             <h2 className="font-mono text-base font-semibold">{feature.title}</h2>
             <p className="text-sm text-fd-muted-foreground">{feature.body}</p>

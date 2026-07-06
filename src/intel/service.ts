@@ -422,47 +422,54 @@ export const IntelLive = Layer.effect(
             [],
           ),
         ),
-      warmHold: (repoRoot, path) =>
-        Effect.gen(function* warm() {
-          const handle = yield* firstCapableServer(repoRoot, path, "definition");
-          if (handle === undefined) {
-            return yield* Effect.never;
-          }
-          const absolute = join(repoRoot, path);
-          const text = yield* Effect.promise(() =>
-            Bun.file(absolute)
-              .text()
-              .catch(() => undefined),
-          );
-          if (text !== undefined) {
-            // Open the viewed file and wait out the project load in an inner scope, then close it:
-            // This warms the server process and pre-loads the project (so the first intel pull skips
-            // Both the cold spawn and the load wait) without holding a stale document open. There is
-            // No `didChange` path, so a persistently-open doc would feed later pulls stale text.
-            const uri = pathToFileURL(absolute).href;
-            yield* Effect.scoped(
-              Effect.gen(function* preload() {
-                yield* Effect.acquireRelease(
-                  handle.connection.openDocument({
-                    languageId: lspLanguageId(path),
-                    text,
-                    uri,
-                    version: 1,
-                  }),
-                  () => handle.connection.closeDocument(uri),
-                );
-                yield* handle.connection.whenProjectLoaded.pipe(
-                  Effect.timeout("60 seconds"),
-                  Effect.ignore,
-                );
-              }),
+      warmHold: (repoRoot, path) => {
+        const hold = (): Effect.Effect<never, never, Scope.Scope> =>
+          Effect.gen(function* warm() {
+            const handle = yield* firstCapableServer(repoRoot, path, "definition");
+            if (handle === undefined) {
+              // No intel server yet: it may still be installing on first launch, or a transient
+              // Acquire miss. Wait and retry rather than parking forever, so the hold establishes
+              // Once the server becomes available and keeps it warm for the rest of the session.
+              yield* Effect.sleep("3 seconds");
+              return yield* hold();
+            }
+            const absolute = join(repoRoot, path);
+            const text = yield* Effect.promise(() =>
+              Bun.file(absolute)
+                .text()
+                .catch(() => undefined),
             );
-          }
-          // The server reference stays held by the caller's scope until it interrupts this fiber
-          // (repo/language re-key or quit), which releases it back to the pool; the 30s idle TTL
-          // Then reaps the server only once nothing else holds it.
-          return yield* Effect.never;
-        }),
+            if (text !== undefined) {
+              // Open the viewed file and wait out the project load in an inner scope, then close it:
+              // This warms the server process and pre-loads the project (so the first intel pull skips
+              // Both the cold spawn and the load wait) without holding a stale document open. There is
+              // No `didChange` path, so a persistently-open doc would feed later pulls stale text.
+              const uri = pathToFileURL(absolute).href;
+              yield* Effect.scoped(
+                Effect.gen(function* preload() {
+                  yield* Effect.acquireRelease(
+                    handle.connection.openDocument({
+                      languageId: lspLanguageId(path),
+                      text,
+                      uri,
+                      version: 1,
+                    }),
+                    () => handle.connection.closeDocument(uri),
+                  );
+                  yield* handle.connection.whenProjectLoaded.pipe(
+                    Effect.timeout("60 seconds"),
+                    Effect.ignore,
+                  );
+                }),
+              );
+            }
+            // The server reference stays held by the caller's scope until it interrupts this fiber
+            // (repo/language re-key or quit), which releases it back to the pool; the 30s idle TTL
+            // Then reaps the server only once nothing else holds it.
+            return yield* Effect.never;
+          });
+        return hold();
+      },
     };
   }),
 );

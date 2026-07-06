@@ -17,6 +17,7 @@ import { LanguageServers, lspLanguageId, serversProviding } from "@/diagnostics/
 import type { Capability } from "@/diagnostics/servers";
 import { relativize } from "@/utils/path";
 
+import { cacheKey, makeIntelCache } from "./cache";
 import {
   firstHierarchyItem,
   normalizeDefinition,
@@ -92,6 +93,12 @@ export class Intel extends Context.Service<
      * until interruption, not discharged when the (never-resolving) effect "completes".
      */
     readonly warmHold: (repoRoot: string, path: string) => Effect.Effect<never, never, Scope.Scope>;
+    /**
+     * Drop cached replies so a later pull re-queries the server. Empty `paths` invalidates the
+     * whole repo (the safe default: an edit to one file can move a references/call-hierarchy result
+     * queried from another); a non-empty list drops only those files' entries.
+     */
+    readonly invalidate: (repoRoot: string, paths: readonly string[]) => Effect.Effect<void>;
   }
 >()("stet/Intel") {}
 
@@ -99,6 +106,36 @@ export const IntelLive = Layer.effect(
   Intel,
   Effect.gen(function* intelLive() {
     const servers = yield* LanguageServers;
+
+    // One LRU per reply shape, so a cache hit narrows to the method's type without a cast. Sized to
+    // A browsing session's worth of distinct carets; eviction is oldest-first.
+    const locationCache = makeIntelCache<NormalizedLocation[]>(256);
+    const hoverCache = makeIntelCache<HoverSegment[]>(256);
+    const symbolCache = makeIntelCache<NormalizedSymbol[]>(256);
+
+    // Serve a cached reply, or run the pull and store a non-empty result. An empty reply is never
+    // Cached: it may be a transient miss (server still loading or briefly unavailable), and the
+    // Content-change invalidation never fires for that, so caching it would strand the caret on
+    // "nothing here" until the next edit.
+    function withCache<V extends readonly unknown[]>(
+      cache: { get: (key: string) => V | undefined; set: (key: string, value: V) => void },
+      key: string,
+      run: Effect.Effect<V, IntelRequestError>,
+    ) {
+      const hit = cache.get(key);
+      if (hit !== undefined) {
+        return Effect.succeed(hit);
+      }
+      return run.pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            if (result.length > 0) {
+              cache.set(key, result);
+            }
+          }),
+        ),
+      );
+    }
 
     // The first server for this file that advertises the capability. `serversProviding` drops
     // Servers whose static hint can't answer it (no wasted acquire); the handshake-advertised set
@@ -257,64 +294,133 @@ export const IntelLive = Layer.effect(
     }
 
     return {
-      callHierarchy: (repoRoot, path, position, direction) =>
-        pullPrepareResolve(
-          repoRoot,
-          path,
-          position,
-          "callHierarchy",
-          "textDocument/prepareCallHierarchy",
-          direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls",
-          relativizeLocations(
+      callHierarchy: (repoRoot, path, position, direction) => {
+        const method =
+          direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls";
+        return withCache(
+          locationCache,
+          cacheKey({ character: position.character, line: position.line, method, path, repoRoot }),
+          pullPrepareResolve(
             repoRoot,
-            direction === "incoming" ? normalizeIncomingCalls : normalizeOutgoingCalls,
+            path,
+            position,
+            "callHierarchy",
+            "textDocument/prepareCallHierarchy",
+            method,
+            relativizeLocations(
+              repoRoot,
+              direction === "incoming" ? normalizeIncomingCalls : normalizeOutgoingCalls,
+            ),
+          ),
+        );
+      },
+      definition: (repoRoot, path, position) =>
+        withCache(
+          locationCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/definition",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            position,
+            "definition",
+            "textDocument/definition",
+            {},
+            relativizeLocations(repoRoot, normalizeDefinition),
+            [],
           ),
         ),
-      definition: (repoRoot, path, position) =>
-        pull(
-          repoRoot,
-          path,
-          position,
-          "definition",
-          "textDocument/definition",
-          {},
-          relativizeLocations(repoRoot, normalizeDefinition),
-          [],
-        ),
       hover: (repoRoot, path, position) =>
-        pull(repoRoot, path, position, "hover", "textDocument/hover", {}, parseHover, []),
-      implementation: (repoRoot, path, position) =>
-        pull(
-          repoRoot,
-          path,
-          position,
-          "implementation",
-          "textDocument/implementation",
-          {},
-          relativizeLocations(repoRoot, normalizeDefinition),
-          [],
+        withCache(
+          hoverCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/hover",
+            path,
+            repoRoot,
+          }),
+          pull(repoRoot, path, position, "hover", "textDocument/hover", {}, parseHover, []),
         ),
+      implementation: (repoRoot, path, position) =>
+        withCache(
+          locationCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/implementation",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            position,
+            "implementation",
+            "textDocument/implementation",
+            {},
+            relativizeLocations(repoRoot, normalizeDefinition),
+            [],
+          ),
+        ),
+      invalidate: (repoRoot, paths) =>
+        Effect.sync(() => {
+          for (const cache of [locationCache, hoverCache, symbolCache]) {
+            if (paths.length === 0) {
+              cache.invalidateRepo(repoRoot);
+              continue;
+            }
+            for (const path of paths) {
+              cache.invalidatePath(repoRoot, path);
+            }
+          }
+        }),
       references: (repoRoot, path, position) =>
-        pull(
-          repoRoot,
-          path,
-          position,
-          "references",
-          "textDocument/references",
-          { context: { includeDeclaration: true } },
-          relativizeLocations(repoRoot, normalizeReferences),
-          [],
+        withCache(
+          locationCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/references",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            position,
+            "references",
+            "textDocument/references",
+            { context: { includeDeclaration: true } },
+            relativizeLocations(repoRoot, normalizeReferences),
+            [],
+          ),
         ),
       symbols: (repoRoot, path) =>
-        pull(
-          repoRoot,
-          path,
-          undefined,
-          "documentSymbol",
-          "textDocument/documentSymbol",
-          {},
-          normalizeDocumentSymbols,
-          [],
+        withCache(
+          symbolCache,
+          cacheKey({
+            character: -1,
+            line: -1,
+            method: "textDocument/documentSymbol",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            undefined,
+            "documentSymbol",
+            "textDocument/documentSymbol",
+            {},
+            normalizeDocumentSymbols,
+            [],
+          ),
         ),
       warmHold: (repoRoot, path) =>
         Effect.gen(function* warm() {

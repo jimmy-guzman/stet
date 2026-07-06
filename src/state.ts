@@ -2178,6 +2178,22 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
+  // Drop cached intel replies whenever the working tree changes. `gitModel` re-emits only when the
+  // Changed set's content actually shifts (mtime/additions/deletions), staying stable through quiet
+  // Poll ticks, so this fires on real edits and leaves cache hits intact during the quiet periods
+  // The cache is for. Repo-wide is the safe grain: an edit to one file can move a references or
+  // Call-hierarchy result queried from another.
+  createEffect(
+    on(gitModel, (model) => {
+      if (model.repoRoot === "") {
+        return;
+      }
+      runtime
+        .runPromise(Intel.use((intel) => intel.invalidate(model.repoRoot, [])))
+        .catch(() => {});
+    }),
+  );
+
   // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
   // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
   // The shared precondition for a caret-anchored pull: the caret must sit on a symbol in the

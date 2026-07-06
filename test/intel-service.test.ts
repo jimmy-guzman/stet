@@ -118,6 +118,44 @@ test("definition opens the file, requests at the caret, normalizes, then closes"
   );
 });
 
+test("definition caches its reply so a repeat issues no second request, and invalidate re-hits", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },
+    async (dir) => {
+      const log: Recorded[] = [];
+      const targetUri = pathToFileURL(join(dir, "src/b.ts")).href;
+      const ts = handle(
+        ["definition"],
+        (method) =>
+          method === "textDocument/definition"
+            ? Effect.succeed({ range: definitionRange, uri: targetUri })
+            : Effect.succeed(null),
+        log,
+      );
+      const definitions = (entry: Recorded) => entry.method === "textDocument/definition";
+
+      await Effect.runPromise(
+        Intel.pipe(
+          Effect.flatMap((intel) =>
+            Effect.gen(function* repeat() {
+              const first = yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              const second = yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              // The repeat is served from cache: identical reply, and only one request went out.
+              expect(second).toEqual(first);
+              expect(log.filter(definitions)).toHaveLength(1);
+              // A content-change invalidation forces the next call back to the server.
+              yield* intel.invalidate(dir, []);
+              yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              expect(log.filter(definitions)).toHaveLength(2);
+            }),
+          ),
+          Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+        ),
+      );
+    },
+  );
+});
+
 test("definition waits for project load before requesting", async () => {
   await withRepo(
     { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },

@@ -12,7 +12,12 @@ describe("upgradeInvocation", () => {
   });
 
   test("npm installs the latest published version", () => {
-    expect(upgradeInvocation("npm")?.argv).toEqual(["npm", "install", "-g", "stet@latest"]);
+    expect(upgradeInvocation("npm")?.argv).toEqual([
+      "npm",
+      "install",
+      "-g",
+      "@jimmy.codes/stet@latest",
+    ]);
   });
 
   test("brew upgrades the tap formula", () => {

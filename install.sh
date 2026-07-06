@@ -70,7 +70,7 @@ case "$(uname -s)" in
   Darwin) os="darwin" ;;
   Linux) os="linux" ;;
   *)
-    echo "unsupported OS: $(uname -s). Try: npm i -g stet" >&2
+    echo "unsupported OS: $(uname -s). Try: npm i -g @jimmy.codes/stet" >&2
     exit 1
     ;;
 esac
@@ -80,7 +80,7 @@ case "$arch" in
   aarch64 | arm64) arch="arm64" ;;
   x86_64) arch="x64" ;;
   *)
-    echo "unsupported architecture: $arch. Try: npm i -g stet" >&2
+    echo "unsupported architecture: $arch. Try: npm i -g @jimmy.codes/stet" >&2
     exit 1
     ;;
 esac
@@ -94,7 +94,7 @@ fi
 
 if [ "$os" = "linux" ]; then
   if [ -f /etc/alpine-release ] || (ldd --version 2>&1 || true) | grep -qi musl; then
-    echo "musl libc is not supported by the prebuilt binaries yet. Try: npm i -g stet" >&2
+    echo "musl libc is not supported by the prebuilt binaries yet. Try: npm i -g @jimmy.codes/stet" >&2
     exit 1
   fi
 fi

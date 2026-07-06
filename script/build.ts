@@ -134,7 +134,8 @@ if (!single) {
         homepage: "https://github.com/jimmy-guzman/stet",
         keywords: ["tui", "diff", "git", "code-review", "coding-agent", "terminal"],
         license: "MIT",
-        name: pkg.name,
+        // Bare unscoped "stet" trips npm's too-similar typosquat filter, so the launcher publishes under the brand scope (the `stet` command is unchanged).
+        name: "@jimmy.codes/stet",
         optionalDependencies: Object.fromEntries(
           allTargets.map((target) => [`${pkg.name}-${target.os}-${target.arch}`, pkg.version]),
         ),

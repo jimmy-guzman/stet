@@ -53,7 +53,7 @@ That keeps the basic view useful even when checks are still running.
 curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/stet/main/install.sh | bash
 
 # npm (works with npm, bun, pnpm, yarn; pulls a prebuilt binary)
-npm i -g stet
+npm i -g @jimmy.codes/stet
 
 # homebrew
 brew install jimmy-guzman/tap/stet

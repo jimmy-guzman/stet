@@ -22,7 +22,10 @@ export function upgradeInvocation(method: InstallMethod): UpgradeInvocation | un
   }
 
   if (method === "npm") {
-    return { argv: ["npm", "install", "-g", "stet@latest"], label: "upgrading via npm..." };
+    return {
+      argv: ["npm", "install", "-g", "@jimmy.codes/stet@latest"],
+      label: "upgrading via npm...",
+    };
   }
 
   if (method === "brew") {

@@ -2191,11 +2191,14 @@ function createState() {
   // References or call-hierarchy result queried from another.
   createEffect(
     on(gitModel, (model, prevModel) => {
-      if (
-        model.repoRoot === "" ||
-        prevModel === undefined ||
-        !changedContentAdvanced(prevModel, model)
-      ) {
+      if (model.repoRoot === "" || prevModel === undefined) {
+        return;
+      }
+      // A worktree switch makes `prevModel` a different repo, so `changedContentAdvanced` would be a
+      // Meaningless cross-repo comparison. Invalidate the switched-to repo outright: its cache may
+      // Hold entries from an earlier visit that changed while away. Within one repo, gate on a real
+      // Edit (the Layer 3.1 behavior).
+      if (prevModel.repoRoot === model.repoRoot && !changedContentAdvanced(prevModel, model)) {
         return;
       }
       runtime

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.6.1...stet-v0.6.2) (2026-07-07)
+
+
+### Bug Fixes
+
+* 🐛 bump opentui and shiki deps ([#234](https://github.com/jimmy-guzman/stet/issues/234)) ([1d41248](https://github.com/jimmy-guzman/stet/commit/1d41248c0268c0aae93021abbdbce68bdd464c3f))
+* **help:** 🐛 single-source keybindings for the ? overlay & --help ([#235](https://github.com/jimmy-guzman/stet/issues/235)) ([9c26f96](https://github.com/jimmy-guzman/stet/commit/9c26f9621ec6cc15aeb4126b61b11ce526339712))
+* **viewer:** 🐛 keep caret restore for the settled diff ([#233](https://github.com/jimmy-guzman/stet/issues/233)) ([2465804](https://github.com/jimmy-guzman/stet/commit/24658046373fac839eed1d4ef682a9fe04321470))
+
+
+### Performance Improvements
+
+* **intel:** ⚡️ eliminate intel action latency ([#229](https://github.com/jimmy-guzman/stet/issues/229)) ([c4e3581](https://github.com/jimmy-guzman/stet/commit/c4e3581974defe70d7b1785349b5a147c8056e7f))
+
 ## [0.6.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.6.0...stet-v0.6.1) (2026-07-06)
 
 

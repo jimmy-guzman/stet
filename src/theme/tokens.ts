@@ -55,7 +55,9 @@ export const ThemeSchema = Schema.Struct({
   severity: Schema.Struct({ error: Hex, info: Hex, warning: Hex }),
   stage: Schema.Struct(stageTokens),
   success: Hex,
-  surface: Schema.Struct({ base: Hex, cursor: Hex, panel: Hex }),
+  // `scrim` is the alert-dialog backdrop color; resolve.ts blends it with a fixed
+  // Alpha into `rgba.scrim` to dim (not hide) the app behind a modal.
+  surface: Schema.Struct({ base: Hex, cursor: Hex, panel: Hex, scrim: Hex }),
   syntax: Schema.Struct({
     comment: Hex,
     function: Hex,

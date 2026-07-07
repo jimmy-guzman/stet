@@ -331,7 +331,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `o`         | open file in GUI / IDE (renderer stays live)           |
 | `Shift+F10` | context menu for the focused tree row or viewer symbol |
 | `?`         | show all keybindings                                   |
-| `q` / `esc` | quit (esc closes the problems panel first)             |
+| `q`         | quit (confirm with `y`)                                |
 
 Press `?` anytime to see the full list in the app:
 

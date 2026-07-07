@@ -72,7 +72,7 @@ export const KEY_HELP: { entries: [combo: string, action: string][]; heading: st
       ["o", "open in GUI / IDE (renderer stays live, --ide template)"],
       ["Shift+F10", "context menu for the focused row or symbol (or right-click)"],
       ["?", "show all keybindings"],
-      ["q / esc", "quit (esc closes panels first)"],
+      ["q", "quit (confirm with y)"],
     ],
     heading: "app",
   },

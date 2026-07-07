@@ -25,6 +25,7 @@ describe("createKeyHandler", () => {
 
   afterEach(() => {
     state.closeCommandMenu();
+    state.setQuitConfirmOpen(false);
     state.setFocusedPane("tree");
     state.seedNav(undefined);
   });
@@ -274,5 +275,79 @@ describe("createKeyHandler", () => {
     expect(state.viewerDecoration()).toBeUndefined();
     // The decoration's esc must early-return before the global esc-quits-the-app path.
     expect(quitCount).toBe(0);
+  });
+
+  test("q opens the quit confirm instead of quitting immediately", () => {
+    let quitCount = 0;
+    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+
+    handle(keyEvent({ name: "q" }));
+
+    expect(state.quitConfirmOpen()).toBe(true);
+    expect(quitCount).toBe(0);
+  });
+
+  test("escape from a clean state does nothing: never opens the confirm, never quits", () => {
+    let quitCount = 0;
+    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+
+    handle(keyEvent({ name: "escape" }));
+
+    expect(state.quitConfirmOpen()).toBe(false);
+    expect(quitCount).toBe(0);
+  });
+
+  test("the quit confirm owns the keyboard: y and enter quit, esc and n cancel, other keys are swallowed", () => {
+    let quitCount = 0;
+    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+
+    state.setQuitConfirmOpen(true);
+    handle(keyEvent({ name: "y" }));
+    expect(quitCount).toBe(1);
+
+    state.setQuitConfirmOpen(true);
+    handle(keyEvent({ name: "return" }));
+    expect(quitCount).toBe(2);
+
+    state.setQuitConfirmOpen(true);
+    handle(keyEvent({ name: "escape" }));
+    expect(state.quitConfirmOpen()).toBe(false);
+    expect(quitCount).toBe(2);
+
+    state.setQuitConfirmOpen(true);
+    handle(keyEvent({ name: "n" }));
+    expect(state.quitConfirmOpen()).toBe(false);
+    expect(quitCount).toBe(2);
+
+    // An unrelated key is swallowed: no quit, and the confirm stays open.
+    state.setQuitConfirmOpen(true);
+    handle(keyEvent({ name: "j" }));
+    expect(quitCount).toBe(2);
+    expect(state.quitConfirmOpen()).toBe(true);
+  });
+
+  test("ctrl-c quits instantly even while the quit confirm is open", () => {
+    let quitCount = 0;
+    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+
+    state.setQuitConfirmOpen(true);
+    handle(keyEvent({ ctrl: true, name: "c" }));
+
+    expect(quitCount).toBe(1);
+  });
+
+  test("escape only ever closes: problems panel, then search view, never quits", () => {
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    state.setProblemsOpen(true);
+    handle(keyEvent({ name: "escape" }));
+    expect(state.problemsOpen()).toBe(false);
+    expect(state.quitConfirmOpen()).toBe(false);
+
+    state.openSearch();
+    state.setFocusedPane("tree");
+    handle(keyEvent({ name: "escape" }));
+    expect(state.mainView()).toBe("file");
+    expect(state.quitConfirmOpen()).toBe(false);
   });
 });

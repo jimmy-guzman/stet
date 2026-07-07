@@ -16,6 +16,7 @@ export interface ResolvedTheme {
     addedBgActive: RGBA;
     findMatchBgActive: RGBA;
     removedBgActive: RGBA;
+    scrim: RGBA;
     transparent: RGBA;
   };
 }
@@ -41,15 +42,21 @@ function surfaceIsLight(hex: string) {
 const DARK_ACTIVE_FACTOR = 1.6;
 const LIGHT_ACTIVE_FACTOR = 0.82;
 
+// Opacity of the alert-dialog backdrop over the app: enough to read as modal,
+// Light enough that the dimmed content stays legible behind it.
+const SCRIM_ALPHA = 0.5;
+
 export function resolveTheme(theme: Theme): ResolvedTheme {
   const factor = surfaceIsLight(theme.surface.base) ? LIGHT_ACTIVE_FACTOR : DARK_ACTIVE_FACTOR;
   const active = (hex: string) => scaleRgba(hex, factor);
+  const scrim = RGBA.fromHex(theme.surface.scrim);
   return {
     colors: theme,
     rgba: {
       addedBgActive: active(theme.diff.addedBg),
       findMatchBgActive: active(theme.find.matchBg),
       removedBgActive: active(theme.diff.removedBg),
+      scrim: RGBA.fromValues(scrim.r, scrim.g, scrim.b, SCRIM_ALPHA),
       transparent: RGBA.fromValues(0, 0, 0, 0),
     },
   };

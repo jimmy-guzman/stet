@@ -33,7 +33,7 @@ export const darkTheme: Theme = {
     untracked: "#7e8083",
   },
   success: "#5ab66b",
-  surface: { base: "#191b1d", cursor: "#2c2e30", panel: "#101214" },
+  surface: { base: "#191b1d", cursor: "#2c2e30", panel: "#101214", scrim: "#000000" },
   syntax: {
     comment: "#707274",
     function: "#71c1f7",

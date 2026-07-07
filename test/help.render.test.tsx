@@ -47,7 +47,7 @@ describe("help overlay", () => {
       // The list sizes to fit (wrapped descriptions included), so even the last
       // Row is visible without scrolling — guards the clip regression.
       expect(help).toContain("pin / unpin the current file as a tab");
-      expect(help).toContain("quit (esc closes panels first)");
+      expect(help).toContain("quit (confirm with y)");
 
       // P and ctrl-b must be swallowed: no problems panel, no sidebar toggle, overlay stays
       mockInput.pressKey("p");

@@ -7,6 +7,7 @@ import { Effect } from "effect";
 
 import {
   activeServersForPath,
+  intelLanguage,
   lspLanguageId,
   performHandshake,
   resolveServerCommand,
@@ -47,6 +48,24 @@ test("activeServersForPath gates biome on a repo's biome config", () => {
     rmSync(withConfig, { force: true, recursive: true });
     rmSync(withJsonc, { force: true, recursive: true });
     rmSync(without, { force: true, recursive: true });
+  }
+});
+
+test("intelLanguage picks the one server that answers code-intel for a file", () => {
+  const repo = mkdtempSync(join(tmpdir(), "stet-intel-"));
+  try {
+    // TypeScript is the only registered server that provides code-intel, so a JS/TS-family file
+    // Resolves to it regardless of the other extension-matching servers (oxlint, biome).
+    expect(intelLanguage("src/a.ts", repo)).toBe("typescript");
+    expect(intelLanguage("src/a.tsx", repo)).toBe("typescript");
+    expect(intelLanguage("src/a.mjs", repo)).toBe("typescript");
+    // CSS/JSON/YAML only match intel-less servers, and an extensionless file matches none: no warm.
+    expect(intelLanguage("src/a.css", repo)).toBeUndefined();
+    expect(intelLanguage("package.json", repo)).toBeUndefined();
+    expect(intelLanguage("config.yaml", repo)).toBeUndefined();
+    expect(intelLanguage("Makefile", repo)).toBeUndefined();
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
   }
 });
 

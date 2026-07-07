@@ -11,11 +11,13 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Context, Data, Effect, Layer } from "effect";
+import type { Scope } from "effect";
 
 import { LanguageServers, lspLanguageId, serversProviding } from "@/diagnostics/servers";
 import type { Capability } from "@/diagnostics/servers";
 import { relativize } from "@/utils/path";
 
+import { cacheKey, makeIntelCache } from "./cache";
 import {
   firstHierarchyItem,
   normalizeDefinition,
@@ -84,6 +86,19 @@ export class Intel extends Context.Service<
       position: Position,
       direction: "incoming" | "outgoing",
     ) => Effect.Effect<NormalizedLocation[], IntelRequestError>;
+    /**
+     * Hold the intel-capable server for `path`'s repo warm for as long as the caller's scope lives:
+     * acquire it, pre-load the project in the background, then park on `Effect.never`. Interrupting
+     * the fiber releases the pool reference. Run it under `Effect.scoped` so the acquire is held
+     * until interruption, not discharged when the (never-resolving) effect "completes".
+     */
+    readonly warmHold: (repoRoot: string, path: string) => Effect.Effect<never, never, Scope.Scope>;
+    /**
+     * Drop cached replies so a later pull re-queries the server. Empty `paths` invalidates the
+     * whole repo (the safe default: an edit to one file can move a references/call-hierarchy result
+     * queried from another); a non-empty list drops only those files' entries.
+     */
+    readonly invalidate: (repoRoot: string, paths: readonly string[]) => Effect.Effect<void>;
   }
 >()("stet/Intel") {}
 
@@ -91,6 +106,43 @@ export const IntelLive = Layer.effect(
   Intel,
   Effect.gen(function* intelLive() {
     const servers = yield* LanguageServers;
+
+    // One LRU per reply shape, so a cache hit narrows to the method's type without a cast. Sized to
+    // A browsing session's worth of distinct carets; eviction is oldest-first.
+    const locationCache = makeIntelCache<NormalizedLocation[]>(256);
+    const hoverCache = makeIntelCache<HoverSegment[]>(256);
+    const symbolCache = makeIntelCache<NormalizedSymbol[]>(256);
+
+    // Bumped on every invalidate so a pull whose LSP round-trip straddled the invalidate does not
+    // Re-store a now-stale result (it may have read pre-edit content).
+    let generation = 0;
+
+    // Serve a cached reply, or run the pull and store a non-empty result. An empty reply is never
+    // Cached: it may be a transient miss (server still loading or briefly unavailable), and the
+    // Content-change invalidation never fires for that, so caching it would strand the caret on
+    // "nothing here" until the next edit.
+    function withCache<V extends readonly unknown[]>(
+      cache: { get: (key: string) => V | undefined; set: (key: string, value: V) => void },
+      key: string,
+      run: Effect.Effect<V, IntelRequestError>,
+    ) {
+      const hit = cache.get(key);
+      if (hit !== undefined) {
+        return Effect.succeed(hit);
+      }
+      const started = generation;
+      return run.pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            // Skip storing when an invalidate landed while this pull was in flight: the result may
+            // Reflect pre-edit content, so caching it would strand a stale entry until the next edit.
+            if (result.length > 0 && generation === started) {
+              cache.set(key, result);
+            }
+          }),
+        ),
+      );
+    }
 
     // The first server for this file that advertises the capability. `serversProviding` drops
     // Servers whose static hint can't answer it (no wasted acquire); the handshake-advertised set
@@ -249,65 +301,187 @@ export const IntelLive = Layer.effect(
     }
 
     return {
-      callHierarchy: (repoRoot, path, position, direction) =>
-        pullPrepareResolve(
-          repoRoot,
-          path,
-          position,
-          "callHierarchy",
-          "textDocument/prepareCallHierarchy",
-          direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls",
-          relativizeLocations(
+      callHierarchy: (repoRoot, path, position, direction) => {
+        const method =
+          direction === "incoming" ? "callHierarchy/incomingCalls" : "callHierarchy/outgoingCalls";
+        return withCache(
+          locationCache,
+          cacheKey({ character: position.character, line: position.line, method, path, repoRoot }),
+          pullPrepareResolve(
             repoRoot,
-            direction === "incoming" ? normalizeIncomingCalls : normalizeOutgoingCalls,
+            path,
+            position,
+            "callHierarchy",
+            "textDocument/prepareCallHierarchy",
+            method,
+            relativizeLocations(
+              repoRoot,
+              direction === "incoming" ? normalizeIncomingCalls : normalizeOutgoingCalls,
+            ),
+          ),
+        );
+      },
+      definition: (repoRoot, path, position) =>
+        withCache(
+          locationCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/definition",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            position,
+            "definition",
+            "textDocument/definition",
+            {},
+            relativizeLocations(repoRoot, normalizeDefinition),
+            [],
           ),
         ),
-      definition: (repoRoot, path, position) =>
-        pull(
-          repoRoot,
-          path,
-          position,
-          "definition",
-          "textDocument/definition",
-          {},
-          relativizeLocations(repoRoot, normalizeDefinition),
-          [],
-        ),
       hover: (repoRoot, path, position) =>
-        pull(repoRoot, path, position, "hover", "textDocument/hover", {}, parseHover, []),
-      implementation: (repoRoot, path, position) =>
-        pull(
-          repoRoot,
-          path,
-          position,
-          "implementation",
-          "textDocument/implementation",
-          {},
-          relativizeLocations(repoRoot, normalizeDefinition),
-          [],
+        withCache(
+          hoverCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/hover",
+            path,
+            repoRoot,
+          }),
+          pull(repoRoot, path, position, "hover", "textDocument/hover", {}, parseHover, []),
         ),
+      implementation: (repoRoot, path, position) =>
+        withCache(
+          locationCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/implementation",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            position,
+            "implementation",
+            "textDocument/implementation",
+            {},
+            relativizeLocations(repoRoot, normalizeDefinition),
+            [],
+          ),
+        ),
+      invalidate: (repoRoot, paths) =>
+        Effect.sync(() => {
+          generation += 1;
+          for (const cache of [locationCache, hoverCache, symbolCache]) {
+            if (paths.length === 0) {
+              cache.invalidateRepo(repoRoot);
+              continue;
+            }
+            for (const path of paths) {
+              cache.invalidatePath(repoRoot, path);
+            }
+          }
+        }),
       references: (repoRoot, path, position) =>
-        pull(
-          repoRoot,
-          path,
-          position,
-          "references",
-          "textDocument/references",
-          { context: { includeDeclaration: true } },
-          relativizeLocations(repoRoot, normalizeReferences),
-          [],
+        withCache(
+          locationCache,
+          cacheKey({
+            character: position.character,
+            line: position.line,
+            method: "textDocument/references",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            position,
+            "references",
+            "textDocument/references",
+            { context: { includeDeclaration: true } },
+            relativizeLocations(repoRoot, normalizeReferences),
+            [],
+          ),
         ),
       symbols: (repoRoot, path) =>
-        pull(
-          repoRoot,
-          path,
-          undefined,
-          "documentSymbol",
-          "textDocument/documentSymbol",
-          {},
-          normalizeDocumentSymbols,
-          [],
+        withCache(
+          symbolCache,
+          cacheKey({
+            character: -1,
+            line: -1,
+            method: "textDocument/documentSymbol",
+            path,
+            repoRoot,
+          }),
+          pull(
+            repoRoot,
+            path,
+            undefined,
+            "documentSymbol",
+            "textDocument/documentSymbol",
+            {},
+            normalizeDocumentSymbols,
+            [],
+          ),
         ),
+      warmHold: (repoRoot, path) => {
+        const hold = (attempt: number): Effect.Effect<never, never, Scope.Scope> =>
+          Effect.gen(function* warm() {
+            const handle = yield* firstCapableServer(repoRoot, path, "definition");
+            if (handle === undefined) {
+              // No intel server yet: it may still be installing on first launch, or a transient
+              // Acquire miss, so retry with backoff rather than parking immediately. But a genuinely
+              // Absent server (offline, `--no-lsp-download`, unsupported language) is never coming,
+              // So give up after a bounded window (~90s) and park instead of spinning all session.
+              if (attempt >= 5) {
+                return yield* Effect.never;
+              }
+              yield* Effect.sleep(3000 * 2 ** attempt);
+              return yield* hold(attempt + 1);
+            }
+            const absolute = join(repoRoot, path);
+            const text = yield* Effect.promise(() =>
+              Bun.file(absolute)
+                .text()
+                .catch(() => undefined),
+            );
+            if (text !== undefined) {
+              // Open the viewed file and wait out the project load in an inner scope, then close it:
+              // This warms the server process and pre-loads the project (so the first intel pull skips
+              // Both the cold spawn and the load wait) without holding a stale document open. There is
+              // No `didChange` path, so a persistently-open doc would feed later pulls stale text.
+              const uri = pathToFileURL(absolute).href;
+              yield* Effect.scoped(
+                Effect.gen(function* preload() {
+                  yield* Effect.acquireRelease(
+                    handle.connection.openDocument({
+                      languageId: lspLanguageId(path),
+                      text,
+                      uri,
+                      version: 1,
+                    }),
+                    () => handle.connection.closeDocument(uri),
+                  );
+                  yield* handle.connection.whenProjectLoaded.pipe(
+                    Effect.timeout("60 seconds"),
+                    Effect.ignore,
+                  );
+                }),
+              );
+            }
+            // The server reference stays held by the caller's scope until it interrupts this fiber
+            // (repo/language re-key or quit), which releases it back to the pool; the 30s idle TTL
+            // Then reaps the server only once nothing else holds it.
+            return yield* Effect.never;
+          });
+        return hold(0);
+      },
     };
   }),
 );

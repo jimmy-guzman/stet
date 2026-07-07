@@ -36,7 +36,7 @@ import {
 import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import { serversProviding } from "./diagnostics/servers";
+import { intelLanguage, serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -64,7 +64,12 @@ import {
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
 import type { Commit } from "./git/log";
-import { changedPathsDiffer, EMPTY_TREE_SHA, mergeChanged } from "./git/model";
+import {
+  changedContentAdvanced,
+  changedPathsDiffer,
+  EMPTY_TREE_SHA,
+  mergeChanged,
+} from "./git/model";
 import type { ChangedFile, GitModel, Worktree } from "./git/model";
 import { filterPathspecs } from "./git/search";
 import type { SearchMatch } from "./git/search";
@@ -2150,6 +2155,67 @@ function createState() {
   // Single overlay, so a fresh request of either kind supersedes the other's in-flight pull,
   // Rather than two uncoordinated controllers clobbering each other's results.
   let intelController: AbortController | undefined;
+
+  // Keep the intel-capable server for the viewed repo warm across the whole session so the first
+  // Intel action never pays a cold spawn plus project load (the stall). The seed latches to the most
+  // Recent intel-capable file in the current repo and stays put across non-code detours (a README,
+  // JSON, an image), so browsing one of those never tears the hold down and lets the 30s idle TTL
+  // Reap the server. It resets when the repo changes; a worktree switch re-keys the seed and releases
+  // The old server, quit disposes the root. `Effect.scoped` holds the acquire until the abort
+  // Interrupts the never-resolving fiber, at which point the scope closes and the pool reference drops.
+  const warmSeed = createMemo<{ root: string; path: string } | undefined>((prev) => {
+    const root = repoRoot();
+    if (root === "") {
+      return undefined;
+    }
+    // Already latched for this repo: keep the seed (and stop tracking selectedPath) so non-code
+    // Files don't churn or drop the hold.
+    if (prev?.root === root) {
+      return prev;
+    }
+    const path = selectedPath();
+    return path !== undefined && intelLanguage(path, root) !== undefined
+      ? { path, root }
+      : undefined;
+  });
+  createEffect(() => {
+    const seed = warmSeed();
+    if (seed === undefined) {
+      return;
+    }
+    const controller = new AbortController();
+    runtime
+      .runPromise(Effect.scoped(Intel.use((intel) => intel.warmHold(seed.root, seed.path))), {
+        signal: controller.signal,
+      })
+      .catch(() => {});
+    onCleanup(() => controller.abort());
+  });
+
+  // Drop cached intel replies only on a real working-tree edit, not on diff-baseline churn. The
+  // Cache keys off working-tree file content (what the server reads), but `gitModel` tracks the diff
+  // Vs a baseline, so a commit, scope re-resolve, or staging re-emits it without any content change.
+  // `changedContentAdvanced` gates on a changed file's mtime advancing, so a baseline move leaves
+  // Still-valid entries intact. Repo-wide is the safe grain: an edit to one file can move a
+  // References or call-hierarchy result queried from another.
+  createEffect(
+    on(gitModel, (model, prevModel) => {
+      if (model.repoRoot === "" || prevModel === undefined) {
+        return;
+      }
+      // A worktree switch makes `prevModel` a different repo, so `changedContentAdvanced` would be a
+      // Meaningless cross-repo comparison. Invalidate the switched-to repo outright: its cache may
+      // Hold entries from an earlier visit that changed while away. Within one repo, gate on a real
+      // Edit (the Layer 3.1 behavior).
+      if (prevModel.repoRoot === model.repoRoot && !changedContentAdvanced(prevModel, model)) {
+        return;
+      }
+      runtime
+        .runPromise(Intel.use((intel) => intel.invalidate(model.repoRoot, [])))
+        .catch(() => {});
+    }),
+  );
+
   // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
   // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
   // The shared precondition for a caret-anchored pull: the caret must sit on a symbol in the

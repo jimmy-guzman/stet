@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { Deferred, Effect, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 
 import { LanguageServers, ServerUnavailable } from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
@@ -114,6 +114,86 @@ test("definition opens the file, requests at the caret, normalizes, then closes"
         position: { character: 6, line: 0 },
         textDocument: { uri: pathToFileURL(join(dir, "src/a.ts")).href },
       });
+    },
+  );
+});
+
+test("definition caches its reply so a repeat issues no second request, and invalidate re-hits", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },
+    async (dir) => {
+      const log: Recorded[] = [];
+      const targetUri = pathToFileURL(join(dir, "src/b.ts")).href;
+      const ts = handle(
+        ["definition"],
+        (method) =>
+          method === "textDocument/definition"
+            ? Effect.succeed({ range: definitionRange, uri: targetUri })
+            : Effect.succeed(null),
+        log,
+      );
+      const definitions = (entry: Recorded) => entry.method === "textDocument/definition";
+
+      await Effect.runPromise(
+        Intel.pipe(
+          Effect.flatMap((intel) =>
+            Effect.gen(function* repeat() {
+              const first = yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              const second = yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              // The repeat is served from cache: identical reply, and only one request went out.
+              expect(second).toEqual(first);
+              expect(log.filter(definitions)).toHaveLength(1);
+              // A content-change invalidation forces the next call back to the server.
+              yield* intel.invalidate(dir, []);
+              yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              expect(log.filter(definitions)).toHaveLength(2);
+            }),
+          ),
+          Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+        ),
+      );
+    },
+  );
+});
+
+test("a pull whose response straddles an invalidate is not cached (generation guard)", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },
+    async (dir) => {
+      const log: Recorded[] = [];
+      const targetUri = pathToFileURL(join(dir, "src/b.ts")).href;
+      // The server holds its definition reply until the test releases the gate, standing in for an
+      // LSP round-trip that is still in flight when the agent's edit invalidates the cache.
+      const gate = await Effect.runPromise(Deferred.make<void>());
+      const ts = handle(
+        ["definition"],
+        (method) =>
+          method === "textDocument/definition"
+            ? Deferred.await(gate).pipe(Effect.as({ range: definitionRange, uri: targetUri }))
+            : Effect.succeed(null),
+        log,
+      );
+      const definitions = (entry: Recorded) => entry.method === "textDocument/definition";
+
+      await Effect.runPromise(
+        Intel.pipe(
+          Effect.flatMap((intel) =>
+            Effect.gen(function* race() {
+              const fiber = yield* Effect.forkChild(
+                intel.definition(dir, "src/a.ts", { character: 6, line: 0 }),
+              );
+              // An edit lands (invalidate) while the pull is blocked, then the server answers.
+              yield* intel.invalidate(dir, []);
+              yield* Deferred.succeed(gate, undefined);
+              yield* Fiber.join(fiber);
+              // The straddling result was dropped, not stored: the repeat re-queries the server.
+              yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              expect(log.filter(definitions)).toHaveLength(2);
+            }),
+          ),
+          Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+        ),
+      );
     },
   );
 });
@@ -708,6 +788,52 @@ test("call hierarchy returns empty when no acquired server advertises it", async
       ),
     );
     expect(result).toEqual([]);
+  });
+});
+
+test("warmHold pre-loads the project then closes the doc, holding the server until interrupted", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    let acquired = 0;
+    let released = 0;
+    const ts = handle(["definition"], () => Effect.succeed(null), log);
+    // An acquire that registers a scope finalizer, so releasing the pool reference is observable.
+    const servers = Layer.succeed(LanguageServers)({
+      acquire: () =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            acquired += 1;
+            return ts;
+          }),
+          () => Effect.sync(() => void (released += 1)),
+        ),
+    });
+
+    await Effect.runPromise(
+      Effect.gen(function* warmHoldTest() {
+        const fiber = yield* Effect.forkChild(
+          Effect.scoped(
+            Intel.pipe(Effect.flatMap((intel) => intel.warmHold(dir, "src/a.ts"))),
+          ).pipe(Effect.provide(IntelLive.pipe(Layer.provide(servers)))),
+        );
+        // Wait until the pre-load has opened and then closed the viewed document.
+        while (!log.some((entry) => entry.method === "textDocument/didClose")) {
+          yield* Effect.sleep("1 milli");
+        }
+        // Layer 1 does not hold the doc open (no didChange path): open to trigger the load, then
+        // Close. The server reference is still acquired and held (released stays 0 while parked on
+        // Never), which is what keeps the project warm for the first intel pull.
+        expect(log.map((entry) => entry.method)).toEqual([
+          "textDocument/didOpen",
+          "textDocument/didClose",
+        ]);
+        expect(acquired).toBe(1);
+        expect(released).toBe(0);
+        // Interrupting the fiber closes the caller's scope and releases the pooled server.
+        yield* Fiber.interrupt(fiber);
+        expect(released).toBe(1);
+      }).pipe(Effect.timeout("5 seconds")),
+    );
   });
 });
 

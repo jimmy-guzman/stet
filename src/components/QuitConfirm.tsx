@@ -24,6 +24,10 @@ export function QuitConfirm() {
       onMouseDown={(event: MouseEvent) => event.stopPropagation()}
     >
       <box
+        ref={(el) => {
+          el.selectable = false;
+          el.focusable = false;
+        }}
         position="absolute"
         left={state.overlayLeft()}
         top={1}
@@ -34,10 +38,26 @@ export function QuitConfirm() {
         backgroundColor={theme.colors.surface.panel}
       >
         <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-          <text fg={theme.colors.text.strong}>Quit stet?</text>
+          <text
+            ref={(el) => {
+              el.selectable = false;
+              el.focusable = false;
+            }}
+            fg={theme.colors.text.strong}
+          >
+            Quit stet?
+          </text>
         </box>
         <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-          <text fg={theme.colors.text.muted}>y quit · esc cancel</text>
+          <text
+            ref={(el) => {
+              el.selectable = false;
+              el.focusable = false;
+            }}
+            fg={theme.colors.text.muted}
+          >
+            y quit · esc cancel
+          </text>
         </box>
       </box>
     </box>

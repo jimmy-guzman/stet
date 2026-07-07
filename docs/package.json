@@ -4,9 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "next build",
-    "check": "fumadocs-mdx && tsc --noEmit && oxlint",
+    "check": "fumadocs-mdx && tsc --noEmit && oxlint && oxfmt --check .",
     "dev": "next dev",
-    "postinstall": "fumadocs-mdx",
     "start": "next start"
   },
   "dependencies": {

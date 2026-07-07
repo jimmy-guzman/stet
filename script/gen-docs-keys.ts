@@ -55,7 +55,12 @@ const afterStartLine = text.indexOf("\n", start) + 1;
 
 if (process.argv.includes("--check")) {
   const actual = parseKeyTables(text.slice(afterStartLine, end));
-  const expected = KEY_HELP.map((group) => ({ entries: group.entries, heading: group.heading }));
+  // ParseKeyTables lowercases headings (renderKeyTables capitalizes them for display), so
+  // Normalize the same way here: the check compares data, not the display casing.
+  const expected = KEY_HELP.map((group) => ({
+    entries: group.entries,
+    heading: group.heading.toLowerCase(),
+  }));
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     console.error(`${MDX_PATH} is out of date with src/help/keys.ts; run \`bun run gen:keys\``);
     process.exit(1);

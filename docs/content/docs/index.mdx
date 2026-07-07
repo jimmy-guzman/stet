@@ -5,6 +5,8 @@ description: Install stet and inspect an agent's changes from the next terminal 
 
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Callout } from "fumadocs-ui/components/callout";
+import { Card, Cards } from "fumadocs-ui/components/card";
+import { FileText, GitBranch, Palette, Search, Waypoints } from "lucide-react";
 
 `stet` is a read-only companion TUI for inspecting an agent's changes. The agent
 runs in one terminal pane; stet sits in the next one and answers the questions
@@ -14,6 +16,30 @@ changed.
 
 It shows you the repo, the diff, and the problems. It never reviews, approves,
 or talks to the agent. You decide what to say next.
+
+## What you can do
+
+<Cards>
+  <Card
+    icon={<FileText />}
+    title="Reading files & diffs"
+    href="/docs/guides/reading-files-and-diffs"
+  >
+    Read any file, view changes as diffs, fold by structure, and keep your place across tabs.
+  </Card>
+  <Card icon={<Search />} title="Search & navigation" href="/docs/guides/search-and-navigation">
+    Jump to any file, find within the open file, and search the whole repo.
+  </Card>
+  <Card icon={<Waypoints />} title="Code intelligence" href="/docs/guides/code-intelligence">
+    Go to definition, references, implementations, call hierarchy, hover, and problems.
+  </Card>
+  <Card icon={<GitBranch />} title="Scopes & worktrees" href="/docs/guides/scopes-and-worktrees">
+    Choose what the diff compares and switch between git worktrees in place.
+  </Card>
+  <Card icon={<Palette />} title="Themes" href="/docs/guides/themes">
+    Preview and switch themes live, then make one permanent in your config.
+  </Card>
+</Cards>
 
 ## Install
 
@@ -67,8 +93,9 @@ so the basic view stays useful while checks are still running.
 </Callout>
 
 Press `?` at any time to see every keybinding, or read the
-[keybindings reference](/docs/keybindings). See
-[configuration](/docs/configuration) to set a permanent theme and editor.
+[keybindings reference](/docs/reference/keybindings). See
+[configuration](/docs/reference/configuration) to set a permanent theme and
+editor.
 
 ## Upgrade
 

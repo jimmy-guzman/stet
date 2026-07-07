@@ -1,0 +1,52 @@
+---
+title: Reading files & diffs
+description: Open any file read-only, view changes as diffs, fold by structure, and keep your place across tabs.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+stet opens every file read-only. Unchanged files show as plain source; changed
+files show as diffs. Nothing here ever writes to the repo.
+
+## Read any file
+
+Open any file and read it with syntax highlighting for any language Shiki
+supports. Unchanged files open with no diff gutters, just the source.
+
+![A source file open in stet with syntax highlighting and no diff gutters](/screenshots/read-only.png)
+
+## Diffs and the full-file toggle
+
+A changed file opens as a diff. Press `v` to toggle between the diff and the
+full file, and `f` to load the full content when a large file is truncated.
+
+## Fold code
+
+Press `z` in the viewer to fold the block at the caret behind a `▸ N lines
+folded` marker. Code folds by indentation, markdown by heading section. The same
+key expands a git-elided gap to reveal the unchanged lines around a hunk. Click
+any marker to toggle it.
+
+![A diff with a function folded behind a "17 lines folded" marker](/screenshots/folding.png)
+
+<Callout>
+  Folding is per file and resets when you switch files. Press `x` to wrap long lines in the viewer
+  instead of scrolling them horizontally.
+</Callout>
+
+## Tabs and history
+
+Browsing the tree previews files in a single view, shown in italic to mark it as
+ephemeral, so nothing piles up. `<` and `>` step back and forward through where
+you have been, restoring each spot's cursor and scroll. Press `ctrl-t` to pin
+the current file as a tab (or double-click it in the tree); `{` and `}` switch
+tabs and `ctrl-w` closes one. Each tab carries its own history and remembered
+position.
+
+![The tab strip with pinned, diff-status-tinted tabs](/screenshots/tabs.png)
+
+## Copy a reference
+
+Press `y` to copy a reference to paste back into the agent conversation: the file
+`path` in the tree, or `path:line:col` in the viewer. `Y` copies the whole
+file's contents, and `C` copies the selected lines (or the caret line).

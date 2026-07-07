@@ -1,0 +1,24 @@
+---
+title: Scopes & worktrees
+description: Choose what the diff compares and switch between git worktrees in place.
+---
+
+## Switch scope
+
+Press `s` to pick what the diff compares. The scopes group into changes
+(uncommitted, staged, or unstaged) and history (everything since stet launched,
+or just the last commit). The picker also drills into recent commits
+(`commits →`), so you can view any of them as its own diff.
+
+![The scope picker grouping the diff scopes under changes and history](/screenshots/scope-picker.png)
+
+You can also start in a scope from the command line with `stet --staged` or
+`stet --unstaged`, or compare against another ref with `stet <ref>`.
+
+## Switch worktrees
+
+Press `w` to jump between git worktrees without leaving the view. Type to filter
+by branch or path, `↑`/`↓` to move, `⏎` to switch. The tree, diffs, polling, and
+checks all re-point at the chosen worktree.
+
+![The worktree combobox with a filter input listing worktrees, the current one marked](/screenshots/worktree-picker.png)

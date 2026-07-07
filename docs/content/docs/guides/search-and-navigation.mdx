@@ -1,0 +1,34 @@
+---
+title: Search & navigation
+description: Jump to any file, find within the open file, search the whole repo, and follow recent activity.
+---
+
+## Go to file
+
+Press `ctrl-p` to fuzzy-search the whole repo and open any file, tracked or
+untracked.
+
+![The go-to-file overlay fuzzy-matching paths across the repo](/screenshots/go-to-file.png)
+
+## Find in the viewer
+
+Press `/` to search within the open file. `n` and `N` cycle through matches, a
+counter tracks your place, and `esc` clears the search.
+
+![Find-in-viewer highlighting matches in the open file with a match counter](/screenshots/find.png)
+
+## Search file contents
+
+Press `ctrl-f` to open the project search pane. Results group by file with
+syntax-highlighted context around each match. `ctrl-r` toggles regex, `ctrl-x`
+toggles case sensitivity, a filter field narrows by glob (`!` excludes, e.g.
+`src/ !*.test.ts`), `ctrl-g` toggles between the changed files and the whole
+tree, and `ctrl-s` picks the scope without leaving the pane. Jumping to a match
+keeps your query and results, so `ctrl-f` brings them right back.
+
+![Project content search listing matches for a term across several files](/screenshots/search.png)
+
+## Follow recent activity
+
+stet marks recently changed files as the agent works. Press `.` to jump to the
+most recently changed file, and `n` to jump to the next file that has findings.

@@ -21,7 +21,12 @@
  * fa-paper_plane, astro custom-astro, pdf fa-file_pdf_o, video fa-file_video_o, symlink
  * oct-file_symlink_file, test cod-beaker (any test/spec/cy file, one glyph across every language so
  * "test-ness" reads the same everywhere rather than mixing a symbol with per-framework brand
- * logos), storybook dev-storybook (.stories./.story. files).
+ * logos), storybook dev-storybook (.stories./.story. files), xls/xlsx seti-xls (the same Excel
+ * workbook artifact across both container versions, paired with csv's seti-csv from the same Seti
+ * family but kept distinct since a CSV is plain text, not a workbook), cpuprofile cod-flame (a CPU
+ * profile is conventionally visualized as a flame graph), codeowners oct-shield_check (an octicon,
+ * GitHub's own icon set, for a GitHub-specific file; the shield-with-check reads as the
+ * ownership/protection a CODEOWNERS file enforces, matching vscode-icons' shield).
  */
 
 const DEFAULT_FILE = "\u{ea7b}";
@@ -47,6 +52,7 @@ const BY_STEM = new Map([
   [".gitignore", "\u{e702}"],
   [".env", CONFIG],
   ["readme.md", "\u{f02d}"],
+  ["codeowners", "\u{f510}"],
   // JVM build files: the Gradle/Maven glyph beats the kotlin/groovy extension glyph,
   // The way an IDE marks a build script over an ordinary source file.
   ["build.gradle", GRADLE],
@@ -74,6 +80,9 @@ const BY_SUFFIX = new Map([
   ["mdx", "\u{e73e}"],
   ["css", "\u{e749}"],
   ["csv", "\u{e64a}"],
+  ["xls", "\u{e6a6}"],
+  ["xlsx", "\u{e6a6}"],
+  ["cpuprofile", "\u{eaf2}"],
   ["html", "\u{e736}"],
   ["http", "\u{f1d8}"],
   ["astro", "\u{e6b3}"],

@@ -64,7 +64,12 @@ import {
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
 import type { Commit } from "./git/log";
-import { changedPathsDiffer, EMPTY_TREE_SHA, mergeChanged } from "./git/model";
+import {
+  changedContentAdvanced,
+  changedPathsDiffer,
+  EMPTY_TREE_SHA,
+  mergeChanged,
+} from "./git/model";
 import type { ChangedFile, GitModel, Worktree } from "./git/model";
 import { filterPathspecs } from "./git/search";
 import type { SearchMatch } from "./git/search";
@@ -2201,6 +2206,31 @@ function createState() {
         return;
       }
       runtime.runPromise(Intel.use((intel) => intel.invalidate(root, []))).catch(() => {});
+    }),
+  );
+
+  // Safety-poll fallback for intel invalidation. The watcher drives per-write invalidation
+  // Precisely (it catches every working-tree write, including a revert, a deletion, or a
+  // Non-advancing-mtime write), but it is best-effort: a platform whose fs.watch never delivers
+  // (no inotify, a sandbox, a network filesystem) or a dropped event would otherwise leave intel
+  // Stale with no floor, the same failure the git refresh covers with its slow poll. So whenever
+  // The poll (or the watcher) surfaces a model whose newest mtime advanced, invalidate repo-wide
+  // Too. `changedContentAdvanced` is deliberately conservative: a commit, staging, or scope
+  // Re-resolve moves no mtime, so this stays silent on a baseline move and never over-invalidates.
+  // It is redundant with the watcher on a healthy platform (a harmless second repo-wide clear) and
+  // Is the correctness floor where the watcher misses.
+  createEffect(
+    on(gitModel, (model, prev) => {
+      if (prev === undefined || model.repoRoot === "" || model === prev) {
+        return;
+      }
+      // A repo switch is handled by the repoRoot effect above; within one repo, gate on a real edit.
+      if (prev.repoRoot !== model.repoRoot || !changedContentAdvanced(prev, model)) {
+        return;
+      }
+      runtime
+        .runPromise(Intel.use((intel) => intel.invalidate(model.repoRoot, [])))
+        .catch(() => {});
     }),
   );
 

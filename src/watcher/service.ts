@@ -35,9 +35,16 @@ function watchStream(roots: ReturnType<typeof watchRoots>) {
         let worktreeChanged = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const flush = () => {
-          Queue.offerUnsafe(queue, worktreeChanged);
-          worktreeChanged = false;
           timer = undefined;
+          // Clear the pending flag only once the emit is actually accepted. The callback queue is
+          // BufferSize-1 dropping, so a burst could drop this offer; if it carried a worktree write
+          // (the intel-invalidation signal), keep the flag and retry rather than losing it. A
+          // Dropped git-internal tick (`false`) needs no retry, the safety poll is its floor.
+          if (Queue.offerUnsafe(queue, worktreeChanged)) {
+            worktreeChanged = false;
+          } else if (worktreeChanged) {
+            timer = setTimeout(flush, DEBOUNCE_MS);
+          }
         };
         const watchers = roots.flatMap((root) => {
           try {

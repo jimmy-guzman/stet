@@ -64,12 +64,7 @@ import {
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
 import type { Commit } from "./git/log";
-import {
-  changedContentAdvanced,
-  changedPathsDiffer,
-  EMPTY_TREE_SHA,
-  mergeChanged,
-} from "./git/model";
+import { changedPathsDiffer, EMPTY_TREE_SHA, mergeChanged } from "./git/model";
 import type { ChangedFile, GitModel, Worktree } from "./git/model";
 import { filterPathspecs } from "./git/search";
 import type { SearchMatch } from "./git/search";
@@ -2193,27 +2188,19 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // Drop cached intel replies only on a real working-tree edit, not on diff-baseline churn. The
-  // Cache keys off working-tree file content (what the server reads), but `gitModel` tracks the diff
-  // Vs a baseline, so a commit, scope re-resolve, or staging re-emits it without any content change.
-  // `changedContentAdvanced` gates on a changed file's mtime advancing, so a baseline move leaves
-  // Still-valid entries intact. Repo-wide is the safe grain: an edit to one file can move a
-  // References or call-hierarchy result queried from another.
+  // Drop the switched-to repo's cached intel on a worktree switch: its cache may hold entries from
+  // An earlier visit that changed while the watcher for that root was inactive. Repo-wide is the
+  // Safe grain (an edit to one file can move a references or call-hierarchy result queried from
+  // Another), and this fires only on an actual repo change, not a scope re-resolve. Within one
+  // Repo, invalidation is driven per working-tree write by the filesystem watcher (see the refresh
+  // Effect): the cache keys off working-tree content, so a baseline move (commit, staging) never
+  // Touches a tracked file and leaves still-valid entries intact.
   createEffect(
-    on(gitModel, (model, prevModel) => {
-      if (model.repoRoot === "" || prevModel === undefined) {
+    on(repoRoot, (root, prev) => {
+      if (prev === undefined || root === "" || root === prev) {
         return;
       }
-      // A worktree switch makes `prevModel` a different repo, so `changedContentAdvanced` would be a
-      // Meaningless cross-repo comparison. Invalidate the switched-to repo outright: its cache may
-      // Hold entries from an earlier visit that changed while away. Within one repo, gate on a real
-      // Edit (the Layer 3.1 behavior).
-      if (prevModel.repoRoot === model.repoRoot && !changedContentAdvanced(prevModel, model)) {
-        return;
-      }
-      runtime
-        .runPromise(Intel.use((intel) => intel.invalidate(model.repoRoot, [])))
-        .catch(() => {});
+      runtime.runPromise(Intel.use((intel) => intel.invalidate(root, []))).catch(() => {});
     }),
   );
 
@@ -3392,8 +3379,9 @@ function createState() {
           );
 
           // Changed-set triggers: an immediate tick on (re)key, a debounced
-          // Fs-watch tick per change (which also records watcher health), and a
-          // Safety poll whose cadence adapts to that health — fast where the
+          // Fs-watch tick per change (which also records watcher health and, on a
+          // Tracked working-tree write, invalidates the content-keyed intel cache),
+          // And a safety poll whose cadence adapts to that health — fast where the
           // Watcher is unproven or has missed a change, slow once it has earned
           // Trust. See `refreshDelay`.
           const watchTicks = Stream.unwrap(
@@ -3401,7 +3389,17 @@ function createState() {
               const watcher = yield* Watcher;
               return watcher.changes(root);
             }),
-          ).pipe(Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))));
+          ).pipe(
+            Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))),
+            // A working-tree write changes what the language server reads, so drop the repo's
+            // Cached intel; a git-internal tick (commit, staging) leaves valid content untouched.
+            Stream.tap((worktreeChanged) =>
+              worktreeChanged
+                ? Intel.use((intel) => intel.invalidate(root, [])).pipe(Effect.ignore)
+                : Effect.void,
+            ),
+            Stream.map(() => undefined),
+          );
           const safetyTicks = Stream.fromEffect(
             Effect.suspend(() =>
               Effect.sleep(

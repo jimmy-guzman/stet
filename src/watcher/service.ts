@@ -10,39 +10,41 @@ import { watchRoots } from "./scope";
 const DEBOUNCE_MS = 100;
 
 /**
- * Filesystem-change ticks for a worktree, debounced so an agent's burst of writes collapses into
- * one. Each tick means "something changed, re-derive git state"; the boolean is whether the batch
- * included a tracked working-tree write (vs a git-internal change like HEAD/index/refs), so the
- * consumer can invalidate the content-keyed intel cache on real edits but not on commits or scope
- * moves. Watch failures (a platform without recursive support, a sandbox without inotify) are
- * swallowed: that root simply never ticks and the caller's slow poll remains the correctness
- * floor.
+ * Filesystem-change batches for a worktree, debounced so an agent's burst of writes collapses into
+ * one. Each emit means "something changed, re-derive git state"; its array is the worktree-relative
+ * paths written this batch (empty for a git-internal-only or nameless batch). The consumer ticks
+ * the git refresh on every emit and invalidates the content-keyed intel cache only for a path it
+ * knows is tracked (so gitignored churn like `node_modules/` does not wipe the cache, and a commit,
+ * which touches only `.git`, carries no path). Watch failures (a platform without recursive
+ * support, a sandbox without inotify) are swallowed: that root simply never ticks and the caller's
+ * slow poll remains the correctness floor.
  */
 export class Watcher extends Context.Service<
   Watcher,
   {
-    readonly changes: (repoRoot: string) => Stream.Stream<boolean>;
+    readonly changes: (repoRoot: string) => Stream.Stream<readonly string[]>;
   }
 >()("stet/Watcher") {}
 
 function watchStream(roots: ReturnType<typeof watchRoots>) {
-  return Stream.callback<boolean>(
+  return Stream.callback<readonly string[]>(
     (queue) =>
       Effect.gen(function* watch_() {
-        // Debounce inside the callback so a burst collapses to one emit while the per-batch
-        // Worktree-changed flag survives the window: a plain keep-last `Stream.debounce` would
-        // Drop an earlier worktree write whenever the window's last event was git-internal.
-        let worktreeChanged = false;
+        // Debounce inside the callback so a burst collapses to one emit. `pending` accumulates the
+        // Named worktree paths written in the window; a plain keep-last `Stream.debounce` would drop
+        // Earlier paths whenever the window's last event was git-internal or a different file.
+        let pending = new Set<string>();
         let timer: ReturnType<typeof setTimeout> | undefined;
         const flush = () => {
           timer = undefined;
-          // Clear the pending flag only once the emit is actually accepted. The callback queue is
-          // BufferSize-1 dropping, so a burst could drop this offer; if it carried a worktree write
-          // (the intel-invalidation signal), keep the flag and retry rather than losing it. A
-          // Dropped git-internal tick (`false`) needs no retry, the safety poll is its floor.
-          if (Queue.offerUnsafe(queue, worktreeChanged)) {
-            worktreeChanged = false;
-          } else if (worktreeChanged) {
+          const paths = [...pending];
+          // Clear the pending set only once the emit is accepted. The callback queue is bufferSize-1
+          // Dropping, so a burst could drop this offer; if it carried worktree paths (the intel
+          // Signal) keep them and retry rather than losing them. A dropped empty batch is only a
+          // Git-refresh tick, and the safety poll is its floor.
+          if (Queue.offerUnsafe(queue, paths)) {
+            pending = new Set();
+          } else if (pending.size > 0) {
             timer = setTimeout(flush, DEBOUNCE_MS);
           }
         };
@@ -53,8 +55,10 @@ function watchStream(roots: ReturnType<typeof watchRoots>) {
               if (kind === "ignored") {
                 return;
               }
-              if (kind === "worktree") {
-                worktreeChanged = true;
+              // A named worktree write is intel-relevant; a git-internal or nameless event still
+              // Ticks the refresh but carries no path (nameless real edits ride the mtime poll floor).
+              if (kind === "worktree" && typeof filename === "string") {
+                pending.add(filename);
               }
               if (timer !== undefined) {
                 clearTimeout(timer);

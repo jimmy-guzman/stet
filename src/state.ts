@@ -3421,10 +3421,12 @@ function createState() {
             }),
           ).pipe(
             Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))),
-            // A working-tree write changes what the language server reads, so drop the repo's
-            // Cached intel; a git-internal tick (commit, staging) leaves valid content untouched.
-            Stream.tap((worktreeChanged) =>
-              worktreeChanged
+            // A write to a file git tracks (or already counts as changed) alters what the language
+            // Server reads, so drop the repo's cached intel. Gate on tracked-ness: the watcher also
+            // Sees gitignored churn (`node_modules/`, `dist/`) an agent generates, which must not
+            // Wipe the warm cache, and a git-internal or nameless batch carries no path at all.
+            Stream.tap((paths) =>
+              paths.some((path) => repoFilePaths().has(path) || gitModel().changedByPath.has(path))
                 ? Intel.use((intel) => intel.invalidate(root, [])).pipe(Effect.ignore)
                 : Effect.void,
             ),

@@ -12,7 +12,7 @@ import { createFixtureRepo } from "./helpers";
 
 const WatcherTest = WatcherLive.pipe(Layer.provide(GitLive), Layer.provide(ProcessLive));
 
-test("Watcher.changes emits a worktree-changed tick when a file changes", async () => {
+test("Watcher.changes emits the changed worktree path when a file changes", async () => {
   const repo = createFixtureRepo("watcher-service-", { "a.txt": "one\n" });
   try {
     let writes = 0;
@@ -36,8 +36,8 @@ test("Watcher.changes emits a worktree-changed tick when a file changes", async 
       }).pipe(Effect.provide(WatcherTest)),
     );
 
-    // A tracked working-tree edit, so the batch flags a content change (drives intel invalidation).
-    expect(Option.getOrNull(first)).toBe(true);
+    // A tracked working-tree edit, so its path rides the batch (which drives intel invalidation).
+    expect(Option.getOrElse(first, () => [] as readonly string[])).toContain("a.txt");
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

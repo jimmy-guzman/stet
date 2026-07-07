@@ -1,16 +1,23 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { useState } from "react";
 
 export function InstallCommand({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
 
   async function copy() {
-    await navigator.clipboard.writeText(command);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(command);
+      setStatus("copied");
+    } catch {
+      setStatus("error");
+    }
+    setTimeout(() => setStatus("idle"), 1500);
   }
+
+  const label =
+    status === "copied" ? "Copied" : status === "error" ? "Copy failed" : "Copy install command";
 
   return (
     <div className="flex w-full max-w-md items-center gap-3 rounded-lg border border-fd-border bg-fd-card px-4 py-3 font-mono text-sm">
@@ -19,10 +26,16 @@ export function InstallCommand({ command }: { command: string }) {
       <button
         type="button"
         onClick={copy}
-        aria-label={copied ? "Copied" : "Copy install command"}
+        aria-label={label}
         className="shrink-0 text-fd-muted-foreground transition-colors hover:text-fd-foreground"
       >
-        {copied ? <Check className="size-4 text-fd-primary" /> : <Copy className="size-4" />}
+        {status === "copied" ? (
+          <Check className="size-4 text-fd-primary" />
+        ) : status === "error" ? (
+          <X className="size-4 text-fd-muted-foreground" />
+        ) : (
+          <Copy className="size-4" />
+        )}
       </button>
     </div>
   );

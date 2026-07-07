@@ -30,8 +30,8 @@ problems. You decide what to say next.
   scoped to the changes or the whole tree.
 - Switches scope from a picker (all changes, staged, unstaged, since launch, or
   the last commit) and between git worktrees in place.
-- Watches the filesystem and refreshes the moment the agent changes something,
-  keeping the current file and selection stable.
+- Watches the filesystem and refreshes as the agent changes files, keeping the
+  current file and selection stable.
 - Marks recent activity and lets you jump to the latest touched file.
 - Shows diagnostics in the tree, the viewer, and a problems panel.
 - Navigates code through read-only language-server pulls: go to definition, find
@@ -69,7 +69,7 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 - [Keybindings](https://stet.jimmy.codes/docs/reference/keybindings) — every
   shortcut (or press `?` in the app)
 - [Configuration](https://stet.jimmy.codes/docs/reference/configuration) — themes
-  and editor setup at `~/.config/stet/config.jsonc`
+  and editor setup at `~/.config/stet/config.jsonc` (or `config.json`)
 
 ## Requirements
 

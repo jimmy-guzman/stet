@@ -7,6 +7,7 @@ export async function getStetVersion() {
   try {
     const res = await fetch("https://registry.npmjs.org/@jimmy.codes/stet/latest", {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return undefined;
     const data: unknown = await res.json();

@@ -1,5 +1,7 @@
 import util from "node:util";
 
+import { KEY_HELP } from "@/help/keys";
+
 export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit" | "commit";
 
 // Picker order, also the single source of truth for the scope list. Grouped for the
@@ -153,6 +155,24 @@ export function scopeMenuLabel(kind: ScopeKind) {
   return "unstaged";
 }
 
+// Renders the `?` overlay registry (`KEY_HELP`) as the `--help` Keys section, so the
+// Two never drift. Combos align to the widest one by display width (wide glyphs like
+// The arrows count correctly), grouped under each section heading.
+function keyBindingsHelp() {
+  const width = Math.max(
+    ...KEY_HELP.flatMap((group) => group.entries.map(([combo]) => Bun.stringWidth(combo))),
+  );
+  return KEY_HELP.map(
+    (group) =>
+      `  ${group.heading}:\n${group.entries
+        .map(
+          ([combo, action]) =>
+            `    ${combo}${" ".repeat(width - Bun.stringWidth(combo) + 2)}${action}`,
+        )
+        .join("\n")}`,
+  ).join("\n\n");
+}
+
 export function helpText() {
   return `stet - read-only companion TUI for inspecting an agent's changes
 
@@ -200,66 +220,7 @@ Options:
       If nothing is configured, o does nothing.
 
 Keys:
-  tab        switch focus between the file tree and the viewer
-
-File tree:
-  j/down     next row
-  k/up       previous row
-  h/left     collapse folder
-  l/right    expand folder
-  enter      open focused tree item
-
-Viewer:
-  j/down     move cursor down a line
-  k/up       move cursor up a line
-  h/left     word-hop the caret to the previous symbol
-  l/right    word-hop the caret to the next symbol
-  ctrl-d/u   move cursor half a page
-  g/G        jump to first / last line
-  /          find in the viewer (n/N cycle matches, escape clears)
-  v          toggle diff <-> full file view
-  z          fold / unfold the region at the caret, or expand a git gap
-  x          toggle long-line wrap in the viewer
-  f          load full content when truncated
-  < / >      step back / forward through viewer history
-  F12        go to definition of the symbol under the caret
-  shift-f12  find references to the symbol under the caret
-  shift-i    find implementations of the symbol under the caret
-  shift-h    call hierarchy of the symbol (tab flips direction)
-  K          hover card: type and docs for the symbol under the caret
-  S          find symbols: outline of the open file
-
-Tabs:
-  ctrl-t     pin / unpin the current file as a tab
-  ctrl-w     close the active tab
-  { / }      previous / next tab
-
-Problems:
-  j/down     next problem
-  k/up       previous problem
-  enter      jump to the problem's file and line
-  p/escape   close the panel
-
-Anywhere:
-  ctrl-p     open the go-to-file palette (type to fuzzy-search, enter jumps)
-  ctrl-f     open project search (full-view; regex/case/glob/scope toggles)
-  s          open the scope picker (kinds, or drill into recent commits)
-  t          open the theme switcher (filter, preview live, enter applies)
-  w          switch to another git worktree
-  e          open in terminal editor (suspends TUI, --editor template)
-  o          open in GUI / IDE (renderer stays live, --ide template)
-  c          toggle changes-only filter for the tree
-  p          toggle the problems panel
-  ctrl-b     toggle the file tree sidebar
-  [ / ]      shrink / grow the sidebar ( \\ resets its width )
-  .          jump to the most recently changed file
-  n          jump to next file with findings
-  r          re-run checks
-  y          copy path (tree), path:line, or path:line:col (viewer)
-  Y          copy the entire contents of the viewed file
-  shift-f10  context menu for the focused tree row or viewer symbol
-  ?          show all keybindings
-  q/escape   quit
+${keyBindingsHelp()}
 
 The whole repo renders as a tree with changes overlaid; open any file
 read-only. The view is live: files, diffs, and recency markers refresh as an

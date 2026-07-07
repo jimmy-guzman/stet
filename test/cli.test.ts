@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { helpText, parseArgs, parseCommand, scopeKinds, scopeLabel, scopeMenuLabel } from "@/cli";
+import { KEY_HELP } from "@/help/keys";
 
 describe("parseArgs", () => {
   test("defaults to uncommitted vs HEAD", () => {
@@ -160,18 +161,16 @@ describe("scopeMenuLabel", () => {
 });
 
 describe("helpText", () => {
-  test("describes the companion keys clearly", () => {
-    expect(helpText()).toContain(
-      "s          open the scope picker (kinds, or drill into recent commits)",
-    );
-    expect(helpText()).toContain("c          toggle changes-only filter for the tree");
-    expect(helpText()).toContain("v          toggle diff <-> full file view");
-    expect(helpText()).toContain("p          toggle the problems panel");
-    expect(helpText()).toContain(".          jump to the most recently changed file");
-    expect(helpText()).toContain(
-      "y          copy path (tree), path:line, or path:line:col (viewer)",
-    );
-    expect(helpText()).toContain("The view is live");
+  test("documents every keybinding from the registry", () => {
+    const help = helpText();
+    for (const group of KEY_HELP) {
+      expect(help).toContain(`${group.heading}:`);
+      for (const [combo, action] of group.entries) {
+        expect(help).toContain(combo);
+        expect(help).toContain(action);
+      }
+    }
+    expect(help).toContain("The view is live");
   });
 
   test("documents the --editor and --ide flags", () => {
@@ -182,8 +181,8 @@ describe("helpText", () => {
   });
 
   test("documents the e and o keybindings", () => {
-    expect(helpText()).toContain("e          open in terminal editor");
-    expect(helpText()).toContain("o          open in GUI / IDE");
+    expect(helpText()).toContain("open in terminal editor");
+    expect(helpText()).toContain("open in GUI / IDE");
   });
 
   test("documents the upgrade command", () => {

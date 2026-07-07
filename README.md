@@ -61,14 +61,14 @@ Run `stet` inside any git repository; `stet upgrade` updates it in place.
 
 Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 
-- [Getting started](https://stet.jimmy.codes/docs) — install, usage, flags, and
+- [Getting started](https://stet.jimmy.codes/docs): install, usage, flags, and
   requirements
-- [Guides](https://stet.jimmy.codes/docs/guides/reading-files-and-diffs) —
+- [Guides](https://stet.jimmy.codes/docs/guides/reading-files-and-diffs):
   reading files and diffs, search and navigation, code intelligence, scopes and
   worktrees, and themes
-- [Keybindings](https://stet.jimmy.codes/docs/reference/keybindings) — every
+- [Keybindings](https://stet.jimmy.codes/docs/reference/keybindings): every
   shortcut (or press `?` in the app)
-- [Configuration](https://stet.jimmy.codes/docs/reference/configuration) — themes
+- [Configuration](https://stet.jimmy.codes/docs/reference/configuration): themes
   and editor setup at `~/.config/stet/config.jsonc` (or `config.json`)
 
 ## Requirements

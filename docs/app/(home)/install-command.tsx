@@ -1,19 +1,21 @@
 "use client";
 
 import { Check, Copy, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export function InstallCommand({ command }: { command: string }) {
   const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
+  const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   async function copy() {
+    clearTimeout(resetTimer.current);
     try {
       await navigator.clipboard.writeText(command);
       setStatus("copied");
     } catch {
       setStatus("error");
     }
-    setTimeout(() => setStatus("idle"), 1500);
+    resetTimer.current = setTimeout(() => setStatus("idle"), 1500);
   }
 
   const label =

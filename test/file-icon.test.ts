@@ -19,6 +19,25 @@ describe("fileIcon", () => {
     expect(fileIcon("requests.http")).toBe("\u{f1d8}");
   });
 
+  test("pairs xls/xlsx in the Seti spreadsheet family, distinct from csv", () => {
+    expect(fileIcon("book.xls")).toBe("\u{e6a6}");
+    expect(fileIcon("book.xlsx")).toBe("\u{e6a6}");
+    // A workbook is not a CSV: same Seti family, different glyph.
+    expect(fileIcon("book.xlsx")).not.toBe(fileIcon("data.csv"));
+  });
+
+  test("marks a .cpuprofile with the flame glyph", () => {
+    expect(fileIcon("CPU-20250101.cpuprofile")).toBe("\u{eaf2}");
+    expect(fileIcon("CPU-20250101.cpuprofile")).not.toBe("\u{ea7b}");
+  });
+
+  test("marks CODEOWNERS with the shield glyph by exact filename", () => {
+    expect(fileIcon("CODEOWNERS")).toBe("\u{f510}");
+    expect(fileIcon("codeowners")).toBe("\u{f510}");
+    // A plain uppercase file with no rule stays generic.
+    expect(fileIcon("CODEOWNERS")).not.toBe(fileIcon("AUTHORS"));
+  });
+
   test("marks NOTICE with the license glyph, like LICENSE", () => {
     expect(fileIcon("NOTICE")).toBe("\u{e60a}");
     expect(fileIcon("NOTICE")).toBe(fileIcon("LICENSE"));

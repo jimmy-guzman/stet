@@ -15,7 +15,7 @@ becoming part of the agent loop. It does not review code, approve changes, talk
 to the agent, or manage a workflow. It shows you the repo, the diff, and the
 problems. You decide what to say next.
 
-![stet showing the repo tree beside a diff of a changed file](assets/screenshots/stet.png)
+![stet showing the repo tree beside a diff of a changed file](docs/public/screenshots/stet.png)
 
 ## What it does
 

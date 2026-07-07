@@ -44,6 +44,23 @@ export function Viewer() {
         : lines.findIndex(
             (line) => line.newLine === pending.cursorLine || line.oldLine === pending.cursorLine,
           );
+    // A fresh open homes to the first change. When the file has line changes yet
+    // This snapshot shows none, the diff is still loading (an interrupted git read
+    // Can briefly commit an empty patch); don't spend the one-shot restore on it,
+    // The real diff re-fires this effect and lands on the change. A file with no
+    // Change lines (binary, rename/mode-only) settles with none, so it still
+    // Consumes at the top.
+    const changed = state.selectedFile();
+    const expectsChangeLines =
+      changed !== undefined && !changed.binary && changed.additions + changed.deletions > 0;
+    if (
+      pending.cursorLine === undefined &&
+      found === -1 &&
+      !state.fileView() &&
+      expectsChangeLines
+    ) {
+      return;
+    }
     const index =
       found !== -1
         ? found

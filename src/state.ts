@@ -448,6 +448,7 @@ function createState() {
   const [worktreeComboboxQuery, setWorktreeComboboxQuery] = createSignal("");
   const [worktrees, setWorktrees] = createSignal<Worktree[] | undefined>(undefined);
   const [helpDialogOpen, setHelpDialogOpen] = createSignal(false);
+  const [quitConfirmOpen, setQuitConfirmOpen] = createSignal(false);
   const [themeComboboxOpen, setThemeComboboxOpen] = createSignal(false);
   const [themeComboboxIndex, setThemeComboboxIndex] = createSignal(0);
   const [themeComboboxQuery, setThemeComboboxQuery] = createSignal("");
@@ -3635,6 +3636,7 @@ function createState() {
     problems,
     problemsOpen,
     problemsScrollTop,
+    quitConfirmOpen,
     recencyByPath,
     referencesIndex,
     referencesLabel,
@@ -3716,6 +3718,7 @@ function createState() {
     setProblemsOpen,
     setProblemsScrollTop,
     setProvisioningLanguages,
+    setQuitConfirmOpen,
     setReferencesIndex,
     setReferencesScrollTop,
     setRepoRoot,

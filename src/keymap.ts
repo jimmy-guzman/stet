@@ -61,6 +61,17 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // The quit confirm owns the keyboard while open; ctrl-c above still exits
+      // Instantly, so the deliberate escape hatch is never gated behind it.
+      if (state.quitConfirmOpen()) {
+        if (key.name === "y" || key.name === "return") {
+          host.quit();
+        } else if (key.name === "escape" || key.name === "n") {
+          state.setQuitConfirmOpen(false);
+        }
+        return;
+      }
+
       if (state.helpDialogOpen()) {
         if (key.name === "escape" || key.name === "?" || key.name === "q") {
           state.setHelpDialogOpen(false);
@@ -458,13 +469,14 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "q") {
-        host.quit();
+        state.setQuitConfirmOpen(true);
         return;
       }
 
       if (key.name === "escape") {
-        // Esc closes panels innermost-first: the problems panel, then the
-        // Search view left on screen with the tree focused, then the app.
+        // Esc only ever closes: the problems panel, then the search view left on
+        // Screen with the tree focused, then nothing. Esc never quits; quitting is
+        // Q, which raises the confirm above.
         if (state.problemsOpen()) {
           state.setProblemsOpen(false);
           if (state.focusedPane() === "problems") {
@@ -476,7 +488,6 @@ export function createKeyHandler(host: HostEffects) {
           state.closeSearch();
           return;
         }
-        host.quit();
         return;
       }
 

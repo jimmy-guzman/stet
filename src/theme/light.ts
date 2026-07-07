@@ -33,7 +33,7 @@ export const lightTheme: Theme = {
     untracked: "#5c5e60",
   },
   success: "#257c3a",
-  surface: { base: "#f7f8fa", cursor: "#d5d8db", panel: "#e6e8ea" },
+  surface: { base: "#f7f8fa", cursor: "#d5d8db", panel: "#e6e8ea", scrim: "#1a1c1e" },
   syntax: {
     comment: "#7e8083",
     function: "#006aa5",

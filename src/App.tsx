@@ -10,6 +10,7 @@ import { FileCombobox } from "./components/FileCombobox";
 import { HeaderBar } from "./components/HeaderBar";
 import { HelpDialog } from "./components/HelpDialog";
 import { ProblemsPanel } from "./components/ProblemsPanel";
+import { QuitConfirm } from "./components/QuitConfirm";
 import { ReferencesOverlay } from "./components/ReferencesOverlay";
 import { ScopeMenu } from "./components/ScopeMenu";
 import { Sidebar } from "./components/Sidebar";
@@ -192,6 +193,9 @@ export function App() {
       </Show>
       <Show when={state.helpDialogOpen()}>
         <HelpDialog />
+      </Show>
+      <Show when={state.quitConfirmOpen()}>
+        <QuitConfirm />
       </Show>
     </box>
   );

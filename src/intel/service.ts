@@ -113,6 +113,10 @@ export const IntelLive = Layer.effect(
     const hoverCache = makeIntelCache<HoverSegment[]>(256);
     const symbolCache = makeIntelCache<NormalizedSymbol[]>(256);
 
+    // Bumped on every invalidate so a pull whose LSP round-trip straddled the invalidate does not
+    // Re-store a now-stale result (it may have read pre-edit content).
+    let generation = 0;
+
     // Serve a cached reply, or run the pull and store a non-empty result. An empty reply is never
     // Cached: it may be a transient miss (server still loading or briefly unavailable), and the
     // Content-change invalidation never fires for that, so caching it would strand the caret on
@@ -126,10 +130,13 @@ export const IntelLive = Layer.effect(
       if (hit !== undefined) {
         return Effect.succeed(hit);
       }
+      const started = generation;
       return run.pipe(
         Effect.tap((result) =>
           Effect.sync(() => {
-            if (result.length > 0) {
+            // Skip storing when an invalidate landed while this pull was in flight: the result may
+            // Reflect pre-edit content, so caching it would strand a stale entry until the next edit.
+            if (result.length > 0 && generation === started) {
               cache.set(key, result);
             }
           }),
@@ -370,6 +377,7 @@ export const IntelLive = Layer.effect(
         ),
       invalidate: (repoRoot, paths) =>
         Effect.sync(() => {
+          generation += 1;
           for (const cache of [locationCache, hoverCache, symbolCache]) {
             if (paths.length === 0) {
               cache.invalidateRepo(repoRoot);
@@ -423,15 +431,19 @@ export const IntelLive = Layer.effect(
           ),
         ),
       warmHold: (repoRoot, path) => {
-        const hold = (): Effect.Effect<never, never, Scope.Scope> =>
+        const hold = (attempt: number): Effect.Effect<never, never, Scope.Scope> =>
           Effect.gen(function* warm() {
             const handle = yield* firstCapableServer(repoRoot, path, "definition");
             if (handle === undefined) {
               // No intel server yet: it may still be installing on first launch, or a transient
-              // Acquire miss. Wait and retry rather than parking forever, so the hold establishes
-              // Once the server becomes available and keeps it warm for the rest of the session.
-              yield* Effect.sleep("3 seconds");
-              return yield* hold();
+              // Acquire miss, so retry with backoff rather than parking immediately. But a genuinely
+              // Absent server (offline, `--no-lsp-download`, unsupported language) is never coming,
+              // So give up after a bounded window (~90s) and park instead of spinning all session.
+              if (attempt >= 5) {
+                return yield* Effect.never;
+              }
+              yield* Effect.sleep(3000 * 2 ** attempt);
+              return yield* hold(attempt + 1);
             }
             const absolute = join(repoRoot, path);
             const text = yield* Effect.promise(() =>
@@ -468,7 +480,7 @@ export const IntelLive = Layer.effect(
             // Then reaps the server only once nothing else holds it.
             return yield* Effect.never;
           });
-        return hold();
+        return hold(0);
       },
     };
   }),

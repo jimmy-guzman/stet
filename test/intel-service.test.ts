@@ -156,6 +156,48 @@ test("definition caches its reply so a repeat issues no second request, and inva
   );
 });
 
+test("a pull whose response straddles an invalidate is not cached (generation guard)", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },
+    async (dir) => {
+      const log: Recorded[] = [];
+      const targetUri = pathToFileURL(join(dir, "src/b.ts")).href;
+      // The server holds its definition reply until the test releases the gate, standing in for an
+      // LSP round-trip that is still in flight when the agent's edit invalidates the cache.
+      const gate = await Effect.runPromise(Deferred.make<void>());
+      const ts = handle(
+        ["definition"],
+        (method) =>
+          method === "textDocument/definition"
+            ? Deferred.await(gate).pipe(Effect.as({ range: definitionRange, uri: targetUri }))
+            : Effect.succeed(null),
+        log,
+      );
+      const definitions = (entry: Recorded) => entry.method === "textDocument/definition";
+
+      await Effect.runPromise(
+        Intel.pipe(
+          Effect.flatMap((intel) =>
+            Effect.gen(function* race() {
+              const fiber = yield* Effect.forkChild(
+                intel.definition(dir, "src/a.ts", { character: 6, line: 0 }),
+              );
+              // An edit lands (invalidate) while the pull is blocked, then the server answers.
+              yield* intel.invalidate(dir, []);
+              yield* Deferred.succeed(gate, undefined);
+              yield* Fiber.join(fiber);
+              // The straddling result was dropped, not stored: the repeat re-queries the server.
+              yield* intel.definition(dir, "src/a.ts", { character: 6, line: 0 });
+              expect(log.filter(definitions)).toHaveLength(2);
+            }),
+          ),
+          Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+        ),
+      );
+    },
+  );
+});
+
 test("definition waits for project load before requesting", async () => {
   await withRepo(
     { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },

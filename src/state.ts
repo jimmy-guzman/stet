@@ -2157,26 +2157,35 @@ function createState() {
   let intelController: AbortController | undefined;
 
   // Keep the intel-capable server for the viewed repo warm across the whole session so the first
-  // Intel action never pays a cold spawn plus project load (the stall). Keyed on the repo and its
-  // Intel language, not the file: the hold establishes on the first capable file view and persists
-  // Across every later file switch and pause (two files in one repo share the pool key, so the
-  // Process is never reaped between them). A worktree switch re-keys `repoRoot` and releases the old
-  // Server; quit disposes the root. `Effect.scoped` holds the acquire until the abort interrupts the
-  // Never-resolving fiber, at which point the scope closes and the pool reference drops.
-  const warmLanguage = createMemo(() => intelLanguage(selectedPath() ?? "", repoRoot()));
-  createEffect(() => {
+  // Intel action never pays a cold spawn plus project load (the stall). The seed latches to the most
+  // Recent intel-capable file in the current repo and stays put across non-code detours (a README,
+  // JSON, an image), so browsing one of those never tears the hold down and lets the 30s idle TTL
+  // Reap the server. It resets when the repo changes; a worktree switch re-keys the seed and releases
+  // The old server, quit disposes the root. `Effect.scoped` holds the acquire until the abort
+  // Interrupts the never-resolving fiber, at which point the scope closes and the pool reference drops.
+  const warmSeed = createMemo<{ root: string; path: string } | undefined>((prev) => {
     const root = repoRoot();
-    const language = warmLanguage();
-    if (root === "" || language === undefined) {
-      return;
+    if (root === "") {
+      return undefined;
     }
-    const seedPath = untrack(selectedPath);
-    if (seedPath === undefined) {
+    // Already latched for this repo: keep the seed (and stop tracking selectedPath) so non-code
+    // Files don't churn or drop the hold.
+    if (prev?.root === root) {
+      return prev;
+    }
+    const path = selectedPath();
+    return path !== undefined && intelLanguage(path, root) !== undefined
+      ? { path, root }
+      : undefined;
+  });
+  createEffect(() => {
+    const seed = warmSeed();
+    if (seed === undefined) {
       return;
     }
     const controller = new AbortController();
     runtime
-      .runPromise(Effect.scoped(Intel.use((intel) => intel.warmHold(root, seedPath))), {
+      .runPromise(Effect.scoped(Intel.use((intel) => intel.warmHold(seed.root, seed.path))), {
         signal: controller.signal,
       })
       .catch(() => {});

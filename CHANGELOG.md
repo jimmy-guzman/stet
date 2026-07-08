@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.6.2...stet-v0.7.0) (2026-07-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **keymap:** 💥 `q` now opens a Quit alert dialog (confirm with `y`); esc no longer quits (it only closes panels); `ctrl-c` still exits instantly
+
+### Features
+
+* **icons:** ✨ add icons for CODEOWNERS, xls/xlsx, & cpuprofile ([#242](https://github.com/jimmy-guzman/stet/issues/242)) ([ec6e25c](https://github.com/jimmy-guzman/stet/commit/ec6e25c3a7651f603560bb85fdd9359973bfcda5))
+* **keymap:** ✨ confirm before quitting via an alert dialog ([#237](https://github.com/jimmy-guzman/stet/issues/237)) ([6482b1a](https://github.com/jimmy-guzman/stet/commit/6482b1a7b9b846c075d2e5098e9806d5287dbd37))
+
+
+### Bug Fixes
+
+* **intel:** 🐛 drive cache invalidation from watcher writes ([#243](https://github.com/jimmy-guzman/stet/issues/243)) ([c57e23e](https://github.com/jimmy-guzman/stet/commit/c57e23e86e33a283c7f029cbf3b6b10444d5a9ca)), closes [#230](https://github.com/jimmy-guzman/stet/issues/230)
+
 ## [0.6.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.6.1...stet-v0.6.2) (2026-07-07)
 
 

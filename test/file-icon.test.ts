@@ -101,6 +101,7 @@ describe("fileIcon", () => {
     expect(fileIcon("build.gradle")).toBe("\u{e7f2}");
     expect(fileIcon("settings.gradle")).toBe("\u{e7f2}");
     expect(fileIcon("gradlew")).toBe("\u{e7f2}");
+    expect(fileIcon("gradle-wrapper.properties")).toBe("\u{e7f2}");
     expect(fileIcon("pom.xml")).toBe("\u{e674}");
     // Build.gradle.kts gets the Gradle glyph, not the .kts kotlin glyph.
     expect(fileIcon("build.gradle.kts")).toBe("\u{e7f2}");

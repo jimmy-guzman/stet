@@ -102,8 +102,8 @@ fi
 filename="$APP-$os-$arch.tar.gz"
 
 if [ -n "$requested_version" ]; then
-  url="https://github.com/$REPO/releases/download/v$requested_version/$filename"
-  sums_url="https://github.com/$REPO/releases/download/v$requested_version/SHA256SUMS"
+  url="https://github.com/$REPO/releases/download/stet-v$requested_version/$filename"
+  sums_url="https://github.com/$REPO/releases/download/stet-v$requested_version/SHA256SUMS"
 else
   url="https://github.com/$REPO/releases/latest/download/$filename"
   sums_url="https://github.com/$REPO/releases/latest/download/SHA256SUMS"

@@ -1,0 +1,10 @@
+{
+  "title": "Guides",
+  "pages": [
+    "reading-files-and-diffs",
+    "search-and-navigation",
+    "code-intelligence",
+    "scopes-and-worktrees",
+    "themes"
+  ]
+}

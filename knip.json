@@ -1,6 +1,11 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "tags": ["-lintignore"],
-  "entry": ["script/stet-launcher.cjs", "test/**/*.{ts,tsx}"],
-  "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}", "script/**/*.{ts,cjs}"]
+  "ignoreWorkspaces": ["docs"],
+  "workspaces": {
+    ".": {
+      "entry": ["script/stet-launcher.cjs", "test/**/*.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}", "script/**/*.{ts,cjs}"]
+    }
+  }
 }

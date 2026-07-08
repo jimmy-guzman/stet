@@ -1,7 +1,8 @@
 /**
  * The one keybindings registry: the source of truth for the in-app `?` overlay (`HelpDialog`) and,
  * via `script/gen-docs-keys.ts`, the docs keybindings reference. Editing here and running `bun run
- * gen:keys` keeps them in lockstep; `test/docs-keybindings.test.ts` fails the build if they drift.
+ * gen:keys` keeps them in lockstep; `bun run gen:keys --check` (in `docs:check`) fails the build if
+ * they drift.
  */
 export const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[] = [
   {

@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/oxlint/configuration_schema.json",
+  "extends": ["../.oxlintrc.json"],
+  "plugins": ["typescript", "react", "jsx-a11y", "import"],
+  "categories": {
+    "correctness": "error",
+    "style": "off"
+  },
+  "rules": {
+    "import/no-unassigned-import": "off",
+    "new-cap": ["error", { "capIsNewExceptions": ["Geist", "Geist_Mono"] }],
+    "react/react-in-jsx-scope": "off"
+  },
+  "ignorePatterns": [".next", ".source", "out", "next-env.d.ts"]
+}

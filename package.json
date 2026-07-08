@@ -8,15 +8,22 @@
   "bin": {
     "stet": "./src/main.tsx"
   },
+  "workspaces": [
+    "docs"
+  ],
   "type": "module",
   "scripts": {
     "build": "bun run script/build.ts --single --skip-install",
     "build:dist": "bun script/build.ts",
     "check": "bun run lint && bun run format:check && bun test && bun run typecheck && bun run knip",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "docs:build": "bun run --cwd docs build",
+    "docs:check": "bun run gen:keys --check && bun run --cwd docs check",
+    "docs:dev": "bun run --cwd docs dev",
+    "gen:keys": "bun run script/gen-docs-keys.ts",
+    "format": "oxfmt --disable-nested-config",
+    "format:check": "oxfmt --check --disable-nested-config",
+    "lint": "oxlint --disable-nested-config",
+    "lint:fix": "oxlint --fix --disable-nested-config",
     "prepare": "effect-language-service patch",
     "screenshots": "bun run script/screenshots.ts",
     "stet": "bun run src/main.tsx",

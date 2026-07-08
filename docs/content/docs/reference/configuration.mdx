@@ -1,0 +1,85 @@
+---
+title: Configuration
+description: Set a permanent theme and editor for stet through an optional config file.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Configuration is optional. Without it, stet follows your terminal's light and
+dark appearance and uses sensible defaults.
+
+## Location
+
+stet reads its config once at startup from:
+
+```
+~/.config/stet/config.jsonc
+```
+
+`$XDG_CONFIG_HOME` is honored, and `config.json` works too. Both are parsed as
+JSONC, so comments and trailing commas are allowed.
+
+<Callout>
+  A malformed or invalid config never blocks startup: stet falls back to defaults and shows a
+  notice.
+</Callout>
+
+## Editor and IDE
+
+Use `editor` and `ide` to set persistent command templates for the `e` key
+(terminal editor) and the `o` key (GUI / IDE). Both use `{file}` and `{line}` as
+placeholders; `{line}` is omitted automatically when no cursor line is
+available.
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "editor": "nvim +{line} {file}",
+  "ide": "code --goto {file}:{line}",
+}
+```
+
+Without a config value, each key falls back to `STET_EDITOR` / `STET_IDE`, then
+`$EDITOR` / `$VISUAL`, then `vim` (editor only); `o` does nothing if nothing is
+configured. A bare editor name with no `{file}` is expanded to a known template
+(`nvim` becomes `nvim +{line} {file}`, `code` becomes `code --goto
+{file}:{line}`, and so on). Templates are split on whitespace, so an editor
+binary path with spaces is not supported.
+
+## Themes
+
+Define themes under `themes` and pick one with `theme`. `theme` is either a
+single theme name, or a `{ "dark": ..., "light": ... }` pair that follows the
+terminal live: flip your terminal's appearance and stet re-themes.
+
+A theme is a full set of `#rrggbb` tokens, or `{ "base": <name>, ... }` that
+inherits another theme and overrides only the tokens you name. Its `"syntax"` is
+a bundled [Shiki](https://shiki.style/) theme name, or an object overriding
+individual tokens (`keyword`, `string`, and so on).
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  // follow the terminal, with a custom theme on each side
+  "theme": { "dark": "my-dark", "light": "my-light" },
+  "themes": {
+    "my-dark": { "base": "dark", "accent": { "primary": "#ffa7d9" } },
+    "my-light": { "base": "light", "accent": { "primary": "#b4267a" } },
+    "mocha": { "base": "dark", "syntax": "catppuccin-mocha" }, // stet chrome, Catppuccin code
+    "tweaked": { "base": "dark", "syntax": { "keyword": "#ff8800" } }, // one token changed
+  },
+}
+```
+
+The built-in themes are `dark` and `light`. Press `t` in the app to open the
+theme switcher and try any theme without editing the config: filter by name,
+move or hover to preview the whole UI live, `enter` (or click) to apply, `esc`
+to revert. The switch lasts the session; the config file is where a theme is
+made permanent.
+
+## Environment variables
+
+| Variable               | Effect                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `STET_EDITOR`          | fallback command template for the `e` key                                    |
+| `STET_IDE`             | fallback command template for the `o` key                                    |
+| `STET_NO_LSP_DOWNLOAD` | do not auto-download a missing language server (same as `--no-lsp-download`) |
+| `XDG_CONFIG_HOME`      | base directory for the config file                                           |

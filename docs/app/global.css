@@ -1,0 +1,84 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@theme {
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+/* stet palette, mapped onto Fumadocs design tokens. Values come from
+   src/theme/dark.ts and src/theme/light.ts. */
+:root {
+  --color-fd-background: #f7f8fa;
+  --color-fd-foreground: #2a2e33;
+  --color-fd-muted: #e6e8ea;
+  --color-fd-muted-foreground: #707274;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #2a2e33;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #2a2e33;
+  --color-fd-border: #bbbec1;
+  --color-fd-primary: #d446a1;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #e6e8ea;
+  --color-fd-secondary-foreground: #2a2e33;
+  --color-fd-accent: #e6e8ea;
+  --color-fd-accent-foreground: #2a2e33;
+  --color-fd-ring: #d446a1;
+}
+
+.dark {
+  --color-fd-background: #101214;
+  --color-fd-foreground: #e9ebee;
+  --color-fd-muted: #191b1d;
+  --color-fd-muted-foreground: #848688;
+  --color-fd-popover: #191b1d;
+  --color-fd-popover-foreground: #e9ebee;
+  --color-fd-card: #191b1d;
+  --color-fd-card-foreground: #e9ebee;
+  --color-fd-border: #2c2e30;
+  --color-fd-primary: #ffa7d9;
+  --color-fd-primary-foreground: #101214;
+  --color-fd-secondary: #2c2e30;
+  --color-fd-secondary-foreground: #e9ebee;
+  --color-fd-accent: #2c2e30;
+  --color-fd-accent-foreground: #e9ebee;
+  --color-fd-ring: #ffa7d9;
+}
+
+/* Text selection uses stet's find-match color. */
+::selection {
+  background: #b4d6ef;
+}
+
+.dark ::selection {
+  background: #234155;
+}
+
+/* Terminal caret on the landing eyebrow. Blinks like a cursor, steady for
+   users who prefer reduced motion. */
+@keyframes stet-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.stet-caret {
+  animation: stet-caret-blink 1.05s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stet-caret {
+    animation: none;
+  }
+}

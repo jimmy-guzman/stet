@@ -1,0 +1,122 @@
+---
+title: Getting started
+description: Install stet and inspect an agent's changes from the next terminal pane.
+---
+
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+import { Callout } from "fumadocs-ui/components/callout";
+import { Card, Cards } from "fumadocs-ui/components/card";
+import { FileText, GitBranch, Palette, Search, Waypoints } from "lucide-react";
+
+`stet` is a read-only companion TUI for inspecting an agent's changes. The agent
+runs in one terminal pane; stet sits in the next one and answers the questions
+you would otherwise open an editor for: what files are in this repo, what
+changed, what was touched most recently, and whether there are errors in what
+changed.
+
+It shows you the repo, the diff, and the problems. It never reviews, approves,
+or talks to the agent. You decide what to say next.
+
+## What you can do
+
+<Cards>
+  <Card
+    icon={<FileText />}
+    title="Reading files & diffs"
+    href="/docs/guides/reading-files-and-diffs"
+  >
+    Read any file, view changes as diffs, fold by structure, and keep your place across tabs.
+  </Card>
+  <Card icon={<Search />} title="Search & navigation" href="/docs/guides/search-and-navigation">
+    Jump to any file, find within the open file, and search the whole repo.
+  </Card>
+  <Card icon={<Waypoints />} title="Code intelligence" href="/docs/guides/code-intelligence">
+    Go to definition, references, implementations, call hierarchy, hover, and problems.
+  </Card>
+  <Card icon={<GitBranch />} title="Scopes & worktrees" href="/docs/guides/scopes-and-worktrees">
+    Choose what the diff compares and switch between git worktrees in place.
+  </Card>
+  <Card icon={<Palette />} title="Themes" href="/docs/guides/themes">
+    Preview and switch themes live, then make one permanent in your config.
+  </Card>
+</Cards>
+
+## Install
+
+<Tabs items={["curl", "npm", "homebrew"]}>
+  <Tab value="curl">
+    A standalone binary for macOS and Linux. No runtime needed.
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/stet/main/install.sh | bash
+    ```
+
+  </Tab>
+  <Tab value="npm">
+    Works with npm, bun, pnpm, and yarn. Pulls a prebuilt binary.
+
+    ```sh
+    npm i -g @jimmy.codes/stet
+    ```
+
+  </Tab>
+  <Tab value="homebrew">
+    ```sh
+    brew install jimmy-guzman/tap/stet
+    ```
+  </Tab>
+</Tabs>
+
+## Usage
+
+Run `stet` inside any git repository.
+
+```sh
+stet            # whole repo, uncommitted vs HEAD
+stet main       # compare against another ref
+stet --staged   # start in the staged scope
+stet --unstaged # start in the unstaged scope
+stet --no-icons # plain tree without Nerd Font file-type icons
+stet --wrap     # wrap long lines in the viewer instead of scrolling them horizontally
+stet --editor "nvim +{line} {file}"       # terminal editor for the e key
+stet --ide    "code --goto {file}:{line}" # GUI/IDE for the o key
+```
+
+The git-backed file tree renders first. Diagnostics arrive later as decorations,
+so the basic view stays useful while checks are still running.
+
+<Callout title="Nerd Font icons">
+  The tree shows a file-type icon next to each file. These are [Nerd
+  Font](https://www.nerdfonts.com/) glyphs and only render with a Nerd Font selected in your
+  terminal; without one they appear as empty boxes, so pass `--no-icons` to fall back to a plain
+  tree.
+</Callout>
+
+Press `?` at any time to see every keybinding, or read the
+[keybindings reference](/docs/reference/keybindings). See
+[configuration](/docs/reference/configuration) to set a permanent theme and
+editor.
+
+## Upgrade
+
+```sh
+stet upgrade
+```
+
+Updates stet to the latest release using whichever channel it was installed
+through: a standalone install re-runs the install script, an npm install runs
+npm, and a Homebrew install runs `brew upgrade`. It checks the latest GitHub
+release first and reports `stet X.Y.Z is already up to date` without running
+anything when you are current.
+
+stet also checks for a newer release in the background while it runs, and prints
+a one-line notice on clean exit when one is available. The check is non-blocking
+and never interrupts the session.
+
+## Requirements
+
+- git
+- a clipboard tool for copy (`y`): `pbcopy` on macOS (built in), or `wl-copy`,
+  `xclip`, or `xsel` on Linux
+- a Nerd Font for the tree's file-type icons (optional; use `--no-icons`
+  without one)

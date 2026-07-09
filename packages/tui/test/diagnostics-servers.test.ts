@@ -10,24 +10,49 @@ import {
   intelLanguage,
   lspLanguageId,
   performHandshake,
+  registerLanguages,
   resolveServerCommand,
+  restoreLanguages,
   serversForPath,
   serversProviding,
+  snapshotLanguages,
 } from "@/diagnostics/servers";
 import type { LspConnection } from "@/diagnostics/transport";
 
-test("resolves a source file to every server that handles its extension", () => {
-  // Biome, oxlint, and typescript all claim the JS/TS family, so a code file runs through all three.
-  expect(serversForPath("src/a.tsx")).toEqual(["biome", "oxlint", "typescript"]);
-  expect(serversForPath("src/a.mjs")).toEqual(["biome", "oxlint", "typescript"]);
-  // Only biome claims css/graphql; the extension matcher includes it regardless of repo gating.
+test("resolves a source file to its language's servers in declared order", () => {
+  // The JS/TS family lists its canonical server first, then the linters that overlap it.
+  expect(serversForPath("src/a.tsx")).toEqual(["typescript", "oxlint", "biome"]);
+  expect(serversForPath("src/a.mjs")).toEqual(["typescript", "oxlint", "biome"]);
+  // Only biome claims css/graphql; the language matcher includes it regardless of repo gating.
   expect(serversForPath("src/a.css")).toEqual(["biome"]);
   // Json overlaps biome (biome only in a biome repo, the json server everywhere); yaml is disjoint.
-  expect(serversForPath("package.json")).toEqual(["biome", "json"]);
+  expect(serversForPath("package.json")).toEqual(["json", "biome"]);
   expect(serversForPath("config.yaml")).toEqual(["yaml"]);
   expect(serversForPath("config.yml")).toEqual(["yaml"]);
   expect(serversForPath("README.md")).toEqual([]);
   expect(serversForPath("Makefile")).toEqual([]);
+});
+
+test("routes an exact filename ahead of its extension", () => {
+  const snapshot = snapshotLanguages();
+  try {
+    // A registered language can claim extensionless names (Dockerfile) and specific filenames that
+    // Would otherwise resolve through their extension (justfile.yaml here), like icons do.
+    registerLanguages({
+      docker: { extensions: {}, filenames: { Dockerfile: "dockerfile" }, servers: ["yaml"] },
+      just: { extensions: {}, filenames: { "justfile.yaml": "just" }, servers: ["nonexistent"] },
+    });
+    expect(serversForPath("services/api/Dockerfile")).toEqual(["yaml"]);
+    expect(lspLanguageId("services/api/Dockerfile")).toBe("dockerfile");
+    // The exact-name claim wins over the yaml extension the basename would otherwise match.
+    expect(lspLanguageId("justfile.yaml")).toBe("just");
+    // A server key the registry doesn't know is dropped rather than acquired.
+    expect(serversForPath("justfile.yaml")).toEqual([]);
+    // The dot in a directory name never reads as an extension.
+    expect(serversForPath("src/v1.2/README")).toEqual([]);
+  } finally {
+    restoreLanguages(snapshot);
+  }
 });
 
 test("activeServersForPath gates biome on a repo's biome config", () => {
@@ -39,10 +64,10 @@ test("activeServersForPath gates biome on a repo's biome config", () => {
 
   try {
     // A biome.json (or biome.jsonc) opts the repo in; biome then handles the JS/TS family and css.
-    expect(activeServersForPath("src/a.ts", withConfig)).toEqual(["biome", "oxlint", "typescript"]);
+    expect(activeServersForPath("src/a.ts", withConfig)).toEqual(["typescript", "oxlint", "biome"]);
     expect(activeServersForPath("src/a.css", withJsonc)).toEqual(["biome"]);
     // Without a biome config, biome stays off: oxlint/typescript still run, css has no server.
-    expect(activeServersForPath("src/a.ts", without)).toEqual(["oxlint", "typescript"]);
+    expect(activeServersForPath("src/a.ts", without)).toEqual(["typescript", "oxlint"]);
     expect(activeServersForPath("src/a.css", without)).toEqual([]);
   } finally {
     rmSync(withConfig, { force: true, recursive: true });

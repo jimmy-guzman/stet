@@ -20,6 +20,8 @@ const geistMonoPath = join(
   "../../node_modules/geist/dist/fonts/geist-mono/GeistMono-SemiBold.ttf",
 );
 
+let geistMonoPromise: Promise<Buffer> | undefined;
+
 /**
  * Satori ships no monospace face, so the letters sit in fixed cells rather than trusting the font
  * to advance evenly, and the strike is a div rather than an unreliably colored `text-decoration`.
@@ -43,7 +45,7 @@ const letters = [
 ];
 
 export default async function Image() {
-  const geistMono = await readFile(geistMonoPath);
+  const geistMono = await (geistMonoPromise ??= readFile(geistMonoPath));
 
   return new ImageResponse(
     <div

@@ -12,7 +12,10 @@ import { $ } from "bun";
 
 import pkg from "../package.json";
 
-const dir = path.resolve(import.meta.dirname, "..");
+// Repo root, not the package: the hoisted node_modules lives here, `dist/` stays
+// Here (release.yml uploads dist/*), and the parser-worker define below must remain
+// A node_modules-relative path for the /$bunfs/root/ mapping to hold.
+const dir = path.resolve(import.meta.dirname, "../../..");
 process.chdir(dir);
 
 const single = process.argv.includes("--single");
@@ -44,7 +47,9 @@ await $`rm -rf dist`;
 
 if (!skipInstall) {
   // Materialize every platform's native @opentui core so any target can embed its library
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`;
+  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`.cwd(
+    "packages/tui",
+  );
 }
 
 const parserWorker = fs.realpathSync(
@@ -76,13 +81,13 @@ for (const target of targets) {
       OTUI_TREE_SITTER_WORKER_PATH: JSON.stringify(bunfsRoot + workerRelativePath),
       ...(target.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify("glibc") } : {}),
     },
-    entrypoints: ["./src/main.tsx", parserWorker],
+    entrypoints: ["./packages/tui/src/main.tsx", parserWorker],
     format: "esm",
     minify: true,
     plugins: [solidPlugin],
     sourcemap: "none",
     splitting: true,
-    tsconfig: "./tsconfig.json",
+    tsconfig: "./packages/tui/tsconfig.json",
   });
 
   if (!result.success) {
@@ -123,7 +128,7 @@ for (const target of targets) {
 
 if (!single) {
   await $`mkdir -p dist/${pkg.name}/bin`;
-  await $`cp script/stet-launcher.cjs dist/${pkg.name}/bin/stet.js`;
+  await $`cp packages/tui/script/stet-launcher.cjs dist/${pkg.name}/bin/stet.js`;
   await $`cp README.md LICENSE dist/${pkg.name}/`;
   await Bun.file(`dist/${pkg.name}/package.json`).write(
     JSON.stringify(

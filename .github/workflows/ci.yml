@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   check:
     strategy:
@@ -21,7 +24,7 @@ jobs:
       - run: bun run check
       - run: bun run build
       - name: compile smoke (current platform)
-        run: bun script/build.ts --single --skip-install
+        run: bun packages/tui/script/build.ts --single --skip-install
 
   docs:
     runs-on: ubuntu-latest

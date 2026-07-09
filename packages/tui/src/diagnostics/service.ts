@@ -282,11 +282,17 @@ export const DiagnosticsLive = Layer.effect(
           if (outcome.kind === "diagnostics") {
             const { diagnostics, failed, pending, resolved } = outcome.collected;
             const map = stateForResolvedChecker("diagnostics", resolved, diagnostics, repoRoot);
+            // A pending/failed file may already carry findings from another file's related
+            // Report; those are real results, so they win (findings outrank both, per statusRank).
             for (const file of pending) {
-              map.set(file.path, { count: 0, diagnostics: [], status: "pending" });
+              if (map.get(file.path)?.status !== "findings") {
+                map.set(file.path, { count: 0, diagnostics: [], status: "pending" });
+              }
             }
             for (const { file, message } of failed) {
-              map.set(file.path, { count: 0, diagnostics: [], message, status: "failed" });
+              if (map.get(file.path)?.status !== "findings") {
+                map.set(file.path, { count: 0, diagnostics: [], message, status: "failed" });
+              }
             }
             return map;
           }

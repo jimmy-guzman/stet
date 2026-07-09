@@ -233,7 +233,11 @@ export function makeTransport(
       channel.send({ jsonrpc: "2.0", method, params });
 
     // The pull bucket: per uri, the last full report's items and the resultId to echo back. Only
-    // Documents this client pulls enter it, so it stays bounded by the changed set.
+    // Documents this client pulls enter it, so it stays bounded by the changed set. Commits need no
+    // Per-uri ordering: each run renders from its own answers (the bucket only feeds the next
+    // `previousResultId`), every commit is an atomic (resultId, items) pair the server itself
+    // Issued, and echoing an older pair at worst makes the server answer `full` (an `unchanged` is
+    // The server asserting the held pair is still current, so its reuse is correct by definition).
     const pulled = new Map<string, { resultId?: string; items: unknown[] }>();
 
     const pullDiagnostics = (uri: string) =>

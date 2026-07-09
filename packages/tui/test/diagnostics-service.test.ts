@@ -451,3 +451,41 @@ test("a pull answer's related documents surface findings for their own paths", a
     expect(state.get("other.yaml")).toMatchObject({ count: 1, status: "findings" });
   });
 });
+
+test("a related report's findings survive the named file's own pull failing", async () => {
+  await withRepo({ "config.yaml": "a: 1\n", "other.yaml": "b: 2\n" }, async (dir) => {
+    const configUri = pathToFileURL(join(dir, "config.yaml")).href;
+    const otherUri = pathToFileURL(join(dir, "other.yaml")).href;
+    // Config.yaml's pull succeeds and carries a related report naming other.yaml; other.yaml's own
+    // Pull is rejected. The real cross-file finding must not be wiped by the failure placeholder.
+    const connection: LspConnection = {
+      clearPublished: () => Effect.void,
+      closeDocument: () => Effect.void,
+      closed: Effect.sync(() => false),
+      notify: () => Effect.void,
+      openDocument: () => Effect.void,
+      published: Effect.sync(() => new Map<string, unknown[]>()),
+      pullDiagnostics: (uri) =>
+        uri === configUri
+          ? Effect.succeed({ items: [], related: new Map([[otherUri, [anError]]]) })
+          : Effect.fail(
+              new LspRequestError({ message: "boom", method: "textDocument/diagnostic" }),
+            ),
+      request: () => Effect.succeed(null),
+      whenProjectLoaded: Effect.void,
+    };
+    const handle: ServerHandle = {
+      capabilities: new Set<Capability>(["pullDiagnostics"]),
+      connection,
+    };
+
+    const state = await runDiagnostics(
+      dir,
+      [changed("config.yaml"), changed("other.yaml")],
+      fakeServers({ yaml: handle }),
+    );
+
+    expect(state.get("config.yaml")).toMatchObject({ count: 0, status: "clean" });
+    expect(state.get("other.yaml")).toMatchObject({ count: 1, status: "findings" });
+  });
+});

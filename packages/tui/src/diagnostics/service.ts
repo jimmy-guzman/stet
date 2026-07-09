@@ -14,7 +14,7 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Context, Effect, Exit, Layer, Scope, Stream } from "effect";
+import { Context, Effect, Exit, Layer, Scope, Semaphore, Stream } from "effect";
 
 import type { ChangedFile } from "@/git/model";
 
@@ -139,6 +139,7 @@ function pullDiagnostics(handle: ServerHandle, opened: { file: ChangedFile; uri:
  */
 interface Keeper {
   readonly handle: ServerHandle;
+  readonly language: string;
   readonly repoRoot: string;
   readonly scope: Scope.Closeable;
   readonly sent: Map<string, ReturnType<typeof Bun.hash>>;
@@ -302,11 +303,25 @@ export const DiagnosticsLive = Layer.effect(
         Effect.andThen(Effect.sync(() => keepers.delete(key))),
       );
 
+    // Per-key locks serializing keeper acquisition: a run superseding a still-interrupting one
+    // Could otherwise pass the `keepers.get` check concurrently and create two keepers for one
+    // Key, the overwritten one leaking its pool reference and document refcounts forever.
+    const keeperLocks = new Map<string, Semaphore.Semaphore>();
+    const keeperLock = (key: string) => {
+      const existing = keeperLocks.get(key);
+      if (existing !== undefined) {
+        return existing;
+      }
+      const created = Semaphore.makeUnsafe(1);
+      keeperLocks.set(key, created);
+      return created;
+    };
+
     // One keeper per (server, repo): reused warm across runs, rebuilt (documents reopened fresh by
     // The next sync, since `sent` starts empty) when the pooled server died in between.
-    const acquireKeeper = (language: string, repoRoot: string) =>
-      Effect.gen(function* acquire() {
-        const key = `${language} ${repoRoot}`;
+    const acquireKeeper = (language: string, repoRoot: string) => {
+      const key = `${language} ${repoRoot}`;
+      return Effect.gen(function* acquire() {
         const existing = keepers.get(key);
         if (existing !== undefined) {
           const isClosed = yield* existing.handle.connection.closed;
@@ -343,17 +358,21 @@ export const DiagnosticsLive = Layer.effect(
             ),
           ),
         );
-        const created: Keeper = { handle, repoRoot, scope, sent };
+        const created: Keeper = { handle, language, repoRoot, scope, sent };
         keepers.set(key, created);
         return created;
-      });
+      }).pipe(Semaphore.withPermit(keeperLock(key)));
+    };
 
-    // A run against a different repo (a worktree switch) releases the previous repo's keepers, so
-    // Its servers close their documents and idle out of the pool instead of staying warm forever.
-    const releaseOtherRepos = (repoRoot: string) =>
+    // Every run reconciles the resident keepers: one for a different repo (a worktree switch) or
+    // For a language whose changed set dropped to zero is released, so its documents close and its
+    // Server idles out of the pool instead of holding files no run tracks anymore.
+    const releaseStaleKeepers = (repoRoot: string, active: ReadonlySet<string>) =>
       Effect.suspend(() =>
         Effect.forEach(
-          [...keepers.entries()].filter(([, keeper]) => keeper.repoRoot !== repoRoot),
+          [...keepers.entries()].filter(
+            ([, keeper]) => keeper.repoRoot !== repoRoot || !active.has(keeper.language),
+          ),
           ([key, keeper]) => closeKeeper(key, keeper),
           { discard: true },
         ),
@@ -498,7 +517,7 @@ export const DiagnosticsLive = Layer.effect(
       const languages = [...new Set(changed.flatMap((file) => serversFor(file.path)))];
       if (languages.length === 0) {
         return Stream.fromEffect(
-          releaseOtherRepos(repoRoot).pipe(
+          releaseStaleKeepers(repoRoot, new Set()).pipe(
             Effect.as({ checker: "diagnostics", state: noServer } satisfies CheckerUpdate),
           ),
         );
@@ -542,7 +561,9 @@ export const DiagnosticsLive = Layer.effect(
       );
 
       // The repo sweep runs once, before any keeper for this run is acquired.
-      return Stream.fromEffect(releaseOtherRepos(repoRoot)).pipe(Stream.flatMap(() => merged));
+      return Stream.fromEffect(releaseStaleKeepers(repoRoot, new Set(languages))).pipe(
+        Stream.flatMap(() => merged),
+      );
     }
 
     return { run };

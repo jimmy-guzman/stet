@@ -726,3 +726,57 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
     expect(acquires).toBe(2);
   });
 });
+
+test("releases a language's keeper when its changed set drops to zero", async () => {
+  await withRepo({ "config.yaml": "a: 1\n", "data.json": "{}\n" }, async (dir) => {
+    const yaml = keeperProbe();
+    const json = keeperProbe();
+    const { captured, states } = await runSequence(
+      [
+        { files: [changed("config.yaml"), changed("data.json")], repoRoot: dir },
+        { files: [changed("data.json")], repoRoot: dir },
+      ],
+      fakeServers({ json: json.handle, yaml: yaml.handle }),
+      () => ({ jsonCloses: [...json.closes], yamlCloses: [...yaml.closes] }),
+    );
+
+    // The yaml keeper released its document (nothing tracks it anymore); json's stayed held.
+    expect(captured.yamlCloses).toEqual([pathToFileURL(join(dir, "config.yaml")).href]);
+    expect(captured.jsonCloses).toEqual([]);
+    expect(states[1]?.get("data.json")).toMatchObject({ status: "clean" });
+  });
+});
+
+test("concurrent runs share one keeper instead of racing two into existence", async () => {
+  await withRepo({ "config.yaml": "a: 1\n" }, async (dir) => {
+    const probe = keeperProbe();
+    let acquires = 0;
+    // An acquire slow enough that both concurrent runs pass the keeper-cache miss before either
+    // Finishes creating; the per-key lock must serialize them onto one keeper.
+    const slowServers = Layer.succeed(LanguageServers)({
+      acquire: () =>
+        Effect.sync(() => {
+          acquires += 1;
+        }).pipe(Effect.andThen(Effect.sleep("50 millis")), Effect.as(probe.handle)),
+    });
+
+    const files = [changed("config.yaml")];
+    const captured = await Effect.runPromise(
+      Diagnostics.pipe(
+        Effect.flatMap((diagnostics) =>
+          Effect.all(
+            [
+              Stream.runDrain(diagnostics.run(dir, files)),
+              Stream.runDrain(diagnostics.run(dir, files)),
+            ],
+            { concurrency: "unbounded" },
+          ).pipe(Effect.map(() => ({ acquires, opens: [...probe.opens] }))),
+        ),
+        Effect.provide(DiagnosticsLive.pipe(Layer.provide(slowServers))),
+      ),
+    );
+
+    expect(captured.acquires).toBe(1);
+    expect(captured.opens).toEqual([pathToFileURL(join(dir, "config.yaml")).href]);
+  });
+});

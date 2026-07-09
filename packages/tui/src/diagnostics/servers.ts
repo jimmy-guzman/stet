@@ -253,21 +253,19 @@ export function serversForPath(path: string): string[] {
  */
 export function activeLanguages(repoRoot: string): Set<string> {
   return new Set(
-    Object.keys(registry).filter((language) => registry[language]?.detect?.(repoRoot) ?? true),
+    Object.keys(registry).filter((server) => registry[server]?.detect?.(repoRoot) ?? true),
   );
 }
 
 /** The file's language servers whose repo gate (if any) accepts `repoRoot`. */
 export function activeServersForPath(path: string, repoRoot: string): string[] {
   const active = activeLanguages(repoRoot);
-  return serversForPath(path).filter((language) => active.has(language));
+  return serversForPath(path).filter((server) => active.has(server));
 }
 
 /** Servers for this path that statically declare they can answer `capability`, in declared order. */
 export function serversProviding(path: string, capability: Capability): string[] {
-  return serversForPath(path).filter((language) =>
-    registry[language]?.provides.includes(capability),
-  );
+  return serversForPath(path).filter((server) => registry[server]?.provides.includes(capability));
 }
 
 const intelCapabilities = new Set<Capability>([
@@ -286,8 +284,8 @@ const intelCapabilities = new Set<Capability>([
  * than paying a cold spawn plus project load.
  */
 export function intelLanguage(path: string, repoRoot: string): string | undefined {
-  return activeServersForPath(path, repoRoot).find((language) =>
-    (registry[language]?.provides ?? []).some((capability) => intelCapabilities.has(capability)),
+  return activeServersForPath(path, repoRoot).find((server) =>
+    (registry[server]?.provides ?? []).some((capability) => intelCapabilities.has(capability)),
   );
 }
 

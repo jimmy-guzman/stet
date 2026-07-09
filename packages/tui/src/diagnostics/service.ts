@@ -1,13 +1,12 @@
 /**
- * Collects diagnostics language servers push (`textDocument/publishDiagnostics`) and projects them
- * onto the keyed `CheckerState` the UI already renders. Per run: changed files are grouped by
- * language, each group's server is acquired from the warm pool, every file is opened with its
- * on-disk text, the run waits for the server to publish, then snapshots and closes. Every failure
- * degrades a file to `failed`/`unavailable` rather than erroring the stream, so a server hiccup
- * never blanks the panel. A file the server has not published for yet stays `pending`, never
- * falsely `clean` (the SPEC invariant). (Push is the baseline most servers implement, incl.
- * typescript- language-server; pull diagnostics are a deferred enhancement for servers that
- * advertise them.)
+ * Collects language-server diagnostics and projects them onto the keyed `CheckerState` the UI
+ * already renders. Per run: changed files are grouped by language, each group's server is acquired
+ * from the warm pool, and every file is opened with its on-disk text. Retrieval is hybrid: a server
+ * advertising `diagnosticProvider` is pulled (one `textDocument/diagnostic` per file, push bucket
+ * unioned in), every other server keeps the push path (wait for `publishDiagnostics`, then
+ * snapshot); both close the docs after. Every failure degrades a file to `failed`/`unavailable`
+ * rather than erroring the stream, so a server hiccup never blanks the panel. A file the server has
+ * not answered for stays `pending`, never falsely `clean` (the SPEC invariant).
  */
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -71,12 +70,63 @@ function settle(connection: LspConnection, uris: string[], attempt = 0): Effect.
   );
 }
 
+// One pull request's ceiling: past it the file stays pending and the next run retries, so a cold
+// Server that needs longer to index (rust-analyzer on a big crate) converges without wedging a run.
+const PULL_TIMEOUT = "10 seconds";
+const PULL_CONCURRENCY = 8;
+
 interface Collected {
   diagnostics: Diagnostic[];
-  /** Files the server published for (clean or findings). */
+  /** Files the server answered for (clean or findings). */
   resolved: ChangedFile[];
-  /** Files still awaiting a first publish (cold start, slow server) — render as pending. */
+  /** Files still awaiting an answer (cold start, slow server) — render as pending. */
   pending: ChangedFile[];
+  /** Files whose pull the server rejected outright; render as failed with its message. */
+  failed: { file: ChangedFile; message: string }[];
+}
+
+/**
+ * The pull path: one `textDocument/diagnostic` round trip per opened file, no settle heuristics.
+ * The push bucket is still read and unioned per uri, because a hybrid server (rust-analyzer)
+ * answers pulls with its native findings while pushing its cargo-check ones. A timeout leaves the
+ * file pending (the next run retries); a server error marks it failed, never falsely clean.
+ */
+function pullDiagnostics(handle: ServerHandle, opened: { file: ChangedFile; uri: string }[]) {
+  return Effect.gen(function* pull() {
+    const outcomes = yield* Effect.forEach(
+      opened,
+      ({ file, uri }) =>
+        handle.connection.pullDiagnostics(uri).pipe(
+          Effect.timeout(PULL_TIMEOUT),
+          Effect.map((answer) => ({ answer, file, kind: "resolved" as const, uri })),
+          Effect.catchTag("TimeoutError", () => Effect.succeed({ file, kind: "pending" as const })),
+          Effect.catchTag("LspRequestError", (error) =>
+            Effect.succeed({ file, kind: "failed" as const, message: error.message }),
+          ),
+        ),
+      { concurrency: PULL_CONCURRENCY },
+    );
+    const map = yield* handle.connection.published;
+
+    const collected: Collected = { diagnostics: [], failed: [], pending: [], resolved: [] };
+    for (const outcome of outcomes) {
+      if (outcome.kind === "pending") {
+        collected.pending.push(outcome.file);
+        continue;
+      }
+      if (outcome.kind === "failed") {
+        collected.failed.push({ file: outcome.file, message: outcome.message });
+        continue;
+      }
+      collected.resolved.push(outcome.file);
+      const pushed = map.get(outcome.uri) ?? [];
+      collected.diagnostics.push(...mapItems([...outcome.answer.items, ...pushed], outcome.uri));
+      for (const [relatedUri, relatedItems] of outcome.answer.related) {
+        collected.diagnostics.push(...mapItems(relatedItems, relatedUri));
+      }
+    }
+    return collected;
+  });
 }
 
 function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: ChangedFile[]) {
@@ -109,6 +159,13 @@ function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: Chang
       opened.push({ file, uri });
     }
 
+    // A server that advertises pull answers request/response, no settle heuristics; every other
+    // Server keeps the push path: wait for its publishes, then snapshot.
+    if (handle.capabilities.has("pullDiagnostics")) {
+      const collected = yield* pullDiagnostics(handle, opened);
+      return { ...collected, pending: [...pending, ...collected.pending] } satisfies Collected;
+    }
+
     yield* settle(
       handle.connection,
       opened.map((entry) => entry.uri),
@@ -130,7 +187,7 @@ function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: Chang
       }
     }
 
-    return { diagnostics, pending, resolved };
+    return { diagnostics, failed: [], pending, resolved } satisfies Collected;
   }).pipe(
     Effect.ensuring(
       Effect.forEach(opened, (entry) => handle.connection.closeDocument(entry.uri), {
@@ -223,10 +280,13 @@ export const DiagnosticsLive = Layer.effect(
       return runLanguage(repoRoot, language, langFiles).pipe(
         Effect.map((outcome) => {
           if (outcome.kind === "diagnostics") {
-            const { diagnostics, pending, resolved } = outcome.collected;
+            const { diagnostics, failed, pending, resolved } = outcome.collected;
             const map = stateForResolvedChecker("diagnostics", resolved, diagnostics, repoRoot);
             for (const file of pending) {
               map.set(file.path, { count: 0, diagnostics: [], status: "pending" });
+            }
+            for (const { file, message } of failed) {
+              map.set(file.path, { count: 0, diagnostics: [], message, status: "failed" });
             }
             return map;
           }

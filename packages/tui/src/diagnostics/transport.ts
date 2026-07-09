@@ -27,9 +27,23 @@ interface TextDocument {
   readonly version: number;
 }
 
+/** One `textDocument/diagnostic` answer: the file's items plus any cross-file reports it carried. */
+interface PulledDiagnostics {
+  readonly items: unknown[];
+  /** Full `relatedDocuments` reports keyed by uri; per-answer data, deliberately not stored. */
+  readonly related: ReadonlyMap<string, unknown[]>;
+}
+
 export interface LspConnection {
   readonly request: (method: string, params?: unknown) => Effect.Effect<unknown, LspRequestError>;
   readonly notify: (method: string, params?: unknown) => Effect.Effect<void>;
+  /**
+   * One pull-diagnostics round trip for an open document, with `resultId` bookkeeping: the previous
+   * answer's id rides along as `previousResultId`, and an `unchanged` report resolves to the items
+   * cached from the last `full` one. The cache is the transport's because it must live exactly as
+   * long as the connection: a fresh server knows no prior resultId, a warm one honors it.
+   */
+  readonly pullDiagnostics: (uri: string) => Effect.Effect<PulledDiagnostics, LspRequestError>;
   /**
    * Refcounted `textDocument/didOpen`: sent only on the first holder of a uri (count 0→1); a later
    * holder reuses the already-open doc. Intel pulls and the diagnostics run share one connection,
@@ -64,9 +78,42 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+interface ParsedReport {
+  readonly kind: "full" | "unchanged";
+  readonly resultId?: string;
+  readonly items: unknown[];
+  readonly related: Map<string, unknown[]>;
+}
+
+// A DocumentDiagnosticReport: `full` carries items (and the resultId to send back next time),
+// `unchanged` asserts the previous resultId still holds. `relatedDocuments` nests one report per
+// Cross-file uri; only its `full` entries carry data, and the spec nests no further level.
+function parseDiagnosticReport(value: unknown): ParsedReport | undefined {
+  if (!isObject(value)) {
+    return undefined;
+  }
+  const resultId = typeof value.resultId === "string" ? { resultId: value.resultId } : {};
+  const related = new Map<string, unknown[]>();
+  if (isObject(value.relatedDocuments)) {
+    for (const [uri, report] of Object.entries(value.relatedDocuments)) {
+      if (isObject(report) && report.kind === "full" && Array.isArray(report.items)) {
+        related.set(uri, report.items);
+      }
+    }
+  }
+  if (value.kind === "full" && Array.isArray(value.items)) {
+    return { items: value.items, kind: "full", related, ...resultId };
+  }
+  if (value.kind === "unchanged") {
+    return { items: [], kind: "unchanged", related, ...resultId };
+  }
+  return undefined;
+}
+
 export function makeTransport(
   channel: LspTransportChannel,
   onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
+  onRefreshRequest?: Effect.Effect<void>,
 ) {
   return Effect.gen(function* makeTransportScope() {
     // Default answer for a server-to-client request: a null result, so a server that asks for
@@ -107,9 +154,16 @@ export function makeTransport(
             );
       }
       if (isJsonRpcRequest(message)) {
-        // Answer server-to-client requests so the server does not stall waiting on us; the handler
-        // (or the null default) decides the result.
         const { id } = message;
+        // A server nudging "re-pull your diagnostics" (rust-analyzer after a cargo check cycle):
+        // Answer immediately so it never stalls, then surface the nudge so the app re-runs checks.
+        if (message.method === "workspace/diagnostic/refresh") {
+          return channel
+            .send({ id, jsonrpc: "2.0", result: null })
+            .pipe(Effect.andThen(onRefreshRequest ?? Effect.void));
+        }
+        // Answer other server-to-client requests so the server does not stall waiting on us; the
+        // Handler (or the null default) decides the result.
         return respond(message.method, message.params).pipe(
           Effect.flatMap((result) => channel.send({ id, jsonrpc: "2.0", result })),
         );
@@ -178,6 +232,38 @@ export function makeTransport(
     const notify = (method: string, params?: unknown) =>
       channel.send({ jsonrpc: "2.0", method, params });
 
+    // The pull bucket: per uri, the last full report's items and the resultId to echo back. Only
+    // Documents this client pulls enter it, so it stays bounded by the changed set.
+    const pulled = new Map<string, { resultId?: string; items: unknown[] }>();
+
+    const pullDiagnostics = (uri: string) =>
+      Effect.suspend(() => {
+        const previous = pulled.get(uri);
+        return request("textDocument/diagnostic", {
+          textDocument: { uri },
+          ...(previous?.resultId === undefined ? {} : { previousResultId: previous.resultId }),
+        }).pipe(
+          Effect.flatMap((result) => {
+            const report = parseDiagnosticReport(result);
+            if (report === undefined) {
+              return Effect.fail(
+                new LspRequestError({
+                  message: "malformed diagnostic report",
+                  method: "textDocument/diagnostic",
+                }),
+              );
+            }
+            const items = report.kind === "full" ? report.items : (previous?.items ?? []);
+            // An `unchanged` without the (spec-required) resultId keeps the stored one; a `full`
+            // Without one means the server issues no ids, so none is stored.
+            const resultId =
+              report.kind === "full" ? report.resultId : (report.resultId ?? previous?.resultId);
+            pulled.set(uri, { items, ...(resultId === undefined ? {} : { resultId }) });
+            return Effect.succeed({ items, related: report.related } satisfies PulledDiagnostics);
+          }),
+        );
+      });
+
     // The count is read-modified-written synchronously inside `suspend`, before the async send, so a
     // Second fiber acquiring the same uri can't interleave between the read and the increment.
     const openDocument = (textDocument: TextDocument) =>
@@ -212,6 +298,7 @@ export function makeTransport(
       notify,
       openDocument,
       published: Effect.sync(() => published),
+      pullDiagnostics,
       request,
       whenProjectLoaded: Effect.suspend(() =>
         loaded ? Effect.void : Deferred.await(projectLoaded),

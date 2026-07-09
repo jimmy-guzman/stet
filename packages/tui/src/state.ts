@@ -34,6 +34,7 @@ import {
   markPending,
 } from "./diagnostics/checker";
 import type { CheckerState, Diagnostic } from "./diagnostics/checker";
+import { LspProcess } from "./diagnostics/lsp-process";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import { intelLanguage, serversProviding } from "./diagnostics/servers";
@@ -2127,6 +2128,23 @@ function createState() {
               return next;
             });
             void runChecks(gitModel());
+          }),
+        ),
+        Effect.forever,
+      ),
+    ),
+  );
+  // A server nudging `workspace/diagnostic/refresh` (rust-analyzer after a cargo-check cycle)
+  // Re-runs checks, exactly like a finished download; a nudge from another repo's pooled server
+  // (a just-switched-away worktree) is ignored rather than churning the current one.
+  runtime.runFork(
+    LspProcess.use((lsp) =>
+      Queue.take(lsp.refreshes).pipe(
+        Effect.flatMap((refreshedRoot) =>
+          Effect.sync(() => {
+            if (refreshedRoot === gitModel().repoRoot) {
+              void runChecks(gitModel());
+            }
           }),
         ),
         Effect.forever,

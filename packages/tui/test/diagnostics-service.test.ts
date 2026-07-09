@@ -8,8 +8,9 @@ import { Effect, Layer, Stream } from "effect";
 
 import type { CheckerFileState } from "@/diagnostics/checker";
 import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
-import type { ServerHandle } from "@/diagnostics/servers";
+import type { Capability, ServerHandle } from "@/diagnostics/servers";
 import { Diagnostics, DiagnosticsLive } from "@/diagnostics/service";
+import { LspRequestError } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
 import type { ChangedFile } from "@/git/model";
 
@@ -42,6 +43,10 @@ function pushingHandle(items: unknown[]): ServerHandle {
     notify: () => Effect.void,
     openDocument: (textDocument) => Effect.sync(() => void published.set(textDocument.uri, items)),
     published: Effect.sync(() => published),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
     request: () => Effect.succeed(null),
     whenProjectLoaded: Effect.void,
   };
@@ -58,6 +63,10 @@ function deadHandle(): ServerHandle {
     notify: () => Effect.void,
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
     request: () => Effect.succeed(null),
     whenProjectLoaded: Effect.void,
   };
@@ -139,6 +148,10 @@ test("closes every opened document even when the run is interrupted mid-settle",
       notify: () => Effect.void,
       openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
       published: Effect.sync(() => new Map<string, unknown[]>()),
+      pullDiagnostics: () =>
+        Effect.fail(
+          new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+        ),
       request: () => Effect.succeed(null),
       whenProjectLoaded: Effect.void,
     };
@@ -341,5 +354,100 @@ test("degrades to unavailable when the server cannot be acquired", async () => {
     });
     const state = await runDiagnostics(dir, [changed("src/a.ts")], failing);
     expect(state.get("src/a.ts")?.status).toBe("unavailable");
+  });
+});
+
+// A pull server: it answers `textDocument/diagnostic` per uri instead of publishing on open, and
+// Optionally pushes items too (the hybrid rust-analyzer shape). A real LspConnection, not a mock.
+function pullingHandle(options: {
+  itemsByUri?: Record<string, unknown[]>;
+  related?: ReadonlyMap<string, unknown[]>;
+  pushed?: unknown[];
+  rejects?: string;
+}): ServerHandle {
+  const published = new Map<string, unknown[]>();
+  const connection: LspConnection = {
+    clearPublished: (uris) =>
+      Effect.sync(() => {
+        for (const uri of uris) {
+          published.delete(uri);
+        }
+      }),
+    closeDocument: () => Effect.void,
+    closed: Effect.sync(() => false),
+    notify: () => Effect.void,
+    openDocument: (textDocument) =>
+      Effect.sync(() => {
+        if (options.pushed !== undefined) {
+          published.set(textDocument.uri, options.pushed);
+        }
+      }),
+    published: Effect.sync(() => published),
+    pullDiagnostics: (uri) =>
+      options.rejects === undefined
+        ? Effect.succeed({
+            items: options.itemsByUri?.[uri] ?? [],
+            related: options.related ?? new Map<string, unknown[]>(),
+          })
+        : Effect.fail(
+            new LspRequestError({ message: options.rejects, method: "textDocument/diagnostic" }),
+          ),
+    request: () => Effect.succeed(null),
+    whenProjectLoaded: Effect.void,
+  };
+  return { capabilities: new Set<Capability>(["pullDiagnostics"]), connection };
+}
+
+test("a pull-capable server resolves findings from the pull answer, no publish needed", async () => {
+  await withRepo({ "config.yaml": "a: 1\n" }, async (dir) => {
+    const uri = pathToFileURL(join(dir, "config.yaml")).href;
+    const state = await runDiagnostics(
+      dir,
+      [changed("config.yaml")],
+      fakeServers({ yaml: pullingHandle({ itemsByUri: { [uri]: [anError] } }) }),
+    );
+    expect(state.get("config.yaml")).toMatchObject({ count: 1, status: "findings" });
+  });
+});
+
+test("a pull answer and a concurrent push merge for a hybrid server", async () => {
+  await withRepo({ "config.yaml": "a: 1\n" }, async (dir) => {
+    const uri = pathToFileURL(join(dir, "config.yaml")).href;
+    const state = await runDiagnostics(
+      dir,
+      [changed("config.yaml")],
+      fakeServers({
+        yaml: pullingHandle({ itemsByUri: { [uri]: [anError] }, pushed: [aLintWarning] }),
+      }),
+    );
+    // The pulled native finding and the pushed one both surface, one channel never masking the other.
+    expect(state.get("config.yaml")).toMatchObject({ count: 2, status: "findings" });
+  });
+});
+
+test("a rejected pull marks the file failed with the server's message, never clean", async () => {
+  await withRepo({ "config.yaml": "a: 1\n" }, async (dir) => {
+    const state = await runDiagnostics(
+      dir,
+      [changed("config.yaml")],
+      fakeServers({ yaml: pullingHandle({ rejects: "boom" }) }),
+    );
+    expect(state.get("config.yaml")).toMatchObject({ message: "boom", status: "failed" });
+  });
+});
+
+test("a pull answer's related documents surface findings for their own paths", async () => {
+  await withRepo({ "config.yaml": "a: 1\n", "other.yaml": "b: 2\n" }, async (dir) => {
+    const relatedUri = pathToFileURL(join(dir, "other.yaml")).href;
+    const state = await runDiagnostics(
+      dir,
+      [changed("config.yaml")],
+      fakeServers({
+        yaml: pullingHandle({ related: new Map([[relatedUri, [anError]]]) }),
+      }),
+    );
+    // The pulled file is clean; the cross-file report lands on the path it names.
+    expect(state.get("config.yaml")).toMatchObject({ count: 0, status: "clean" });
+    expect(state.get("other.yaml")).toMatchObject({ count: 1, status: "findings" });
   });
 });

@@ -36,6 +36,10 @@ function handle(
         () => void log.push({ method: "textDocument/didOpen", params: { textDocument } }),
       ),
     published: Effect.sync(() => new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
     request: (method, params) => {
       log.push({ method, params });
       return respond(method, params);

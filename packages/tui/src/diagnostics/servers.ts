@@ -387,6 +387,11 @@ export function performHandshake(
           textDocument: {
             callHierarchy: { dynamicRegistration: false },
             definition: { dynamicRegistration: false, linkSupport: true },
+            // Pull diagnostics: a server that advertises `diagnosticProvider` only answers
+            // `textDocument/diagnostic` when the client declares this cap. Push stays advertised
+            // Alongside (publishDiagnostics below): the two are concurrent channels, and a hybrid
+            // Server (rust-analyzer) pulls its native findings while pushing its cargo-check ones.
+            diagnostic: { dynamicRegistration: false, relatedDocumentSupport: true },
             documentSymbol: { dynamicRegistration: false, hierarchicalDocumentSymbolSupport: true },
             hover: { dynamicRegistration: false },
             implementation: { dynamicRegistration: false, linkSupport: true },
@@ -394,13 +399,13 @@ export function performHandshake(
             references: { dynamicRegistration: false },
             synchronization: { didSave: false, dynamicRegistration: false },
           },
-          // A server that pulls its settings (oxlint) needs the workspace caps advertised here.
-          ...(config?.workspaceCapabilities === undefined
-            ? {}
-            : { workspace: config.workspaceCapabilities }),
           // Opt into server-driven progress so tsserver reports project-load begin/end; intel pulls
           // Gate on the "end" (see `whenProjectLoaded`), and without this it sends no progress at all.
           window: { workDoneProgress: true },
+          // `diagnostics.refreshSupport` tells the server it may nudge a re-pull via
+          // `workspace/diagnostic/refresh`; a server that pulls its settings (oxlint) adds its
+          // Workspace caps alongside.
+          workspace: { diagnostics: { refreshSupport: true }, ...config?.workspaceCapabilities },
         },
         initializationOptions: config?.initializationOptions,
         processId: process.pid,

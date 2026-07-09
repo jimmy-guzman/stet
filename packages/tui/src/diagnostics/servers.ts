@@ -54,8 +54,6 @@ export type Capability =
 interface ServerSpec {
   readonly binary: string;
   readonly args: readonly string[];
-  /** File extensions (no dot) this server handles; servers may overlap (oxlint lints what tsc owns). */
-  readonly extensions: readonly string[];
   /**
    * The intents this server can answer, declared statically so intel skips a non-provider without
    * acquiring it. A pre-acquire filter only; the handshake-advertised set on `ServerHandle` stays
@@ -75,16 +73,11 @@ interface ServerSpec {
   readonly detect?: (repoRoot: string) => boolean;
 }
 
-// The JS/TS family both servers handle; typescript type-checks it, oxlint lints it.
-const codeExtensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"] as const;
-
-// Biome lints the JS/TS family plus json/css/graphql, where it adds findings oxlint does not.
-const biomeExtensions = [...codeExtensions, "json", "jsonc", "css", "graphql"] as const;
-
-// Adding a language is one registry entry plus its file extensions; the transport, pool, and
-// Handshake are language-agnostic. typescript-language-server also serves JavaScript; oxlint lints
-// The same files, so a `.ts` file resolves to both servers and their findings merge. A server with a
-// `detect` gate runs only where its predicate accepts the repo (Biome needs a biome config).
+// Adding a language is one `languages` entry (its file types and server order) plus a `registry`
+// Entry per new server; the transport, pool, and handshake are language-agnostic. A language lists
+// Every server that analyzes it (typescript type-checks the JS/TS family, oxlint lints the same
+// Files) and the per-file results merge. A server with a `detect` gate runs only where its
+// Predicate accepts the repo (Biome needs a biome config).
 //
 // `provision.packages` pin exact versions, never a bare name that resolves `@latest`: the tier-3
 // Download is otherwise nondeterministic (whatever the registry serves that day) and would pull a
@@ -101,7 +94,6 @@ export const registry: Record<string, ServerSpec> = {
     // The transport's null default answers its `workspace/configuration` pull. No handshake needed.
     detect: (repoRoot) =>
       existsSync(join(repoRoot, "biome.json")) || existsSync(join(repoRoot, "biome.jsonc")),
-    extensions: biomeExtensions,
     provides: [],
     provision: { packages: ["@biomejs/biome@2.5.2"] },
   },
@@ -112,14 +104,12 @@ export const registry: Record<string, ServerSpec> = {
     // Up, and the per-file merge unions them.
     args: ["--stdio"],
     binary: "vscode-json-language-server",
-    extensions: ["json", "jsonc"],
     provides: [],
     provision: { packages: ["vscode-langservers-extracted@4.10.0"] },
   },
   oxlint: {
     args: ["--lsp"],
     binary: "oxlint",
-    extensions: codeExtensions,
     handshake: (repoRoot) => {
       // Oxlint validates only once it has workspace options; passing them inline (and answering
       // Its `workspace/configuration` pull defensively) makes it publish on didOpen. `run: onType`
@@ -143,7 +133,6 @@ export const registry: Record<string, ServerSpec> = {
   typescript: {
     args: ["--stdio"],
     binary: "typescript-language-server",
-    extensions: codeExtensions,
     provides: [
       "definition",
       "references",
@@ -157,7 +146,6 @@ export const registry: Record<string, ServerSpec> = {
   yaml: {
     args: ["--stdio"],
     binary: "yaml-language-server",
-    extensions: ["yaml", "yml"],
     provides: [],
     provision: { packages: ["yaml-language-server@1.23.0"] },
   },
@@ -167,20 +155,99 @@ function configurationItems(params: unknown): unknown[] {
   return isObject(params) && Array.isArray(params.items) ? params.items : [];
 }
 
-/** Every language whose server handles this file's extension (typescript and oxlint overlap). */
-export function serversForPath(path: string): string[] {
-  const dot = path.lastIndexOf(".");
-  if (dot === -1) {
-    return [];
+/**
+ * A language: the file types it owns and the ordered servers that analyze them. Each extension or
+ * exact filename maps to the LSP `languageId` sent on `didOpen` (finer-grained than the language
+ * key: `tsx` opens as `typescriptreact`), so a routable file type and its `languageId` cannot drift
+ * apart. `servers` names `registry` keys, primary server first, then linters.
+ */
+interface Language {
+  /** Extension (no dot) -> LSP `languageId`. */
+  readonly extensions: Record<string, string>;
+  /** Exact basename -> LSP `languageId`; wins over the extension match. */
+  readonly filenames?: Record<string, string>;
+  readonly servers: readonly string[];
+}
+
+// No built-in declares `filenames` yet; it routes extensionless types (Dockerfile, Makefile) the
+// Day a server for one lands, resolving exact-name-then-extension the way the icon and highlighter
+// Lookups already do.
+const builtinLanguages: Record<string, Language> = {
+  css: { extensions: { css: "css" }, servers: ["biome"] },
+  graphql: { extensions: { graphql: "graphql" }, servers: ["biome"] },
+  json: { extensions: { json: "json", jsonc: "jsonc" }, servers: ["json", "biome"] },
+  typescript: {
+    extensions: {
+      cjs: "javascript",
+      cts: "typescript",
+      js: "javascript",
+      jsx: "javascriptreact",
+      mjs: "javascript",
+      mts: "typescript",
+      ts: "typescript",
+      tsx: "typescriptreact",
+    },
+    servers: ["typescript", "oxlint", "biome"],
+  },
+  yaml: { extensions: { yaml: "yaml", yml: "yaml" }, servers: ["yaml"] },
+};
+
+const languages = new Map(Object.entries(builtinLanguages));
+
+// Test-only: the language table is a process-global map, so a test that registers a language would
+// Leak it into later tests. Snapshot before and restore after to isolate.
+export function snapshotLanguages() {
+  return new Map(languages);
+}
+
+export function restoreLanguages(snapshot: ReturnType<typeof snapshotLanguages>) {
+  languages.clear();
+  for (const [name, language] of snapshot) {
+    languages.set(name, language);
   }
-  const extension = path.slice(dot + 1);
-  return Object.keys(registry).filter((language) =>
-    registry[language]?.extensions.includes(extension),
-  );
+}
+
+/** Merge languages into the table; the config layer registers user languages through this. */
+export function registerLanguages(entries: Record<string, Language>) {
+  for (const [name, language] of Object.entries(entries)) {
+    languages.set(name, language);
+  }
+}
+
+// Exact filename beats extension; the extension comes from the basename so a dotted directory
+// Never reads as one.
+function fileType(path: string) {
+  const base = path.slice(path.lastIndexOf("/") + 1);
+  for (const language of languages.values()) {
+    const languageId = language.filenames?.[base];
+    if (languageId !== undefined) {
+      return { language, languageId };
+    }
+  }
+  const dot = base.lastIndexOf(".");
+  if (dot === -1) {
+    return undefined;
+  }
+  const extension = base.slice(dot + 1);
+  for (const language of languages.values()) {
+    const languageId = language.extensions[extension];
+    if (languageId !== undefined) {
+      return { language, languageId };
+    }
+  }
+  return undefined;
+}
+
+/** The owning language's servers for this file's type, in declared order, unknown keys dropped. */
+export function serversForPath(path: string): string[] {
+  const type = fileType(path);
+  return type === undefined
+    ? []
+    : type.language.servers.filter((server) => registry[server] !== undefined);
 }
 
 /**
- * The registered languages whose repo gate (if any) accepts `repoRoot`. Evaluate once per run and
+ * The registered servers whose repo gate (if any) accepts `repoRoot`. Evaluate once per run and
  * reuse across files: a gate may stat the filesystem (Biome's `detect`), so re-checking it per file
  * per snapshot emission would re-stat the same config repeatedly for an invariant result.
  */
@@ -190,13 +257,13 @@ export function activeLanguages(repoRoot: string): Set<string> {
   );
 }
 
-/** Servers whose extension matches this path and whose repo gate (if any) accepts `repoRoot`. */
+/** The file's language servers whose repo gate (if any) accepts `repoRoot`. */
 export function activeServersForPath(path: string, repoRoot: string): string[] {
   const active = activeLanguages(repoRoot);
   return serversForPath(path).filter((language) => active.has(language));
 }
 
-/** Servers for this path that statically declare they can answer `capability`, in registry order. */
+/** Servers for this path that statically declare they can answer `capability`, in declared order. */
 export function serversProviding(path: string, capability: Capability): string[] {
   return serversForPath(path).filter((language) =>
     registry[language]?.provides.includes(capability),
@@ -224,29 +291,12 @@ export function intelLanguage(path: string, repoRoot: string): string | undefine
   );
 }
 
-// The LSP `languageId` for `didOpen`, finer-grained than the server key so the server applies the
-// Right grammar (tsx vs ts). Every registry extension needs an entry here, or `didOpen` sends
-// `plaintext` and the server never analyzes the file.
-const lspLanguageIdByExtension: Record<string, string> = {
-  cjs: "javascript",
-  css: "css",
-  cts: "typescript",
-  graphql: "graphql",
-  js: "javascript",
-  json: "json",
-  jsonc: "jsonc",
-  jsx: "javascriptreact",
-  mjs: "javascript",
-  mts: "typescript",
-  ts: "typescript",
-  tsx: "typescriptreact",
-  yaml: "yaml",
-  yml: "yaml",
-};
-
+/**
+ * The LSP `languageId` for `didOpen`, from the owning language's file-type map; `plaintext` when no
+ * language claims the file (a server never analyzes a `plaintext` document).
+ */
 export function lspLanguageId(path: string): string {
-  const dot = path.lastIndexOf(".");
-  return dot === -1 ? "plaintext" : (lspLanguageIdByExtension[path.slice(dot + 1)] ?? "plaintext");
+  return fileType(path)?.languageId ?? "plaintext";
 }
 
 // Discovery tiers: a repo-local binary or one on PATH wins; otherwise a server stet has already

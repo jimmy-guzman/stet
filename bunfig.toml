@@ -1,11 +1,6 @@
-preload = ["@opentui/solid/preload"]
-
 [install]
-# Flat node_modules. Bun defaults a newly-added workspace to the isolated
-# linker, whose symlinked .bun store breaks Next.js/Turbopack's RSC client
-# manifest resolution (global-error builtin) in dev. Hoisted matches what the
-# TUI already used before the docs workspace existed.
+# Flat node_modules. Bun defaults a workspace root to the isolated linker,
+# whose symlinked .bun store breaks Next.js/Turbopack's RSC client manifest
+# resolution (global-error builtin) in dev. Hoisted matches what the TUI
+# already used before the workspaces existed.
 linker = "hoisted"
-
-[test]
-preload = ["@opentui/solid/preload", "./test/setup.ts"]

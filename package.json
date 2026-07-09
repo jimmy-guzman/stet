@@ -1,54 +1,33 @@
 {
-  "name": "stet",
-  "version": "0.7.1",
+  "name": "stet-monorepo",
   "private": true,
-  "description": "Read-only companion TUI for inspecting an agent's changes",
   "license": "MIT",
   "repository": "github:jimmy-guzman/stet",
-  "bin": {
-    "stet": "./src/main.tsx"
-  },
   "workspaces": [
+    "packages/*",
     "docs"
   ],
   "type": "module",
   "scripts": {
-    "build": "bun run script/build.ts --single --skip-install",
-    "build:dist": "bun script/build.ts",
-    "check": "bun run lint && bun run format:check && bun test && bun run typecheck && bun run knip",
+    "build": "bun run --cwd packages/tui build",
+    "build:dist": "bun run --cwd packages/tui build:dist",
+    "check": "bun run --cwd packages/tui check && bun run knip",
     "docs:build": "bun run --cwd docs build",
     "docs:check": "bun run gen:keys --check && bun run --cwd docs check",
     "docs:dev": "bun run --cwd docs dev",
-    "gen:keys": "bun run script/gen-docs-keys.ts",
-    "format": "oxfmt --disable-nested-config",
-    "format:check": "oxfmt --check --disable-nested-config",
-    "lint": "oxlint --disable-nested-config",
-    "lint:fix": "oxlint --fix --disable-nested-config",
+    "gen:keys": "bun run --cwd packages/tui gen:keys",
+    "knip": "knip",
     "prepare": "effect-language-service patch",
-    "screenshots": "bun run script/screenshots.ts",
-    "stet": "bun run src/main.tsx",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "knip": "knip"
-  },
-  "dependencies": {
-    "@opentui/core": "0.4.3",
-    "@opentui/solid": "0.4.3",
-    "@pierre/diffs": "1.2.12",
-    "diff": "9.0.0",
-    "effect": "4.0.0-beta.93",
-    "shiki": "4.3.1",
-    "solid-js": "1.9.14"
+    "screenshots": "bun run --cwd packages/tui screenshots",
+    "stet": "bun run --cwd packages/tui stet",
+    "test": "bun run --cwd packages/tui test"
   },
   "devDependencies": {
     "@effect/language-service": "0.86.4",
-    "@types/bun": "1.3.14",
-    "@types/node": "26.1.0",
     "knip": "6.25.0",
     "lefthook": "2.1.9",
     "oxfmt": "0.58.0",
     "oxlint": "1.73.0",
-    "oxlint-tsgolint": "0.24.0",
-    "typescript": "6.0.3"
+    "oxlint-tsgolint": "0.24.0"
   }
 }

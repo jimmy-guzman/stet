@@ -40,7 +40,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run check
       - name: build all targets
-        run: bun script/build.ts --archive
+        run: bun packages/tui/script/build.ts --archive
       - name: upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -93,7 +93,7 @@ jobs:
               -e "s/{{SHA_DARWIN_X64}}/$(render darwin-x64)/" \
               -e "s/{{SHA_LINUX_X64}}/$(render linux-x64)/" \
               -e "s/{{SHA_LINUX_ARM64}}/$(render linux-arm64)/" \
-              script/stet.rb.tmpl > stet.rb
+              packages/tui/script/stet.rb.tmpl > stet.rb
       - name: push to tap
         env:
           GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

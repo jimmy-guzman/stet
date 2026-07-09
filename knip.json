@@ -3,7 +3,7 @@
   "tags": ["-lintignore"],
   "ignoreWorkspaces": ["docs"],
   "workspaces": {
-    ".": {
+    "packages/tui": {
       "entry": ["script/stet-launcher.cjs", "test/**/*.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}", "script/**/*.{ts,cjs}"]
     }

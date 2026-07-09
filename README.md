@@ -83,7 +83,7 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 
 ```sh
 bun install
-bun run src/main.tsx     # run from source
+bun run stet             # run from source (the TUI lives in packages/tui)
 bun run check            # tests + typecheck
 bun run build:dist       # build standalone binaries for all targets
 ```

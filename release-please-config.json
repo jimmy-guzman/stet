@@ -1,11 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "packages": {
-    ".": {
+    "packages/tui": {
       "release-type": "node",
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
-      "exclude-paths": ["docs"]
+      "bump-patch-for-minor-pre-major": true
     }
   }
 }

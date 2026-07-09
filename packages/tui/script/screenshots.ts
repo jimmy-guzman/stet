@@ -19,11 +19,14 @@ import { resolve } from "node:path";
  * Where the images are written: the docs site serves this dir at /screenshots, and the README links
  * into it, so it is the single committed home. Always this repo, so a PR here picks them up.
  */
-const OUT = resolve(import.meta.dir, "../docs/public/screenshots");
-/** Which checkout stet runs against; override to capture a clean tree elsewhere. */
+const OUT = resolve(import.meta.dir, "../../../docs/public/screenshots");
+/**
+ * Which checkout stet runs against (the repo root; the tapes cd into its packages/tui); override
+ * with a post-restructure checkout to capture a clean tree elsewhere.
+ */
 const REPO = process.env.STET_SCREENSHOT_REPO
   ? resolve(process.env.STET_SCREENSHOT_REPO)
-  : resolve(import.meta.dir, "..");
+  : resolve(import.meta.dir, "../../..");
 const BUN = process.execPath;
 const VHS = "vhs";
 /** Optional lossless PNG optimizer; when absent the raw (larger) VHS output ships unchanged. */
@@ -41,7 +44,7 @@ const BASE_REF = "8f94f10";
  * Inside src/ so it falls under tsconfig's include and typescript-language-server reports the type
  * error alongside oxlint's unused-symbol findings.
  */
-const FIXTURE = `${REPO}/src/_diagnostics-demo.ts`;
+const FIXTURE = `${REPO}/packages/tui/src/_diagnostics-demo.ts`;
 /**
  * A throwaway config dir for the theme-switcher shot only: stet reads `XDG_CONFIG_HOME`, so
  * pointing that one tape here populates the theme list with named palettes (rich swatches and a
@@ -88,7 +91,7 @@ function header() {
 function launchCmd(env = "") {
   return [
     "Hide",
-    `Type "cd ${REPO} && ${env}${BUN} run src/main.tsx ${BASE_REF}"`,
+    `Type "cd ${REPO}/packages/tui && ${env}${BUN} run src/main.tsx ${BASE_REF}"`,
     "Enter",
     "Sleep 3s",
     "Show",

@@ -1,12 +1,18 @@
-import { KEY_HELP } from "@/help/keys";
+import { resolve } from "node:path";
+
+import { KEY_HELP } from "../src/help/keys";
 
 /**
  * Single-sources the docs keybindings from `src/help/keys.ts`. Default: writes the markdown tables
  * into the docs page between the markers. With `--check`: parses the committed page back and exits
  * non-zero if it has drifted from KEY_HELP (wired into `docs:check`). The page's intro and Mouse
- * prose stay hand-written outside the markers.
+ * prose stay hand-written outside the markers. The docs workspace lives at the repo root, so the
+ * output path is anchored to this file rather than the cwd.
  */
-const MDX_PATH = "docs/content/docs/reference/keybindings.mdx";
+const MDX_PATH = resolve(
+  import.meta.dirname,
+  "../../../docs/content/docs/reference/keybindings.mdx",
+);
 const START_MARKER = "{/* GENERATED-KEYS: edit src/help/keys.ts then run bun run gen:keys */}";
 const END_MARKER = "{/* /GENERATED-KEYS */}";
 const HEADING = /^##\s+(?<heading>.+?)\s*$/;

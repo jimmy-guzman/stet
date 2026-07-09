@@ -116,13 +116,27 @@ export class LspProcess extends Context.Service<
       cwd: string,
       onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
     ) => Effect.Effect<LspConnection, LspSpawnError, Scope.Scope>;
+    /**
+     * Repo roots whose server asked for `workspace/diagnostic/refresh`; drains to re-run checks,
+     * the way the provisioner's `completions` drives a re-check after a download.
+     */
+    readonly refreshes: Queue.Dequeue<string>;
   }
 >()("stet/LspProcess") {}
 
-export const LspProcessLive = Layer.succeed(LspProcess)({
-  start: (command, cwd, onRequest) =>
-    acquireChild(command, cwd).pipe(
-      Effect.flatMap(createByteChannel),
-      Effect.flatMap((channel) => makeTransport(channel, onRequest)),
-    ),
-});
+export const LspProcessLive = Layer.effect(
+  LspProcess,
+  Effect.gen(function* lspProcess() {
+    const refreshes = yield* Queue.unbounded<string>();
+    return {
+      refreshes,
+      start: (command, cwd, onRequest) =>
+        acquireChild(command, cwd).pipe(
+          Effect.flatMap(createByteChannel),
+          Effect.flatMap((channel) =>
+            makeTransport(channel, onRequest, Queue.offer(refreshes, cwd).pipe(Effect.asVoid)),
+          ),
+        ),
+    };
+  }),
+);

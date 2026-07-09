@@ -17,6 +17,7 @@ import {
   serversProviding,
   snapshotLanguages,
 } from "@/diagnostics/servers";
+import { LspRequestError } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
 
 test("resolves a source file to its language's servers in declared order", () => {
@@ -130,6 +131,10 @@ test("handshake parses advertised providers into the capability set", async () =
     notify: (method) => Effect.sync(() => void notified.push(method)),
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
     request: (method, params) =>
       Effect.sync(() => {
         requested.push(method);
@@ -182,6 +187,10 @@ test("handshake yields an empty capability set when no providers are advertised"
     notify: () => Effect.void,
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
     request: () => Effect.succeed({ capabilities: {} }),
     whenProjectLoaded: Effect.void,
   };
@@ -202,6 +211,10 @@ test("handshake treats a malformed provider value as unsupported", async () => {
     notify: () => Effect.void,
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
     request: () =>
       Effect.succeed({
         capabilities: {
@@ -218,4 +231,43 @@ test("handshake treats a malformed provider value as unsupported", async () => {
   expect(handle.capabilities.has("definition")).toBe(false);
   expect(handle.capabilities.has("implementation")).toBe(false);
   expect(handle.capabilities.has("references")).toBe(false);
+});
+
+test("handshake advertises pull diagnostics and refresh support, and parses diagnosticProvider", async () => {
+  let initializeParams: unknown;
+  // A rust-analyzer-shaped reply: it advertises diagnosticProvider, so the pull path activates.
+  const connection: LspConnection = {
+    clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
+    closed: Effect.sync(() => false),
+    notify: () => Effect.void,
+    openDocument: () => Effect.void,
+    published: Effect.sync(() => new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
+    request: (method, params) =>
+      Effect.sync(() => {
+        initializeParams = method === "initialize" ? params : initializeParams;
+        return {
+          capabilities: {
+            diagnosticProvider: { interFileDependencies: true, workspaceDiagnostics: true },
+          },
+        };
+      }),
+    whenProjectLoaded: Effect.void,
+  };
+
+  const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
+
+  expect(handle.capabilities.has("pullDiagnostics")).toBe(true);
+  // Servers only answer `textDocument/diagnostic` (and only send refresh nudges) when the client
+  // Declares the matching caps in `initialize`.
+  expect(initializeParams).toMatchObject({
+    capabilities: {
+      textDocument: { diagnostic: { relatedDocumentSupport: true } },
+      workspace: { diagnostics: { refreshSupport: true } },
+    },
+  });
 });

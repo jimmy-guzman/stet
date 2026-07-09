@@ -19,16 +19,23 @@ interface Peer {
 }
 
 /** Drives the transport against a fake in-process peer over two queues. No process, no mocks. */
-function withPeer<A, E>(run: (peer: Peer) => Effect.Effect<A, E>) {
+function withPeer<A, E>(
+  run: (peer: Peer) => Effect.Effect<A, E>,
+  onRefreshRequest?: Effect.Effect<void>,
+) {
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* fakePeer() {
         const inbound = yield* Queue.make<unknown, Cause.Done>();
         const sent = yield* Queue.make<JsonRpcMessage, Cause.Done>();
-        const connection = yield* makeTransport({
-          inbound,
-          send: (message) => Queue.offer(sent, message).pipe(Effect.asVoid),
-        });
+        const connection = yield* makeTransport(
+          {
+            inbound,
+            send: (message) => Queue.offer(sent, message).pipe(Effect.asVoid),
+          },
+          undefined,
+          onRefreshRequest,
+        );
         return yield* run({
           close: Queue.end(inbound).pipe(Effect.asVoid),
           connection,
@@ -264,4 +271,106 @@ test("a closed connection fails an in-flight request instead of hanging", async 
     ).pipe(Effect.map(([result]) => result)),
   );
   expect(Exit.isFailure(exit)).toBe(true);
+});
+
+test("pullDiagnostics echoes the stored resultId and reuses cached items on unchanged", async () => {
+  const outcome = await withPeer(({ connection, reply, sent }) =>
+    Effect.all(
+      [
+        Effect.gen(function* pulls() {
+          const first = yield* connection.pullDiagnostics("file:///a.ts");
+          const second = yield* connection.pullDiagnostics("file:///a.ts");
+          return { first, second };
+        }),
+        Effect.gen(function* respond() {
+          const out1 = yield* Queue.take(sent);
+          expect(isJsonRpcRequest(out1) ? out1.method : undefined).toBe("textDocument/diagnostic");
+          // The first pull carries no previousResultId: nothing has been answered yet.
+          expect(isJsonRpcRequest(out1) ? out1.params : undefined).toEqual({
+            textDocument: { uri: "file:///a.ts" },
+          });
+          yield* reply({
+            id: idOf(out1),
+            jsonrpc: "2.0",
+            result: { items: ["d1"], kind: "full", resultId: "r1" },
+          });
+          const out2 = yield* Queue.take(sent);
+          // The second pull echoes the first answer's resultId back.
+          expect(isJsonRpcRequest(out2) ? out2.params : undefined).toEqual({
+            previousResultId: "r1",
+            textDocument: { uri: "file:///a.ts" },
+          });
+          yield* reply({
+            id: idOf(out2),
+            jsonrpc: "2.0",
+            result: { kind: "unchanged", resultId: "r2" },
+          });
+        }),
+      ],
+      { concurrency: "unbounded" },
+    ).pipe(Effect.map(([pulls]) => pulls)),
+  );
+  expect(outcome.first.items).toEqual(["d1"]);
+  // Unchanged means "same as the last full answer": the cached items resolve, not an empty set.
+  expect(outcome.second.items).toEqual(["d1"]);
+});
+
+test("pullDiagnostics surfaces full relatedDocuments reports, skipping unchanged ones", async () => {
+  const answer = await withPeer(({ connection, reply, sent }) =>
+    Effect.all(
+      [
+        connection.pullDiagnostics("file:///a.ts"),
+        Effect.gen(function* respond() {
+          const outgoing = yield* Queue.take(sent);
+          yield* reply({
+            id: idOf(outgoing),
+            jsonrpc: "2.0",
+            result: {
+              items: [],
+              kind: "full",
+              relatedDocuments: {
+                "file:///b.ts": { items: ["cross"], kind: "full" },
+                "file:///c.ts": { kind: "unchanged", resultId: "x" },
+              },
+              resultId: "r1",
+            },
+          });
+        }),
+      ],
+      { concurrency: "unbounded" },
+    ).pipe(Effect.map(([pulled]) => pulled)),
+  );
+  expect([...answer.related.entries()]).toEqual([["file:///b.ts", ["cross"]]]);
+});
+
+test("pullDiagnostics fails on a malformed diagnostic report", async () => {
+  const exit = await withPeer(({ connection, reply, sent }) =>
+    Effect.all(
+      [
+        Effect.exit(connection.pullDiagnostics("file:///a.ts")),
+        Effect.gen(function* respond() {
+          const outgoing = yield* Queue.take(sent);
+          yield* reply({ id: idOf(outgoing), jsonrpc: "2.0", result: { nonsense: true } });
+        }),
+      ],
+      { concurrency: "unbounded" },
+    ).pipe(Effect.map(([result]) => result)),
+  );
+  expect(Exit.isFailure(exit)).toBe(true);
+});
+
+test("workspace/diagnostic/refresh is answered null and surfaces the nudge", async () => {
+  let refreshes = 0;
+  const response = await withPeer(
+    ({ reply, sent }) =>
+      Effect.gen(function* run() {
+        yield* reply({ id: 7, jsonrpc: "2.0", method: "workspace/diagnostic/refresh" });
+        return yield* Queue.take(sent);
+      }),
+    Effect.sync(() => {
+      refreshes += 1;
+    }),
+  );
+  expect(response).toMatchObject({ id: 7, result: null });
+  expect(refreshes).toBe(1);
 });

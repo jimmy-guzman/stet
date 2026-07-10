@@ -92,7 +92,8 @@ bun run build:dist       # build standalone binaries for all targets
 ```
 
 `bun install` also wires up git hooks (via [lefthook](https://lefthook.dev)):
-`pre-commit` formats and lints staged files, `pre-push` re-runs `bun run check`.
+`pre-commit` formats and lints staged files, `pre-push` typechecks the whole
+repo and runs knip.
 
 ## Non-goals
 

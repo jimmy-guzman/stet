@@ -20,7 +20,8 @@
     "prepare": "effect-language-service patch",
     "screenshots": "bun run --cwd packages/tui screenshots",
     "stet": "bun run --cwd packages/tui stet",
-    "test": "bun run --cwd packages/tui test"
+    "test": "bun run --cwd packages/tui test",
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
     "@effect/language-service": "0.86.4",

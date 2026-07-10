@@ -15,7 +15,7 @@ import { resolveBinary } from "./checker";
 import { LspProcess } from "./lsp-process";
 import type { LspSpawnError } from "./lsp-process";
 import { cachedBinaryPath, Provisioner } from "./provision";
-import type { ProvisionSpec } from "./provision";
+import type { ProvisionChannel, ProvisionSpec } from "./provision";
 import { LspRequestError } from "./transport";
 import type { LspConnection } from "./transport";
 
@@ -60,8 +60,8 @@ interface ServerSpec {
    * the authoritative gate, so this must not under-declare what the server actually provides.
    */
   readonly provides: readonly Capability[];
-  /** Npm packages stet installs into its cache when the server is found neither in repo nor PATH. */
-  readonly provision?: { readonly packages: readonly string[] };
+  /** How stet installs the server into its cache when it is found neither in repo nor on PATH. */
+  readonly provision?: ProvisionChannel;
   /** Per-server handshake extras (caps, initializationOptions, server-request answers). */
   readonly handshake?: (repoRoot: string) => HandshakeConfig;
   /**
@@ -87,7 +87,7 @@ interface ServerSpec {
 // So a bump re-provisions. The oxlint/typescript pins deliberately track this repo's own devDeps but
 // Are independent (stet's build toolchain vs. the LSP server it downloads into arbitrary repos).
 export const registry: Record<string, ServerSpec> = {
-  biome: {
+  "biome": {
     args: ["lsp-proxy"],
     binary: "biome",
     // Read off disk; `detect` guarantees a biome config exists, so Biome resolves it on its own and
@@ -95,9 +95,9 @@ export const registry: Record<string, ServerSpec> = {
     detect: (repoRoot) =>
       existsSync(join(repoRoot, "biome.json")) || existsSync(join(repoRoot, "biome.jsonc")),
     provides: [],
-    provision: { packages: ["@biomejs/biome@2.5.2"] },
+    provision: { kind: "npm", packages: ["@biomejs/biome@2.5.2"] },
   },
-  json: {
+  "json": {
     // Always-on (no `detect`) so JSON gets schema validation in every repo. It overlaps Biome's
     // Json coverage where a biome config exists, but the two are complementary: Biome lints, this
     // Validates against schemas (package.json/tsconfig/SchemaStore); only raw syntax errors double
@@ -105,9 +105,9 @@ export const registry: Record<string, ServerSpec> = {
     args: ["--stdio"],
     binary: "vscode-json-language-server",
     provides: [],
-    provision: { packages: ["vscode-langservers-extracted@4.10.0"] },
+    provision: { kind: "npm", packages: ["vscode-langservers-extracted@4.10.0"] },
   },
-  oxlint: {
+  "oxlint": {
     args: ["--lsp"],
     binary: "oxlint",
     handshake: (repoRoot) => {
@@ -128,9 +128,56 @@ export const registry: Record<string, ServerSpec> = {
       };
     },
     provides: [],
-    provision: { packages: ["oxlint@1.72.0"] },
+    provision: { kind: "npm", packages: ["oxlint@1.72.0"] },
   },
-  typescript: {
+  // The first binary-channel server: rust-analyzer ships as gzipped per-platform GitHub release
+  // Assets (it is not an npm package), pinned by tag and per-asset sha256 from the release API's
+  // Digests. It answers pull diagnostics and pushes its cargo-check findings, the hybrid shape the
+  // Retrieval path is built for.
+  "rust-analyzer": {
+    args: [],
+    binary: "rust-analyzer",
+    provides: [
+      "definition",
+      "references",
+      "hover",
+      "documentSymbol",
+      "callHierarchy",
+      "implementation",
+    ],
+    provision: {
+      assets: [
+        {
+          arch: "arm64",
+          asset: "rust-analyzer-aarch64-apple-darwin.gz",
+          os: "darwin",
+          sha256: "0fb2229496105666460d22d062a55e154c862bb8004c464a38c6ffaff6fd68fe",
+        },
+        {
+          arch: "x64",
+          asset: "rust-analyzer-x86_64-apple-darwin.gz",
+          os: "darwin",
+          sha256: "3a6bc5b42c27d3f8d308dacb25fdbe9bba0577be2970500cdb936e53c21c3496",
+        },
+        {
+          arch: "arm64",
+          asset: "rust-analyzer-aarch64-unknown-linux-gnu.gz",
+          os: "linux",
+          sha256: "7e2627d96c6f1614115d212b61fd5f8dc9279853054b800f2b023c883e3ae056",
+        },
+        {
+          arch: "x64",
+          asset: "rust-analyzer-x86_64-unknown-linux-gnu.gz",
+          os: "linux",
+          sha256: "2fb596e12676e512de5dbf1c322dd591127ee089a1cca47995605593f2fc8850",
+        },
+      ],
+      kind: "binary",
+      repo: "rust-lang/rust-analyzer",
+      tag: "2026-07-06",
+    },
+  },
+  "typescript": {
     args: ["--stdio"],
     binary: "typescript-language-server",
     provides: [
@@ -141,13 +188,13 @@ export const registry: Record<string, ServerSpec> = {
       "callHierarchy",
       "implementation",
     ],
-    provision: { packages: ["typescript-language-server@5.3.0", "typescript@6.0.3"] },
+    provision: { kind: "npm", packages: ["typescript-language-server@5.3.0", "typescript@6.0.3"] },
   },
-  yaml: {
+  "yaml": {
     args: ["--stdio"],
     binary: "yaml-language-server",
     provides: [],
-    provision: { packages: ["yaml-language-server@1.23.0"] },
+    provision: { kind: "npm", packages: ["yaml-language-server@1.23.0"] },
   },
 };
 
@@ -176,6 +223,7 @@ const builtinLanguages: Record<string, Language> = {
   css: { extensions: { css: "css" }, servers: ["biome"] },
   graphql: { extensions: { graphql: "graphql" }, servers: ["biome"] },
   json: { extensions: { json: "json", jsonc: "jsonc" }, servers: ["json", "biome"] },
+  rust: { extensions: { rs: "rust" }, servers: ["rust-analyzer"] },
   typescript: {
     extensions: {
       cjs: "javascript",
@@ -309,7 +357,11 @@ export function resolveServerCommand(language: string, repoRoot: string): string
     return [repoOrPath, ...spec.args];
   }
   if (spec.provision !== undefined) {
-    const cached = cachedBinaryPath(language, spec.binary, spec.provision.packages);
+    const cached = cachedBinaryPath(language, {
+      args: spec.args,
+      binary: spec.binary,
+      channel: spec.provision,
+    });
     if (existsSync(cached)) {
       return [cached, ...spec.args];
     }
@@ -322,7 +374,7 @@ function provisionSpecFor(language: string): ProvisionSpec | undefined {
   if (spec?.provision === undefined) {
     return undefined;
   }
-  return { args: spec.args, binary: spec.binary, packages: spec.provision.packages };
+  return { args: spec.args, binary: spec.binary, channel: spec.provision };
 }
 
 export interface ServerHandle {

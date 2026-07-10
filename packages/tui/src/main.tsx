@@ -10,6 +10,7 @@ import { App } from "./App";
 import { helpText, parseCommand } from "./cli";
 import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
+import { registerLanguages, registerServers, resolveLanguages } from "./diagnostics/servers";
 import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import type { GitModel } from "./git/model";
 import { Git } from "./git/service";
@@ -93,6 +94,16 @@ try {
   const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
   registerThemes(themes);
   setSelection(config.theme);
+
+  // Register configured languages and their inline servers the same way, before the app runtime
+  // Builds, so the first diagnostics run already sees them.
+  const {
+    issues: languageIssues,
+    languages: configLanguages,
+    servers: configServers,
+  } = resolveLanguages(config.languages ?? {});
+  registerServers(configServers);
+  registerLanguages(configLanguages);
 
   // Create the renderer up front and detect the terminal's dark/light appearance
   // Before the first runtime use (which warms the diff highlighter), so the whole
@@ -195,7 +206,7 @@ try {
       void state.runChecks(model);
 
       // A bad config never blocks startup; the first issue surfaces as a notice.
-      const issues = [...configIssues, ...themeIssues];
+      const issues = [...configIssues, ...themeIssues, ...languageIssues];
       if (issues.length > 0) {
         state.notify(issues[0] ?? "config has issues");
       }

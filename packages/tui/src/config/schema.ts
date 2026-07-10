@@ -10,6 +10,9 @@ const ThemeSelection = Schema.Union([
 export const UserConfigSchema = Schema.Struct({
   editor: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
   ide: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
+  // Entries stay raw like `themes`; `resolveLanguages` validates each, since a partial entry is
+  // Only a valid language once merged over its built-in.
+  languages: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
   theme: Schema.optionalKey(ThemeSelection),
   themes: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 });

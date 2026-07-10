@@ -85,4 +85,13 @@ describe("loadConfigText", () => {
     expect(config).toEqual({});
     expect(issues).toHaveLength(1);
   });
+
+  test("language entries load raw; the resolver validates them later", () => {
+    const { config, issues } = loadConfigText(
+      `{ "languages": { "python": { "extensions": ["py"], "servers": [{ "command": ["pyright-langserver", "--stdio"] }] } } }`,
+    );
+
+    expect(issues).toEqual([]);
+    expect(config.languages).toMatchObject({ python: { extensions: ["py"] } });
+  });
 });

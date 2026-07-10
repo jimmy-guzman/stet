@@ -5,6 +5,8 @@
  * as a "view on GitHub" fallback), mirroring the shape of `lib/version.ts`.
  */
 
+import { Data, Effect } from "effect";
+
 export interface ReleaseNote {
   emoji?: string;
   scope?: string;
@@ -120,17 +122,42 @@ function toRelease(release: GithubRelease): Release {
   };
 }
 
-function fetchReleasesPage(page: number): Promise<Response> {
-  return fetch(
-    `https://api.github.com/repos/jimmy-guzman/stet/releases?per_page=100&page=${page}`,
-    {
-      headers: {
-        "User-Agent": "stet-docs",
-        "Accept": "application/vnd.github+json",
-      },
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(5000),
-    },
+class ReleasesError extends Data.TaggedError("ReleasesError")<{ message: string }> {}
+
+function fetchReleasesPage(page: number) {
+  return Effect.tryPromise({
+    try: (signal) =>
+      fetch(`https://api.github.com/repos/jimmy-guzman/stet/releases?per_page=100&page=${page}`, {
+        headers: {
+          "User-Agent": "stet-docs",
+          "Accept": "application/vnd.github+json",
+        },
+        next: { revalidate: 3600 },
+        signal,
+      }),
+    catch: (cause) =>
+      new ReleasesError({ message: cause instanceof Error ? cause.message : String(cause) }),
+  }).pipe(
+    Effect.timeout("5 seconds"),
+    Effect.flatMap((res) =>
+      res.ok
+        ? Effect.succeed(res)
+        : Effect.fail(new ReleasesError({ message: `releases request failed: ${res.status}` })),
+    ),
+  );
+}
+
+function readReleasesPage(res: Response) {
+  return Effect.tryPromise({
+    try: () => res.json() as Promise<unknown>,
+    catch: (cause) =>
+      new ReleasesError({ message: cause instanceof Error ? cause.message : String(cause) }),
+  }).pipe(
+    Effect.flatMap((data) =>
+      Array.isArray(data)
+        ? Effect.succeed(data)
+        : Effect.fail(new ReleasesError({ message: "unexpected releases payload" })),
+    ),
   );
 }
 
@@ -139,26 +166,25 @@ function lastPageFrom(linkHeader: string | null): number {
   return match ? Number(match[1]) : 1;
 }
 
-export async function getReleases(): Promise<Release[]> {
-  try {
-    const first = await fetchReleasesPage(1);
-    if (!first.ok) return [];
-    const firstData: unknown = await first.json();
-    if (!Array.isArray(firstData)) return [];
+const loadReleases = Effect.gen(function* () {
+  const first = yield* fetchReleasesPage(1);
+  const firstData = yield* readReleasesPage(first);
 
-    const lastPage = lastPageFrom(first.headers.get("link"));
-    const restPages = Array.from({ length: lastPage - 1 }, (_, index) => index + 2);
-    const restResponses = await Promise.all(restPages.map(fetchReleasesPage));
-    if (restResponses.some((res) => !res.ok)) return [];
-    const restData: unknown[] = await Promise.all(restResponses.map((res) => res.json()));
-    if (restData.some((data) => !Array.isArray(data))) return [];
+  const lastPage = lastPageFrom(first.headers.get("link"));
+  const restPages = Array.from({ length: lastPage - 1 }, (_, index) => index + 2);
+  const restData = yield* Effect.forEach(
+    restPages,
+    (page) => fetchReleasesPage(page).pipe(Effect.flatMap(readReleasesPage)),
+    { concurrency: 5 },
+  );
 
-    return [firstData, ...restData]
-      .flat()
-      .filter(isGithubRelease)
-      .filter((release) => !release.draft && !release.prerelease)
-      .map(toRelease);
-  } catch {
-    return [];
-  }
+  return [firstData, ...restData]
+    .flat()
+    .filter(isGithubRelease)
+    .filter((release) => !release.draft && !release.prerelease)
+    .map(toRelease);
+});
+
+export function getReleases(): Promise<Release[]> {
+  return Effect.runPromise(loadReleases.pipe(Effect.orElseSucceed((): Release[] => [])));
 }

@@ -3,6 +3,7 @@ import { Logo } from "@/components/logo";
 const links = [
   { label: "GitHub", href: "https://github.com/jimmy-guzman/stet" },
   { label: "npm", href: "https://npmx.dev/package/@jimmy.codes/stet" },
+  { label: "Changelog", href: "/changelog" },
   {
     label: "MIT License",
     href: "https://github.com/jimmy-guzman/stet/blob/main/LICENSE",

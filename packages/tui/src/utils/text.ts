@@ -9,9 +9,15 @@ export function toCodePoints(text: string): string[] {
   return chars;
 }
 
+// One shared segmenter: constructing one costs more than the truncation it serves.
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 // Truncate to `max` display columns (not code units), so a wide glyph or emoji counts as its real
 // Cell width and the result never overflows the budget it was given. A trailing … marks the cut and
-// Costs one cell, so the ellipsised form fits in `max` too.
+// Costs one cell, so the ellipsised form fits in `max` too. The unit is the grapheme cluster, not
+// The code point: `Bun.stringWidth` measures a whole cluster (a ZWJ emoji, a flag, a skin-tone
+// Sequence) as the cells it paints, while its parts sum to more, so a per-code-point walk both
+// Mismeasures the budget and cuts inside a cluster, leaving a dangling joiner or a stripped modifier.
 export function truncate(text: string, max: number) {
   if (max <= 0) {
     return "";
@@ -22,13 +28,13 @@ export function truncate(text: string, max: number) {
   const budget = max - 1;
   let width = 0;
   let kept = "";
-  for (const char of text) {
-    const cells = Bun.stringWidth(char);
+  for (const { segment } of graphemes.segment(text)) {
+    const cells = Bun.stringWidth(segment);
     if (width + cells > budget) {
       break;
     }
     width += cells;
-    kept += char;
+    kept += segment;
   }
   return `${kept}…`;
 }

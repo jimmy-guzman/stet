@@ -5,6 +5,7 @@ import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
 
+import packageJson from "../package.json";
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
 describe("help overlay", () => {
@@ -34,6 +35,8 @@ describe("help overlay", () => {
       expect(help).toContain("navigation");
       expect(help).toContain("workspace");
       expect(help).toContain("layout");
+      // The version left the header bar for this overlay's title row; it must still be reachable.
+      expect(help).toContain(`stet@${packageJson.version}`);
       expect(help).toContain("go to file: fuzzy-search the whole repo");
       // The hover shortcut must be listed, or the height bump alone would pass with it gone.
       expect(help).toContain("hover: type and docs for the symbol under the caret");

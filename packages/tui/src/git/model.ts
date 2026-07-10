@@ -33,8 +33,9 @@ export interface GitModel {
   changedByPath: Map<string, ChangedFile>;
   repoFiles: RepoFile[];
   repoFilesKey: string;
-  // The current HEAD branch (undefined on a detached HEAD or before the first commit). Parsed from
-  // The `## ` header of the working-tree status, so it refreshes live on the same drain as changes.
+  // The current HEAD branch, undefined only on a detached HEAD. An unborn HEAD (before the first
+  // Commit) still names the branch it will create. Parsed from the `##` header of the working-tree
+  // Status, so it refreshes live on the same drain as changes.
   branch: string | undefined;
 }
 

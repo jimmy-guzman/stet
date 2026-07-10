@@ -30,6 +30,30 @@ describe("truncate", () => {
     // Budget 3 reserves 1 for the ellipsis, leaving 2 cells: the emoji fits exactly.
     expect(truncate("🐛xy", 3)).toBe("🐛…");
   });
+
+  test("keeps a ZWJ sequence whole rather than cutting it into a dangling joiner", () => {
+    // The family is one 2-cell cluster, so it fits the 2 cells left by the ellipsis.
+    expect(truncate("👨‍👩‍👧xyz", 3)).toBe("👨‍👩‍👧…");
+  });
+
+  test("keeps a skin-tone modifier with the emoji it modifies", () => {
+    expect(truncate("👍🏽xyz", 3)).toBe("👍🏽…");
+  });
+
+  test("measures a cluster as the cells it paints, not the sum of its code points", () => {
+    // The family paints 2 cells; its code points sum to 6. Budget 4 leaves 3 cells after
+    // The ellipsis, so the family and the following `x` both fit.
+    expect(truncate("👨‍👩‍👧xyz", 4)).toBe("👨‍👩‍👧x…");
+    expect(Bun.stringWidth(truncate("👨‍👩‍👧xyz", 4))).toBe(4);
+  });
+
+  test("never exceeds the budget it was given", () => {
+    for (const text of ["👨‍👩‍👧xyz", "👍🏽xyz", "🇺🇸xyz", "ab🐛cd", "feat/header-repo-anchor"]) {
+      for (const max of [1, 2, 3, 4, 5, 6]) {
+        expect(Bun.stringWidth(truncate(text, max))).toBeLessThanOrEqual(max);
+      }
+    }
+  });
 });
 
 describe("truncateAroundMatch", () => {

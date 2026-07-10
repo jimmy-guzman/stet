@@ -18,6 +18,9 @@ const BRANCH_GLYPH = "\u{f062c}";
 // A shown glyph occupies a fixed 2-cell box; ` · ` joins the identity and the right-side fields.
 const GLYPH_CELLS = 2;
 const SEP = " · ";
+// The row's own horizontal inset, on both edges. `available()` budgets against it, so the two must
+// Move together or the line is measured wider than it paints.
+const PADDING = 1;
 // Floors so a squeezed line degrades to a readable stub rather than a lone ellipsis, and so a branch
 // With almost no room is dropped outright instead of shown as `…`.
 const MIN_SCOPE = 8;
@@ -49,7 +52,7 @@ export function HeaderBar() {
   };
 
   const glyphCells = () => (state.iconsEnabled() ? GLYPH_CELLS : 0);
-  const available = () => Math.max(0, state.terminalWidth() - 2);
+  const available = () => Math.max(0, state.terminalWidth() - PADDING * 2);
   // The right-side fields that are never truncated: the changed count and optional diagnostics badge.
   const tail = () => {
     const changed = `${state.gitModel().changed.length} changed`;
@@ -80,8 +83,8 @@ export function HeaderBar() {
       height={1}
       flexDirection="row"
       justifyContent="space-between"
-      paddingLeft={1}
-      paddingRight={1}
+      paddingLeft={PADDING}
+      paddingRight={PADDING}
       backgroundColor={theme.colors.surface.base}
     >
       <Show
@@ -89,7 +92,7 @@ export function HeaderBar() {
         fallback={
           <box flexDirection="row">
             <Show when={state.iconsEnabled()}>
-              <box width={2} overflow="hidden">
+              <box width={GLYPH_CELLS} overflow="hidden">
                 <text fg={theme.colors.text.muted}>
                   {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
                 </text>
@@ -101,7 +104,7 @@ export function HeaderBar() {
                 <box flexDirection="row">
                   <text fg={theme.colors.text.secondary}>{SEP}</text>
                   <Show when={state.iconsEnabled()}>
-                    <box width={2} overflow="hidden">
+                    <box width={GLYPH_CELLS} overflow="hidden">
                       <text fg={theme.colors.text.muted}>{BRANCH_GLYPH}</text>
                     </box>
                   </Show>

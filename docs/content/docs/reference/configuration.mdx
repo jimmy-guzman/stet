@@ -108,10 +108,13 @@ server is either the name of a built-in (`typescript`, `oxlint`, `biome`,
 }
 ```
 
-Servers you name here are programs stet runs. They resolve from the repo's own
-`node_modules/.bin`, then your `PATH`; they are never downloaded. The config is
-yours alone: stet never reads language servers from the repository being
-inspected, so cloning a repo can never make stet execute a command it ships.
+Servers you name here are programs stet runs, and any executable on your
+machine works: a command resolves from the repo's own `node_modules/.bin`,
+then your `PATH` (a rustup-installed rust-analyzer, a `go install`ed gopls, a
+brew-installed ruff), and an absolute path is used as-is. They are never
+auto-downloaded. The config is yours alone: stet never reads language servers
+from the repository being inspected, so cloning a repo can never make stet
+execute a command it ships.
 
 <Callout>
   An entry that does not validate is reported in a notice and skipped; the rest of the config still

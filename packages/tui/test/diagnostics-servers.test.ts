@@ -483,3 +483,24 @@ test("registered config languages route files exactly like built-ins", () => {
     restoreServers(serverSnapshot);
   }
 });
+
+test("an inline server command may be an absolute path, used as-is", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  try {
+    const resolved = resolveLanguages({
+      probe: { extensions: ["prb"], servers: [{ command: ["/bin/ls", "--stdio"] }] },
+    });
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    // Bun.which passes an existing executable path through, so the docs' "an absolute path is
+    // Used as-is" holds: no node_modules/.bin or PATH entry involved.
+    expect(resolveServerCommand("probe/ls", "/some/repo")).toEqual(["/bin/ls", "--stdio"]);
+    expect(serversForPath("src/x.prb")).toEqual(["probe/ls"]);
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+  }
+});

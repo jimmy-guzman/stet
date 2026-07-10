@@ -505,15 +505,23 @@ test("an inline server command may be an absolute path, used as-is", () => {
   }
 });
 
+// The reversed declaration orders below are built through Object.fromEntries because a plain
+// Object literal cannot hold them: the sort-keys auto-fix re-sorts literal keys alphabetically,
+// Which is exactly how an earlier version of these tests silently lost its second order.
+function inBothOrders(entries: [string, unknown][]) {
+  return [Object.fromEntries(entries), Object.fromEntries(entries.toReversed())];
+}
+
 test("an override that drops a file type frees it for another language, in any order", () => {
   // "flow" wants js/jsx, which the typescript built-in owns until the override narrows it away.
   const flow = { extensions: ["js", "jsx"], servers: [{ command: ["flow", "lsp"] }] };
   const narrowed = { extensions: ["ts", "tsx"] };
 
-  const flowFirst = resolveLanguages({ flow, typescript: narrowed });
-  const overrideFirst = resolveLanguages({ flow, typescript: narrowed });
-
-  for (const { issues, languages } of [flowFirst, overrideFirst]) {
+  for (const raw of inBothOrders([
+    ["flow", flow],
+    ["typescript", narrowed],
+  ])) {
+    const { issues, languages } = resolveLanguages(raw);
     expect(issues).toEqual([]);
     expect(languages.flow?.extensions).toEqual({ js: "flow", jsx: "flow" });
     expect(languages.typescript?.extensions).toEqual({ ts: "typescript", tsx: "typescriptreact" });
@@ -524,10 +532,10 @@ test("a file type an override keeps still beats a new claimant, in any order", (
   const grabber = { extensions: ["ts"], servers: [{ command: ["grabber-lsp"] }] };
   const keepsTs = { servers: ["typescript"] };
 
-  for (const raw of [
-    { grabber, typescript: keepsTs },
-    { grabber, typescript: keepsTs },
-  ]) {
+  for (const raw of inBothOrders([
+    ["grabber", grabber],
+    ["typescript", keepsTs],
+  ])) {
     const { issues, languages } = resolveLanguages(raw);
     expect(issues).toEqual([
       'language "grabber": extensions entry "ts" already belongs to "typescript"',

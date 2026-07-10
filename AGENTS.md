@@ -5,7 +5,7 @@ This is a Bun-workspaces monorepo. The repo root is a private orchestrator; the 
 - `packages/tui/` is `stet`, the read-only companion TUI and the published package. **Read `packages/tui/AGENTS.md` before touching it**, plus its `SPEC.md` (behavioral invariants) and `TASTE.md` (UI craft bar). All of its conventions, state/Effect rules, and verification commands live there.
 - `docs/` is the documentation site (Fumadocs on Next.js), deployed to Vercel with root directory `docs`.
 
-Root scripts delegate: `bun run check` runs the TUI's check then knip, `bun run stet` runs the TUI from source, `docs:check`/`docs:build` cover the docs workspace. Run `bun install` at the root (the workspace uses the hoisted linker; see `bunfig.toml`).
+Root scripts delegate: `bun run check` runs the TUI's check then knip, `bun run stet` runs the TUI from source, `docs:check`/`docs:build` cover the docs workspace, and `bun run typecheck` fans out to every workspace's own `typecheck` script via `bun run --filter '*' typecheck` (currently `packages/tui` and `docs`). Run `bun install` at the root (the workspace uses the hoisted linker; see `bunfig.toml`).
 
 Release-please tracks only `packages/tui`, so commits that touch nothing under it never cut a CLI release. A stranded or partial release (tagged but missing assets, npm packages, or the tap update) is republished with `gh workflow run release.yml -f tag=stet-vX.Y.Z`; the push path cannot redo it, because release-please's `GITHUB_TOKEN` is blocked from creating a release for an older commit once the workflow files have changed.
 

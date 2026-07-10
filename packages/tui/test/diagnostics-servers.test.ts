@@ -9,6 +9,10 @@ import { Effect } from "effect";
 import {
   activeServersForPath,
   handshakeConfigFor,
+  registerServers,
+  resolveLanguages,
+  restoreServers,
+  snapshotServers,
   intelLanguage,
   lspLanguageId,
   performHandshake,
@@ -341,4 +345,141 @@ test("substitution never rescans text a placeholder inserted", () => {
     root: repoRoot,
     uri: pathToFileURL(repoRoot).href,
   });
+});
+
+test("resolveLanguages turns a new language into routable file types and synthesized servers", () => {
+  const { issues, languages, servers } = resolveLanguages({
+    python: {
+      extensions: ["py", ".pyi"],
+      servers: [
+        {
+          command: ["pyright-langserver", "--stdio"],
+          settings: { python: { analysis: {} } },
+        },
+      ],
+    },
+  });
+
+  expect(issues).toEqual([]);
+  // File types map to the language key as their LSP languageId; a leading dot is tolerated.
+  expect(languages.python).toMatchObject({
+    extensions: { py: "python", pyi: "python" },
+    servers: ["python/pyright-langserver"],
+  });
+  const spec = servers["python/pyright-langserver"];
+  expect(spec).toMatchObject({
+    args: ["--stdio"],
+    binary: "pyright-langserver",
+    settings: { python: { analysis: {} } },
+  });
+  // Optimistic intel: the handshake-advertised set stays the authoritative gate.
+  expect(spec?.provides).toContain("definition");
+  // No provisioning for user servers: repo-local -> PATH only.
+  expect(spec?.provision).toBeUndefined();
+});
+
+test("resolveLanguages overrides a built-in's servers while inheriting its file types", () => {
+  const { issues, languages, servers } = resolveLanguages({
+    typescript: { servers: ["typescript", "biome"] },
+  });
+
+  expect(issues).toEqual([]);
+  expect(servers).toEqual({});
+  // The list replaced (oxlint dropped); the inherited extensions keep their per-extension ids.
+  expect(languages.typescript?.servers).toEqual(["typescript", "biome"]);
+  expect(languages.typescript?.extensions).toMatchObject({
+    ts: "typescript",
+    tsx: "typescriptreact",
+  });
+});
+
+test("resolveLanguages reports and drops an unknown built-in server reference", () => {
+  const { issues, languages } = resolveLanguages({
+    typescript: { servers: ["typescript", "eslint"] },
+  });
+
+  expect(issues).toEqual(['language "typescript": unknown server "eslint"']);
+  expect(languages.typescript?.servers).toEqual(["typescript"]);
+});
+
+test("resolveLanguages skips invalid entries without sinking the rest", () => {
+  const { issues, languages } = resolveLanguages({
+    go: { extensions: ["go"], servers: [{ command: ["gopls"] }] },
+    nonsense: "not an object",
+    scala: { extensions: [42], servers: [{ command: ["metals"] }] },
+  });
+
+  expect(issues).toEqual([
+    'language "nonsense": must be an object',
+    'language "scala": extensions must be an array of non-empty strings',
+  ]);
+  expect(Object.keys(languages)).toEqual(["go"]);
+});
+
+test("resolveLanguages never lets a new language shadow another's file types", () => {
+  const { issues, languages } = resolveLanguages({
+    mylang: { extensions: ["ts", "ml"], servers: [{ command: ["mylang-lsp"] }] },
+  });
+
+  expect(issues).toEqual([
+    'language "mylang": extensions entry "ts" already belongs to "typescript"',
+  ]);
+  // The unclaimed extension still routes; the shadowing one is skipped.
+  expect(languages.mylang?.extensions).toEqual({ ml: "mylang" });
+});
+
+test("resolveLanguages rejects a new language with no file types or no servers", () => {
+  const { issues, languages } = resolveLanguages({
+    empty: { servers: [{ command: ["lsp"] }] },
+    serverless: { extensions: ["xyz"] },
+  });
+
+  expect(issues).toEqual([
+    'language "empty": declares no file types',
+    'language "serverless": declares no servers',
+  ]);
+  expect(languages).toEqual({});
+});
+
+test("resolveLanguages flags unknown fields so typos never silently no-op", () => {
+  const { issues } = resolveLanguages({
+    // A typo'd extensions key leaves a new language with no file types at all.
+    python: { extentions: ["py"], servers: [{ command: ["pyright"] }] },
+    // A typo'd command key leaves an inline server unusable.
+    ruby: { extensions: ["rb"], servers: [{ comand: ["ruby-lsp"] }] },
+  });
+
+  expect(issues).toContain('language "python": unknown field "extentions"');
+  expect(issues).toContain('language "python": declares no file types');
+  expect(issues).toContain(
+    'language "ruby": a server must be a built-in name or { command: [...] }',
+  );
+});
+
+test("registered config languages route files exactly like built-ins", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  try {
+    const resolved = resolveLanguages({
+      docker: {
+        filenames: ["Dockerfile"],
+        servers: [{ command: ["docker-langserver", "--stdio"] }],
+      },
+      typescript: { servers: ["typescript"] },
+    });
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    // The inline server routes by exact filename with the language key as languageId.
+    expect(serversForPath("services/api/Dockerfile")).toEqual(["docker/docker-langserver"]);
+    expect(lspLanguageId("services/api/Dockerfile")).toBe("docker");
+    // The override dropped oxlint and biome for the JS/TS family.
+    expect(serversForPath("src/a.ts")).toEqual(["typescript"]);
+    // The synthesized server declares intel, so the warm-hold picks it up.
+    expect(intelLanguage("services/api/Dockerfile", "/repo")).toBe("docker/docker-langserver");
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+  }
 });

@@ -323,6 +323,202 @@ export function registerLanguages(entries: Record<string, Language>) {
   }
 }
 
+// Test-only: the server registry is process-global like the language table; snapshot before and
+// Restore after so a test that registers servers never leaks them into later tests.
+export function snapshotServers() {
+  return { ...registry };
+}
+
+export function restoreServers(snapshot: ReturnType<typeof snapshotServers>) {
+  for (const key of Object.keys(registry)) {
+    delete registry[key];
+  }
+  Object.assign(registry, snapshot);
+}
+
+/** Merge servers into the registry; the config layer registers synthesized user servers here. */
+export function registerServers(entries: Record<string, ServerSpec>) {
+  Object.assign(registry, entries);
+}
+
+export interface ResolvedLanguages {
+  languages: Record<string, Language>;
+  servers: Record<string, ServerSpec>;
+  issues: string[];
+}
+
+/**
+ * Resolve raw config `languages` entries into registrable languages plus the server specs their
+ * inline commands synthesize, mirroring `resolveThemes`: every problem lands in `issues` rather
+ * than thrown, so one bad entry never sinks the rest. A partial entry merges over its built-in per
+ * field (absent fields inherit; `servers` replaces the whole list, which is how a linter is
+ * dropped). A user language's file types take the language key as their LSP `languageId` unless the
+ * built-in already maps them, and a file type another language owns is reported and skipped, never
+ * silently shadowed. Inline servers resolve repo-local -> PATH only (no `provision`, no `detect`)
+ * and declare every intel capability optimistically: the handshake-advertised set on `ServerHandle`
+ * is the authoritative gate, so over-declaring costs one acquire, not a wrong answer.
+ */
+export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguages {
+  const issues: string[] = [];
+  const resolvedLanguages: Record<string, Language> = {};
+  const resolvedServers: Record<string, ServerSpec> = {};
+
+  const claimedExtensions = new Map<string, string>();
+  const claimedFilenames = new Map<string, string>();
+  for (const [name, language] of languages) {
+    for (const extension of Object.keys(language.extensions)) {
+      claimedExtensions.set(extension, name);
+    }
+    for (const filename of Object.keys(language.filenames ?? {})) {
+      claimedFilenames.set(filename, name);
+    }
+  }
+
+  const fileTypes = (
+    name: string,
+    field: "extensions" | "filenames",
+    value: unknown,
+    claimed: Map<string, string>,
+    builtin: Record<string, string> | undefined,
+  ) => {
+    const items = Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string" && item !== "")
+      : undefined;
+    if (items === undefined || (Array.isArray(value) && items.length !== value.length)) {
+      issues.push(`language "${name}": ${field} must be an array of non-empty strings`);
+      return undefined;
+    }
+    const record: Record<string, string> = {};
+    for (const item of items) {
+      // Tolerate a ".py"-style leading dot on extensions; the matcher keys bare suffixes.
+      const key = field === "extensions" ? item.replace(/^\./, "") : item;
+      const owner = claimed.get(key);
+      if (owner !== undefined && owner !== name) {
+        issues.push(`language "${name}": ${field} entry "${item}" already belongs to "${owner}"`);
+        continue;
+      }
+      claimed.set(key, name);
+      record[key] = builtin?.[key] ?? name;
+    }
+    return record;
+  };
+
+  const uniqueServerKey = (base: string) => {
+    if (registry[base] === undefined && resolvedServers[base] === undefined) {
+      return base;
+    }
+    const taken = (key: string) =>
+      registry[key] !== undefined || resolvedServers[key] !== undefined;
+    const next = (index: number): string =>
+      taken(`${base}-${index}`) ? next(index + 1) : `${base}-${index}`;
+    return next(2);
+  };
+
+  const inlineServerFields = new Set(["command", "initializationOptions", "settings"]);
+  const serverList = (name: string, value: unknown) => {
+    if (!Array.isArray(value)) {
+      issues.push(`language "${name}": servers must be an array`);
+      return undefined;
+    }
+    const keys: string[] = [];
+    for (const entry of value) {
+      if (typeof entry === "string") {
+        if (registry[entry] === undefined) {
+          issues.push(`language "${name}": unknown server "${entry}"`);
+          continue;
+        }
+        keys.push(entry);
+        continue;
+      }
+      if (!isObject(entry) || !Array.isArray(entry.command)) {
+        issues.push(`language "${name}": a server must be a built-in name or { command: [...] }`);
+        continue;
+      }
+      for (const field of Object.keys(entry)) {
+        if (!inlineServerFields.has(field)) {
+          issues.push(`language "${name}": unknown server field "${field}"`);
+        }
+      }
+      const command = entry.command.filter(
+        (part): part is string => typeof part === "string" && part !== "",
+      );
+      const [binary, ...args] = command;
+      if (binary === undefined || command.length !== entry.command.length) {
+        issues.push(`language "${name}": an inline server's command must be non-empty strings`);
+        continue;
+      }
+      const key = uniqueServerKey(`${name}/${binary.slice(binary.lastIndexOf("/") + 1)}`);
+      resolvedServers[key] = {
+        args,
+        binary,
+        provides: [...intelCapabilities],
+        ...(entry.initializationOptions === undefined
+          ? {}
+          : { initializationOptions: entry.initializationOptions }),
+        ...(entry.settings === undefined ? {} : { settings: entry.settings }),
+      };
+      keys.push(key);
+    }
+    return keys;
+  };
+
+  const languageFields = new Set(["extensions", "filenames", "servers"]);
+  for (const [name, entry] of Object.entries(raw)) {
+    if (!isObject(entry)) {
+      issues.push(`language "${name}": must be an object`);
+      continue;
+    }
+    for (const field of Object.keys(entry)) {
+      if (!languageFields.has(field)) {
+        issues.push(`language "${name}": unknown field "${field}"`);
+      }
+    }
+    const builtin = languages.get(name);
+    const extensions =
+      entry.extensions === undefined
+        ? builtin?.extensions
+        : fileTypes(name, "extensions", entry.extensions, claimedExtensions, builtin?.extensions);
+    const filenames =
+      entry.filenames === undefined
+        ? builtin?.filenames
+        : fileTypes(name, "filenames", entry.filenames, claimedFilenames, builtin?.filenames);
+    if (
+      (entry.extensions !== undefined && extensions === undefined) ||
+      (entry.filenames !== undefined && filenames === undefined)
+    ) {
+      continue;
+    }
+    if (
+      builtin === undefined &&
+      Object.keys(extensions ?? {}).length === 0 &&
+      Object.keys(filenames ?? {}).length === 0
+    ) {
+      issues.push(`language "${name}": declares no file types`);
+      continue;
+    }
+    const servers =
+      entry.servers === undefined
+        ? builtin === undefined
+          ? undefined
+          : [...builtin.servers]
+        : serverList(name, entry.servers);
+    if (entry.servers !== undefined && servers === undefined) {
+      continue;
+    }
+    if (builtin === undefined && (servers === undefined || servers.length === 0)) {
+      issues.push(`language "${name}": declares no servers`);
+      continue;
+    }
+    resolvedLanguages[name] = {
+      extensions: extensions ?? {},
+      ...(filenames === undefined || Object.keys(filenames).length === 0 ? {} : { filenames }),
+      servers: servers ?? [],
+    };
+  }
+
+  return { issues, languages: resolvedLanguages, servers: resolvedServers };
+}
+
 // Exact filename beats extension; the extension comes from the basename so a dotted directory
 // Never reads as one.
 function fileType(path: string) {

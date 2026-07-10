@@ -8,7 +8,7 @@
   },
   "rules": {
     "import/no-unassigned-import": "off",
-    "new-cap": ["error", { "capIsNewExceptions": ["Geist", "Geist_Mono"] }],
+    "new-cap": ["error", { "capIsNewExceptions": ["Data.TaggedError", "Geist", "Geist_Mono"] }],
     "react/react-in-jsx-scope": "off"
   },
   "ignorePatterns": [".next", ".source", "out", "next-env.d.ts"]

@@ -7,7 +7,7 @@ This is a Bun-workspaces monorepo. The repo root is a private orchestrator; the 
 
 Root scripts delegate: `bun run check` runs the TUI's check then knip, `bun run stet` runs the TUI from source, `docs:check`/`docs:build` cover the docs workspace. Run `bun install` at the root (the workspace uses the hoisted linker; see `bunfig.toml`).
 
-Release-please tracks only `packages/tui`, so commits that touch nothing under it never cut a CLI release.
+Release-please tracks only `packages/tui`, so commits that touch nothing under it never cut a CLI release. A stranded or partial release (tagged but missing assets, npm packages, or the tap update) is republished with `gh workflow run release.yml -f tag=stet-vX.Y.Z`; the push path cannot redo it, because release-please's `GITHUB_TOKEN` is blocked from creating a release for an older commit once the workflow files have changed.
 
 ## Repo-wide rules
 

@@ -22,7 +22,7 @@ describe("help overlay", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      const initial = await settleUntil("app chrome", (frame) => frame.includes("stet"), 5);
+      const initial = await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
       expect(initial).toContain("? keys · q quit");
 
       mockInput.pressKey("?");
@@ -77,7 +77,7 @@ describe("help overlay", () => {
         "help closed by q",
         (frame) => !frame.includes("switch to another git worktree"),
       );
-      expect(closed).toContain("stet");
+      expect(closed).toContain("q quit");
       expect(closed).toContain("? keys · q quit");
     } finally {
       renderer.destroy();

@@ -9,8 +9,28 @@ export function toCodePoints(text: string): string[] {
   return chars;
 }
 
+// Truncate to `max` display columns (not code units), so a wide glyph or emoji counts as its real
+// Cell width and the result never overflows the budget it was given. A trailing … marks the cut and
+// Costs one cell, so the ellipsised form fits in `max` too.
 export function truncate(text: string, max: number) {
-  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
+  if (max <= 0) {
+    return "";
+  }
+  if (Bun.stringWidth(text) <= max) {
+    return text;
+  }
+  const budget = max - 1;
+  let width = 0;
+  let kept = "";
+  for (const char of text) {
+    const cells = Bun.stringWidth(char);
+    if (width + cells > budget) {
+      break;
+    }
+    width += cells;
+    kept += char;
+  }
+  return `${kept}…`;
 }
 
 export function truncateLeft(text: string, max: number) {

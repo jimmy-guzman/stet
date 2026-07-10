@@ -106,9 +106,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          count=$(gh release view "$TAG" --json assets --jq '.assets | length')
-          if [ "$count" -ne 5 ]; then
-            echo "::error::expected 5 release assets on $TAG, found $count"
+          expected=$(printf '%s\n' SHA256SUMS stet-darwin-arm64.tar.gz stet-darwin-x64.tar.gz stet-linux-arm64.tar.gz stet-linux-x64.tar.gz | sort)
+          actual=$(gh release view "$TAG" --json assets --jq '.assets[].name' | sort)
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::release assets on $TAG do not match the expected set"
+            printf 'expected:\n%s\nactual:\n%s\n' "$expected" "$actual"
             exit 1
           fi
           version="${TAG#stet-v}"

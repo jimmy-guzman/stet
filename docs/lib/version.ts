@@ -26,7 +26,7 @@ const loadVersion = Effect.gen(function* () {
       }),
     catch: (cause) =>
       new VersionError({ message: cause instanceof Error ? cause.message : String(cause) }),
-  }).pipe(Effect.timeout("3 seconds"));
+  });
 
   if (!res.ok) {
     return yield* Effect.fail(
@@ -47,6 +47,9 @@ const loadVersion = Effect.gen(function* () {
 
 export function getStetVersion(): Promise<string | undefined> {
   return Effect.runPromise(
-    loadVersion.pipe(Effect.orElseSucceed((): string | undefined => undefined)),
+    loadVersion.pipe(
+      Effect.timeout("3 seconds"),
+      Effect.orElseSucceed((): string | undefined => undefined),
+    ),
   );
 }

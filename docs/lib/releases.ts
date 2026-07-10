@@ -120,23 +120,41 @@ function toRelease(release: GithubRelease): Release {
   };
 }
 
+function fetchReleasesPage(page: number): Promise<Response> {
+  return fetch(
+    `https://api.github.com/repos/jimmy-guzman/stet/releases?per_page=100&page=${page}`,
+    {
+      headers: {
+        "User-Agent": "stet-docs",
+        "Accept": "application/vnd.github+json",
+      },
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+}
+
+function lastPageFrom(linkHeader: string | null): number {
+  const match = linkHeader?.match(/[?&]page=(\d+)[^>]*>;\s*rel="last"/);
+  return match ? Number(match[1]) : 1;
+}
+
 export async function getReleases(): Promise<Release[]> {
   try {
-    const res = await fetch(
-      "https://api.github.com/repos/jimmy-guzman/stet/releases?per_page=100",
-      {
-        headers: {
-          "User-Agent": "stet-docs",
-          "Accept": "application/vnd.github+json",
-        },
-        next: { revalidate: 3600 },
-        signal: AbortSignal.timeout(5000),
-      },
-    );
-    if (!res.ok) return [];
-    const data: unknown = await res.json();
-    if (!Array.isArray(data)) return [];
-    return data
+    const first = await fetchReleasesPage(1);
+    if (!first.ok) return [];
+    const firstData: unknown = await first.json();
+    if (!Array.isArray(firstData)) return [];
+
+    const lastPage = lastPageFrom(first.headers.get("link"));
+    const restPages = Array.from({ length: lastPage - 1 }, (_, index) => index + 2);
+    const restResponses = await Promise.all(restPages.map(fetchReleasesPage));
+    if (restResponses.some((res) => !res.ok)) return [];
+    const restData: unknown[] = await Promise.all(restResponses.map((res) => res.json()));
+    if (restData.some((data) => !Array.isArray(data))) return [];
+
+    return [firstData, ...restData]
+      .flat()
       .filter(isGithubRelease)
       .filter((release) => !release.draft && !release.prerelease)
       .map(toRelease);

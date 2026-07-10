@@ -328,3 +328,17 @@ test("a handshake closure replaces the data-derived handshake entirely", () => {
   expect(config?.initializationOptions).toEqual({ fromClosure: true });
   expect(config?.workspaceCapabilities).toBeUndefined();
 });
+
+test("substitution never rescans text a placeholder inserted", () => {
+  // A repo path containing a literal placeholder token is legal on disk; the substitution must
+  // Insert it verbatim, not substitute inside its own output.
+  const repoRoot = "/tmp/{repoUri}/repo";
+  const config = handshakeConfigFor(
+    { initializationOptions: { root: "{repoRoot}", uri: "{repoUri}" } },
+    repoRoot,
+  );
+  expect(config?.initializationOptions).toEqual({
+    root: repoRoot,
+    uri: pathToFileURL(repoRoot).href,
+  });
+});

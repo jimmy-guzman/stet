@@ -208,12 +208,13 @@ function configurationItems(params: unknown): unknown[] {
 }
 
 // Deep-substitute the repo placeholders in every string leaf of a JSON value, so registry (and
-// Eventually user-config) server options express per-repo values as data.
+// Eventually user-config) server options express per-repo values as data. One pass over the
+// Original string, so a repo path that itself contains a placeholder token is never rescanned.
 function substitutePlaceholders(value: unknown, repoRoot: string): unknown {
   if (typeof value === "string") {
-    return value
-      .replaceAll("{repoRoot}", repoRoot)
-      .replaceAll("{repoUri}", pathToFileURL(repoRoot).href);
+    return value.replaceAll(/\{repo(?:Root|Uri)\}/g, (token) =>
+      token === "{repoRoot}" ? repoRoot : pathToFileURL(repoRoot).href,
+    );
   }
   if (Array.isArray(value)) {
     return value.map((item) => substitutePlaceholders(item, repoRoot));

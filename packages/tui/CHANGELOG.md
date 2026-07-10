@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.7.1...stet-v0.7.2) (2026-07-10)
+
+
+### Features
+
+* **diagnostics:** ✨ hold documents open across runs ([#254](https://github.com/jimmy-guzman/stet/issues/254)) ([482a44a](https://github.com/jimmy-guzman/stet/commit/482a44a373ffdf2e3c8cc2d0b6ba76e88496b41e))
+* **diagnostics:** ✨ provision rust-analyzer through a binary ([#256](https://github.com/jimmy-guzman/stet/issues/256)) ([5a51001](https://github.com/jimmy-guzman/stet/commit/5a5100114f0cfa4a7b90f9e65c13e19bfe138de9))
+* **diagnostics:** ✨ pull diagnostics where servers advertise them ([#251](https://github.com/jimmy-guzman/stet/issues/251)) ([8363b7b](https://github.com/jimmy-guzman/stet/commit/8363b7bed10f93af0a5bcb34adc677aab87f0c3c))
+* **header:** ✨ surface git identity & scope ([#261](https://github.com/jimmy-guzman/stet/issues/261)) ([ecc0f38](https://github.com/jimmy-guzman/stet/commit/ecc0f3827d13cca7cc982ebd7b7478e125e17c9d))
+
 ## [0.7.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.7.0...stet-v0.7.1) (2026-07-08)
 
 

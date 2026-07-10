@@ -363,22 +363,10 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
   const resolvedLanguages: Record<string, Language> = {};
   const resolvedServers: Record<string, ServerSpec> = {};
 
-  const claimedExtensions = new Map<string, string>();
-  const claimedFilenames = new Map<string, string>();
-  for (const [name, language] of languages) {
-    for (const extension of Object.keys(language.extensions)) {
-      claimedExtensions.set(extension, name);
-    }
-    for (const filename of Object.keys(language.filenames ?? {})) {
-      claimedFilenames.set(filename, name);
-    }
-  }
-
   const fileTypes = (
     name: string,
     field: "extensions" | "filenames",
     value: unknown,
-    claimed: Map<string, string>,
     builtin: Record<string, string> | undefined,
   ) => {
     const items = Array.isArray(value)
@@ -388,19 +376,13 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
       issues.push(`language "${name}": ${field} must be an array of non-empty strings`);
       return undefined;
     }
-    const record: Record<string, string> = {};
-    for (const item of items) {
-      // Tolerate a ".py"-style leading dot on extensions; the matcher keys bare suffixes.
-      const key = field === "extensions" ? item.replace(/^\./, "") : item;
-      const owner = claimed.get(key);
-      if (owner !== undefined && owner !== name) {
-        issues.push(`language "${name}": ${field} entry "${item}" already belongs to "${owner}"`);
-        continue;
-      }
-      claimed.set(key, name);
-      record[key] = builtin?.[key] ?? name;
-    }
-    return record;
+    return Object.fromEntries(
+      items.map((item) => {
+        // Tolerate a ".py"-style leading dot on extensions; the matcher keys bare suffixes.
+        const key = field === "extensions" ? item.replace(/^\./, "") : item;
+        return [key, builtin?.[key] ?? name];
+      }),
+    );
   };
 
   const uniqueServerKey = (base: string) => {
@@ -462,6 +444,17 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
     return keys;
   };
 
+  // Pass 1: validate each entry into a proposal, no cross-entry checks yet. Only entries that
+  // Survive every validation propose anything, so a skipped entry can never block another's
+  // File types.
+  interface Proposal {
+    readonly name: string;
+    readonly override: boolean;
+    readonly extensions: Record<string, string>;
+    readonly filenames?: Record<string, string>;
+    readonly servers: readonly string[];
+  }
+  const proposals: Proposal[] = [];
   const languageFields = new Set(["extensions", "filenames", "servers"]);
   for (const [name, entry] of Object.entries(raw)) {
     if (!isObject(entry)) {
@@ -477,11 +470,11 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
     const extensions =
       entry.extensions === undefined
         ? builtin?.extensions
-        : fileTypes(name, "extensions", entry.extensions, claimedExtensions, builtin?.extensions);
+        : fileTypes(name, "extensions", entry.extensions, builtin?.extensions);
     const filenames =
       entry.filenames === undefined
         ? builtin?.filenames
-        : fileTypes(name, "filenames", entry.filenames, claimedFilenames, builtin?.filenames);
+        : fileTypes(name, "filenames", entry.filenames, builtin?.filenames);
     if (
       (entry.extensions !== undefined && extensions === undefined) ||
       (entry.filenames !== undefined && filenames === undefined)
@@ -509,10 +502,66 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
       issues.push(`language "${name}": declares no servers`);
       continue;
     }
-    resolvedLanguages[name] = {
+    proposals.push({
       extensions: extensions ?? {},
       ...(filenames === undefined || Object.keys(filenames).length === 0 ? {} : { filenames }),
+      name,
+      override: builtin !== undefined,
       servers: servers ?? [],
+    });
+  }
+
+  // Pass 2: reconcile file-type claims against the FINAL table, not declaration order. A committed
+  // Override replaces its built-in wholesale, so the built-in's dropped file types are genuinely
+  // Free; overrides claim before new languages, so a kept built-in type still beats a new claimant
+  // Regardless of where each appears in the config.
+  const overridden = new Set(
+    proposals.filter((proposal) => proposal.override).map((proposal) => proposal.name),
+  );
+  const claimedExtensions = new Map<string, string>();
+  const claimedFilenames = new Map<string, string>();
+  for (const [name, language] of languages) {
+    if (overridden.has(name)) {
+      continue;
+    }
+    for (const extension of Object.keys(language.extensions)) {
+      claimedExtensions.set(extension, name);
+    }
+    for (const filename of Object.keys(language.filenames ?? {})) {
+      claimedFilenames.set(filename, name);
+    }
+  }
+  const claim = (
+    name: string,
+    field: "extensions" | "filenames",
+    record: Record<string, string>,
+    claimed: Map<string, string>,
+  ) =>
+    Object.fromEntries(
+      Object.entries(record).filter(([key]) => {
+        const owner = claimed.get(key);
+        if (owner !== undefined && owner !== name) {
+          issues.push(`language "${name}": ${field} entry "${key}" already belongs to "${owner}"`);
+          return false;
+        }
+        claimed.set(key, name);
+        return true;
+      }),
+    );
+  const ordered = [
+    ...proposals.filter((proposal) => proposal.override),
+    ...proposals.filter((proposal) => !proposal.override),
+  ];
+  for (const proposal of ordered) {
+    const extensions = claim(proposal.name, "extensions", proposal.extensions, claimedExtensions);
+    const filenames =
+      proposal.filenames === undefined
+        ? undefined
+        : claim(proposal.name, "filenames", proposal.filenames, claimedFilenames);
+    resolvedLanguages[proposal.name] = {
+      extensions,
+      ...(filenames === undefined || Object.keys(filenames).length === 0 ? {} : { filenames }),
+      servers: proposal.servers,
     };
   }
 

@@ -1,5 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,7 +22,7 @@ import { Process } from "@/process";
 const spec: ProvisionSpec = {
   args: ["--stdio"],
   binary: "typescript-language-server",
-  packages: ["typescript-language-server", "typescript"],
+  channel: { kind: "npm", packages: ["typescript-language-server", "typescript"] },
 };
 
 // The test preload disables downloads globally; restore that default after each toggle.
@@ -63,7 +72,7 @@ test("ensure returns ready when the binary is already cached", async () => {
       "stet",
       "lsp",
       "typescript",
-      provisionKey(spec.packages),
+      provisionKey(spec.channel),
       "node_modules",
       ".bin",
     );
@@ -169,13 +178,13 @@ test("provisioning installs the registry's exact pinned versions", async () => {
   process.env.STET_NO_LSP_DOWNLOAD = "";
   const root = tempRoot();
   const ts = registry.typescript;
-  if (ts?.provision === undefined) {
-    throw new Error("typescript must remain provisionable for this test");
+  if (ts?.provision?.kind !== "npm") {
+    throw new Error("typescript must remain npm-provisionable for this test");
   }
   const provisionSpec: ProvisionSpec = {
     args: ts.args,
     binary: ts.binary,
-    packages: ts.provision.packages,
+    channel: ts.provision,
   };
   const commands: string[][] = [];
   try {
@@ -197,11 +206,27 @@ test("provisioning installs the registry's exact pinned versions", async () => {
   }
 });
 
-test("every provisioned server pins an exact version, never a bare @latest name", () => {
+test("every provisioned server pins exactly, never a floating version or checksum-less asset", () => {
   for (const [language, serverSpec] of Object.entries(registry)) {
-    for (const pkg of serverSpec.provision?.packages ?? []) {
-      // A pinned spec carries `@<version>`; a bare `oxlint` or scoped `@biomejs/biome` does not.
-      expect(pkg, `${language} pins ${pkg}`).toMatch(/@\d/);
+    const channel = serverSpec.provision;
+    if (channel?.kind === "npm") {
+      for (const pkg of channel.packages) {
+        // A pinned spec carries `@<version>`; a bare `oxlint` or scoped `@biomejs/biome` does not.
+        expect(pkg, `${language} pins ${pkg}`).toMatch(/@\d/);
+      }
+    }
+    if (channel?.kind === "binary") {
+      expect(channel.tag, `${language} pins a release tag`).not.toBe("");
+      // Both shipped platforms are covered, each integrity-pinned to a full sha256.
+      for (const os of ["darwin", "linux"] as const) {
+        for (const arch of ["arm64", "x64"] as const) {
+          const asset = channel.assets.find(
+            (candidate) => candidate.os === os && candidate.arch === arch,
+          );
+          expect(asset, `${language} ships ${os}-${arch}`).toBeDefined();
+          expect(asset?.sha256, `${language} ${os}-${arch} checksum`).toMatch(/^[0-9a-f]{64}$/);
+        }
+      }
     }
   }
 });
@@ -272,5 +297,146 @@ test("a filesystem setup failure degrades to failed, not a stuck install", async
     expect(result.second).toBe("failed");
   } finally {
     rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+const binaryBytes = new TextEncoder().encode("#!/bin/sh\necho rust-analyzer\n");
+const gzipped = Bun.gzipSync(binaryBytes);
+const gzippedSha = createHash("sha256").update(gzipped).digest("hex");
+
+function binarySpec(sha256: string): ProvisionSpec {
+  return {
+    args: [],
+    binary: "rust-analyzer",
+    channel: {
+      assets: [
+        { arch: "arm64", asset: "ra-darwin-arm64.gz", os: "darwin", sha256 },
+        { arch: "x64", asset: "ra-darwin-x64.gz", os: "darwin", sha256 },
+        { arch: "arm64", asset: "ra-linux-arm64.gz", os: "linux", sha256 },
+        { arch: "x64", asset: "ra-linux-x64.gz", os: "linux", sha256 },
+      ],
+      kind: "binary",
+      repo: "rust-lang/rust-analyzer",
+      tag: "2026-07-06",
+    },
+  };
+}
+
+function withBinaryProvisioner<A, E>(
+  root: string,
+  download: (url: string) => Effect.Effect<Uint8Array<ArrayBuffer>>,
+  effect: Effect.Effect<A, E, Provisioner>,
+) {
+  return Effect.runPromise(
+    Effect.scoped(
+      effect.pipe(
+        Effect.provide(
+          Layer.effect(Provisioner, makeProvisioner(root, undefined, download)).pipe(
+            // The binary channel spawns nothing; a Process that fails proves it.
+            Layer.provide(
+              Layer.succeed(Process)({
+                run: () => Effect.die(new Error("binary channel must not spawn")),
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+test("the binary channel verifies the checksum, extracts, and marks the file executable", async () => {
+  process.env.STET_NO_LSP_DOWNLOAD = "";
+  const root = tempRoot();
+  const urls: string[] = [];
+  try {
+    const state = await withBinaryProvisioner(
+      root,
+      (url) =>
+        Effect.sync(() => {
+          urls.push(url);
+          return gzipped;
+        }),
+      Effect.gen(function* scenario() {
+        const provisioner = yield* Provisioner;
+        yield* provisioner.ensure("rust-analyzer", binarySpec(gzippedSha));
+        yield* Queue.take(provisioner.completions);
+        return yield* provisioner.ensure("rust-analyzer", binarySpec(gzippedSha));
+      }),
+    );
+
+    expect(state.kind).toBe("ready");
+    if (state.kind === "ready") {
+      const [bin] = state.command;
+      expect(readFileSync(bin ?? "", "utf8")).toBe("#!/bin/sh\necho rust-analyzer\n");
+      // The executable bit is what lets the pool spawn it.
+      expect(statSync(bin ?? "").mode & 0o111).not.toBe(0);
+    }
+    // The URL is assembled from the pinned repo, tag, and this platform's asset name.
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain("github.com/rust-lang/rust-analyzer/releases/download/2026-07-06/");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("a checksum mismatch fails the install and writes no binary", async () => {
+  process.env.STET_NO_LSP_DOWNLOAD = "";
+  const root = tempRoot();
+  try {
+    const state = await withBinaryProvisioner(
+      root,
+      () => Effect.succeed(Bun.gzipSync(new TextEncoder().encode("tampered"))),
+      Effect.gen(function* scenario() {
+        const provisioner = yield* Provisioner;
+        yield* provisioner.ensure("rust-analyzer", binarySpec(gzippedSha));
+        yield* Queue.take(provisioner.completions);
+        return yield* provisioner.ensure("rust-analyzer", binarySpec(gzippedSha));
+      }),
+    );
+
+    expect(state.kind).toBe("failed");
+    if (state.kind === "failed") {
+      expect(state.message).toContain("checksum mismatch");
+    }
+    // Nothing unverified ever lands on disk.
+    expect(existsSync(join(root, "stet", "lsp", "rust-analyzer"))).toBe(false);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("a platform with no pinned asset degrades to failed, not a hang", async () => {
+  process.env.STET_NO_LSP_DOWNLOAD = "";
+  const root = tempRoot();
+  const assetless: ProvisionSpec = {
+    args: [],
+    binary: "rust-analyzer",
+    channel: {
+      // An asset list that cannot match: no build for this machine.
+      assets: [],
+      kind: "binary",
+      repo: "rust-lang/rust-analyzer",
+      tag: "2026-07-06",
+    },
+  };
+  try {
+    const state = await withBinaryProvisioner(
+      root,
+      () => Effect.sync(() => gzipped),
+      Effect.gen(function* scenario() {
+        const provisioner = yield* Provisioner;
+        yield* provisioner.ensure("rust-analyzer", assetless);
+        yield* Queue.take(provisioner.completions);
+        return yield* provisioner.ensure("rust-analyzer", assetless);
+      }),
+    );
+
+    expect(state.kind).toBe("failed");
+    if (state.kind === "failed") {
+      expect(state.message).toContain("no rust-analyzer build for");
+    }
+  } finally {
+    rmSync(root, { force: true, recursive: true });
   }
 });

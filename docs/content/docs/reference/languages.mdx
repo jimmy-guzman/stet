@@ -6,10 +6,10 @@ description: What stet gives every language, and which get diagnostics and code 
 import { Callout } from "fumadocs-ui/components/callout";
 
 Language support is layered. Every file in the repo gets syntax highlighting,
-a file-type icon, and structural folding, whatever the language. The languages
-below also get diagnostics from real language servers, and the TypeScript and
-Rust families get full code navigation on top. Anything not listed can be
-wired up through [your config](/docs/reference/configuration#languages).
+a file-type icon, and structural folding, whatever the language. Language
+servers add diagnostics for the languages the table marks, TypeScript and
+Rust get full code navigation on top, and you can wire anything else up
+through [your config](/docs/reference/configuration#languages).
 
 | Language                | Highlighting | Folding    | Diagnostics   | Code intelligence |
 | ----------------------- | ------------ | ---------- | ------------- | ----------------- |
@@ -25,9 +25,9 @@ wired up through [your config](/docs/reference/configuration#languages).
 ## Syntax highlighting
 
 Any language [Shiki](https://shiki.style/) bundles highlights out of the box,
-200 and counting. The grammar is picked from the file's name, exact names like
-`Dockerfile` included, and loads on demand, so there is nothing to configure.
-Every surface that shows code shares the same highlighter and theme: the diff,
+200 and counting. stet picks the grammar from the file's name, exact names
+like `Dockerfile` included, and loads it on demand. Every surface that shows
+code shares the same highlighter and theme: the diff,
 the full file, search results, hover cards, and reference previews. A file
 type nothing recognizes falls back to plain text.
 
@@ -60,8 +60,8 @@ them (label `biome`) when the repo has a `biome.json` or `biome.jsonc`.
 ### Rust
 
 `.rs` files get rust-analyzer's own analysis (label `rust-analyzer`) plus the
-findings cargo check produces through it (label `rustc`). The server is
-downloaded automatically on first use, so a Rust repo works with no setup.
+findings cargo check produces through it (label `rustc`). stet downloads the
+server automatically the first time a Rust file needs it.
 
 ### JSON & JSONC
 
@@ -96,8 +96,8 @@ rust-analyzer. Pass `--no-lsp-download` (or set `STET_NO_LSP_DOWNLOAD`) to
 turn downloads off.
 
 <Callout>
-  Offline or air-gapped? A download that cannot complete times out and the affected files show as
-  unavailable; nothing hangs.
+  A download that cannot complete (offline, air-gapped, locked-down CI) times out, and its files
+  show as unavailable instead of waiting forever.
 </Callout>
 
 ## Add your own languages
@@ -116,7 +116,7 @@ your machine, and can change which servers run for the built-in languages:
 }
 ```
 
-Servers you name are any executable, resolved locally and never taken from
-the repository being inspected. See
+Servers you name are any executable on your machine; stet resolves them
+locally and never runs a command the inspected repository ships. See
 [configuration](/docs/reference/configuration#languages) for the full shape:
 filename routing, server options, and overriding built-ins.

@@ -7,7 +7,7 @@
 - Bun for scripts and dependencies; pin every dependency to an exact version (no `^`/`~`), matching the rest of the repo.
 - Fumadocs (`fumadocs-core`, `fumadocs-ui`, `fumadocs-mdx`) with `createMDX()` wired in `next.config.mjs`. Code blocks use stet's own Shiki themes from `lib/code-theme.ts`, set in `source.config.ts`.
 - Tailwind v4 via `@tailwindcss/postcss`. Use Fumadocs theme tokens (`fd-*` classes: `text-fd-muted-foreground`, `border-fd-border`, `bg-fd-background`, and so on), never hardcoded colors.
-- Lint and format are oxlint and oxfmt, same as the TUI. No ESLint or Prettier.
+- Lint and format are oxlint and oxfmt, same as the TUI, run from the repo root rather than from within `docs/`. No ESLint or Prettier.
 - Async IO (server-side data fetching in `lib/`) uses Effect, the same as the TUI, but leanly: no services, layers, or `ManagedRuntime`. Write the flow as an `Effect.gen` with typed `Data.TaggedError` failures, then run it at the call boundary with `Effect.runPromise`, collapsing failure to a safe fallback via `Effect.orElseSucceed` (`lib/releases.ts` returns `[]`, `lib/version.ts` returns `undefined`). Bound any request fan-out with `Effect.forEach(..., { concurrency })`. `Data.TaggedError` is in the docs `new-cap` `capIsNewExceptions`.
 
 ## Content
@@ -24,5 +24,5 @@
 
 ## Verification
 
-- `bun run check` (from `docs/`) runs `fumadocs-mdx && tsc --noEmit && oxlint && oxfmt --check .`. From the repo root, `bun run docs:check` runs the same, and `bun run docs:build` is the `next build` smoke check.
+- `bun run typecheck` (from `docs/`) runs `fumadocs-mdx && tsc --noEmit`. From the repo root, `bun run docs:check` runs `gen:keys --check` then the same, `bun run docs:build` is the `next build` smoke check, and full-repo format/lint (including `docs/`) is covered by the root `bun run check`.
 - `bun install` at the repo root after any dependency or lockfile change (the workspace uses the hoisted linker).

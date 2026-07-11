@@ -19,7 +19,7 @@ See `README.md` for what stet does, its keys, and its non-goals; see `SPEC.md` f
 - Prefer `bun run`, `bun test`, `bun install`, `bun add`, `bun add -d`, `bun remove`, `bun build`. No Node/npm/Jest/esbuild wrappers unless explicitly requested. Runtime flags go before `run` (e.g. `bun --watch run <script>`).
 - Keep `bun.lock` changes paired with dependency changes. Declare direct dependencies in `package.json`; don't rely on transitive ones.
 - Pin every `dependencies` and `devDependencies` entry to an exact version (no `^`/`~`). stet ships as a compiled binary (`private: true`, `bun build --compile`), so the manifest mirrors the lock and every bump is an explicit, reviewable edit; caret ranges only help library consumers dedupe, which never applies here.
-- Lint and format are oxlint and oxfmt (`bun run lint`, `bun run format`); do not add ESLint or Prettier.
+- Lint and format are oxlint and oxfmt, run from the repo root (`bun run lint`, `bun run fmt`), not from within `packages/tui`: both tools resolve this package's `.oxlintrc.json`/`.oxfmtrc.json` on their own when invoked from the root, so a single root-level command already covers the whole repo. Do not add ESLint or Prettier.
 - Dead exports are caught by knip (`bun run knip`, also part of `bun run check`). Remove the `export` keyword rather than suppressing.
 - Git hooks run through lefthook (`lefthook.yml`, wired up automatically by its own postinstall on every `bun install`, no extra step). `pre-commit` runs on staged files only: both format and lint auto-fix and re-stage (oxlint's `--fix` only applies safe, unambiguous fixes), and anything neither can safely fix still blocks the commit. `pre-push` runs only `typecheck` (root `bun run typecheck`, fanning out to both `packages/tui` and `docs` via `bun run --filter '*' typecheck`) and `knip` (tui only, per `knip.json`'s `ignoreWorkspaces`), in parallel: those are the two checks that need the whole project graph and can't be scoped to staged files. `bun test` and full-project lint/format are deliberately left off pre-push (pre-commit already covers staged-file lint/format, and CI runs the full `bun run check` on every push/PR), since re-running the whole suite on every push was slow enough to be worth trading for CI as the actual safety net. Agents run the same hooks as humans; no skip/bypass config is layered on top of git's own `--no-verify` or lefthook's `LEFTHOOK=0`.
 - Use `===` and `!==`; never `== null` or `!= null`.
@@ -146,7 +146,7 @@ Do not implement a web preview, PR workflow, accept/reject protocol, agent integ
 
 ## Verification
 
-- `bun run check`: default pre-submit command.
+- `bun run check` (from the repo root): default pre-submit command.
 - `bun run build`: Bun compile smoke check.
 - `bun run src/main.tsx --help`: CLI smoke check.
 - `bun install` after package or lockfile changes — this also installs git hooks via lefthook automatically (no manual `lefthook install` step, and worktrees share the main checkout's `.git` hooks path so nothing worktree-specific is needed).

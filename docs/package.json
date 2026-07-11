@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "build": "next build",
-    "check": "fumadocs-mdx && tsc --noEmit && oxlint && oxfmt --check .",
     "dev": "next dev",
     "start": "next start",
     "typecheck": "fumadocs-mdx && tsc --noEmit"

@@ -90,7 +90,7 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 ```sh
 bun install
 bun run stet             # run from source (the TUI lives in packages/tui)
-bun run check            # format, lint, tests + typecheck
+bun run check            # format, lint, tests, typecheck + knip
 bun run build:dist       # build standalone binaries for all targets
 ```
 

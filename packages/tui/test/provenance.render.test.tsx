@@ -52,11 +52,14 @@ describe("provenance rail", () => {
         frame.includes("uncommitted · working tree"),
       );
 
-      // Focus the viewer, then move the caret up to a committed context line: it traces to the
-      // File's first commit, so the status names its tier in text (readable with color off).
+      // Focus the viewer, then move the caret up to a committed context line: the status shows
+      // Its commit (author, a sane age, subject). The fixture commit is fresh, so the age is
+      // `now`, guarding the seconds-vs-milliseconds age bug.
       mockInput.pressTab();
       mockInput.pressKey("k");
-      await settleUntil("status names the committed tier", (frame) => frame.includes("initial · "));
+      await settleUntil("status shows the committed line's commit with a sane age", (frame) =>
+        frame.includes("Stet Test · now · fixture"),
+      );
 
       // Toggling off restores the gutter with no rail glyphs.
       mockInput.pressKey("a");

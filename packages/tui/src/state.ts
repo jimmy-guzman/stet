@@ -18,7 +18,6 @@ import { formatCopyReference } from "./clipboard/reference";
 import { Clipboard } from "./clipboard/service";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
-import { provenanceLabel } from "./components/provenance";
 import {
   PROBLEMS_HEIGHT,
   REFERENCES_MAX_ROWS,
@@ -1631,9 +1630,9 @@ function createState() {
   // The caret line's provenance for the status bar: the band (its glyph + color) plus a
   // Compact detail. An uncommitted line reads as working tree; a committed line as its age,
   // Author, and summary. Undefined when the rail is off or the caret sits on a removed row.
-  // The caret line's commit for the status bar, named tier first so it reads in text: `tier ·
-  // Author · age · subject` for a committed line, `uncommitted · working tree` otherwise, and
-  // Undefined when the rail is off or the caret sits on a row git cannot attribute.
+  // The caret line's commit for the status bar: `author · age · subject` for a committed line
+  // (the band is the leading glyph the bar draws, not repeated in words), `uncommitted · working
+  // Tree` otherwise. Undefined when the rail is off or the caret sits on a row git can't attribute.
   const caretProvenanceDetail = createMemo(() => {
     const row = cursorLine();
     const provenance = row === undefined ? undefined : provenanceForRow(row);
@@ -1641,17 +1640,13 @@ function createState() {
       return undefined;
     }
     const text =
-      provenance.band === "uncommitted"
+      provenance.blame === undefined || provenance.band === "uncommitted"
         ? "uncommitted · working tree"
         : [
-            provenanceLabel(provenance.band),
-            ...(provenance.blame === undefined
-              ? []
-              : [
-                  provenance.blame.author,
-                  relativeTime(provenance.blame.authorTime, now()),
-                  provenance.blame.summary,
-                ]),
+            provenance.blame.author,
+            // `now()` is milliseconds; `relativeTime` and `authorTime` are unix seconds.
+            relativeTime(provenance.blame.authorTime, now() / 1000),
+            provenance.blame.summary,
           ]
             .filter((part) => part !== "")
             .join(" · ");

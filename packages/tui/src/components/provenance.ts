@@ -18,17 +18,3 @@ export function provenanceGlyph(band: Provenance) {
           ? "▎"
           : "▏";
 }
-
-// The tier's plain-text name for the status bar, so the caret line's exact tier reads under
-// NO_COLOR where the rail's weight only conveys the ordering.
-export function provenanceLabel(band: Provenance) {
-  return band === "uncommitted"
-    ? "uncommitted"
-    : band === "session"
-      ? "this session"
-      : band === "branch"
-        ? "this branch"
-        : band === "changed"
-          ? "changed"
-          : "initial";
-}

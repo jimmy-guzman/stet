@@ -61,7 +61,7 @@ test("an error notice carries the error level for the status bar to color", () =
 });
 
 // A createEffect in state re-stamps `now` to the real clock whenever activity is
-// Recorded (it keeps the "Ns ago" label live), so these tests record at real time.
+// Recorded (it keeps the recency clock live), so these tests record at real time.
 // Status() is a process-wide signal other suites may leave set (a long diagnostics
 // Error, say), and it trails the path behind " · ", eating into the path's budget.
 // So these use a generous width and a path far longer than any realistic budget:
@@ -74,8 +74,8 @@ test("a long recent path is shortened from the front, keeping the filename", () 
   );
 
   const line = state.statusRight();
-  // Leading "…" after the label proves the head was dropped, not the filename tail.
-  expect(line).toMatch(/^\d+s ago …/);
+  // A leading "…" proves the head was dropped, not the filename tail.
+  expect(line).toMatch(/^…/);
   expect(line).toContain("DiffView.tsx");
 });
 
@@ -99,7 +99,63 @@ test("activity older than the recency window drops off the status line", () => {
     ),
   );
 
-  const line = state.statusRight();
-  expect(line).not.toContain("s ago");
-  expect(line).not.toContain("src/foo.ts");
+  expect(state.statusRight()).not.toContain("src/foo.ts");
+});
+
+// The status bar shows the recent changed file (path) apart from the leveled status
+// (message), so it can tint the path and color the message independently. These lock
+// The pieces the two renderers consume.
+test("the recent changed file is exposed as a path, separate from the leveled status", () => {
+  state.setTerminalWidth(300);
+  state.setActivityLog(
+    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
+  );
+  state.setProvisioningLanguages(new Set(["typescript"]));
+
+  expect(state.statusRightPath()).toBe("src/foo.ts");
+  expect(state.statusRightMessage()).toBe("installing typescript server…");
+  // The plain-text projection still joins them with the divider the bar renders.
+  expect(state.statusRight()).toBe("src/foo.ts · installing typescript server…");
+});
+
+test("a narrow bar caps the status message so it can't overflow past the path and dot", () => {
+  state.setTerminalWidth(40);
+  state.setActivityLog(
+    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
+  );
+  state.setProvisioningLanguages(new Set(["typescript"]));
+
+  // At a narrow width the full "installing typescript server…" cannot sit beside the path
+  // And its dot, so it is truncated rather than spilling into the left hint.
+  expect(state.statusRightMessage().length).toBeLessThan("installing typescript server…".length);
+});
+
+test("a leveled message with no recent activity has no path", () => {
+  state.notify("copied src/state.ts", "success");
+
+  expect(state.statusRightPath()).toBe("");
+  expect(state.statusRightMessage()).toBe("copied src/state.ts");
+  // No changed file backs it, so there is no recency timestamp for the dot or the fade.
+  expect(state.statusRightRecencyAt()).toBeUndefined();
+});
+
+// The recent path exposes its activity timestamp so the bar can fade the tint and draw
+// The recency dot off it, then drops it once the file ages past the 30s window.
+test("the recent path exposes its recency timestamp, then drops it once aged out", () => {
+  state.setTerminalWidth(300);
+
+  const at = Date.now();
+  state.setActivityLog(
+    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], at),
+  );
+  expect(state.statusRightRecencyAt()).toBe(at);
+
+  state.setActivityLog(
+    recordActivity(
+      emptyActivityLog,
+      [{ kind: "changed", path: "src/foo.ts" }],
+      Date.now() - 60_000,
+    ),
+  );
+  expect(state.statusRightRecencyAt()).toBeUndefined();
 });

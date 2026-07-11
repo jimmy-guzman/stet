@@ -467,21 +467,29 @@ async function writeImageFixture() {
   if (existsSync(IMAGE_FIXTURE)) {
     throw new Error(`refusing to overwrite existing ${IMAGE_FIXTURE} (not created by this script)`);
   }
-  plantedImageFixture = true;
   // A real PNG (ffmpeg's test pattern) so the card reports honest dimensions and a plausible size,
   // Rather than a hand-built header. ffmpeg already ships with VHS, so it adds no new dependency.
-  await run("ffmpeg", [
-    "-loglevel",
-    "error",
-    "-f",
-    "lavfi",
-    "-i",
-    "testsrc=size=800x450",
-    "-frames:v",
-    "1",
-    "-y",
-    IMAGE_FIXTURE,
-  ]);
+  try {
+    await run("ffmpeg", [
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=800x450",
+      "-frames:v",
+      "1",
+      "-y",
+      IMAGE_FIXTURE,
+    ]);
+  } catch (error) {
+    // A failed run can leave a partial file behind; remove it so the ownership guard above does not
+    // Refuse the next run. Flag ownership only after ffmpeg succeeds, so removeImageFixture (and its
+    // Cleanup registration) stays aligned with a file this script actually created.
+    rmSync(IMAGE_FIXTURE, { force: true });
+    throw error;
+  }
+  plantedImageFixture = true;
 }
 
 function removeImageFixture() {

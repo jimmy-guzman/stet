@@ -59,8 +59,8 @@ describe("binary preview", () => {
 
       expect(frame).toContain("PNG image");
       // Both sides' dimensions, as an old -> new delta (the diff stet cannot draw).
-      expect(frame).toContain("128 × 64");
-      expect(frame).toContain("256 × 128");
+      expect(frame).toContain("128x64");
+      expect(frame).toContain("256x128");
     } finally {
       renderer.destroy();
     }
@@ -89,7 +89,7 @@ describe("binary preview", () => {
       );
 
       expect(frame).toContain("PNG image");
-      expect(frame).toContain("64 × 32");
+      expect(frame).toContain("64x32");
       expect(frame).toContain("24 B");
     } finally {
       renderer.destroy();

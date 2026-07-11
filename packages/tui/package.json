@@ -12,12 +12,7 @@
   "scripts": {
     "build": "bun run script/build.ts --single --skip-install",
     "build:dist": "bun script/build.ts",
-    "check": "bun run lint && bun run format:check && bun test && bun run typecheck",
     "gen:keys": "bun run script/gen-docs-keys.ts",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
     "screenshots": "bun run script/screenshots.ts",
     "stet": "bun run src/main.tsx",
     "typecheck": "tsc --noEmit",

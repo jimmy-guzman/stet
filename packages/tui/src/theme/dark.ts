@@ -19,7 +19,13 @@ export const darkTheme: Theme = {
     renamed: "#b086eb",
     untracked: "#5ab66b",
   },
-  provenance: { earlier: "#5c5e60", session: "#4fa8e1", uncommitted: "#dda734" },
+  provenance: {
+    branch: "#5ab66b",
+    changed: "#848688",
+    initial: "#5c5e60",
+    session: "#4fa8e1",
+    uncommitted: "#dda734",
+  },
   recency: { aged: "#616366", fresh: "#ffa7d9" },
   scrollbar: { thumb: "#515355" },
   severity: {

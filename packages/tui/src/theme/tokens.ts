@@ -47,9 +47,16 @@ export const ThemeSchema = Schema.Struct({
   }),
   find: Schema.Struct({ matchBg: Hex }),
   kind: Schema.Struct(kindTokens),
-  // The viewer's per-line provenance rail: a scrutiny ramp from uncommitted (working
-  // Tree) through this session (committed since launch) to earlier (settled context).
-  provenance: Schema.Struct({ earlier: Hex, session: Hex, uncommitted: Hex }),
+  // The viewer's per-line provenance rail: a five-tier scrutiny timeline. The three "yours"
+  // Tiers (uncommitted, session, branch) are saturated hues, the two settled tiers (changed
+  // On the base branch, initial from the file's first commit) gray, dimmest last.
+  provenance: Schema.Struct({
+    branch: Hex,
+    changed: Hex,
+    initial: Hex,
+    session: Hex,
+    uncommitted: Hex,
+  }),
   // Recency dot ramps fresh -> aged across an activity's lifetime, then vanishes.
   recency: Schema.Struct({ aged: Hex, fresh: Hex }),
   // Only the thumb is themed; the track stays transparent so it inherits

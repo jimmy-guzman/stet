@@ -415,13 +415,17 @@ function createState() {
   const [commandMenuAnchor, setCommandMenuAnchor] = createSignal<{ x: number; y: number }>();
   const [commandMenuGuard, setCommandMenuGuard] = createSignal<CommandMenuGuard>();
   const [iconsEnabled, setIconsEnabled] = createSignal(true);
-  // The per-line provenance rail (blame reframed): off by default, toggled by `a`.
-  // `blameByLine` maps a working-tree line number to its blame, `sessionCommits` is the
-  // Set of SHAs committed since launch (`sessionBase..HEAD`), and `openFileWhollyNew` marks
-  // An untracked/added file whose every line is uncommitted (git can't blame it).
+  // The per-line provenance rail (blame reframed): off by default, toggled by `a`. The three
+  // Timeline anchors: `sessionCommits` = SHAs in `sessionBase..HEAD` (since launch),
+  // `branchCommits` = SHAs in `branchBase..HEAD` (this branch, a superset of the session set),
+  // And `fileFirstSha` = the open file's introducing commit. `blameByLine` maps a working-tree
+  // Line number to its blame; `openFileWhollyNew` marks an untracked/added file whose every
+  // Line is uncommitted (git can't blame it).
   const [blameEnabled, setBlameEnabled] = createSignal(false);
   const [blameByLine, setBlameByLine] = createSignal<ReadonlyMap<number, BlameLine>>(new Map());
   const [sessionCommits, setSessionCommits] = createSignal<ReadonlySet<string>>(new Set());
+  const [branchCommits, setBranchCommits] = createSignal<ReadonlySet<string>>(new Set());
+  const [fileFirstSha, setFileFirstSha] = createSignal<string | undefined>(undefined);
   const [openFileWhollyNew, setOpenFileWhollyNew] = createSignal(false);
   const toggleBlame = () => setBlameEnabled((enabled) => !enabled);
   // The provenance band + blame for a viewer row, O(1) off the precomputed map. A pure
@@ -437,7 +441,14 @@ function createState() {
     const blame = blameByLine().get(row.newLine);
     return blame === undefined
       ? undefined
-      : { band: classifyProvenance(blame, sessionCommits()), blame };
+      : {
+          band: classifyProvenance(blame, {
+            branchShas: branchCommits(),
+            fileFirstSha: fileFirstSha(),
+            sessionShas: sessionCommits(),
+          }),
+          blame,
+        };
   };
   const [overflow, setOverflow] = createSignal<"scroll" | "wrap">("scroll");
   const [changesOnly, setChangesOnly] = createSignal(false);
@@ -929,9 +940,9 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // The commits landed since launch (`sessionBase..HEAD`), the boundary between "this
-  // Session" and "earlier". Re-run on a model drain (a new commit moves HEAD); only fetched
-  // While the rail is on, and cheap (a bare rev-list). Failures leave the last set intact.
+  // The commits landed since launch (`sessionBase..HEAD`), the boundary of the "this session"
+  // Tier. Re-run on a model drain (a new commit moves HEAD); only fetched while the rail is on,
+  // And cheap (a bare rev-list). Failures leave the last set intact.
   createEffect(() => {
     if (!blameEnabled()) {
       return;
@@ -955,19 +966,60 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // Per-line blame for the open file, refreshed on the same trigger as the diff. A wholly-new
-  // File (untracked/added) is unblameable, so skip the git call and mark every line uncommitted
-  // From the model; otherwise map each blame line by its working-tree line number for O(1) rail
-  // Lookups. Abort/re-run on file switch like the diff pipeline so a stale blame never lands.
+  // The branch base (`merge-base HEAD <default-branch>`) and the commits since it
+  // (`branchBase..HEAD`), which bound the "this branch" tier (a superset of the session set; the
+  // Ordered classify separates them). Resolved once per session on a model drain, gated on the
+  // Rail; a repo with no default branch leaves the set empty, folding the branch tier away.
   createEffect(() => {
     if (!blameEnabled()) {
-      setBlameByLine(new Map());
-      setOpenFileWhollyNew(false);
+      return;
+    }
+    const model = gitModel();
+    const controller = new AbortController();
+    runtime
+      .runPromise(
+        Git.use((git) =>
+          git
+            .branchBase(model.repoRoot)
+            .pipe(
+              Effect.flatMap((base) =>
+                base === undefined
+                  ? Effect.succeed(new Set<string>())
+                  : git.commitsSince(model.repoRoot, base),
+              ),
+            ),
+        ),
+        { signal: controller.signal },
+      )
+      .then((shas) => {
+        if (!controller.signal.aborted) {
+          setBranchCommits(shas);
+        }
+      })
+      .catch(() => {});
+    onCleanup(() => controller.abort());
+  });
+
+  // Per-line blame plus the file's first commit (the `initial` boundary) for the open file,
+  // Refreshed on the same trigger as the diff. A wholly-new file (untracked/added) is
+  // Unblameable, so skip the git calls and mark every line uncommitted from the model; otherwise
+  // Map each blame line by its working-tree line number for O(1) rail lookups. Abort/re-run on
+  // File switch like the diff pipeline so a stale blame never lands.
+  createEffect(() => {
+    if (!blameEnabled()) {
+      batch(() => {
+        setBlameByLine(new Map());
+        setFileFirstSha(undefined);
+        setOpenFileWhollyNew(false);
+      });
       return;
     }
     const src = diffSource();
     if (src === undefined) {
-      setBlameByLine(new Map());
+      batch(() => {
+        setBlameByLine(new Map());
+        setFileFirstSha(undefined);
+      });
       return;
     }
     const kind = src.model.changedByPath.get(src.path)?.kind;
@@ -975,6 +1027,7 @@ function createState() {
       batch(() => {
         setOpenFileWhollyNew(true);
         setBlameByLine(new Map());
+        setFileFirstSha(undefined);
       });
       return;
     }
@@ -982,16 +1035,27 @@ function createState() {
     const controller = new AbortController();
     runtime
       .runPromise(
-        Git.use((git) => git.blame(src.model.repoRoot, src.path)),
+        Git.use((git) =>
+          Effect.all(
+            [
+              git.blame(src.model.repoRoot, src.path),
+              git.fileFirstCommit(src.model.repoRoot, src.path),
+            ],
+            { concurrency: "unbounded" },
+          ),
+        ),
         {
           signal: controller.signal,
         },
       )
-      .then((lines) => {
+      .then(([lines, firstSha]) => {
         if (controller.signal.aborted || selectedPath() !== src.path) {
           return;
         }
-        setBlameByLine(new Map(lines.map((line) => [line.line, line])));
+        batch(() => {
+          setBlameByLine(new Map(lines.map((line) => [line.line, line])));
+          setFileFirstSha(firstSha);
+        });
       })
       .catch(() => {});
     onCleanup(() => controller.abort());

@@ -19,7 +19,13 @@ export const lightTheme: Theme = {
     renamed: "#7449a9",
     untracked: "#257c3a",
   },
-  provenance: { earlier: "#8d8f92", session: "#0070a6", uncommitted: "#9d7200" },
+  provenance: {
+    branch: "#257c3a",
+    changed: "#707274",
+    initial: "#8d8f92",
+    session: "#0070a6",
+    uncommitted: "#9d7200",
+  },
   recency: { aged: "#8d8f92", fresh: "#d446a1" },
   scrollbar: { thumb: "#a2a5a8" },
   severity: {

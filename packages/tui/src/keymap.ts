@@ -328,7 +328,9 @@ export function createKeyHandler(host: HostEffects) {
           }
           // E/o and y retarget from the hidden viewer to the selected result: open
           // It in the editor, or copy its reference (a match carries its column).
-          if (key.name === "e" || key.name === "o") {
+          // Unshifted only, so Shift+O falls through to the external-open binding
+          // Rather than opening the highlighted result in the IDE.
+          if ((key.name === "e" || key.name === "o") && !key.shift) {
             const item = items[state.searchIndex()];
             if (item !== undefined && item.kind !== "gap") {
               void host.openInEditor(
@@ -695,8 +697,13 @@ export function createKeyHandler(host: HostEffects) {
 
       // Open externally sits beside `o` as its Shift pair (bare uppercase, so the modifier
       // Survives terminals that drop Shift on control keys). Placed ahead of the plain-`o`
-      // Handler, which is tightened to !shift so the two never both fire.
-      if ((key.name === "O" || (key.name === "o" && key.shift)) && selectedPath !== undefined) {
+      // Handler, which is tightened to !shift so the two never both fire. Gated on
+      // FileViewShowing like the sibling e/o/Y/C single-file actions.
+      if (
+        (key.name === "O" || (key.name === "o" && key.shift)) &&
+        fileViewShowing &&
+        selectedPath !== undefined
+      ) {
         state.openExternally(selectedPath);
         return;
       }

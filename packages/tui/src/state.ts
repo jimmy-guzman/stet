@@ -343,8 +343,9 @@ function loadDiffView(src: {
           }),
         ),
         // A `git show` failure still shows the designed binary surface (metadata just
-        // Absent), never a blank pane, so a changed binary always reads as one.
-        Effect.catch(() =>
+        // Absent), never a blank pane, so a changed binary always reads as one. Scoped
+        // To GitError so an unexpected defect still propagates.
+        Effect.catchTag("GitError", () =>
           Effect.succeed<DiffBase>({
             binary: {},
             diff: "",

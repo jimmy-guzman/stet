@@ -4,6 +4,9 @@ export class EditorError extends Data.TaggedError("EditorError")<{
   readonly message: string;
 }> {}
 
+const toEditorError = (cause: unknown) =>
+  new EditorError({ message: cause instanceof Error ? cause.message : String(cause) });
+
 export class Editor extends Context.Service<
   Editor,
   {
@@ -31,14 +34,12 @@ export class Editor extends Context.Service<
 // OS-default-app openers, both of which outlive nothing and only report a non-zero exit.
 const spawnGuiAwaitingExit = (argv: string[], cwd: string) =>
   Effect.try({
-    catch: (cause) =>
-      new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
+    catch: toEditorError,
     try: () => Bun.spawn(argv, { cwd, stderr: "ignore", stdin: "ignore", stdout: "ignore" }),
   }).pipe(
     Effect.flatMap((proc) =>
       Effect.tryPromise({
-        catch: (cause) =>
-          new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
+        catch: toEditorError,
         try: () => proc.exited,
       }),
     ),
@@ -49,14 +50,12 @@ export const EditorLive = Layer.succeed(Editor)({
   openIde: (argv, cwd) => spawnGuiAwaitingExit(argv, cwd),
   openTerminal: (argv, cwd) =>
     Effect.try({
-      catch: (cause) =>
-        new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
+      catch: toEditorError,
       try: () => Bun.spawn(argv, { cwd, stderr: "inherit", stdin: "inherit", stdout: "inherit" }),
     }).pipe(
       Effect.flatMap((proc) =>
         Effect.tryPromise({
-          catch: (cause) =>
-            new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
+          catch: toEditorError,
           try: (signal) => {
             signal.addEventListener("abort", () => proc.kill(), { once: true });
             return proc.exited;

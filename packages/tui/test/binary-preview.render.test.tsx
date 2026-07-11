@@ -52,15 +52,47 @@ describe("binary preview", () => {
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-    const frame = await settleUntil("binary preview", (current) =>
-      current.includes("open externally"),
-    );
+    try {
+      const frame = await settleUntil("binary preview", (current) =>
+        current.includes("open externally"),
+      );
 
-    expect(frame).toContain("PNG image");
-    // Both sides' dimensions, as an old -> new delta (the diff stet cannot draw).
-    expect(frame).toContain("128 × 64");
-    expect(frame).toContain("256 × 128");
+      expect(frame).toContain("PNG image");
+      // Both sides' dimensions, as an old -> new delta (the diff stet cannot draw).
+      expect(frame).toContain("128 × 64");
+      expect(frame).toContain("256 × 128");
+    } finally {
+      renderer.destroy();
+    }
+  });
 
-    renderer.destroy();
+  test("browsing an unchanged image shows its type, dimensions, and size", async () => {
+    const repoRoot = createFixtureRepo("binary-browse-", { "keep.ts": "keep\n" });
+    writeFileSync(join(repoRoot, "logo.png"), png(64, 32));
+    runGit(repoRoot, ["add", "logo.png"]);
+    runGit(repoRoot, ["commit", "-m", "add logo"]);
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    // Unchanged, so it opens in full-content mode: the single side drives the card.
+    state.selectFile("logo.png");
+
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 32,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      const frame = await settleUntil("binary browse", (current) =>
+        current.includes("open externally"),
+      );
+
+      expect(frame).toContain("PNG image");
+      expect(frame).toContain("64 × 32");
+      expect(frame).toContain("24 B");
+    } finally {
+      renderer.destroy();
+    }
   });
 });

@@ -67,7 +67,9 @@ function webp(b: Uint8Array): ImageMeta | undefined {
     // Extended VP8X: 24-bit (canvas-1) little-endian width/height at 24 and 27.
     return { format: "WebP", height: u24le(b, 27) + 1, width: u24le(b, 24) + 1 };
   }
-  return { format: "WebP", height: 0, width: 0 };
+  // An unrecognized inner chunk: no dimensions to read, so fall through like every other
+  // Parser that can't decode its header rather than reporting a fabricated 0x0.
+  return undefined;
 }
 
 const isSofMarker = (marker: number) =>

@@ -8,6 +8,7 @@ const u16be = (n: number) => [(n >> 8) & 0xff, n & 0xff];
 const u16le = (n: number) => [n & 0xff, (n >> 8) & 0xff];
 const u32be = (n: number) => [(n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
 const u32le = (n: number) => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >> 24) & 0xff];
+const u24le = (n: number) => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff];
 const zeros = (n: number) => Array.from({ length: n }, () => 0);
 
 describe("imageMeta", () => {
@@ -61,6 +62,41 @@ describe("imageMeta", () => {
       zeros(5),
     );
     expect(imageMeta(webp)).toEqual({ format: "WebP", height: 50, width: 100 });
+  });
+
+  test("reads lossy WebP (VP8) dimensions", () => {
+    const webp = concat(
+      ascii("RIFF"),
+      u32le(0),
+      ascii("WEBP"),
+      ascii("VP8 "),
+      u32le(0),
+      [0, 0, 0], // Frame tag
+      [0x9d, 0x01, 0x2a], // Start code
+      u16le(120),
+      u16le(90),
+    );
+    expect(imageMeta(webp)).toEqual({ format: "WebP", height: 90, width: 120 });
+  });
+
+  test("reads extended WebP (VP8X) canvas dimensions", () => {
+    const webp = concat(
+      ascii("RIFF"),
+      u32le(0),
+      ascii("WEBP"),
+      ascii("VP8X"),
+      u32le(0),
+      [0], // Flags
+      [0, 0, 0], // Reserved
+      u24le(1920 - 1),
+      u24le(1080 - 1),
+    );
+    expect(imageMeta(webp)).toEqual({ format: "WebP", height: 1080, width: 1920 });
+  });
+
+  test("returns undefined for a WebP with an unrecognized inner chunk", () => {
+    const webp = concat(ascii("RIFF"), u32le(0), ascii("WEBP"), ascii("ANIM"), zeros(14));
+    expect(imageMeta(webp)).toBeUndefined();
   });
 
   test("returns undefined for an unrecognized blob", () => {

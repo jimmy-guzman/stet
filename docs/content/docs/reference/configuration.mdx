@@ -45,6 +45,10 @@ configured. A bare editor name with no `{file}` is expanded to a known template
 {file}:{line}`, and so on). Templates are split on whitespace, so an editor
 binary path with spaces is not supported.
 
+The `O` key opens the current file in your OS default app (`open` on macOS,
+`xdg-open` on Linux). It uses the system handler, so it needs no template or
+config.
+
 ## Themes
 
 Define themes under `themes` and pick one with `theme`. `theme` is either a

@@ -40,6 +40,7 @@ describe("buildCommandMenuItems", () => {
       "Copy file contents",
       "Open in editor",
       "Open in IDE",
+      "Open externally",
     ]);
   });
 
@@ -50,6 +51,7 @@ describe("buildCommandMenuItems", () => {
       "Copy file contents",
       "Open in editor",
       "Open in IDE",
+      "Open externally",
     ]);
   });
 
@@ -104,7 +106,22 @@ describe("buildCommandMenuItems", () => {
   });
 
   test("tree file node lists pin, copy path, and editor opens (opening is the row click's job)", () => {
-    expect(labels(tree())).toEqual(["Pin as tab", "Copy path", "Open in editor", "Open in IDE"]);
+    expect(labels(tree())).toEqual([
+      "Pin as tab",
+      "Copy path",
+      "Open in editor",
+      "Open in IDE",
+      "Open externally",
+    ]);
+  });
+
+  test("open externally carries the path", () => {
+    expect(
+      buildCommandMenuItems(viewer()).find((item) => item.label === "Open externally")?.action,
+    ).toEqual({ kind: "openExternal", path: "src/foo.ts" });
+    expect(
+      buildCommandMenuItems(tree()).find((item) => item.label === "Open externally")?.action,
+    ).toEqual({ kind: "openExternal", path: "src/foo.ts" });
   });
 
   test("tree file copy path and editor opens carry the node path with no line", () => {

@@ -95,6 +95,22 @@ export function resolveIdeTemplate(explicit: string | undefined): string | undef
 }
 
 /**
+ * The OS "open with the default application" command for a path: `open` on macOS, `xdg-open` on
+ * Linux (the same platform split as the clipboard tool). `undefined` on any other platform, where
+ * the caller surfaces a notice instead. `platform` is a parameter so every branch is
+ * unit-testable.
+ */
+export function openExternalCommand(path: string, platform: string = process.platform) {
+  if (platform === "darwin") {
+    return ["open", path];
+  }
+  if (platform === "linux") {
+    return ["xdg-open", path];
+  }
+  return undefined;
+}
+
+/**
  * Expands a template string into an argv array ready to pass to `Bun.spawn`.
  *
  * - `{file}` is replaced with the absolute file path.

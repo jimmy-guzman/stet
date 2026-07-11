@@ -41,7 +41,7 @@ describe("viewerStats", () => {
   });
 
   test("a binary/placeholder file view has no stats", () => {
-    expect(viewerStats(undefined, true, { kind: "binary" })).toBe("");
+    expect(viewerStats(undefined, true, { bytes: 0, kind: "binary" })).toBe("");
   });
 
   test("diff view labels a binary file instead of zeroed counts", () => {

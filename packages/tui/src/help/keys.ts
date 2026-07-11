@@ -71,6 +71,7 @@ export const KEY_HELP: { entries: [combo: string, action: string][]; heading: st
     entries: [
       ["e", "open in terminal editor (suspends TUI, --editor template)"],
       ["o", "open in GUI / IDE (renderer stays live, --ide template)"],
+      ["O", "open externally in the OS default app (images, PDFs, binaries)"],
       ["Shift+F10", "context menu for the focused row or symbol (or right-click)"],
       ["?", "show all keybindings"],
       ["q", "quit (confirm with y)"],

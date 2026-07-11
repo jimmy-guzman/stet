@@ -48,6 +48,20 @@ describe("textContent", () => {
 describe("classifyFileBytes", () => {
   test("flags bytes with a NUL in the first 8000 as binary", () => {
     expect(classifyFileBytes(new Uint8Array([0x89, 0x50, 0x00, 0x47]), { full: false })).toEqual({
+      bytes: 4,
+      kind: "binary",
+    });
+  });
+
+  test("carries size and image dimensions for a recognized image", () => {
+    // A minimal PNG header: the NUL bytes in the IHDR length flag it binary.
+    const png = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0,
+      16, 0, 0, 0, 8,
+    ]);
+    expect(classifyFileBytes(png, { full: false })).toEqual({
+      bytes: 24,
+      image: { format: "PNG", height: 8, width: 16 },
       kind: "binary",
     });
   });
@@ -102,7 +116,7 @@ describe("loadFileContent", () => {
 
   test("detects binary files", () => {
     writeFileSync(join(dir, "blob.bin"), Buffer.from([0x89, 0x50, 0x00, 0x47]));
-    expect(loadFileContent(dir, "blob.bin", { full: false })).toEqual({ kind: "binary" });
+    expect(loadFileContent(dir, "blob.bin", { full: false })).toEqual({ bytes: 4, kind: "binary" });
   });
 
   test("reports missing files", () => {

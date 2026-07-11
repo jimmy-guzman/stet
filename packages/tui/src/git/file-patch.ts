@@ -3,6 +3,8 @@ import { lstat, readFile, readlink } from "node:fs/promises";
 import { formatPatch, structuredPatch } from "diff";
 
 import type { DiffScope } from "@/cli";
+import { imageMeta } from "@/file/image-meta";
+import type { ImageMeta } from "@/file/image-meta";
 
 import type { ChangedFile } from "./model";
 
@@ -14,11 +16,34 @@ export type PatchSide = { kind: "git"; spec: string } | { kind: "worktree" } | {
 
 export type SideContent =
   | { kind: "text"; text: string }
-  | { kind: "binary" }
+  | { kind: "binary"; bytes: number; image?: ImageMeta }
   | { kind: "too-large" }
   | { kind: "missing" };
 
 export type FilePatch = { kind: "patch"; patch: string } | { kind: "fallback" };
+
+/** A binary side's size and (for a recognized image) pixel dimensions, for the viewer placeholder. */
+export interface SideMeta {
+  bytes: number;
+  image?: ImageMeta;
+}
+
+/**
+ * Both endpoints' binary metadata for a changed binary file; a side is absent when it is the empty
+ * side of an add/delete.
+ */
+export interface BinaryDiff {
+  oldSide?: SideMeta;
+  newSide?: SideMeta;
+}
+
+/**
+ * A fetched side's binary metadata, or `undefined` when the side is not binary (the fabricated
+ * empty side of an add/delete, which classifies as empty text, and thus has no size to show).
+ */
+export function sideMeta(content: SideContent): SideMeta | undefined {
+  return content.kind === "binary" ? { bytes: content.bytes, image: content.image } : undefined;
+}
 
 // Sides above this size are not decoded or diffed in-process; the git fallback
 // Handles them as it always has. 10x the viewer's own file cap: generous enough
@@ -77,7 +102,7 @@ export function classifySideBytes(bytes: Uint8Array): SideContent {
   }
 
   if (bytes.subarray(0, 8000).includes(0)) {
-    return { kind: "binary" };
+    return { bytes: bytes.byteLength, image: imageMeta(bytes), kind: "binary" };
   }
 
   return { kind: "text", text: decoder.decode(bytes) };

@@ -140,7 +140,10 @@ describe("classifySideBytes", () => {
   });
 
   test("classifies a NUL byte in the first 8KB as binary", () => {
-    expect(classifySideBytes(new Uint8Array([104, 105, 0, 33]))).toEqual({ kind: "binary" });
+    expect(classifySideBytes(new Uint8Array([104, 105, 0, 33]))).toEqual({
+      bytes: 4,
+      kind: "binary",
+    });
   });
 
   test("classifies an oversized side as too-large without decoding", () => {
@@ -262,11 +265,11 @@ describe("buildFilePatch", () => {
   });
 
   test("a binary side yields an empty patch, matching the model-driven placeholder", () => {
-    expect(buildFilePatch(file("a.bin"), { kind: "binary" }, text("x\n"))).toEqual({
+    expect(buildFilePatch(file("a.bin"), { bytes: 4, kind: "binary" }, text("x\n"))).toEqual({
       kind: "patch",
       patch: "",
     });
-    expect(buildFilePatch(file("a.bin"), text("x\n"), { kind: "binary" })).toEqual({
+    expect(buildFilePatch(file("a.bin"), text("x\n"), { bytes: 4, kind: "binary" })).toEqual({
       kind: "patch",
       patch: "",
     });

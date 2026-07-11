@@ -49,6 +49,12 @@ const BASE_REF = "f1e0d21";
  */
 const FIXTURE = `${REPO}/packages/tui/src/_diagnostics-demo.ts`;
 /**
+ * A throwaway image for the binary-preview shot: an untracked PNG so the viewer renders its
+ * metadata card (type, dimensions, size) instead of a diff. Generated with ffmpeg (already required
+ * by VHS) at a legible size, and planted only for that shot so it never shows up in another tree.
+ */
+const IMAGE_FIXTURE = `${REPO}/packages/tui/_demo-image.png`;
+/**
  * A throwaway linked worktree for the `worktree: true` screens: stet derives its git identity from
  * the cwd, so launching there renders the header's worktree form (`folder · branch`, file-tree
  * glyph) instead of the main checkout's (`repo · branch`, repo glyph). It branches from `HEAD` so
@@ -221,6 +227,16 @@ const screens = [
     name: "read-only",
     steps: ["Ctrl+P", 'Type "process"', "Sleep 400ms", "Enter", "Sleep 800ms"].join("\n"),
     worktree: true,
+  },
+  {
+    /**
+     * Open the planted demo image. A terminal can't render pixels, so the viewer shows the metadata
+     * card (type, dimensions, size) with the open-externally affordance instead of a blank diff
+     * pane. The image is untracked, so it reads as an added binary.
+     */
+    imageFixture: true,
+    name: "binary-preview",
+    steps: ["Ctrl+P", 'Type "demo-image"', "Sleep 500ms", "Enter", "Sleep 1200ms"].join("\n"),
   },
   {
     /**
@@ -445,6 +461,45 @@ function removeFixture() {
   plantedFixture = false;
 }
 
+// Same ownership rule as the diagnostics fixture: refuse a path we did not create, tear down our own.
+let plantedImageFixture = false;
+async function writeImageFixture() {
+  if (existsSync(IMAGE_FIXTURE)) {
+    throw new Error(`refusing to overwrite existing ${IMAGE_FIXTURE} (not created by this script)`);
+  }
+  // A real PNG (ffmpeg's test pattern) so the card reports honest dimensions and a plausible size,
+  // Rather than a hand-built header. ffmpeg already ships with VHS, so it adds no new dependency.
+  try {
+    await run("ffmpeg", [
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=800x450",
+      "-frames:v",
+      "1",
+      "-y",
+      IMAGE_FIXTURE,
+    ]);
+  } catch (error) {
+    // A failed run can leave a partial file behind; remove it so the ownership guard above does not
+    // Refuse the next run. Flag ownership only after ffmpeg succeeds, so removeImageFixture (and its
+    // Cleanup registration) stays aligned with a file this script actually created.
+    rmSync(IMAGE_FIXTURE, { force: true });
+    throw error;
+  }
+  plantedImageFixture = true;
+}
+
+function removeImageFixture() {
+  if (!plantedImageFixture) {
+    return;
+  }
+  rmSync(IMAGE_FIXTURE, { force: true });
+  plantedImageFixture = false;
+}
+
 // Same ownership rule as the fixture: refuse a path we did not create, and only tear down our own.
 let plantedWorktree = false;
 async function addWorktree() {
@@ -502,9 +557,12 @@ if (!OXIPNG) {
 }
 
 const wanted = screens.filter((screen) => only.size === 0 || only.has(screen.name));
-const standalone = wanted.filter((screen) => !screen.fixture && !screen.worktree);
+const standalone = wanted.filter(
+  (screen) => !screen.fixture && !screen.worktree && !screen.imageFixture,
+);
 const worktreed = wanted.filter((screen) => screen.worktree);
 const fixtured = wanted.filter((screen) => screen.fixture);
+const imageFixtured = wanted.filter((screen) => screen.imageFixture);
 
 // One cleanup list drives both the finally and the signal handlers, so a Ctrl-C mid-shoot leaves
 // Behind neither the temp theme config nor the diagnostics fixture.
@@ -551,6 +609,17 @@ try {
     await writeFixture();
     cleanups.push(removeFixture);
     for (const screen of fixtured) {
+      // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
+      await shoot(screen);
+    }
+  }
+
+  if (imageFixtured.length > 0) {
+    // The untracked demo image would show in every other shot's tree, so plant it only now and
+    // Tear it down through the shared cleanup.
+    await writeImageFixture();
+    cleanups.push(removeImageFixture);
+    for (const screen of imageFixtured) {
       // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
       await shoot(screen);
     }

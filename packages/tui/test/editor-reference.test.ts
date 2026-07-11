@@ -1,6 +1,25 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildEditorCommand, resolveEditorTemplate, resolveIdeTemplate } from "@/editor/reference";
+import {
+  buildEditorCommand,
+  openExternalCommand,
+  resolveEditorTemplate,
+  resolveIdeTemplate,
+} from "@/editor/reference";
+
+describe("openExternalCommand", () => {
+  test("uses open on macOS", () => {
+    expect(openExternalCommand("/repo/logo.png", "darwin")).toEqual(["open", "/repo/logo.png"]);
+  });
+
+  test("uses xdg-open on Linux", () => {
+    expect(openExternalCommand("/repo/logo.png", "linux")).toEqual(["xdg-open", "/repo/logo.png"]);
+  });
+
+  test("has no command on an unsupported platform", () => {
+    expect(openExternalCommand("/repo/logo.png", "win32")).toBeUndefined();
+  });
+});
 
 describe("buildEditorCommand", () => {
   test("substitutes {file} and {line} in a vim-style template", () => {

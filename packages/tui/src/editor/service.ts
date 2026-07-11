@@ -4,9 +4,17 @@ export class EditorError extends Data.TaggedError("EditorError")<{
   readonly message: string;
 }> {}
 
+const toEditorError = (cause: unknown) =>
+  new EditorError({ message: cause instanceof Error ? cause.message : String(cause) });
+
 export class Editor extends Context.Service<
   Editor,
   {
+    /**
+     * Opens a file in the OS default application (`open`/`xdg-open`), fork-and-forget like
+     * `openIde`.
+     */
+    readonly openExternal: (argv: string[], cwd: string) => Effect.Effect<number, EditorError>;
     /**
      * Spawns a GUI/IDE with ignored stdio and blocks until it exits, returning the exit code so the
      * caller can surface non-zero exits to the user.
@@ -22,31 +30,32 @@ export class Editor extends Context.Service<
   }
 >()("stet/Editor") {}
 
-export const EditorLive = Layer.succeed(Editor)({
-  openIde: (argv, cwd) =>
-    Effect.try({
-      catch: (cause) =>
-        new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
-      try: () => Bun.spawn(argv, { cwd, stderr: "ignore", stdin: "ignore", stdout: "ignore" }),
-    }).pipe(
-      Effect.flatMap((proc) =>
-        Effect.tryPromise({
-          catch: (cause) =>
-            new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
-          try: () => proc.exited,
-        }),
-      ),
+// A detached GUI spawn (ignored stdio) awaited for its exit code: shared by the IDE and the
+// OS-default-app openers, both of which outlive nothing and only report a non-zero exit.
+const spawnGuiAwaitingExit = (argv: string[], cwd: string) =>
+  Effect.try({
+    catch: toEditorError,
+    try: () => Bun.spawn(argv, { cwd, stderr: "ignore", stdin: "ignore", stdout: "ignore" }),
+  }).pipe(
+    Effect.flatMap((proc) =>
+      Effect.tryPromise({
+        catch: toEditorError,
+        try: () => proc.exited,
+      }),
     ),
+  );
+
+export const EditorLive = Layer.succeed(Editor)({
+  openExternal: (argv, cwd) => spawnGuiAwaitingExit(argv, cwd),
+  openIde: (argv, cwd) => spawnGuiAwaitingExit(argv, cwd),
   openTerminal: (argv, cwd) =>
     Effect.try({
-      catch: (cause) =>
-        new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
+      catch: toEditorError,
       try: () => Bun.spawn(argv, { cwd, stderr: "inherit", stdin: "inherit", stdout: "inherit" }),
     }).pipe(
       Effect.flatMap((proc) =>
         Effect.tryPromise({
-          catch: (cause) =>
-            new EditorError({ message: cause instanceof Error ? cause.message : String(cause) }),
+          catch: toEditorError,
           try: (signal) => {
             signal.addEventListener("abort", () => proc.kill(), { once: true });
             return proc.exited;

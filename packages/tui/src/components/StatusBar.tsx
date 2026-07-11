@@ -6,6 +6,7 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
+import { provenanceGlyph } from "./provenance";
 import { RecencyDot } from "./RecencyDot";
 
 export function StatusBar() {
@@ -48,12 +49,21 @@ export function StatusBar() {
     >
       {/* In provenance mode the caret line's commit fills the bar (a blame inspector),
           taking the hint's place; the right group is hidden so it spans the width. A
-          transient tier (notice, finding, intel) clears the commit and restores both. */}
+          transient tier (notice, finding, intel) clears the commit and restores both. The
+          band glyph leads it (the same mark the rail draws), the way the recency dot leads
+          the recent-file path. */}
       <Show
         when={state.statusProvenanceCommit()}
         fallback={<text fg={theme.colors.text.muted}>{state.statusHint()}</text>}
       >
-        {(commit) => <text fg={theme.colors.text.secondary}>{commit()}</text>}
+        {(commit) => (
+          <box flexDirection="row">
+            <text fg={theme.colors.provenance[commit().band]} marginRight={1}>
+              {provenanceGlyph(commit().band)}
+            </text>
+            <text fg={theme.colors.text.secondary}>{commit().text}</text>
+          </box>
+        )}
       </Show>
       <Show when={state.statusProvenanceCommit() === undefined}>
         <box flexDirection="row">

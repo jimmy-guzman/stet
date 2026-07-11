@@ -1640,21 +1640,22 @@ function createState() {
     if (provenance === undefined) {
       return undefined;
     }
-    if (provenance.band === "uncommitted") {
-      return "uncommitted · working tree";
-    }
-    return [
-      provenanceLabel(provenance.band),
-      ...(provenance.blame === undefined
-        ? []
+    const text =
+      provenance.band === "uncommitted"
+        ? "uncommitted · working tree"
         : [
-            provenance.blame.author,
-            relativeTime(provenance.blame.authorTime, now()),
-            provenance.blame.summary,
-          ]),
-    ]
-      .filter((part) => part !== "")
-      .join(" · ");
+            provenanceLabel(provenance.band),
+            ...(provenance.blame === undefined
+              ? []
+              : [
+                  provenance.blame.author,
+                  relativeTime(provenance.blame.authorTime, now()),
+                  provenance.blame.summary,
+                ]),
+          ]
+            .filter((part) => part !== "")
+            .join(" · ");
+    return { band: provenance.band, text };
   });
   // The status bar's left key hints, keyed to the active mode. Lives here (not in
   // The StatusBar component) so the right-status budget below can reserve the exact
@@ -1735,16 +1736,18 @@ function createState() {
     // Replacing the ambient recent-file + status lead. The transient tiers above (intel pull,
     // Held notice, cursor finding) return before this, so an error or an acknowledgment is
     // Never hidden behind blame.
-    const provenanceCommit = caretProvenanceDetail();
-    if (provenanceCommit !== undefined) {
+    const commit = caretProvenanceDetail();
+    if (commit !== undefined) {
+      // Truncate against the bar's two paddings plus the band glyph + its space lead.
+      const text = truncate(commit.text, Math.max(1, terminalWidth() - 4));
       return {
         activityPath: "",
         changeKind: undefined,
         level: undefined,
         message: "",
-        provenanceCommit: truncate(provenanceCommit, Math.max(1, terminalWidth() - 2)),
+        provenanceCommit: { band: commit.band, text },
         recencyAt: undefined,
-        text: provenanceCommit,
+        text,
       };
     }
     const latest = latestActivity(activityLog());

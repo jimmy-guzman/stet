@@ -39,6 +39,9 @@ beneath, and it stays.
 - Watches the filesystem and refreshes as the agent changes files, keeping the
   current file and selection stable.
 - Marks recent activity and lets you jump to the latest touched file.
+- Shows per-line provenance with `a`: a gutter rail that marks each line as
+  uncommitted (working tree), committed this session, or settled from before,
+  git blame reframed around what you are reviewing right now.
 - Shows diagnostics in the tree, the viewer, and a problems panel.
 - Navigates code through read-only language-server pulls: go to definition, find
   references, find implementations, call hierarchy, hover, and a symbol outline.

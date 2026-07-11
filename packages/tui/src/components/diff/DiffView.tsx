@@ -17,6 +17,7 @@ import { caretCell } from "@/viewer/anchor";
 
 import { CommandMenu } from "../CommandMenu";
 import { isRightClick } from "../mouse";
+import { provenanceGlyph } from "../provenance";
 import { CaretCard } from "./CaretCard";
 import { createLineMeasurer } from "./line-measure";
 
@@ -145,8 +146,9 @@ export function DiffView() {
   });
   // The gutter is a change bar, the number, then the glyph: fixed cells left of the code,
   // So a clean line reserves the bar/glyph columns and never shifts (bar + number + space
-  // + glyph + space).
-  const gutterWidth = () => numberWidth() + 4;
+  // + glyph + space). The provenance rail adds one fixed cell on the far left when on, so
+  // Turning it on grows the gutter by exactly one column and never oscillates per line.
+  const gutterWidth = () => numberWidth() + 4 + (state.blameEnabled() ? 1 : 0);
 
   const contentWidth = () =>
     Math.max(1, state.terminalWidth() - state.sidebarWidth() - 2 - gutterWidth());
@@ -465,6 +467,20 @@ export function DiffView() {
       : theme.colors.severity[severity];
   };
 
+  // The provenance rail: a width-1 band cell (blank on a row git can't attribute, so the
+  // Gutter never shifts), the band's glyph weight colored by its provenance token. Only
+  // Rendered when the rail is on; the gutter reserves its cell in `gutterWidth`.
+  const railGlyph = (row: DiffLineRow) => {
+    const provenance = state.provenanceForRow(row);
+    return provenance === undefined ? " " : provenanceGlyph(provenance.band);
+  };
+  const railColor = (row: DiffLineRow) => {
+    const provenance = state.provenanceForRow(row);
+    return provenance === undefined
+      ? theme.colors.diff.lineNumberFg
+      : theme.colors.provenance[provenance.band];
+  };
+
   // Each line's background: a find match wins, else a faint add/remove tint (the change
   // Bar and colored number carry the diff state; this is just a subtle block cue). The
   // Cursor lift brightens whatever state the line has rather than replacing it, so a
@@ -675,6 +691,15 @@ export function DiffView() {
                     dragOrigin = undefined;
                   }}
                 >
+                  <Show when={state.blameEnabled()}>
+                    <text
+                      ref={(el) => (el.selectable = false)}
+                      fg={railColor(line())}
+                      bg={gutterBackground(line())}
+                    >
+                      {railGlyph(line())}
+                    </text>
+                  </Show>
                   <text
                     ref={(el) => (el.selectable = false)}
                     fg={changeBarColor(line())}

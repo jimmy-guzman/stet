@@ -4,6 +4,8 @@ import type { DiffScope } from "@/cli";
 import { Process } from "@/process";
 import type { CommandError } from "@/process";
 
+import { blameArgs, parseBlamePorcelain } from "./blame";
+import type { BlameLine } from "./blame";
 import { GitError } from "./errors";
 import {
   buildFilePatch,
@@ -27,6 +29,7 @@ import {
   untrackedDiffArgs,
 } from "./model";
 import type { ChangedFile, GitModel, Worktree } from "./model";
+import { parseRevList, sessionCommitsArgs } from "./provenance";
 import { parseSearchOutput, searchArgs } from "./search";
 import type { SearchMatch, SearchOptions } from "./search";
 
@@ -58,6 +61,8 @@ export class Git extends Context.Service<
       scope: DiffScope,
       file: ChangedFile,
     ) => Effect.Effect<BinaryDiff, GitError>;
+    /** Per-line git blame of the working-tree file; empty for a path git can't blame. */
+    readonly blame: (repoRoot: string, path: string) => Effect.Effect<BlameLine[], GitError>;
     readonly changedFiles: (
       repoRoot: string,
       scope: DiffScope,
@@ -65,6 +70,8 @@ export class Git extends Context.Service<
       Pick<GitModel, "changed" | "changedByPath" | "scopeKey" | "branch">,
       GitError
     >;
+    /** Commit SHAs reachable from HEAD but not `base`, i.e. everything committed this session. */
+    readonly commitsSince: (repoRoot: string, base: string) => Effect.Effect<Set<string>, GitError>;
     readonly fileDiff: (
       repoRoot: string,
       scope: DiffScope,
@@ -137,6 +144,15 @@ export const GitLive = Layer.effect(
           Effect.mapError(toGitError),
         );
       },
+      // Exit 128 is a path git can't blame (untracked or brand-new): the state layer already
+      // Knows those files are wholly uncommitted from the model, so allow it and parse the
+      // Empty stdout to an empty list instead of failing the load.
+      blame: (repoRoot, path) =>
+        process.run(blameArgs(path), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+          retryTransient,
+          Effect.map((result) => parseBlamePorcelain(result.stdout)),
+          Effect.mapError(toGitError),
+        ),
       changedFiles: (repoRoot, scope) =>
         Effect.all(
           [
@@ -158,6 +174,14 @@ export const GitLive = Layer.effect(
               porcelain.stdout,
             ),
           ),
+          Effect.mapError(toGitError),
+        ),
+      // Exit 128 is an unborn HEAD or an unknown base ref; the empty set then means "nothing
+      // Committed this session", so every committed line reads as `earlier`.
+      commitsSince: (repoRoot, base) =>
+        process.run(sessionCommitsArgs(base), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+          retryTransient,
+          Effect.map((result) => parseRevList(result.stdout)),
           Effect.mapError(toGitError),
         ),
       // The per-file patch is computed in-process from the scope's two endpoints

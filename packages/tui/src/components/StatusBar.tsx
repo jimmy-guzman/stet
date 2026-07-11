@@ -6,6 +6,7 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
+import { provenanceGlyph } from "./provenance";
 import { RecencyDot } from "./RecencyDot";
 
 export function StatusBar() {
@@ -26,6 +27,11 @@ export function StatusBar() {
   // Across the 30s recency window, alongside the RecencyDot. So it reads as a changed file
   // Without a number, and recedes as it ages rather than competing with the leveled outcome.
   const pathFg = () => {
+    // A provenance lead reads as neutral detail: the band glyph before it carries the
+    // Color, so the text stays plainly legible with no recency fade.
+    if (state.statusRightProvenanceBand() !== undefined) {
+      return theme.colors.text.secondary;
+    }
     const kind = state.statusRightChangeKind();
     const base = kind === undefined ? theme.colors.text.muted : theme.colors.kind[kind];
     const fraction = recencyFraction(state.statusRightRecencyAt(), state.now());
@@ -48,7 +54,18 @@ export function StatusBar() {
     >
       <text fg={theme.colors.text.muted}>{state.statusHint()}</text>
       <box flexDirection="row">
-        <RecencyDot at={state.statusRightRecencyAt()} marginRight={1} />
+        {/* The lead mark: the caret line's provenance band glyph when the rail is on,
+            else the recent file's recency dot. Both fade/color their own way. */}
+        <Show
+          when={state.statusRightProvenanceBand()}
+          fallback={<RecencyDot at={state.statusRightRecencyAt()} marginRight={1} />}
+        >
+          {(band) => (
+            <text fg={theme.colors.provenance[band()]} marginRight={1}>
+              {provenanceGlyph(band())}
+            </text>
+          )}
+        </Show>
         <Show when={state.statusRightPath()}>
           <text fg={pathFg()}>{state.statusRightPath()}</text>
         </Show>

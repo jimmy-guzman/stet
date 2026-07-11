@@ -614,6 +614,13 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      if (key.name === "a" && !key.ctrl && state.mainView() === "file") {
+        const on = state.blameEnabled();
+        state.toggleBlame();
+        state.notify(on ? "provenance off" : "provenance on");
+        return;
+      }
+
       if (key.name === ".") {
         const latest = latestActivity(state.activityLog());
         if (latest !== undefined) {

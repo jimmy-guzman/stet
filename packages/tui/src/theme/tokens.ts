@@ -47,9 +47,10 @@ export const ThemeSchema = Schema.Struct({
   }),
   find: Schema.Struct({ matchBg: Hex }),
   kind: Schema.Struct(kindTokens),
-  // The viewer's per-line provenance rail: a five-tier scrutiny timeline. The three "yours"
-  // Tiers (uncommitted, session, branch) are saturated hues, the two settled tiers (changed
-  // On the base branch, initial from the file's first commit) gray, dimmest last.
+  // The viewer's per-line provenance rail: a five-tier scrutiny timeline as one neutral
+  // Brightness ramp, brightest at `uncommitted` fading to the faint neutral at `initial`,
+  // So color reinforces the weight ramp (the status bar names the exact tier for the caret).
+  // Neutral, not a hue: the rail is read-only inspection, not a warning or a status.
   provenance: Schema.Struct({
     branch: Hex,
     changed: Hex,

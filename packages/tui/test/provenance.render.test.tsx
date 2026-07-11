@@ -47,10 +47,16 @@ describe("provenance rail", () => {
       );
 
       // The caret homes to the first changed line (the appended working-tree line), so the
-      // Status bar shows its uncommitted detail led by the band glyph.
+      // Status bar's commit line reads its uncommitted detail.
       await settleUntil("status shows the uncommitted detail", (frame) =>
-        frame.includes("▋ uncommitted · working tree"),
+        frame.includes("uncommitted · working tree"),
       );
+
+      // Focus the viewer, then move the caret up to a committed context line: it traces to the
+      // File's first commit, so the status names its tier in text (readable with color off).
+      mockInput.pressTab();
+      mockInput.pressKey("k");
+      await settleUntil("status names the committed tier", (frame) => frame.includes("initial · "));
 
       // Toggling off restores the gutter with no rail glyphs.
       mockInput.pressKey("a");

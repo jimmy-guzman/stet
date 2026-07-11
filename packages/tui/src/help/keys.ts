@@ -24,7 +24,7 @@ export const KEY_HELP: { entries: [combo: string, action: string][]; heading: st
       ["v", "toggle diff ↔ full file view for a changed file"],
       ["z", "fold / unfold the region at the caret"],
       ["x", "toggle long-line wrap in the viewer"],
-      ["a", "toggle the line provenance rail (git blame reframed)"],
+      ["a", "toggle the line provenance rail"],
       ["f", "load full content when truncated"],
       ["ctrl-d/u", "half-page cursor movement in the viewer"],
       ["g / G", "jump to first / last line"],

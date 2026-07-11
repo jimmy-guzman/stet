@@ -18,6 +18,7 @@ import { formatCopyReference } from "./clipboard/reference";
 import { Clipboard } from "./clipboard/service";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
+import { provenanceLabel } from "./components/provenance";
 import {
   PROBLEMS_HEIGHT,
   REFERENCES_MAX_ROWS,
@@ -1630,25 +1631,30 @@ function createState() {
   // The caret line's provenance for the status bar: the band (its glyph + color) plus a
   // Compact detail. An uncommitted line reads as working tree; a committed line as its age,
   // Author, and summary. Undefined when the rail is off or the caret sits on a removed row.
+  // The caret line's commit for the status bar, named tier first so it reads in text: `tier ·
+  // Author · age · subject` for a committed line, `uncommitted · working tree` otherwise, and
+  // Undefined when the rail is off or the caret sits on a row git cannot attribute.
   const caretProvenanceDetail = createMemo(() => {
     const row = cursorLine();
     const provenance = row === undefined ? undefined : provenanceForRow(row);
     if (provenance === undefined) {
       return undefined;
     }
-    const detail =
-      provenance.band === "uncommitted"
-        ? "uncommitted · working tree"
-        : provenance.blame === undefined
-          ? provenance.band
-          : [
-              relativeTime(provenance.blame.authorTime, now()),
-              provenance.blame.author,
-              provenance.blame.summary,
-            ]
-              .filter((part) => part !== "")
-              .join(" · ");
-    return { band: provenance.band, detail };
+    if (provenance.band === "uncommitted") {
+      return "uncommitted · working tree";
+    }
+    return [
+      provenanceLabel(provenance.band),
+      ...(provenance.blame === undefined
+        ? []
+        : [
+            provenance.blame.author,
+            relativeTime(provenance.blame.authorTime, now()),
+            provenance.blame.summary,
+          ]),
+    ]
+      .filter((part) => part !== "")
+      .join(" · ");
   });
   // The status bar's left key hints, keyed to the active mode. Lives here (not in
   // The StatusBar component) so the right-status budget below can reserve the exact
@@ -1690,7 +1696,7 @@ function createState() {
         changeKind: undefined,
         level: "info" as const,
         message,
-        provenanceBand: undefined,
+        provenanceCommit: undefined,
         recencyAt: undefined,
         text: message,
       };
@@ -1705,7 +1711,7 @@ function createState() {
         changeKind: undefined,
         level: held.level,
         message,
-        provenanceBand: undefined,
+        provenanceCommit: undefined,
         recencyAt: undefined,
         text: message,
       };
@@ -1718,43 +1724,49 @@ function createState() {
         changeKind: undefined,
         level: finding.severity satisfies LogLevel,
         message,
-        provenanceBand: undefined,
+        provenanceCommit: undefined,
         recencyAt: undefined,
         text: message,
       };
     }
-    const latest = latestActivity(activityLog());
-    // A live download outranks the ambient checking/status line but stays below the transient tiers
-    // Above (intel pull, action notice, cursor finding), so it shows for the whole download.
     const provisioning = provisioningStatus();
     const displayStatus = provisioning ?? (checksRunning() ? "checking…" : status());
+    // In provenance mode the caret line's commit fills the whole bar (a blame inspector),
+    // Replacing the ambient recent-file + status lead. The transient tiers above (intel pull,
+    // Held notice, cursor finding) return before this, so an error or an acknowledgment is
+    // Never hidden behind blame.
+    const provenanceCommit = caretProvenanceDetail();
+    if (provenanceCommit !== undefined) {
+      return {
+        activityPath: "",
+        changeKind: undefined,
+        level: undefined,
+        message: "",
+        provenanceCommit: truncate(provenanceCommit, Math.max(1, terminalWidth() - 2)),
+        recencyAt: undefined,
+        text: provenanceCommit,
+      };
+    }
+    const latest = latestActivity(activityLog());
     const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
-    // When the rail is on, the caret line's provenance takes the lead group's place: its band
-    // Glyph leads a compact detail, in place of the ambient recent-file cue. It is more
-    // Specific than "most recently changed file" while you read a file with blame on.
-    const provenance = caretProvenanceDetail();
-    // Budget the lead + message against the right slot after the marks the bar draws: the
-    // Severity glyph (2 cells, with a status), the leading mark before the lead text (2, a
-    // Recency dot or the provenance band glyph), and the gap between the two groups (2, only
-    // When both are present). The lead yields first, truncating against the full status; if
-    // The status still overruns it caps too, so the groups never spill past the slot into the
-    // Left hint. A recent-file lead is tinted by change kind and fades with recency (no "Ns
-    // Ago"); a provenance lead carries its own band color, so no change kind or recency.
+    // Budget the path + message against the right slot after the marks the bar draws: the
+    // Severity glyph (2 cells, with a status), the recency dot before the path (2), and the
+    // Gap between the two groups (2, only when both are present). The path yields first, its
+    // Front truncating against the full status; if the status still overruns it caps too, so
+    // The groups never spill past the slot into the left hint. The path is tinted by change
+    // Kind and fades with recency (no "Ns ago"), the same cue the tree gives a changed file.
     const GLYPH_CELLS = 2;
-    const MARK_CELLS = 2;
+    const DOT_CELLS = 2;
     const GAP_CELLS = 2;
-    const hasLead = provenance !== undefined || recent !== undefined;
     const overhead =
       (displayStatus === "" ? 0 : GLYPH_CELLS) +
-      (hasLead ? MARK_CELLS : 0) +
-      (hasLead && displayStatus !== "" ? GAP_CELLS : 0);
+      (recent === undefined ? 0 : DOT_CELLS) +
+      (recent === undefined || displayStatus === "" ? 0 : GAP_CELLS);
     const textBudget = Math.max(1, width - overhead);
     const activityPath =
-      provenance !== undefined
-        ? truncate(provenance.detail, Math.max(1, textBudget - displayStatus.length))
-        : recent === undefined
-          ? ""
-          : truncateLeft(recent.path, Math.max(1, textBudget - displayStatus.length));
+      recent === undefined
+        ? ""
+        : truncateLeft(recent.path, Math.max(1, textBudget - displayStatus.length));
     const message = truncate(displayStatus, Math.max(1, textBudget - activityPath.length));
     const text = [activityPath, message].filter((part) => part !== "").join(" · ");
     // A glyph belongs only to an actual status message. Activity alone is ambient
@@ -1766,20 +1778,17 @@ function createState() {
         : provisioning !== undefined || checksRunning()
           ? "info"
           : statusLevel();
-    // The recent file's git change kind tints the path (the tree's changed-file color); its
-    // Timestamp feeds the fade + dot. Both are suppressed when provenance leads (its band
-    // Glyph carries the color and there is no recency fade).
+    // The recent file's git change kind tints the path (the tree's changed-file color);
+    // Its timestamp feeds both the fading tint and the recency dot the bar draws.
     const changeKind =
-      provenance !== undefined || recent === undefined
-        ? undefined
-        : gitModel().changedByPath.get(recent.path)?.kind;
+      recent === undefined ? undefined : gitModel().changedByPath.get(recent.path)?.kind;
     return {
       activityPath,
       changeKind,
       level,
       message,
-      provenanceBand: provenance?.band,
-      recencyAt: provenance !== undefined ? undefined : recent?.at,
+      provenanceCommit: undefined,
+      recencyAt: recent?.at,
       text,
     };
   });
@@ -1789,7 +1798,7 @@ function createState() {
   const statusRightMessage = () => statusRightModel().message;
   const statusRightRecencyAt = () => statusRightModel().recencyAt;
   const statusRightChangeKind = () => statusRightModel().changeKind;
-  const statusRightProvenanceBand = () => statusRightModel().provenanceBand;
+  const statusProvenanceCommit = () => statusRightModel().provenanceCommit;
 
   // --- navigation ---
   const canGoBack = createMemo(() => canBack(navState()));
@@ -4114,12 +4123,12 @@ function createState() {
     sidebarWidth,
     status,
     statusHint,
+    statusProvenanceCommit,
     statusRight,
     statusRightChangeKind,
     statusRightLevel,
     statusRightMessage,
     statusRightPath,
-    statusRightProvenanceBand,
     statusRightRecencyAt,
     switchWorktree,
     symbolsIndex,

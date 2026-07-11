@@ -265,6 +265,36 @@ const screens = [
   },
   {
     /**
+     * Toggle the provenance rail (`a`) on a real source file, switch to full-file view (`v`) so the
+     * whole history shows rather than just the diff's changed lines, then jump the caret onto a
+     * recently added method. The gutter rail places each line on its five-tier timeline (a Block
+     * Element weight ramp), and the status bar reads out the caret line's commit as a blame
+     * inspector. `git/service` is a long-lived file this branch also touched, so its rail spans the
+     * older tiers and the newer "this branch" one.
+     */
+    name: "provenance",
+    steps: [
+      "Ctrl+P",
+      'Type "git/service"',
+      "Sleep 500ms",
+      "Enter",
+      "Sleep 1500ms",
+      'Type "v"',
+      "Sleep 600ms",
+      'Type "a"',
+      "Sleep 1200ms",
+      'Type "/"',
+      "Sleep 300ms",
+      'Type "blame: (repoRoot"',
+      "Sleep 500ms",
+      "Enter",
+      "Sleep 500ms",
+      "Escape",
+      "Sleep 1500ms",
+    ].join("\n"),
+  },
+  {
+    /**
      * Open a real source diff, jump the caret onto a JSDoc'd exported function with `/`, hop to its
      * name, and press `K`. The hover card shows the syntax-highlighted signature above the plain
      * doc text, anchored at the caret over the diff. The long final sleep waits out tsserver's

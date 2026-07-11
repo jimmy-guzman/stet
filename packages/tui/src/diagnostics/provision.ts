@@ -41,7 +41,7 @@ interface BinaryAsset {
  * How a server gets into the cache. `npm` covers servers published as packages; `binary` covers
  * native servers shipped as GitHub release assets (rust-analyzer, ruff), which npm can never serve.
  * A binary asset is a single gzipped executable (`archive` absent, rust-analyzer) or a `tar.gz`
- * cargo-dist archive the extractor pulls the executable out of (ruff).
+ * cargo-dist archive the extractor pulls the executable out of (`archive: "tar.gz"`, ruff).
  */
 export type ProvisionChannel =
   | { readonly kind: "npm"; readonly packages: readonly string[] }
@@ -50,7 +50,7 @@ export type ProvisionChannel =
       readonly repo: string;
       readonly tag: string;
       readonly assets: readonly BinaryAsset[];
-      readonly archive?: "gzip" | "tar.gz";
+      readonly archive?: "tar.gz";
     };
 
 export interface ProvisionSpec {

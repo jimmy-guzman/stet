@@ -20,7 +20,12 @@ export function extractTarEntry(tar: Uint8Array, name: string): Uint8Array | und
     const nameField = decoder.decode(header.subarray(0, 100));
     const nul = nameField.indexOf("\0");
     const path = nul === -1 ? nameField : nameField.slice(0, nul);
+    // `trim()` leaves the NUL padding of a malformed all-zero-byte size field, so parseInt can still
+    // Return NaN; bail rather than let it flow into `offset` and silently mis-terminate the walk.
     const size = Number.parseInt(decoder.decode(header.subarray(124, 136)).trim() || "0", 8);
+    if (Number.isNaN(size)) {
+      return undefined;
+    }
     const content = offset + BLOCK;
     // Typeflag '0' (0x30) or the legacy NUL both denote a regular file; anything else (directories,
     // The pax header) is skipped, its content advanced over the same way.

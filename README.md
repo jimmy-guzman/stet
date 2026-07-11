@@ -29,6 +29,9 @@ beneath, and it stays.
 - Opens unchanged files read-only, with syntax highlighting for any language
   Shiki supports.
 - Opens changed files as diffs, with a toggle for the full file.
+- Shows an image or binary file as a metadata card (type, dimensions, size)
+  instead of raw bytes, since a terminal can't render the pixels, and opens it in
+  the OS default app with `O`.
 - Finds text within the open file, and searches file contents across the repo,
   scoped to the changes or the whole tree.
 - Switches scope from a picker (all changes, staged, unstaged, since launch, or

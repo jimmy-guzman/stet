@@ -20,7 +20,8 @@ export type CommandAction =
   | { kind: "copyFileContents" }
   | { kind: "loadFullContent" }
   | { kind: "pinTab"; path: string }
-  | { kind: "openEditor"; mode: "terminal" | "ide"; path: string; line: number | undefined };
+  | { kind: "openEditor"; mode: "terminal" | "ide"; path: string; line: number | undefined }
+  | { kind: "openExternal"; path: string };
 
 export interface CommandMenuItem {
   label: string;
@@ -80,6 +81,7 @@ function viewerItems(input: CommandMenuInput): CommandMenuItem[] {
       action: { kind: "openEditor", line: input.caretLine, mode: "ide", path },
       label: "Open in IDE",
     },
+    { action: { kind: "openExternal", path }, label: "Open externally" },
     // Only when the viewer actually capped the file; otherwise it would be a no-op.
     ...(input.truncated
       ? [{ action: { kind: "loadFullContent" }, label: "Show full content" } as const]
@@ -112,5 +114,6 @@ function treeItems(input: CommandMenuInput): CommandMenuItem[] {
       action: { kind: "openEditor", line: undefined, mode: "ide", path: node.path },
       label: "Open in IDE",
     },
+    { action: { kind: "openExternal", path: node.path }, label: "Open externally" },
   ];
 }

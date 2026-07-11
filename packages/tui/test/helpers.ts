@@ -72,6 +72,15 @@ export function loadFileDiff(repoRoot: string, scope: DiffScope, changed: Change
   );
 }
 
+export function loadBinaryMeta(repoRoot: string, scope: DiffScope, changed: ChangedFile) {
+  return Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.binaryMeta(repoRoot, scope, changed)),
+      Effect.provide(GitTestLive),
+    ),
+  );
+}
+
 // State is a global singleton, so render tests seed it fresh (and reset the UI
 // Signals that might bleed from a prior test) before rendering App. Mirrors the
 // Startup seeding in main.tsx.

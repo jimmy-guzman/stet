@@ -1,9 +1,12 @@
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { lstat, readFile, readlink } from "node:fs/promises";
 
+import { imageMeta } from "./image-meta";
+import type { ImageMeta } from "./image-meta";
+
 export type FileContent =
   | { kind: "text"; content: string; lineCount: number; truncated: boolean }
-  | { kind: "binary" }
+  | { kind: "binary"; bytes: number; image?: ImageMeta }
   | { kind: "missing" }
   | { kind: "too-large"; bytes: number };
 
@@ -32,7 +35,7 @@ export function loadFileContent(
       return textContent(readlinkSync(absolutePath), options.full);
     }
     if (!stat.isFile()) {
-      return { kind: "binary" };
+      return { bytes: 0, kind: "binary" };
     }
     size = stat.size;
   } catch {
@@ -70,7 +73,7 @@ export async function loadFileContentAsync(
       return textContent(await readlink(absolutePath), options.full);
     }
     if (!stat.isFile()) {
-      return { kind: "binary" };
+      return { bytes: 0, kind: "binary" };
     }
     if (stat.size > MAX_FILE_BYTES && !options.full) {
       return { bytes: stat.size, kind: "too-large" };
@@ -89,7 +92,7 @@ export function classifyFileBytes(bytes: Uint8Array, options: { full: boolean })
   }
 
   if (bytes.subarray(0, 8000).includes(0)) {
-    return { kind: "binary" };
+    return { bytes: bytes.byteLength, image: imageMeta(bytes), kind: "binary" };
   }
 
   return textContent(new TextDecoder().decode(bytes), options.full);

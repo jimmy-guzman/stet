@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import { Effect, Queue, Stream } from "effect";
 import {
@@ -52,6 +52,8 @@ import {
 import type { GapSource } from "./diff/regions";
 import type { DiffRow, NavigableLine } from "./diff/rows";
 import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
+import { openExternalCommand } from "./editor/reference";
+import { Editor } from "./editor/service";
 import { contentToContextPatch } from "./file/content";
 import type { FileContent } from "./file/content";
 import { File } from "./file/service";
@@ -64,6 +66,7 @@ import {
   recordActivity,
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
+import type { BinaryDiff } from "./git/file-patch";
 import type { Commit } from "./git/log";
 import {
   changedContentAdvanced,
@@ -228,12 +231,16 @@ interface DiffView {
   fileContent: FileContent | undefined;
   render: DiffRender;
   highlighted: boolean;
+  // Present only for a changed binary file: its two sides' size/dimensions, so the
+  // Viewer renders a metadata placeholder instead of the empty diff stet can't draw.
+  binary?: BinaryDiff;
 }
 
 interface DiffBase {
   diff: string;
   fileContent: FileContent | undefined;
   showFileContent: boolean;
+  binary?: BinaryDiff;
 }
 
 const DIFF_MAX_LINES = 1600;
@@ -282,6 +289,7 @@ function loadDiffView(src: {
         return {
           highlight,
           view: {
+            binary: result.binary,
             fileContent: result.fileContent,
             highlighted: false,
             path: src.path,
@@ -318,6 +326,33 @@ function loadDiffView(src: {
   if (file === undefined) {
     return toView(
       Effect.succeed<DiffBase>({ diff: "", fileContent: undefined, showFileContent: false }),
+    );
+  }
+
+  // A binary file has no diff to draw, so skip the patch entirely and fetch the two
+  // Sides' size/dimensions for the placeholder; `fileDiff` would only return "" here.
+  if (file.binary) {
+    return toView(
+      Git.use((git) => git.binaryMeta(src.model.repoRoot, src.scope, file)).pipe(
+        Effect.map(
+          (binary): DiffBase => ({
+            binary,
+            diff: "",
+            fileContent: undefined,
+            showFileContent: false,
+          }),
+        ),
+        // A `git show` failure still shows the designed binary surface (metadata just
+        // Absent), never a blank pane, so a changed binary always reads as one.
+        Effect.catch(() =>
+          Effect.succeed<DiffBase>({
+            binary: {},
+            diff: "",
+            fileContent: undefined,
+            showFileContent: false,
+          }),
+        ),
+      ),
     );
   }
 
@@ -3016,6 +3051,27 @@ function createState() {
     }
   });
 
+  // Open a file in the OS default application. A GUI handler that stet neither owns nor waits on
+  // (fork-and-forget, no renderer suspend), so it lives in `state` and is reached directly by the
+  // Keymap and the command menu, unlike the terminal editor which needs the renderer.
+  function openExternally(path: string) {
+    const argv = openExternalCommand(join(gitModel().repoRoot, path));
+    if (argv === undefined) {
+      notify("open externally isn't supported on this platform", "warning");
+      return;
+    }
+    runtime.runFork(
+      Editor.use((editor) => editor.openExternal(argv, gitModel().repoRoot)).pipe(
+        Effect.tap((code) =>
+          code === 0 ? Effect.void : Effect.sync(() => notify("couldn't open the file", "warning")),
+        ),
+        Effect.catchTag("EditorError", (error) =>
+          Effect.sync(() => notify(`couldn't open externally: ${error.message}`, "error")),
+        ),
+      ),
+    );
+  }
+
   // Run a menu item's action by dispatching to the existing state action. `openEditor`
   // Is excluded: it needs the renderer, so the keymap (host) and the row click
   // (useRenderer) run it themselves; every other action is pure state.
@@ -3062,6 +3118,10 @@ function createState() {
         // Menu is anchored on that node, not on whatever the viewer currently shows.
         selectFile(action.path);
         pinActiveTab();
+        return;
+      }
+      case "openExternal": {
+        openExternally(action.path);
         return;
       }
     }
@@ -3669,6 +3729,7 @@ function createState() {
     now,
     nudgeSidebarWidth,
     openCommandMenu,
+    openExternally,
     openFileCombobox,
     openReferences,
     openSearch,

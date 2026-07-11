@@ -10,7 +10,40 @@ import { diffArgs, untrackedDiffArgs } from "@/git/model";
 import type { ChangedFile } from "@/git/model";
 import { stripGitEnv } from "@/utils/env";
 
-import { createFixtureRepo, loadFileDiff, loadModel, runGit } from "../test/helpers";
+import {
+  createFixtureRepo,
+  loadBinaryMeta,
+  loadFileDiff,
+  loadModel,
+  runGit,
+} from "../test/helpers";
+
+// A minimal valid PNG header (width/height in the IHDR) plus optional trailing padding
+// To vary the byte size; the NUL bytes make git and stet both classify it binary.
+function png(width: number, height: number, pad = 0): Uint8Array {
+  const u32be = (n: number) => [(n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  return Uint8Array.from([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    0,
+    0,
+    0,
+    13,
+    0x49,
+    0x48,
+    0x44,
+    0x52,
+    ...u32be(width),
+    ...u32be(height),
+    ...Array.from({ length: pad }, () => 0),
+  ]);
+}
 
 // The slow pathspec invocation this change replaced, captured directly so a test
 // Asserts the in-process patch renders the same rows git's own diff would.
@@ -229,5 +262,51 @@ describe("in-process fileDiff matches git", () => {
     writeFileSync(join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nWORKTREE\n");
 
     await expectSameRows(repoRoot, { kind: "session", ref: base }, "src/a.ts");
+  });
+});
+
+describe("binaryMeta reads both sides' size and dimensions", () => {
+  test("an added binary reports only the new side", async () => {
+    const repoRoot = createFixtureRepo("stet-bm-add-", { "keep.ts": "keep\n" });
+    writeFileSync(join(repoRoot, "logo.png"), png(16, 8));
+    runGit(repoRoot, ["add", "logo.png"]);
+
+    const scope: DiffScope = { kind: "staged", ref: "HEAD" };
+    const file = await changedFile(repoRoot, scope, "logo.png");
+    expect(file.binary).toBe(true);
+    expect(await loadBinaryMeta(repoRoot, scope, file)).toEqual({
+      newSide: { bytes: 24, image: { format: "PNG", height: 8, width: 16 } },
+      oldSide: undefined,
+    });
+  });
+
+  test("a deleted binary reports only the old side", async () => {
+    const repoRoot = createFixtureRepo("stet-bm-del-", { "keep.ts": "keep\n" });
+    writeFileSync(join(repoRoot, "logo.png"), png(16, 8));
+    runGit(repoRoot, ["add", "logo.png"]);
+    runGit(repoRoot, ["commit", "-m", "add logo"]);
+    runGit(repoRoot, ["rm", "logo.png"]);
+
+    const scope: DiffScope = { kind: "staged", ref: "HEAD" };
+    const file = await changedFile(repoRoot, scope, "logo.png");
+    expect(await loadBinaryMeta(repoRoot, scope, file)).toEqual({
+      newSide: undefined,
+      oldSide: { bytes: 24, image: { format: "PNG", height: 8, width: 16 } },
+    });
+  });
+
+  test("a modified binary reports both sides", async () => {
+    const repoRoot = createFixtureRepo("stet-bm-mod-", { "keep.ts": "keep\n" });
+    writeFileSync(join(repoRoot, "logo.png"), png(16, 8));
+    runGit(repoRoot, ["add", "logo.png"]);
+    runGit(repoRoot, ["commit", "-m", "add logo"]);
+    writeFileSync(join(repoRoot, "logo.png"), png(32, 16, 100));
+
+    const scope: DiffScope = { kind: "all", ref: "HEAD" };
+    const file = await changedFile(repoRoot, scope, "logo.png");
+    expect(await loadBinaryMeta(repoRoot, scope, file)).toEqual({
+      newSide: { bytes: 124, image: { format: "PNG", height: 16, width: 32 } },
+      oldSide: { bytes: 24, image: { format: "PNG", height: 8, width: 16 } },
+    });
   });
 });

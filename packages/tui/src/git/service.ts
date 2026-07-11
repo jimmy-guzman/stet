@@ -5,8 +5,14 @@ import { Process } from "@/process";
 import type { CommandError } from "@/process";
 
 import { GitError } from "./errors";
-import { buildFilePatch, classifySideBytes, fileDiffSides, readWorktreeSide } from "./file-patch";
-import type { FilePatch, PatchSide, SideContent } from "./file-patch";
+import {
+  buildFilePatch,
+  classifySideBytes,
+  fileDiffSides,
+  readWorktreeSide,
+  sideMeta,
+} from "./file-patch";
+import type { BinaryDiff, FilePatch, PatchSide, SideContent } from "./file-patch";
 import { logArgs, parseLog } from "./log";
 import type { Commit } from "./log";
 import {
@@ -42,6 +48,16 @@ function retryTransient<A>(effect: Effect.Effect<A, CommandError>) {
 export class Git extends Context.Service<
   Git,
   {
+    /**
+     * Both sides' size and image dimensions for a binary changed file, so the viewer can render a
+     * metadata placeholder in place of the diff stet cannot draw. Reuses the same side reads as
+     * `fileDiff`; a side is absent when it is the empty side of an add or delete.
+     */
+    readonly binaryMeta: (
+      repoRoot: string,
+      scope: DiffScope,
+      file: ChangedFile,
+    ) => Effect.Effect<BinaryDiff, GitError>;
     readonly changedFiles: (
       repoRoot: string,
       scope: DiffScope,
@@ -108,6 +124,19 @@ export const GitLive = Layer.effect(
     };
 
     return {
+      binaryMeta: (repoRoot, scope, file) => {
+        const { newSide, oldSide } = fileDiffSides(scope, file);
+        return Effect.all(
+          [fetchSide(repoRoot, oldSide, file.path), fetchSide(repoRoot, newSide, file.path)],
+          { concurrency: "unbounded" },
+        ).pipe(
+          Effect.map(([oldContent, newContent]) => ({
+            newSide: sideMeta(newContent),
+            oldSide: sideMeta(oldContent),
+          })),
+          Effect.mapError(toGitError),
+        );
+      },
       changedFiles: (repoRoot, scope) =>
         Effect.all(
           [

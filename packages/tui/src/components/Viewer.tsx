@@ -6,6 +6,7 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { nearestNavigableIndex, placeholderText, viewerStats } from "@/ui-helpers";
 
+import { BinaryPreview } from "./BinaryPreview";
 import { DiffView } from "./diff/DiffView";
 import { PaneFrame } from "./PaneFrame";
 import { SearchPane } from "./SearchPane";
@@ -172,6 +173,25 @@ export function Viewer() {
     return (
       state.diffView()?.showFileContent === true && content !== undefined && content.kind !== "text"
     );
+  };
+
+  // The metadata surface for a binary file, in either view mode: file-content mode
+  // Reads the single viewed side, diff mode the old/new sides. `undefined` for every
+  // Other content, so the placeholder line and DiffView keep their existing paths.
+  const binaryPreview = () => {
+    const view = state.diffView();
+    if (view === undefined) {
+      return undefined;
+    }
+    const name = view.path.split("/").pop() ?? view.path;
+    const content = view.fileContent;
+    if (view.showFileContent && content?.kind === "binary") {
+      return { diff: undefined, name, single: { bytes: content.bytes, image: content.image } };
+    }
+    if (view.binary !== undefined) {
+      return { diff: view.binary, name, single: undefined };
+    }
+    return undefined;
   };
 
   // The input stays mounted whenever the bar shows so a committed (blurred) find
@@ -341,16 +361,30 @@ export function Viewer() {
             }
           >
             <Show
-              when={!isPlaceholder()}
+              when={binaryPreview()}
               fallback={
-                <box height={state.viewerHeight()} paddingLeft={1}>
-                  <text fg={theme.colors.text.muted}>
-                    {placeholderText(state.diffView()?.fileContent)}
-                  </text>
-                </box>
+                <Show
+                  when={!isPlaceholder()}
+                  fallback={
+                    <box height={state.viewerHeight()} paddingLeft={1}>
+                      <text fg={theme.colors.text.muted}>
+                        {placeholderText(state.diffView()?.fileContent)}
+                      </text>
+                    </box>
+                  }
+                >
+                  <DiffView />
+                </Show>
               }
             >
-              <DiffView />
+              {(preview) => (
+                <BinaryPreview
+                  name={preview().name}
+                  height={state.viewerHeight()}
+                  single={preview().single}
+                  diff={preview().diff}
+                />
+              )}
             </Show>
           </Show>
           {/* A partially-loaded file reserves this row (viewerHeight already shrank by

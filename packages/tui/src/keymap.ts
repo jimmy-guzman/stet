@@ -693,7 +693,15 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "o" && fileViewShowing && selectedPath !== undefined) {
+      // Open externally sits beside `o` as its Shift pair (bare uppercase, so the modifier
+      // Survives terminals that drop Shift on control keys). Placed ahead of the plain-`o`
+      // Handler, which is tightened to !shift so the two never both fire.
+      if ((key.name === "O" || (key.name === "o" && key.shift)) && selectedPath !== undefined) {
+        state.openExternally(selectedPath);
+        return;
+      }
+
+      if (key.name === "o" && !key.shift && fileViewShowing && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "ide");

@@ -12,7 +12,7 @@ test("File.content classifies a deleted binary file from git-show as binary", as
     runGit(repo, ["commit", "-m", "add binary"]);
     runGit(repo, ["rm", "logo.bin"]);
 
-    expect(await loadGitShowContent(repo, "logo.bin")).toEqual({ kind: "binary" });
+    expect(await loadGitShowContent(repo, "logo.bin")).toEqual({ bytes: 4, kind: "binary" });
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

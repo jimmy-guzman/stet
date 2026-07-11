@@ -2,18 +2,17 @@ import type { MouseEvent } from "@opentui/core";
 import { batch, createMemo, Show } from "solid-js";
 
 import { checkerSummary, emptyDirectorySummary } from "@/diagnostics/checker";
-import { recencyFraction } from "@/git/activity";
 import type { DirectoryNode, FileNode, FileTreeRow } from "@/git/tree";
 import { levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { kindLetter } from "@/ui-helpers";
-import { lerpHex } from "@/utils/color";
 import { folderIcon } from "@/utils/file-icon";
 import { truncate, truncateName } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
 import { isRightClick } from "./mouse";
+import { RecencyDot } from "./RecencyDot";
 
 // Fine-grained reactivity replaces React.memo: only the rows whose focus,
 // Selection, or checker state actually change re-evaluate. Under the sidebar's
@@ -126,7 +125,7 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
           </box>
         </box>
         <text fg={nameFg()}>{truncateName(props.node.name, maxNameLen())}</text>
-        <RecencyDot at={recencyAt()} />
+        <RecencyDot at={recencyAt()} marginLeft={1} />
       </box>
       <box flexDirection="row">
         {summary()?.failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
@@ -255,7 +254,7 @@ function FileRow(props: {
           <FileIcon name={props.node.name} symlink={props.node.symlink} />
         </box>
         <text fg={nameFg()}>{truncate(props.node.name, maxNameLen())}</text>
-        <RecencyDot at={state.recencyByPath().get(props.node.path)} />
+        <RecencyDot at={state.recencyByPath().get(props.node.path)} marginLeft={1} />
       </box>
       <box flexDirection="row">
         {summary().failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
@@ -304,20 +303,4 @@ function FileRow(props: {
       </box>
     </box>
   );
-}
-
-// The dot fades from recency.fresh toward recency.aged across an activity's
-// Lifetime, then disappears once it ages out. Reads state.now() (the 1s tick
-// That already re-renders these dots), so the ramp is free of new reactivity.
-export function RecencyDot(props: { at: number | undefined }) {
-  const theme = useTheme();
-  // `recencyFraction` is 0 at its freshest, so the dot must key on the resolved
-  // Color (string | undefined), never on the fraction's truthiness.
-  const color = () => {
-    const fraction = recencyFraction(props.at, state.now());
-    return fraction === undefined
-      ? undefined
-      : lerpHex(theme.colors.recency.fresh, theme.colors.recency.aged, fraction);
-  };
-  return <Show when={color()}>{(fg) => <text fg={fg()}> ●</text>}</Show>;
 }

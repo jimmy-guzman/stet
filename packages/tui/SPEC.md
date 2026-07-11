@@ -76,7 +76,7 @@ The viewer is a set of tabs, each an ordered history of Locations (a Location is
 
 ## Recency
 
-Recency markers come from an append-only in-memory activity event log (the seam for a future persistence layer). They decay silently: fresh under 5s, recent under 30s. `.` jumps to the latest activity. A scope switch is not activity.
+Recency markers come from an append-only in-memory activity event log (the seam for a future persistence layer). They decay silently: fresh under 5s, recent under 30s. `.` jumps to the latest activity. A scope switch is not activity. The status bar surfaces that latest activity, the most recent changed file, ahead of the leveled status, presented like a tree row: the path in its git change-kind color plus a recency dot, both fading toward the background across the window (no elapsed-time number), so it reads as a changed file and recedes silently as it ages.
 
 ## Diagnostics
 

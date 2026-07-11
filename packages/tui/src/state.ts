@@ -1460,21 +1460,45 @@ function createState() {
     // An in-flight code-intel pull outranks even a held acknowledgment: it is the
     // Acknowledgment of the very keystroke the user is waiting on, so it stays until
     // The pull settles (which then clears it, letting any follow-up notice show).
+    // The transient tiers are pure leveled messages with no changed-file lead, so their
+    // Whole text is the message and they carry no path, change kind, or recency; only the
+    // Default activity tier below shows a recent changed file the bar tints and fades.
     const busy = intelStatus();
     if (busy !== undefined) {
-      return { level: "info" as const, text: truncate(busy, textWidth) };
+      const message = truncate(busy, textWidth);
+      return {
+        activityPath: "",
+        changeKind: undefined,
+        level: "info" as const,
+        message,
+        recencyAt: undefined,
+        text: message,
+      };
     }
     // A held acknowledgment wins over ambient status for its dwell, so the user
     // Sees their action confirmed even as checks/activity churn underneath.
     const held = notice();
     if (held !== undefined) {
-      return { level: held.level, text: truncate(held.text, textWidth) };
+      const message = truncate(held.text, textWidth);
+      return {
+        activityPath: "",
+        changeKind: undefined,
+        level: held.level,
+        message,
+        recencyAt: undefined,
+        text: message,
+      };
     }
     const finding = cursorFindings()?.[0];
     if (finding !== undefined) {
+      const message = truncate(`${finding.checker}: ${finding.message}`, textWidth);
       return {
+        activityPath: "",
+        changeKind: undefined,
         level: finding.severity satisfies LogLevel,
-        text: truncate(`${finding.checker}: ${finding.message}`, textWidth),
+        message,
+        recencyAt: undefined,
+        text: message,
       };
     }
     const latest = latestActivity(activityLog());
@@ -1483,20 +1507,26 @@ function createState() {
     const provisioning = provisioningStatus();
     const displayStatus = provisioning ?? (checksRunning() ? "checking…" : status());
     const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
-    const prefix =
-      recent === undefined ? "" : `${Math.max(0, Math.round((now() - recent.at) / 1000))}s ago `;
-    // Reserve the seconds prefix and, when present, the " · status" suffix the join
-    // Appends, so a long path shortens from its front (keeping the filename) instead
-    // Of shoving the status off the line.
-    const suffix = displayStatus === "" ? "" : ` · ${displayStatus}`;
-    const activityText =
+    // Budget the path + message against the right slot after the marks the bar draws: the
+    // Severity glyph (2 cells, with a status), the recency dot before the path (2), and the
+    // Gap between the two groups (2, only when both are present). The path yields first, its
+    // Front truncating against the full status; if the status still overruns it caps too, so
+    // The groups never spill past the slot into the left hint. The path is tinted by change
+    // Kind and fades with recency (no "Ns ago"), the same cue the tree gives a changed file.
+    const GLYPH_CELLS = 2;
+    const DOT_CELLS = 2;
+    const GAP_CELLS = 2;
+    const overhead =
+      (displayStatus === "" ? 0 : GLYPH_CELLS) +
+      (recent === undefined ? 0 : DOT_CELLS) +
+      (recent === undefined || displayStatus === "" ? 0 : GAP_CELLS);
+    const textBudget = Math.max(1, width - overhead);
+    const activityPath =
       recent === undefined
         ? ""
-        : `${prefix}${truncateLeft(recent.path, Math.max(1, textWidth - prefix.length - suffix.length))}`;
-    const text = truncate(
-      [activityText, displayStatus].filter((part) => part !== "").join(" · "),
-      textWidth,
-    );
+        : truncateLeft(recent.path, Math.max(1, textBudget - displayStatus.length));
+    const message = truncate(displayStatus, Math.max(1, textBudget - activityPath.length));
+    const text = [activityPath, message].filter((part) => part !== "").join(" · ");
     // A glyph belongs only to an actual status message. Activity alone is ambient
     // And idle is empty, so neither carries a level: the bar renders the text bare,
     // Never a lone glyph.
@@ -1506,10 +1536,25 @@ function createState() {
         : provisioning !== undefined || checksRunning()
           ? "info"
           : statusLevel();
-    return { level, text };
+    // The recent file's git change kind tints the path (the tree's changed-file color);
+    // Its timestamp feeds both the fading tint and the recency dot the bar draws.
+    const changeKind =
+      recent === undefined ? undefined : gitModel().changedByPath.get(recent.path)?.kind;
+    return {
+      activityPath,
+      changeKind,
+      level,
+      message,
+      recencyAt: recent?.at,
+      text,
+    };
   });
   const statusRight = () => statusRightModel().text;
   const statusRightLevel = () => statusRightModel().level;
+  const statusRightPath = () => statusRightModel().activityPath;
+  const statusRightMessage = () => statusRightModel().message;
+  const statusRightRecencyAt = () => statusRightModel().recencyAt;
+  const statusRightChangeKind = () => statusRightModel().changeKind;
 
   // --- navigation ---
   const canGoBack = createMemo(() => canBack(navState()));
@@ -3495,7 +3540,8 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // Keep "Ns ago" labels fresh once a second while activity is recent, then stop.
+  // Tick the recency clock once a second while activity is recent, then stop. Drives the
+  // Tree's fading recency dots and the status bar's fading activity path (both read now()).
   createEffect(() => {
     const latest = latestActivity(activityLog());
     if (latest === undefined || Date.now() - latest.at >= RECENT_MS) {
@@ -3806,7 +3852,11 @@ function createState() {
     status,
     statusHint,
     statusRight,
+    statusRightChangeKind,
     statusRightLevel,
+    statusRightMessage,
+    statusRightPath,
+    statusRightRecencyAt,
     switchWorktree,
     symbolsIndex,
     symbolsOpen,

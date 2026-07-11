@@ -9,7 +9,7 @@ import { matchIndices } from "@/utils/fuzzy";
 import { toCodePoints, truncateAroundMatch } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
-import { RecencyDot } from "./TreeRow";
+import { RecencyDot } from "./RecencyDot";
 
 export function FileCombobox() {
   const theme = useTheme();
@@ -130,7 +130,7 @@ export function FileCombobox() {
                       fg={nameFg}
                       matchFg={() => theme.colors.accent.primary}
                     />
-                    <RecencyDot at={state.recencyByPath().get(path())} />
+                    <RecencyDot at={state.recencyByPath().get(path())} marginLeft={1} />
                   </box>
                   {changed() === undefined ? null : (
                     <text fg={theme.colors.stage[changed()!.stage]}>

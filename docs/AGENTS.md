@@ -16,6 +16,14 @@
 - Add a page by creating `content/docs/<path>.mdx` and listing its slug in the relevant `meta.json`. The URL is `/docs/<path>` (the loader `baseUrl` is `/docs`).
 - `reference/keybindings.mdx` has a `GENERATED-KEYS` region populated by `bun run gen:keys` from the TUI's `src/help/keys.ts`. Never hand-edit inside that fence; run the generator.
 
+## Markdown for agents
+
+- The docs are served as markdown alongside the HTML, so an agent can read them without scraping: `/llms.txt` (the index, `app/llms.txt/route.ts`), `/llms-full.txt` (every page in one file, `app/llms-full.txt/route.ts`), and one markdown route per page (`app/llms.mdx/docs/[[...slug]]/route.ts`, statically generated from `source.generateParams()`). Route handlers set `export const revalidate = false`, so all of it is built once.
+- `proxy.ts` (Next's middleware entrypoint, matched to `/docs*`) routes markdown requests to that per-page route two ways: a `.md`/`.mdx` suffix on any docs URL, and a plain docs URL requested with `Accept: text/markdown` (`isMarkdownPreferred` from `fumadocs-core/negotiation`). A browser hitting the same URL still gets HTML.
+- A page's markdown comes from `getLLMText` in `lib/llm.ts`, which reads `page.data.getText("processed")`. That text only exists because `source.config.ts` sets `postprocess.includeProcessedMarkdown`; without it a page compiles to JSX with no markdown left. Fumadocs' default stringifier keeps `Callout`/`Card` and flattens the rest (`Tabs`, `Cards`) to their children.
+- `llms.txt` is assembled in the route (title, summary, `## Docs`, `## Optional`) from `llms(llmSource).indexNode()` per top-level tree node, not from `index()`, which would emit its own H1 mid-file. It indexes `llmSource` (`lib/source.ts`), a second loader over the same content whose `url` resolves to the absolute `.md` endpoint, so every link in the index is fetchable as-is. Page URLs everywhere else still come from `source`.
+- Images are the one reference an agent dereferences outside a browser, so `markdownImage` (`lib/llm-image.ts`, the `stringify` hook) rewrites them to absolute URLs. It depends on `remarkImageOptions.useImport: false`: with the default, remarkImage turns each image into a bundler import and the markdown can only stringify its variable name (`src="__img0"`). The HTML site still renders them through next/image.
+
 ## Changelog
 
 - `/changelog` is a standalone page in the `(home)` route group (Home layout, not the docs sidebar), linked from the footer.

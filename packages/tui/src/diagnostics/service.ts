@@ -21,7 +21,7 @@ import type { ChangedFile } from "@/git/model";
 import { stateForResolvedChecker } from "./checker";
 import type { CheckerFileState, CheckerName, Diagnostic } from "./checker";
 import { isLspDiagnostic, mapLspDiagnostic } from "./protocol";
-import { activeLanguages, LanguageServers, lspLanguageId, serversForPath } from "./servers";
+import { activeServerGates, activeServers, LanguageServers, lspLanguageId } from "./servers";
 import type { ServerHandle } from "./servers";
 import type { LspConnection } from "./transport";
 
@@ -510,9 +510,8 @@ export const DiagnosticsLive = Layer.effect(
       const changed = files.filter((file) => file.kind !== "deleted");
       // Evaluate each server's repo gate once for this run, then reuse it per file (and per snapshot
       // Emission below) so a filesystem-stat gate like Biome's isn't re-checked for every file.
-      const active = activeLanguages(repoRoot);
-      const serversFor = (path: string) =>
-        serversForPath(path).filter((language) => active.has(language));
+      const gates = activeServerGates(repoRoot);
+      const serversFor = (path: string) => activeServers(path, gates);
       const noServer = noServerState(serversFor, changed);
       const languages = [...new Set(changed.flatMap((file) => serversFor(file.path)))];
       if (languages.length === 0) {

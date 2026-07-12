@@ -50,7 +50,11 @@ findings merge per file, each tagged with its own source label. A linter that
 competes with an always-on default activates only where the repo opted into
 it, the way an editor extension would. Where a language has competing type
 checkers, stet runs the one the repo opted into and only that one, so the same
-code is never type-checked twice.
+code is never type-checked twice. Both of those are stet guessing, and it yields
+to you: [naming a language's servers](/docs/reference/configuration#languages)
+turns detection off for that language, and a server's
+[`when`](/docs/reference/configuration#run-a-server-only-in-some-repos) is how
+you write the gate yourself.
 
 ### TypeScript & JavaScript
 

@@ -87,12 +87,19 @@ change which servers run for a built-in language. Diagnostics and code
 navigation then work for those files exactly as they do for the built-ins.
 
 A language entry declares the file types it owns (`extensions`, and `filenames`
-for exact names like `Dockerfile`) and the `servers` that analyze them. A
-server is either the name of a built-in (`typescript`, `oxlint`, `biome`,
-`json`, `yaml`, `rust-analyzer`, `basedpyright`, `ty`, `ruff`) or an inline
-command, optionally with `initializationOptions` and `settings` passed to the
-server as-is (`{repoRoot}` and `{repoUri}` in string values are replaced per
-repository).
+for exact names like `Dockerfile`) and the `servers` that analyze them. A server
+is written one of three ways:
+
+| Form                                   | What it is                                                 |
+| -------------------------------------- | ---------------------------------------------------------- |
+| `"biome"`                              | a built-in, by name                                        |
+| `{ "server": "biome", "when": [...] }` | a built-in, run only in repos matching `when`              |
+| `{ "command": [...], "when"?: [...] }` | any command on your machine, optionally gated the same way |
+
+The built-in names are `typescript`, `oxlint`, `biome`, `json`, `yaml`,
+`rust-analyzer`, `basedpyright`, `ty`, and `ruff`. An inline command also takes
+`initializationOptions` and `settings`, passed to the server as-is (`{repoRoot}`
+and `{repoUri}` in string values are replaced per repository).
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -115,6 +122,41 @@ repository).
   },
 }
 ```
+
+Naming `servers` turns detection off for that language. Some built-in servers
+normally activate only where a repo opted into them: Biome needs a `biome.json`,
+and Python's type checker is picked from what the repo declares. That detection
+exists to guess what you want, so once you say it, stet stops guessing. Name
+`biome` and it runs with or without a `biome.json`; name a Python type checker
+and it runs whatever the repo declares. Leave `servers` out (to add a file type,
+say) and the language keeps its built-in list, detection included.
+
+### Run a server only in some repos
+
+`when` is how you say it yourself. This config is global, so it applies to every
+repo you open, and a server with nothing to gate it runs everywhere, reporting
+findings in projects that never asked for it. List the paths that mark a repo as
+one of yours, and the server runs where any of them exists:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "languages": {
+    "typescript": {
+      "servers": [
+        "typescript", // always
+        { "server": "biome", "when": ["biome.json", "biome.jsonc"] }, // Biome's own gate, restored
+        { "command": ["house-lsp", "--stdio"], "when": [".houserc"] }, // yours, only where it applies
+      ],
+    },
+  },
+}
+```
+
+Paths are relative to the repository root, and any single match activates the
+server. `when` covers the "this repo has that config file" shape, which is
+exactly what Biome's own gate is. It is paths, not predicates, so it cannot
+express stet's Python gate, which reads a declared dependency out of
+`pyproject.toml`.
 
 Built-in server names use stet's pinned definitions and standard [server
 discovery and provisioning

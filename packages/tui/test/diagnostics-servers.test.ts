@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { Effect } from "effect";
 
+import { loadConfigText } from "@/config/load";
 import {
   activeServersForPath,
   handshakeConfigFor,
@@ -82,6 +83,210 @@ test("a repo that opted into ty runs ty instead of basedpyright, never both", ()
     rmSync(tyRepo, { force: true, recursive: true });
     rmSync(plain, { force: true, recursive: true });
   }
+});
+
+// The whole point of the config escape hatch: a `servers` list is a statement of intent, and the
+// Repo gates exist only to guess that intent, so the guess must not overrule the statement. These
+// Start from the JSONC text a user actually writes and run it through the real load + resolve path,
+// Because a hand-built Language object would prove nothing about what a config does.
+test("servers named in config run without their repo gate", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  const plain = mkdtempSync(join(tmpdir(), "stet-chosen-"));
+  const tyRepo = mkdtempSync(join(tmpdir(), "stet-chosen-"));
+  writeFileSync(join(tyRepo, "pyproject.toml"), '[dependency-groups]\ndev = ["ty"]\n');
+
+  try {
+    const { config, issues } = loadConfigText(`{
+      "languages": {
+        // force ty in a repo that declares it nowhere, and biome without a biome config
+        "python": { "servers": ["ty", "ruff"] },
+        "css": { "servers": ["biome"] },
+      },
+    }`);
+    expect(issues).toEqual([]);
+    const resolved = resolveLanguages(config.languages ?? {});
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    // Detection alone would pick basedpyright here (no ty signal in the repo); the config wins, and
+    // Intel follows it, so hover and go-to-definition come from the checker the user named.
+    expect(activeServersForPath("src/main.py", plain)).toEqual(["ty", "ruff"]);
+    expect(intelLanguage("src/main.py", plain)).toBe("ty");
+    expect(serversProviding("src/main.py", "hover", plain)).toEqual(["ty"]);
+    // Biome's gate is skipped the same way: a named server runs, biome.json or not.
+    expect(activeServersForPath("src/a.css", plain)).toEqual(["biome"]);
+    // The JS/TS family kept its built-in list, so it is still stet guessing: biome stays gated off.
+    expect(activeServersForPath("src/a.ts", plain)).toEqual(["typescript", "oxlint"]);
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+    rmSync(plain, { force: true, recursive: true });
+    rmSync(tyRepo, { force: true, recursive: true });
+  }
+});
+
+test("config can force the type checker detection would have rejected", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  const tyRepo = mkdtempSync(join(tmpdir(), "stet-chosen-"));
+  writeFileSync(join(tyRepo, "pyproject.toml"), '[dependency-groups]\ndev = ["ty"]\n');
+
+  try {
+    const { config } = loadConfigText(`{
+      "languages": { "python": { "servers": ["basedpyright", "ruff"] } },
+    }`);
+    const resolved = resolveLanguages(config.languages ?? {});
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    // The repo declares ty, so detection would have chosen ty and gated basedpyright off. The
+    // Config says basedpyright, so basedpyright runs: the override works in both directions.
+    expect(activeServersForPath("src/main.py", tyRepo)).toEqual(["basedpyright", "ruff"]);
+    expect(intelLanguage("src/main.py", tyRepo)).toBe("basedpyright");
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+    rmSync(tyRepo, { force: true, recursive: true });
+  }
+});
+
+test("a config entry that names no servers inherits the built-ins, gates and all", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  const tyRepo = mkdtempSync(join(tmpdir(), "stet-chosen-"));
+  writeFileSync(join(tyRepo, "pyproject.toml"), "[tool.ty]\n");
+
+  try {
+    // Adding a file type says nothing about servers, so this is still stet guessing: the repo's ty
+    // Config decides, exactly as it would with no config at all.
+    const { config } = loadConfigText(`{
+      "languages": { "python": { "extensions": ["py", "pyi", "pyw"] } },
+    }`);
+    const resolved = resolveLanguages(config.languages ?? {});
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    expect(activeServersForPath("src/main.pyw", tyRepo)).toEqual(["ty", "ruff"]);
+    expect(activeServersForPath("src/main.py", tyRepo)).toEqual(["ty", "ruff"]);
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+    rmSync(tyRepo, { force: true, recursive: true });
+  }
+});
+
+// `when` is the way back: naming servers turns stet's detection off, and this turns your own gate
+// On. Without it a global config (it applies to every repo you open) would run a server in repos
+// That don't use it, reporting findings the project never gates on.
+test("a server's `when` gates it to the repos that hold one of its paths", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  const withConfig = mkdtempSync(join(tmpdir(), "stet-when-"));
+  const without = mkdtempSync(join(tmpdir(), "stet-when-"));
+  writeFileSync(join(withConfig, "biome.jsonc"), "{}");
+  writeFileSync(join(withConfig, ".houserc"), "{}");
+
+  try {
+    const { config, issues } = loadConfigText(`{
+      "languages": {
+        "typescript": {
+          "servers": [
+            "typescript",
+            { "server": "biome", "when": ["biome.json", "biome.jsonc"] },
+            { "command": ["house-lsp", "--stdio"], "when": [".houserc"] },
+          ],
+        },
+      },
+    }`);
+    expect(issues).toEqual([]);
+    const resolved = resolveLanguages(config.languages ?? {});
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    // Any one listed path is enough (biome.jsonc here, not biome.json), for a built-in re-gated by
+    // Name and for the user's own inline server alike.
+    expect(activeServersForPath("src/a.ts", withConfig)).toEqual([
+      "typescript",
+      "biome",
+      "typescript/house-lsp",
+    ]);
+    // No marker file: both gated servers stay off, while the plain-named one still runs ungated.
+    expect(activeServersForPath("src/a.ts", without)).toEqual(["typescript"]);
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+    rmSync(withConfig, { force: true, recursive: true });
+    rmSync(without, { force: true, recursive: true });
+  }
+});
+
+test("a `when` binds to the language it was written for, not to the server everywhere", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  const repo = mkdtempSync(join(tmpdir(), "stet-when-"));
+  writeFileSync(join(repo, "house.json"), "{}");
+
+  try {
+    // Gate biome on a marker that has nothing to do with a biome config, for the JS/TS family only.
+    const { config } = loadConfigText(`{
+      "languages": {
+        "typescript": {
+          "servers": ["typescript", { "server": "biome", "when": ["house.json"] }],
+        },
+      },
+    }`);
+    const resolved = resolveLanguages(config.languages ?? {});
+    expect(resolved.issues).toEqual([]);
+    // The gate rides on the language, so biome keeps its single registry key: a per-language copy
+    // Would be a second cache entry and a second biome process against the same repo.
+    expect(Object.keys(resolved.servers)).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    expect(activeServersForPath("src/a.ts", repo)).toEqual(["typescript", "biome"]);
+    // CSS still has its built-in list, so biome there answers to its own detect, which this repo
+    // (No biome config) fails. One server, two languages, two different gates.
+    expect(activeServersForPath("src/a.css", repo)).toEqual([]);
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("a malformed server entry is reported and skipped, the rest of the list stands", () => {
+  const { issues, languages: resolved } = resolveLanguages({
+    typescript: {
+      servers: [
+        "typescript",
+        // Neither a built-in nor a command.
+        { when: ["biome.json"] },
+        // Both at once: which one would it run?
+        { command: ["x"], server: "biome" },
+        // A built-in that doesn't exist.
+        { server: "bimoe", when: ["biome.json"] },
+        // Options belong to the server, but the pool keys per server and repo, so a language can't
+        // Hold its own copy of them.
+        { initializationOptions: {}, server: "biome" },
+        // An empty gate would mean "never", which is never what anyone means.
+        { command: ["house-lsp"], when: [] },
+      ],
+    },
+  });
+
+  expect(issues).toContain(
+    'language "typescript": a server needs exactly one of "server" or "command"',
+  );
+  expect(issues).toContain('language "typescript": unknown server "bimoe"');
+  expect(issues).toContain('language "typescript": a built-in server takes only "when"');
+  expect(issues).toContain('language "typescript": when must be a non-empty array of repo paths');
+  // Every bad entry dropped out; the one good one survives, so a typo never sinks the whole list.
+  expect(resolved.typescript?.servers).toEqual(["typescript"]);
 });
 
 test("routes an exact filename ahead of its extension", () => {
@@ -495,9 +700,9 @@ test("resolveLanguages flags unknown fields so typos never silently no-op", () =
 
   expect(issues).toContain('language "elixir": unknown field "extentions"');
   expect(issues).toContain('language "elixir": declares no file types');
-  expect(issues).toContain(
-    'language "ruby": a server must be a built-in name or { command: [...] }',
-  );
+  expect(issues).toContain('language "ruby": unknown server field "comand"');
+  // The typo leaves the entry naming neither a built-in nor a command, so it can't resolve either.
+  expect(issues).toContain('language "ruby": a server needs exactly one of "server" or "command"');
 });
 
 test("registered config languages route files exactly like built-ins", () => {

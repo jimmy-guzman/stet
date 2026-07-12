@@ -614,7 +614,7 @@ test("a server correcting itself out of band nudges exactly one re-check", async
   expect(rechecks).toBe(1);
 });
 
-test("a first publish for a document no run ever sent nudges only when it carries findings", async () => {
+test("a publish no run is waiting for is news, clean or not", async () => {
   let rechecks = 0;
   await withPeer(
     (peer) =>
@@ -630,17 +630,25 @@ test("a first publish for a document no run ever sent nudges only when it carrie
   );
   expect(rechecks).toBe(1);
 
-  let empties = 0;
+  let late = 0;
   await withPeer(
     (peer) =>
       Effect.gen(function* run() {
-        // A clean first publish says nothing changed from the nothing we had, so it is not news.
-        yield* peer.reply(publish("file:///never-opened.py", []));
+        // A run re-sent this document, then capped out its settle without an answer, so the file is
+        // Sitting at `pending`.
+        yield* peer.connection.clearPublished(["file:///slow.py"]);
+        yield* peer.connection.published;
+        yield* peer.connection.endPublishWait;
+
+        // The server finally answers, and the answer is that the file is clean. That is the result
+        // The run never got: no entry is not the same as an empty entry, and treating it as one
+        // Stranded the file at `pending` until the next git activity.
+        yield* peer.reply(publish("file:///slow.py", []));
         yield* notificationsSent(peer);
       }),
     Effect.sync(() => {
-      empties += 1;
+      late += 1;
     }),
   );
-  expect(empties).toBe(0);
+  expect(late).toBe(1);
 });

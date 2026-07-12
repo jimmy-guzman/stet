@@ -39,27 +39,37 @@ test("pyright's catch-all glob matches a package installed into an in-repo venv"
   const registrations = parseWatcherRegistrations(pyrightRegistration(), REPO);
 
   expect(
-    matchesWatchers(
-      registrations,
-      join(REPO, ".venv", "lib", "python3.14", "site-packages", "fastapi", "__init__.py"),
-    ),
+    matchesWatchers(registrations, {
+      path: join(REPO, ".venv", "lib", "python3.14", "site-packages", "fastapi", "__init__.py"),
+      type: 2,
+    }),
   ).toBe(true);
-  expect(matchesWatchers(registrations, join(REPO, "pyrightconfig.json"))).toBe(true);
-  expect(matchesWatchers(registrations, join(REPO, "src", "main.py"))).toBe(true);
+  expect(matchesWatchers(registrations, { path: join(REPO, "pyrightconfig.json"), type: 2 })).toBe(
+    true,
+  );
+  expect(matchesWatchers(registrations, { path: join(REPO, "src", "main.py"), type: 2 })).toBe(
+    true,
+  );
 });
 
 test("a path outside the worktree does not match a worktree-relative glob", () => {
   const registrations = parseWatcherRegistrations(pyrightRegistration(), REPO);
 
-  expect(matchesWatchers(registrations, join(sep, "elsewhere", "main.py"))).toBe(false);
+  expect(matchesWatchers(registrations, { path: join(sep, "elsewhere", "main.py"), type: 2 })).toBe(
+    false,
+  );
 });
 
 test("a RelativePattern matches only under its own base", () => {
   const venv = join(sep, "home", "me", ".virtualenvs", "app", "lib", "site-packages");
   const registrations = parseWatcherRegistrations(pyrightRegistration([venv]), REPO);
 
-  expect(matchesWatchers(registrations, join(venv, "fastapi", "__init__.py"))).toBe(true);
-  expect(matchesWatchers(registrations, join(sep, "home", "me", "unrelated.py"))).toBe(false);
+  expect(
+    matchesWatchers(registrations, { path: join(venv, "fastapi", "__init__.py"), type: 2 }),
+  ).toBe(true);
+  expect(
+    matchesWatchers(registrations, { path: join(sep, "home", "me", "unrelated.py"), type: 2 }),
+  ).toBe(false);
 });
 
 test("out-of-tree bases are the ones the worktree watcher cannot see", () => {
@@ -87,11 +97,11 @@ test("registrations for other methods are ignored", () => {
   );
 
   expect(registrations.map((registration) => registration.id)).toEqual(["watch"]);
-  expect(matchesWatchers(registrations, join(REPO, "Cargo.toml"))).toBe(true);
+  expect(matchesWatchers(registrations, { path: join(REPO, "Cargo.toml"), type: 2 })).toBe(true);
 });
 
 test("a server that registers nothing matches nothing", () => {
-  expect(matchesWatchers([], join(REPO, "src", "main.py"))).toBe(false);
+  expect(matchesWatchers([], { path: join(REPO, "src", "main.py"), type: 2 })).toBe(false);
   expect(parseWatcherRegistrations({ registrations: [] }, REPO)).toEqual([]);
   expect(parseWatcherRegistrations(undefined, REPO)).toEqual([]);
 });
@@ -145,4 +155,50 @@ test("a path that appeared is Created, a rewrite is Changed, a vanished path is 
   } finally {
     rmSync(dir, { force: true, recursive: true });
   }
+});
+
+test("a watcher only hears the change kinds it registered for", () => {
+  // WatchKind is a bitmask (1 create, 2 change, 4 delete). A server that registers creates only is
+  // Asking not to be dragged into a full reanalysis on every save, and honoring it is the client's job.
+  const registrations = parseWatcherRegistrations(
+    {
+      registrations: [
+        {
+          id: "creates-only",
+          method: "workspace/didChangeWatchedFiles",
+          registerOptions: { watchers: [{ globPattern: "**", kind: 1 }] },
+        },
+      ],
+    },
+    REPO,
+  );
+  const path = join(REPO, "src", "main.py");
+
+  expect(matchesWatchers(registrations, { path, type: 1 })).toBe(true);
+  expect(matchesWatchers(registrations, { path, type: 2 })).toBe(false);
+  expect(matchesWatchers(registrations, { path, type: 3 })).toBe(false);
+});
+
+test("an absolute glob outside the worktree is watched, not just matched", () => {
+  const stdlib = join(sep, "opt", "python", "lib", "python3.14");
+  const registrations = parseWatcherRegistrations(
+    {
+      registrations: [
+        {
+          id: "stdlib",
+          method: "workspace/didChangeWatchedFiles",
+          registerOptions: { watchers: [{ globPattern: join(stdlib, "**", "*.py") }] },
+        },
+      ],
+    },
+    REPO,
+  );
+
+  // Re-rooted at its literal prefix, so it surfaces as a base the pool can actually put a watch on.
+  // Left as a bare pattern it would match events nothing was ever going to deliver.
+  expect(outOfTreeBases(registrations, REPO)).toEqual([stdlib]);
+  expect(matchesWatchers(registrations, { path: join(stdlib, "json", "tool.py"), type: 2 })).toBe(
+    true,
+  );
+  expect(matchesWatchers(registrations, { path: join(REPO, "main.py"), type: 2 })).toBe(false);
 });

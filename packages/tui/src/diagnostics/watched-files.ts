@@ -25,13 +25,18 @@ export interface WatchedFileEvent {
 
 interface CompiledWatcher {
   /**
-   * Absolute directory the glob matches relative to: a `RelativePattern`'s base, or the worktree
-   * root for a bare glob. `undefined` when the server sent an absolute glob, which matches against
-   * the absolute path as-is.
+   * Absolute directory the glob matches relative to: a `RelativePattern`'s base, the literal prefix
+   * of an absolute glob, or the worktree root for a bare one. Always a real directory, so a base
+   * outside the worktree can be watched (`outOfTreeBases`) rather than merely matched.
    */
-  readonly base: string | undefined;
+  readonly base: string;
   readonly glob: Bun.Glob;
+  /** LSP `WatchKind` bitmask: 1 create, 2 change, 4 delete. Defaults to 7 (all) per the spec. */
+  readonly kind: number;
 }
+
+/** The `WatchKind` bit a change type corresponds to, so a watcher only hears what it registered for. */
+const KIND_BIT: Record<FileChangeType, number> = { 1: 1, 2: 2, 3: 4 };
 
 export interface WatcherRegistration {
   readonly id: string;
@@ -84,17 +89,35 @@ function baseDirectory(baseUri: unknown) {
   }
 }
 
-function compileGlob(pattern: unknown, repoRoot: string): CompiledWatcher | undefined {
-  // A bare glob is workspace-relative (pyright registers `**` and `**/pyrightconfig.json`); a server
-  // That sends an absolute one instead is matched against the absolute path as-is.
+/**
+ * The directory an absolute glob is rooted at: its leading components up to the first wildcard.
+ * This is what turns `/opt/pyenv/versions/3.14/lib/**` into a base that can actually be _watched_,
+ * rather than a pattern that only ever gets matched against events some other watcher happened to
+ * deliver.
+ */
+function literalPrefix(pattern: string) {
+  const parts = pattern.split(sep);
+  const wildcard = parts.findIndex((part) => /[*?{}[\]]/.test(part));
+  return (wildcard === -1 ? parts.slice(0, -1) : parts.slice(0, wildcard)).join(sep) || sep;
+}
+
+function compileGlob(
+  pattern: unknown,
+  kind: number,
+  repoRoot: string,
+): CompiledWatcher | undefined {
+  // A bare glob is workspace-relative (pyright registers `**` and `**/pyrightconfig.json`). An
+  // Absolute one is re-rooted at its literal prefix so it is watchable when it points out of tree.
   if (typeof pattern === "string") {
-    return isAbsolute(pattern)
-      ? { base: undefined, glob: new Bun.Glob(pattern) }
-      : { base: repoRoot, glob: new Bun.Glob(pattern) };
+    if (!isAbsolute(pattern)) {
+      return { base: repoRoot, glob: new Bun.Glob(pattern), kind };
+    }
+    const base = literalPrefix(pattern);
+    return { base, glob: new Bun.Glob(relative(base, pattern)), kind };
   }
   if (isObject(pattern) && typeof pattern.pattern === "string") {
     const base = baseDirectory(pattern.baseUri);
-    return base === undefined ? undefined : { base, glob: new Bun.Glob(pattern.pattern) };
+    return base === undefined ? undefined : { base, glob: new Bun.Glob(pattern.pattern), kind };
   }
   return undefined;
 }
@@ -105,7 +128,13 @@ function compileWatchers(registerOptions: unknown, repoRoot: string) {
   }
   return registerOptions.watchers
     .filter(isObject)
-    .map((watcher) => compileGlob(watcher.globPattern, repoRoot))
+    .map((watcher) =>
+      compileGlob(
+        watcher.globPattern,
+        typeof watcher.kind === "number" ? watcher.kind : 7,
+        repoRoot,
+      ),
+    )
     .filter((watcher) => watcher !== undefined);
 }
 
@@ -144,11 +173,14 @@ export function parseWatcherUnregistrations(params: unknown) {
     .map((registration) => registration.id);
 }
 
-function matchesWatcher(watcher: CompiledWatcher, path: string) {
-  if (watcher.base === undefined) {
-    return watcher.glob.match(path);
+function matchesWatcher(watcher: CompiledWatcher, event: WatchedFileEvent) {
+  // A server that registered for creates only must not be handed changes and deletions: the `kind`
+  // Filter is the client's job, and honoring it is what keeps a create-only search-path watcher from
+  // Being dragged into a full reanalysis on every save.
+  if ((watcher.kind & KIND_BIT[event.type]) === 0) {
+    return false;
   }
-  const within = relative(watcher.base, path);
+  const within = relative(watcher.base, event.path);
   // `relative` escapes with `..` (or stays absolute across drives) exactly when the path lies
   // Outside the base, which is the set of paths this watcher did not ask for.
   if (within === "" || within === ".." || within.startsWith(`..${sep}`) || isAbsolute(within)) {
@@ -157,10 +189,13 @@ function matchesWatcher(watcher: CompiledWatcher, path: string) {
   return watcher.glob.match(within);
 }
 
-/** Whether any registered watcher asked to hear about this absolute path. */
-export function matchesWatchers(registrations: readonly WatcherRegistration[], path: string) {
+/** Whether any registered watcher asked to hear about this change. */
+export function matchesWatchers(
+  registrations: readonly WatcherRegistration[],
+  event: WatchedFileEvent,
+) {
   return registrations.some((registration) =>
-    registration.watchers.some((watcher) => matchesWatcher(watcher, path)),
+    registration.watchers.some((watcher) => matchesWatcher(watcher, event)),
   );
 }
 
@@ -175,7 +210,6 @@ export function outOfTreeBases(registrations: readonly WatcherRegistration[], re
       registrations
         .flatMap((registration) => registration.watchers)
         .map((watcher) => watcher.base)
-        .filter((base) => base !== undefined)
         .filter((base) => base !== repoRoot && !base.startsWith(`${repoRoot}${sep}`)),
     ),
   ];

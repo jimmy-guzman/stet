@@ -170,11 +170,19 @@ export function makeTransport(
     const registrations = new Map<string, WatcherRegistration>();
     const awaiting = new Set<string>();
     const baseUpdates = yield* Queue.unbounded<readonly string[]>();
-    const announceBases = Effect.suspend(() =>
-      Queue.offer(baseUpdates, outOfTreeBases([...registrations.values()], repoRoot)).pipe(
-        Effect.asVoid,
-      ),
-    );
+    // Announce only a base list that actually moved. The consumer re-keys its watchers with
+    // `switchMap`, so a redundant emission tears every `fs.watch` handle down and rebuilds it,
+    // Losing whatever lands in the gap. A server that re-registers on a config change (pyright does)
+    // Would otherwise churn its watchers for nothing.
+    let announced: readonly string[] = [];
+    const announceBases = Effect.suspend(() => {
+      const next = outOfTreeBases([...registrations.values()], repoRoot);
+      if (next.length === announced.length && next.every((base, i) => base === announced[i])) {
+        return Effect.void;
+      }
+      announced = next;
+      return Queue.offer(baseUpdates, next).pipe(Effect.asVoid);
+    });
     let nextId = 0;
     let closed = false;
     // Resolved on the first project-load `$/progress` "end" (or on close); `whenProjectLoaded`
@@ -251,10 +259,11 @@ export function makeTransport(
           }
           const previous = published.get(uri);
           published.set(uri, diagnostics);
-          const unchanged =
-            previous === undefined
-              ? diagnostics.length === 0
-              : Bun.deepEquals(previous, diagnostics);
+          // "No entry" is not the same as "an empty entry". A run that capped out its settle cleared
+          // The bucket and never got an answer, leaving the file `pending`; the server's late reply
+          // Is that answer, and it is news even when it is clean. Treating an absent entry as an
+          // Empty one swallowed exactly that, stranding the file pending until the next git activity.
+          const unchanged = previous !== undefined && Bun.deepEquals(previous, diagnostics);
           // Inside the awaited window this publish is the answer to what the run just sent, and that
           // Run will read it, so it is not news. Outside it, a server that changed its mind on its
           // Own is the only thing that produces this, and no run is waiting for it: without the
@@ -420,7 +429,7 @@ export function makeTransport(
         Effect.suspend(() => {
           const registered = [...registrations.values()];
           const changes = events
-            .filter((event) => matchesWatchers(registered, event.path))
+            .filter((event) => matchesWatchers(registered, event))
             .map((event) => ({ type: event.type, uri: pathToFileURL(event.path).href }));
           return changes.length === 0
             ? Effect.void

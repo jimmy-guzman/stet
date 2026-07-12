@@ -1326,9 +1326,17 @@ export const LanguageServersLive = Layer.effect(
       );
 
     const restart = (repoRoot: string) =>
-      Effect.suspend(() =>
-        Effect.forEach(keysFor(repoRoot), (key) => RcMap.invalidate(pool, key), { discard: true }),
-      );
+      Effect.suspend(() => {
+        const keys = keysFor(repoRoot);
+        // Stop routing to a server we are evicting. `RcMap.invalidate` leaves a still-referenced
+        // Entry's scope open, so its finalizer (which is what normally retracts the handle) may not
+        // Run for a long time, and until the replacement is acquired every watched-file change would
+        // Otherwise be delivered to the orphan instead of the server the user is looking at.
+        for (const key of keys) {
+          live.delete(key);
+        }
+        return Effect.forEach(keys, (key) => RcMap.invalidate(pool, key), { discard: true });
+      });
 
     // Connect through the warm pool; if the pooled server died (its stdout closed), evict it and
     // Bring up a fresh one, so a crash mid-session recovers on the next run.

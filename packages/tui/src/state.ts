@@ -660,6 +660,8 @@ function createState() {
   >(undefined);
   const [activityLog, setActivityLog] = tracked<ActivityLog>(emptyActivityLog);
   const [checksRunning, setChecksRunning] = tracked(false);
+  // Held for the duration of `R`, so the intel warm-hold cannot re-pin a server mid-teardown.
+  const [restartingServers, setRestartingServers] = tracked(false);
   // Languages whose server is downloading right now, sourced live from the provisioner (not the
   // Check run), so the status bar shows it promptly and drops it the moment the download resolves.
   const [provisioningLanguages, setProvisioningLanguages] = tracked<ReadonlySet<string>>(new Set());
@@ -2503,7 +2505,13 @@ function createState() {
   /**
    * `R`: bring the repo's language servers back up from scratch. The escape hatch for a server that
    * cannot be told about a change (a linter that reads its config once at startup) or has wedged;
-   * every editor ships one. Keepers first, or the pool eviction leaves the old children alive.
+   * every editor ships one.
+   *
+   * Every holder of the pooled server has to let go before the pool can kill it, because
+   * `RcMap.invalidate` skips an entry anyone still references. There are three: the run in flight,
+   * the document keepers, and the intel warm-hold, which pins its server for the whole session.
+   * Miss the warm-hold and `R` leaves the wedged child running and merely spawns a second one
+   * beside it.
    */
   async function restartLanguageServers() {
     const model = gitModel();
@@ -2511,6 +2519,19 @@ function createState() {
       return;
     }
     notify("restarting language servers");
+
+    // The run in flight holds handles to the children about to be killed; left alone, its requests
+    // Come back as "connection closed" and flash a red `failed` badge over every file it was checking.
+    checksController?.abort();
+
+    // Drop the warm-hold and wait for its scope to actually close. Aborting the controller directly
+    // Rather than relying on the effect's cleanup keeps this deterministic, independent of when Solid
+    // Flushes; the signal is what stops it re-acquiring until the pool has been evicted.
+    const closing = warmHoldClosed;
+    warmHoldController?.abort();
+    setRestartingServers(true);
+    await closing;
+
     await runtime
       .runPromise(
         Diagnostics.use((diagnostics) => diagnostics.resetServers(model.repoRoot)).pipe(
@@ -2518,6 +2539,9 @@ function createState() {
         ),
       )
       .catch(() => {});
+
+    // Servers are gone; let the warm-hold re-establish itself on a fresh one.
+    setRestartingServers(false);
     void runChecks(model);
   }
 
@@ -2622,13 +2646,21 @@ function createState() {
       ? { path, root }
       : undefined;
   });
+  // The warm-hold's fiber, so a restart can release the pool reference it pins and then wait for the
+  // Scope to actually close. `RcMap.invalidate` skips a still-referenced entry, so a server the user
+  // Asked to restart would otherwise never be killed.
+  let warmHoldController: AbortController | undefined;
+  let warmHoldClosed: Promise<unknown> = Promise.resolve();
   createEffect(() => {
     const seed = warmSeed();
-    if (seed === undefined) {
+    // `restartingServers` keeps the hold down for the whole teardown: re-acquiring before the pool is
+    // Evicted would just re-pin the server being replaced.
+    if (seed === undefined || restartingServers()) {
       return;
     }
     const controller = new AbortController();
-    runtime
+    warmHoldController = controller;
+    warmHoldClosed = runtime
       .runPromise(Effect.scoped(Intel.use((intel) => intel.warmHold(seed.root, seed.path))), {
         signal: controller.signal,
       })
@@ -3994,9 +4026,19 @@ function createState() {
                 : LanguageServers.use((servers) =>
                     servers.notifyWatchedFiles(
                       root,
-                      changes.map((change) =>
-                        watchedFileEvent(join(root, change.path), change.renamed),
-                      ),
+                      changes.map((change) => {
+                        // A rename over a path git already knows is an atomic save (write-temp then
+                        // Rename, which vim and most formatters do), not an appearance. Calling that
+                        // A create would drag pyright's source watcher out of a cheap dirty-mark and
+                        // Into a full reanalysis on every save. A rename to a path git has never
+                        // Heard of *is* an appearance: a new source file, or the package that just
+                        // Landed in gitignored `.venv/`, which is the event the whole channel exists
+                        // For. Git's own view of the tree is what separates the two.
+                        const known =
+                          repoFilePaths().has(change.path) ||
+                          gitModel().changedByPath.has(change.path);
+                        return watchedFileEvent(join(root, change.path), change.renamed && !known);
+                      }),
                     ),
                   ).pipe(Effect.ignore),
             ),

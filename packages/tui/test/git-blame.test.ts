@@ -8,16 +8,16 @@ import { blameArgs, parseBlamePorcelain } from "@/git/blame";
 import { Git, GitLive } from "@/git/service";
 import { ProcessLive } from "@/process";
 
-import { createFixtureRepo } from "./helpers";
+import { createFixtureRepo, runGit } from "./helpers";
 
 const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
 const ZERO = "0".repeat(40);
 
-const blame = (repoRoot: string, path: string) =>
+const blame = (repoRoot: string, path: string, rev?: string) =>
   Effect.runPromise(
     Git.pipe(
-      Effect.flatMap((git) => git.blame(repoRoot, path)),
+      Effect.flatMap((git) => git.blame(repoRoot, path, rev)),
       Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
     ),
   );
@@ -140,5 +140,23 @@ describe("Git.blame", () => {
     const repo = createFixtureRepo("git-blame-untracked-", { "a.txt": "one\n" });
     writeFileSync(join(repo, "new.txt"), "brand new\n");
     expect(await blame(repo, "new.txt")).toEqual([]);
+  });
+
+  test("blames the given revision, not the working tree", async () => {
+    const repo = createFixtureRepo("git-blame-rev-", { "a.txt": "one\ntwo\n" });
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\nthree\n");
+    runGit(repo, ["add", "."]);
+    runGit(repo, ["commit", "-m", "third"]);
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\nthree\nfour\n");
+
+    // The working tree has four lines, the last still uncommitted.
+    const worktree = await blame(repo, "a.txt");
+    expect(worktree).toHaveLength(4);
+    expect(worktree[3]?.uncommitted).toBe(true);
+
+    // At the first commit the file had two lines, all committed.
+    const atFirst = await blame(repo, "a.txt", "HEAD~1");
+    expect(atFirst).toHaveLength(2);
+    expect(atFirst.some((line) => line.uncommitted)).toBe(false);
   });
 });

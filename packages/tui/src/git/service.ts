@@ -68,8 +68,15 @@ export class Git extends Context.Service<
       scope: DiffScope,
       file: ChangedFile,
     ) => Effect.Effect<BinaryDiff, GitError>;
-    /** Per-line git blame of the working-tree file; empty for a path git can't blame. */
-    readonly blame: (repoRoot: string, path: string) => Effect.Effect<BlameLine[], GitError>;
+    /**
+     * Per-line git blame of the file at `rev` (the diff's right side), or the working tree when
+     * omitted; empty for a path git can't blame.
+     */
+    readonly blame: (
+      repoRoot: string,
+      path: string,
+      rev?: string,
+    ) => Effect.Effect<BlameLine[], GitError>;
     /**
      * Merge-base of HEAD with the default branch (where this branch left it); undefined when none
      * resolves.
@@ -164,8 +171,8 @@ export const GitLive = Layer.effect(
       // Exit 128 is a path git can't blame (untracked or brand-new): the state layer already
       // Knows those files are wholly uncommitted from the model, so allow it and parse the
       // Empty stdout to an empty list instead of failing the load.
-      blame: (repoRoot, path) =>
-        process.run(blameArgs(path), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+      blame: (repoRoot, path, rev) =>
+        process.run(blameArgs(path, rev), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
           retryTransient,
           Effect.map((result) => parseBlamePorcelain(result.stdout)),
           Effect.mapError(toGitError),

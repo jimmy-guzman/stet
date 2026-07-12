@@ -67,6 +67,7 @@ import {
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
 import type { BlameLine } from "./git/blame";
+import { fileDiffSides } from "./git/file-patch";
 import type { BinaryDiff } from "./git/file-patch";
 import type { Commit } from "./git/log";
 import {
@@ -942,9 +943,11 @@ function createState() {
 
   // The commits landed since launch (`sessionBase..HEAD`), the boundary of the "this session"
   // Tier. Re-run on a model drain (a new commit moves HEAD); only fetched while the rail is on,
-  // And cheap (a bare rev-list). Failures leave the last set intact.
+  // And cheap (a bare rev-list). Failures leave the last set intact; disabling the rail clears it
+  // (like the blame effect), so a re-enable starts from an empty set until the refetch lands.
   createEffect(() => {
     if (!blameEnabled()) {
+      setSessionCommits(new Set<string>());
       return;
     }
     const model = gitModel();
@@ -970,8 +973,10 @@ function createState() {
   // (`branchBase..HEAD`), which bound the "this branch" tier (a superset of the session set; the
   // Ordered classify separates them). Resolved once per session on a model drain, gated on the
   // Rail; a repo with no default branch leaves the set empty, folding the branch tier away.
+  // Disabling the rail clears it (like the blame effect).
   createEffect(() => {
     if (!blameEnabled()) {
+      setBranchCommits(new Set<string>());
       return;
     }
     const model = gitModel();
@@ -1032,13 +1037,18 @@ function createState() {
       return;
     }
     setOpenFileWhollyNew(false);
+    // Blame the diff's right side, not always the working tree: a `staged`/`last-commit`/`commit`
+    // Scope shows the index or a revision, whose line numbers only match the rail when blamed at
+    // That same rev. `worktree`/`empty` sides (and unchanged files) blame the working tree.
+    const newSide = src.file === undefined ? undefined : fileDiffSides(src.scope, src.file).newSide;
+    const rev = newSide?.kind === "git" ? newSide.spec.split(":")[0] || undefined : undefined;
     const controller = new AbortController();
     runtime
       .runPromise(
         Git.use((git) =>
           Effect.all(
             [
-              git.blame(src.model.repoRoot, src.path),
+              git.blame(src.model.repoRoot, src.path, rev),
               git.fileFirstCommit(src.model.repoRoot, src.path),
             ],
             { concurrency: "unbounded" },

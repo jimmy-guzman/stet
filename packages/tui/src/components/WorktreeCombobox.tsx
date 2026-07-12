@@ -9,17 +9,20 @@ import { lerpHex } from "@/utils/color";
 import { relativeTime } from "@/utils/relative-time";
 import { collapseHome, truncate, truncateLeft } from "@/utils/text";
 
-// The right-hand columns are fixed width and the label column takes the slack, so counts and ages
-// Line up down the list instead of drifting with each row's label and badges. `999 changed` is the
-// Widest count and `11mo` the widest age `relativeTime` produces.
+// Every cell is a fixed-width box, never a padded string: a whitespace-only `<text>` measures zero
+// Cells in a flex row, so a worktree with no age would pull the columns right of it out of line.
+// `999 changed` is the widest count and `11mo` the widest age `relativeTime` produces.
 const MARKER_CELLS = 2;
 const COUNT_CELLS = 11;
 const AGE_CELLS = 4;
 const GAP = 2;
-const LABEL_MIN = 10;
-// Below this a left-truncated path stops carrying enough tail to be worth its column, so a narrow
-// Overlay drops it outright: which worktree is busy outranks where it sits on disk.
-const PATH_MIN = 10;
+// The branch is the row's identity, so it is the column that gets what it needs first (a truncated
+// Branch name is what the picker is for) and the path lives on the leftovers. Below its floor a
+// Left-truncated path stops carrying enough tail to be worth the cells, so the row drops it: which
+// Worktree is busy outranks where it sits on disk.
+const LABEL_MIN = 8;
+const LABEL_MAX = 28;
+const PATH_MIN = 12;
 const PATH_MAX = 24;
 
 export function WorktreeCombobox() {
@@ -32,32 +35,22 @@ export function WorktreeCombobox() {
 
   const repoRoot = () => state.gitModel().repoRoot;
 
-  const available = () => state.overlayWidth() - 2;
+  // Cells the label and path share, once the fixed columns and their gaps are spoken for.
+  const slack = () => state.overlayWidth() - 2 - MARKER_CELLS - GAP - COUNT_CELLS - GAP - AGE_CELLS;
   const pathCells = () => {
-    const slack =
-      available() - MARKER_CELLS - LABEL_MIN - GAP - COUNT_CELLS - GAP - AGE_CELLS - GAP;
-    return slack < PATH_MIN ? 0 : Math.min(slack, PATH_MAX);
+    const remainder = slack() - GAP - Math.min(LABEL_MAX, slack() - GAP - PATH_MIN);
+    return slack() - GAP - PATH_MIN < LABEL_MIN ? 0 : Math.min(PATH_MAX, remainder);
   };
-  const rightCells = () =>
-    GAP + COUNT_CELLS + GAP + AGE_CELLS + (pathCells() === 0 ? 0 : GAP + pathCells());
-  const labelCells = (badges: string) =>
-    Math.max(
-      4,
-      available() - rightCells() - MARKER_CELLS - (badges === "" ? 0 : badges.length + 1),
-    );
+  const labelCells = () =>
+    pathCells() === 0 ? Math.max(LABEL_MIN, slack()) : slack() - GAP - pathCells();
 
   // A worktree whose summary has not landed yet, or whose directory is gone so it can never be read,
-  // Leaves its cells blank rather than guessing at a count. The columns stay reserved either way, so
+  // Leaves its cells empty rather than guessing at a count. The columns stay reserved either way, so
   // A summary arriving never shifts the row.
   const countText = (changed: number | undefined) =>
-    (changed === undefined ? "" : changed === 0 ? "clean" : `${changed} changed`).padStart(
-      COUNT_CELLS,
-    );
+    changed === undefined ? "" : changed === 0 ? "clean" : `${changed} changed`;
   const ageText = (at: number | undefined) =>
-    (at === undefined
-      ? ""
-      : relativeTime(Math.floor(at / 1000), Math.floor(state.now() / 1000))
-    ).padStart(AGE_CELLS);
+    at === undefined ? "" : relativeTime(Math.floor(at / 1000), Math.floor(state.now() / 1000));
   // The age is this row's recency cue, so it carries the fade the dot carries elsewhere: pink while
   // An agent is working in that worktree, cooling into the faint gray the ramp ends on as it goes
   // Quiet. The word itself is the signal, so the row still reads under NO_COLOR; color only ranks it.
@@ -153,13 +146,17 @@ export function WorktreeCombobox() {
                   index === state.worktreeComboboxIndex()
                     ? theme.colors.text.selected
                     : theme.colors.text.strong;
+                // The badge shares the label's column rather than claiming one of its own: `locked`
+                // And `prunable` are rare, and a column reserved for them on every row would be
+                // Empty nearly always while costing the branch name the cells it needs.
+                const nameCells = () =>
+                  Math.max(4, labelCells() - (badges() === "" ? 0 : badges().length + 1));
                 return (
                   <box
                     id={`worktree-combobox-${index}`}
                     height={1}
                     width="100%"
                     flexDirection="row"
-                    justifyContent="space-between"
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={
@@ -172,58 +169,69 @@ export function WorktreeCombobox() {
                     {/* Every text is pinned to one line (height 1 + wrapMode none): a branch name or
                         path long enough to wrap would lay the row out two cells tall and mangle the
                         list, exactly as it would in the scope menu's commit rows. */}
-                    <box flexDirection="row" flexShrink={0}>
-                      <text flexShrink={0} wrapMode="none" height={1} fg={nameFg()}>
-                        {`${current() ? "● " : "  "}${truncate(worktreeLabel(worktree()), labelCells(badges()))}`}
+                    <box width={MARKER_CELLS} flexShrink={0} flexDirection="row">
+                      <Show when={current()}>
+                        <text wrapMode="none" height={1} fg={nameFg()}>
+                          ●
+                        </text>
+                      </Show>
+                    </box>
+                    <box width={labelCells()} flexShrink={0} flexDirection="row">
+                      <text wrapMode="none" height={1} fg={nameFg()}>
+                        {truncate(worktreeLabel(worktree()), nameCells())}
                       </text>
                       <Show when={badges() !== ""}>
                         <text
-                          flexShrink={0}
                           wrapMode="none"
                           height={1}
+                          marginLeft={1}
                           fg={theme.colors.severity.warning}
                         >
-                          {` ${badges()}`}
+                          {badges()}
                         </text>
                       </Show>
                     </box>
-                    <box flexDirection="row" flexShrink={0}>
-                      <text
-                        flexShrink={0}
-                        wrapMode="none"
-                        height={1}
-                        marginLeft={GAP}
-                        fg={
-                          (summary()?.changed ?? 0) > 0
-                            ? theme.colors.text.secondary
-                            : theme.colors.text.faint
-                        }
-                      >
-                        {countText(summary()?.changed)}
-                      </text>
-                      <text
-                        flexShrink={0}
-                        wrapMode="none"
-                        height={1}
-                        marginLeft={GAP}
-                        fg={ageColor(activityAt())}
-                      >
-                        {ageText(activityAt())}
-                      </text>
-                      <Show when={pathCells() > 0}>
+                    <box
+                      width={COUNT_CELLS}
+                      marginLeft={GAP}
+                      flexShrink={0}
+                      flexDirection="row"
+                      justifyContent="flex-end"
+                    >
+                      <Show when={countText(summary()?.changed) !== ""}>
                         <text
-                          flexShrink={0}
                           wrapMode="none"
                           height={1}
-                          marginLeft={GAP}
-                          fg={theme.colors.text.muted}
+                          fg={
+                            (summary()?.changed ?? 0) > 0
+                              ? theme.colors.text.secondary
+                              : theme.colors.text.faint
+                          }
                         >
-                          {truncateLeft(collapseHome(worktree().path), pathCells()).padEnd(
-                            pathCells(),
-                          )}
+                          {countText(summary()?.changed)}
                         </text>
                       </Show>
                     </box>
+                    <box
+                      width={AGE_CELLS}
+                      marginLeft={GAP}
+                      flexShrink={0}
+                      flexDirection="row"
+                      justifyContent="flex-end"
+                    >
+                      <Show when={ageText(activityAt()) !== ""}>
+                        <text wrapMode="none" height={1} fg={ageColor(activityAt())}>
+                          {ageText(activityAt())}
+                        </text>
+                      </Show>
+                    </box>
+                    <Show when={pathCells() > 0}>
+                      <box width={pathCells()} marginLeft={GAP} flexShrink={0} flexDirection="row">
+                        <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+                          {truncateLeft(collapseHome(worktree().path), pathCells())}
+                        </text>
+                      </box>
+                    </Show>
                   </box>
                 );
               }}

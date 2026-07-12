@@ -108,6 +108,60 @@ describe("worktree picker", () => {
     }
   }, 20_000);
 
+  test("counts and ages hold their columns whatever the label, badges, or activity", async () => {
+    const repoRoot = createFixtureRepo("stet-worktree-align-", { "README.md": "# Fixture\n" });
+    const busyRoot = `${repoRoot}-busy`;
+    const lockedRoot = `${repoRoot}-locked`;
+    const quietRoot = `${repoRoot}-quiet`;
+    runGit(repoRoot, ["worktree", "add", "-b", "feat/busy-branch", busyRoot]);
+    runGit(repoRoot, ["worktree", "add", "-b", "chore/a-very-long-branch-name", lockedRoot]);
+    runGit(repoRoot, ["worktree", "add", "-b", "docs/quiet", quietRoot]);
+    runGit(repoRoot, ["worktree", "lock", lockedRoot]);
+    writeFileSync(join(busyRoot, "a.ts"), "export const a = 1\n");
+    writeFileSync(join(busyRoot, "b.ts"), "export const b = 2\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 30,
+      width: 120,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
+      mockInput.pressKey("w");
+      const frame = await settleUntil(
+        "worktree rows",
+        (candidate) => candidate.includes("2 changed") && candidate.includes("locked"),
+      );
+
+      // A row with no age used to render a whitespace-only cell, which measures zero cells in a flex
+      // Row and slid every column right of it out of line. The count column is the witness: a long
+      // Label, a `locked` badge, and a missing age must all leave its right edge where it was.
+      const countEnds = new Set(
+        frame
+          .split("\n")
+          // The header bar carries its own `N changed`; the picker rows are the ones naming a branch.
+          .filter((line) => /feat\/|chore\/|docs\/|● master/.test(line))
+          .map((line) => {
+            const match = /(?:\d+ changed|clean)/.exec(line);
+            return match === null ? -1 : match.index + match[0].length;
+          }),
+      );
+
+      expect(countEnds.size).toBeGreaterThan(0);
+      expect(countEnds.has(-1)).toBe(false);
+      expect(countEnds.size).toBe(1);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+      for (const root of [busyRoot, lockedRoot, quietRoot]) {
+        rmSync(root, { force: true, recursive: true });
+      }
+    }
+  }, 20_000);
+
   test("the header says another worktree is active while you inspect this one", async () => {
     const repoRoot = createFixtureRepo("stet-worktree-cue-", { "README.md": "# Fixture\n" });
     const linkedRoot = `${repoRoot}-linked`;

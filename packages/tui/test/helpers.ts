@@ -1,6 +1,6 @@
 import { afterEach } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -54,6 +54,15 @@ export function loadWorktrees(repoRoot: string) {
   );
 }
 
+export function loadWorktreeSummaries(paths: readonly string[]) {
+  return Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.worktreeSummaries(paths)),
+      Effect.provide(GitTestLive),
+    ),
+  );
+}
+
 export function loadRecentCommits(repoRoot: string, limit: number) {
   return Effect.runPromise(
     Git.pipe(
@@ -102,6 +111,8 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setNotice(undefined);
     state.setGitModel(model);
     state.setRepoRoot(model.repoRoot);
+    // The fixture repo is its own main worktree, as it is at startup: the picker pins main first.
+    state.setMainWorktreePath(model.repoRoot);
     state.setLastChange(Date.now());
     state.seedNav(selected);
     state.setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
@@ -120,6 +131,7 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setWorktreeComboboxIndex(0);
     state.setWorktreeComboboxQuery("");
     state.setWorktrees(undefined);
+    state.setWorktreeSummaries(new Map());
     state.setHelpDialogOpen(false);
     state.setCursorIndex(0);
     state.setJumpTarget(undefined);
@@ -169,7 +181,11 @@ afterEach(() => {
 });
 
 export function createFixtureRepo(prefix: string, files: Record<string, string>) {
-  const repoRoot = mkdtempSync(join(tmpdir(), prefix));
+  // Realpath, because that is what the app gets: it takes repoRoot from `git rev-parse
+  // --show-toplevel`, and git resolves symlinks (on macOS /var/folders is a link to /private/var).
+  // A fixture rooted at the unresolved path would not match the paths git reports back, so anything
+  // Comparing the two (the picker's current-worktree marker, a worktree summary's key) would miss.
+  const repoRoot = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   fixtureRepoRoots.add(repoRoot);
 
   for (const [path, content] of Object.entries(files)) {

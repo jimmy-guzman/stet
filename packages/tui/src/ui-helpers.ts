@@ -1,6 +1,7 @@
 import type { Diagnostic } from "./diagnostics/checker";
 import type { FileContent } from "./file/content";
-import type { ChangedFile, Worktree } from "./git/model";
+import type { ChangedFile } from "./git/model";
+import type { Worktree } from "./git/worktree";
 
 // The right-side stats for the active file: line count in full-file view, the
 // Add/remove counts (plus any warnings) in diff view. The diff/file mode is left

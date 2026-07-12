@@ -566,11 +566,7 @@ export function createKeyHandler(host: HostEffects) {
         // Solid mounts and focuses the picker's filter input within this same key
         // Event, so without preventDefault the triggering "w" would be typed into it.
         key.preventDefault();
-        state.setWorktreeComboboxOpen(true);
-        state.setWorktreeComboboxIndex(0);
-        state.setWorktreeComboboxQuery("");
-        state.setWorktrees(undefined);
-        state.loadWorktrees(state.gitModel().repoRoot);
+        state.openWorktreePicker();
         return;
       }
 

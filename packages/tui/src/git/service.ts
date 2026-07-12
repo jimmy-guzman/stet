@@ -25,10 +25,9 @@ import {
   nameStatusArgs,
   numstatArgs,
   parseRepoFiles,
-  parseWorktreeList,
   untrackedDiffArgs,
 } from "./model";
-import type { ChangedFile, GitModel, Worktree } from "./model";
+import type { ChangedFile, GitModel } from "./model";
 import {
   commitsSinceArgs,
   defaultBranchArgs,
@@ -39,6 +38,8 @@ import {
 } from "./provenance";
 import { parseSearchOutput, searchArgs } from "./search";
 import type { SearchMatch, SearchOptions } from "./search";
+import { parseWorktreeList, summarizeWorktree, worktreeStatusArgs } from "./worktree";
+import type { Worktree, WorktreeSummary } from "./worktree";
 
 function toGitError(error: CommandError) {
   return new GitError({ message: error.message });
@@ -128,6 +129,12 @@ export class Git extends Context.Service<
       options: SearchOptions,
     ) => Effect.Effect<SearchMatch[], GitError>;
     readonly worktrees: (repoRoot: string) => Effect.Effect<Worktree[], GitError>;
+    /**
+     * How much uncommitted work sits in each of the given worktrees, and when each last moved. A
+     * worktree that cannot be read (a pruned one whose directory is gone) is omitted rather than
+     * failing the batch, so one dead worktree never costs the caller the live ones.
+     */
+    readonly worktreeSummaries: (paths: readonly string[]) => Effect.Effect<WorktreeSummary[]>;
   }
 >()("stet/Git") {}
 
@@ -403,6 +410,17 @@ export const GitLive = Layer.effect(
           Effect.map((result) => parseSearchOutput(result.stdoutBytes)),
           Effect.mapError(toGitError),
         ),
+      worktreeSummaries: (paths) =>
+        Effect.all(
+          paths.map((path) =>
+            process.run(worktreeStatusArgs, path).pipe(
+              retryTransient,
+              Effect.map((result) => summarizeWorktree(path, result.stdout)),
+              Effect.orElseSucceed(() => undefined),
+            ),
+          ),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map((summaries) => summaries.filter((summary) => summary !== undefined))),
       worktrees: (repoRoot) =>
         process.run(["git", "worktree", "list", "--porcelain", "-z"], repoRoot).pipe(
           retryTransient,

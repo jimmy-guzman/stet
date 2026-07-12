@@ -15,7 +15,6 @@ import {
   parseNumstat,
   parsePorcelainStatus,
   parseUntrackedFiles,
-  parseWorktreeList,
   untrackedDiffArgs,
 } from "@/git/model";
 import type { ChangedFile, GitModel } from "@/git/model";
@@ -25,7 +24,6 @@ import {
   loadFileDiff,
   loadModel,
   loadRecentCommits,
-  loadWorktrees,
   runGit,
 } from "../test/helpers";
 
@@ -242,83 +240,6 @@ describe("parseBranch", () => {
   test("returns undefined when there is no branch header", () => {
     expect(parseBranch(" M edited.ts\0")).toBeUndefined();
     expect(parseBranch("")).toBeUndefined();
-  });
-});
-
-describe("parseWorktreeList", () => {
-  test("parses the main worktree and a linked worktree with branches", () => {
-    const output =
-      "worktree /repo\0HEAD 1111111111111111111111111111111111111111\0branch refs/heads/main\0\0worktree /repo/.claude/worktrees/feat\0HEAD 2222222222222222222222222222222222222222\0branch refs/heads/feat\0\0";
-    expect(parseWorktreeList(output)).toEqual([
-      {
-        bare: false,
-        branch: "main",
-        detached: false,
-        head: "1111111111111111111111111111111111111111",
-        locked: false,
-        path: "/repo",
-        prunable: false,
-      },
-      {
-        bare: false,
-        branch: "feat",
-        detached: false,
-        head: "2222222222222222222222222222222222222222",
-        locked: false,
-        path: "/repo/.claude/worktrees/feat",
-        prunable: false,
-      },
-    ]);
-  });
-
-  test("marks a detached worktree and leaves branch undefined", () => {
-    const output =
-      "worktree /repo/spike\0HEAD 3333333333333333333333333333333333333333\0detached\0\0";
-    const [worktree] = parseWorktreeList(output);
-    expect(worktree).toMatchObject({
-      detached: true,
-      head: "3333333333333333333333333333333333333333",
-    });
-    expect(worktree?.branch).toBeUndefined();
-  });
-
-  test("marks bare, locked, and prunable entries, with and without reasons", () => {
-    const output =
-      "worktree /repo.git\0bare\0\0worktree /repo/locked-bare-reason\0HEAD 4444444444444444444444444444444444444444\0branch refs/heads/a\0locked\0\0worktree /repo/locked-with-reason\0HEAD 5555555555555555555555555555555555555555\0branch refs/heads/b\0locked path is on a portable device\0\0worktree /repo/gone\0HEAD 6666666666666666666666666666666666666666\0branch refs/heads/c\0prunable gitdir file points to non-existent location\0\0";
-    const [bare, locked, lockedReason, prunable] = parseWorktreeList(output);
-    expect(bare).toMatchObject({ bare: true, path: "/repo.git" });
-    expect(bare?.branch).toBeUndefined();
-    expect(locked).toMatchObject({ locked: true, path: "/repo/locked-bare-reason" });
-    expect(lockedReason).toMatchObject({ locked: true, path: "/repo/locked-with-reason" });
-    expect(prunable).toMatchObject({ path: "/repo/gone", prunable: true });
-  });
-
-  test("skips malformed records and tolerates trailing nuls", () => {
-    const output =
-      "HEAD 7777777777777777777777777777777777777777\0\0worktree /repo\0HEAD 8888888888888888888888888888888888888888\0branch refs/heads/main\0\0\0";
-    const worktrees = parseWorktreeList(output);
-    expect(worktrees).toHaveLength(1);
-    expect(worktrees[0]).toMatchObject({ branch: "main", path: "/repo" });
-  });
-
-  test("returns no worktrees for empty output", () => {
-    expect(parseWorktreeList("")).toEqual([]);
-  });
-});
-
-describe("worktrees in a fixture repo", () => {
-  test("lists the main and a linked worktree with their branches", async () => {
-    const repoRoot = createFixtureRepo("stet-git-worktree-", { "a.ts": "const a = 1\n" });
-    try {
-      runGit(repoRoot, ["worktree", "add", "-b", "side", join(repoRoot, ".wt")]);
-      const worktrees = await loadWorktrees(repoRoot);
-      expect(worktrees).toHaveLength(2);
-      expect(worktrees[1]).toMatchObject({ bare: false, branch: "side", detached: false });
-      expect(worktrees[1]?.path.endsWith(".wt")).toBe(true);
-      expect(worktrees[0]?.branch).toBeDefined();
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
   });
 });
 

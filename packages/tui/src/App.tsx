@@ -20,7 +20,7 @@ import { ThemeCombobox } from "./components/ThemeCombobox";
 import { Viewer } from "./components/Viewer";
 import { WorktreeCombobox } from "./components/WorktreeCombobox";
 import { openInEditor } from "./editor/open";
-import type { Worktree } from "./git/model";
+import type { Worktree } from "./git/worktree";
 import { createKeyHandler } from "./keymap";
 import type { LogLevel } from "./log/levels";
 import { log } from "./log/terminal";

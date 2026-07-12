@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import { Show } from "solid-js";
 
 import { scopeLabel } from "@/cli";
+import { RecencyDot } from "@/components/RecencyDot";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { truncate } from "@/utils/text";
@@ -25,6 +26,8 @@ const PADDING = 1;
 // With almost no room is dropped outright instead of shown as `…`.
 const MIN_SCOPE = 8;
 const MIN_BRANCH = 4;
+// The cue's own cells: ` · ` + the dot (a glyph plus its trailing space) + its text.
+const CUE_DOT_CELLS = 2;
 
 export function HeaderBar() {
   const theme = useTheme();
@@ -77,6 +80,29 @@ export function HeaderBar() {
     const budget = available() - rightWidth - leftFixed;
     return budget < MIN_BRANCH ? undefined : truncate(branch, budget);
   };
+  // Someone is working in another worktree right now. It may only occupy cells nothing else wanted:
+  // The cue comes and goes as agents start and stop, so if it could push the branch (or the commit
+  // Subject) into truncating, the header would reflow every time one of them touched a file. The
+  // Dot carries the fade; the text stays muted and simply disappears once the work ages out, so
+  // Unlike the status bar's lingering path it never needs to fade its own words.
+  const cueText = () => {
+    const count = state.activeWorktrees().count;
+    if (count === 0) {
+      return undefined;
+    }
+    const text = `${count} worktree${count === 1 ? "" : "s"} active`;
+    const branch = branchText();
+    const leftWidth = isCommit()
+      ? Bun.stringWidth(commitSubject())
+      : glyphCells() +
+        Bun.stringWidth(primary()) +
+        (branch === undefined ? 0 : SEP.length + glyphCells() + Bun.stringWidth(branch));
+    const rightWidth = Bun.stringWidth(
+      isCommit() ? tail() : `${scopeLabel(state.scope())}${SEP}${tail()}`,
+    );
+    const budget = available() - leftWidth - rightWidth;
+    return budget < SEP.length + CUE_DOT_CELLS + text.length ? undefined : text;
+  };
 
   return (
     <box
@@ -87,36 +113,47 @@ export function HeaderBar() {
       paddingRight={PADDING}
       backgroundColor={theme.colors.surface.base}
     >
-      <Show
-        when={isCommit()}
-        fallback={
-          <box flexDirection="row">
-            <Show when={state.iconsEnabled()}>
-              <box width={GLYPH_CELLS} overflow="hidden">
-                <text fg={theme.colors.text.muted}>
-                  {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
-                </text>
-              </box>
-            </Show>
-            <text fg={theme.colors.text.strong}>{primary()}</text>
-            <Show when={branchText()}>
-              {(branch) => (
-                <box flexDirection="row">
-                  <text fg={theme.colors.text.secondary}>{SEP}</text>
-                  <Show when={state.iconsEnabled()}>
-                    <box width={GLYPH_CELLS} overflow="hidden">
-                      <text fg={theme.colors.text.muted}>{BRANCH_GLYPH}</text>
-                    </box>
-                  </Show>
-                  <text fg={theme.colors.text.secondary}>{branch()}</text>
+      <box flexDirection="row">
+        <Show
+          when={isCommit()}
+          fallback={
+            <box flexDirection="row">
+              <Show when={state.iconsEnabled()}>
+                <box width={GLYPH_CELLS} overflow="hidden">
+                  <text fg={theme.colors.text.muted}>
+                    {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
+                  </text>
                 </box>
-              )}
-            </Show>
-          </box>
-        }
-      >
-        <text fg={theme.colors.text.secondary}>{commitSubject()}</text>
-      </Show>
+              </Show>
+              <text fg={theme.colors.text.strong}>{primary()}</text>
+              <Show when={branchText()}>
+                {(branch) => (
+                  <box flexDirection="row">
+                    <text fg={theme.colors.text.secondary}>{SEP}</text>
+                    <Show when={state.iconsEnabled()}>
+                      <box width={GLYPH_CELLS} overflow="hidden">
+                        <text fg={theme.colors.text.muted}>{BRANCH_GLYPH}</text>
+                      </box>
+                    </Show>
+                    <text fg={theme.colors.text.secondary}>{branch()}</text>
+                  </box>
+                )}
+              </Show>
+            </box>
+          }
+        >
+          <text fg={theme.colors.text.secondary}>{commitSubject()}</text>
+        </Show>
+        <Show when={cueText()}>
+          {(text) => (
+            <box flexDirection="row" onMouseDown={() => state.openWorktreePicker()}>
+              <text fg={theme.colors.text.secondary}>{SEP}</text>
+              <RecencyDot at={state.activeWorktrees().latestAt} marginRight={1} />
+              <text fg={theme.colors.text.muted}>{text()}</text>
+            </box>
+          )}
+        </Show>
+      </box>
       <text fg={theme.colors.text.secondary}>
         {isCommit() ? tail() : `${scopeLabel(state.scope())}${SEP}${tail()}`}
       </text>

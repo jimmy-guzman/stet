@@ -48,7 +48,9 @@ font lacks the glyphs.
 Servers overlap deliberately: every server that claims a file runs, and their
 findings merge per file, each tagged with its own source label. A linter that
 competes with an always-on default activates only where the repo opted into
-it, the way an editor extension would.
+it, the way an editor extension would. Where a language has competing type
+checkers, stet runs the one the repo opted into and only that one, so the same
+code is never type-checked twice.
 
 ### TypeScript & JavaScript
 
@@ -65,10 +67,33 @@ server automatically the first time a Rust file needs it.
 
 ### Python
 
-`.py` and `.pyi` files run through two servers: basedpyright reports type
-errors (label `basedpyright`) and ruff reports lint findings (label `Ruff`).
-Both download automatically the first time a Python file needs them, basedpyright
-from npm and ruff as a sha256-verified GitHub release binary.
+`.py` and `.pyi` files get a type checker plus ruff's lint findings (label
+`Ruff`). Python has more than one type checker, so stet runs the one your
+project runs: [ty](https://github.com/astral-sh/ty) (label `ty`) in a repo that
+opted into it, basedpyright (label `basedpyright`) everywhere else, never both.
+So the warnings you see are the ones your CI gates on.
+
+A repo counts as a ty repo when it has a `ty.toml` or `.ty.toml`, a `[tool.ty]`
+table in `pyproject.toml`, or ty among its declared dependencies (a dependency
+group, an optional-dependencies extra, or `[tool.uv] dev-dependencies`). Naming
+the servers yourself in [your config](/docs/reference/configuration#languages)
+overrides the choice in either direction:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "languages": {
+    "python": { "servers": ["basedpyright", "ruff"] },
+  },
+}
+```
+
+ty answers hover, go to definition, references, call hierarchy, and the symbol
+outline. It has no go-to-implementation yet, so in a ty repo `Shift+I` says
+implementations are unsupported for the file type rather than claiming there
+are none.
+
+Servers download automatically the first time a Python file needs them,
+basedpyright from npm, ty and ruff as sha256-verified GitHub release binaries.
 
 ### JSON & JSONC
 
@@ -90,8 +115,9 @@ show as unavailable rather than falsely clean.
 
 Go to definition, find references, implementations, call hierarchy, hover,
 and the symbol outline work for the TypeScript & JavaScript family, for Rust,
-and for Python, through the same servers that produce their diagnostics. See
-[code intelligence](/docs/guides/code-intelligence) for the keys and flows.
+and for Python, through the same servers that produce their diagnostics (a ty
+repo has everything but go to implementation, which ty does not yet answer).
+See [code intelligence](/docs/guides/code-intelligence) for the keys and flows.
 
 ## How servers are found
 
@@ -101,7 +127,7 @@ then an existing pinned copy in stet's LSP cache. That cache is
 `~/.cache/stet/lsp` otherwise. If none has the server, stet downloads it into
 that cache: packages distributed through `npm` (this path needs `npm` on your
 `PATH`), or a SHA-256-verified GitHub release binary for the servers it doesn't
-(`rust-analyzer`, `ruff`). Pass `--no-lsp-download` (or set
+(`rust-analyzer`, `ruff`, `ty`). Pass `--no-lsp-download` (or set
 `STET_NO_LSP_DOWNLOAD`) to turn downloads off.
 
 <Callout>

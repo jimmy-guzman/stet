@@ -43,18 +43,44 @@ test("resolves a source file to its language's servers in declared order", () =>
 test("routes Python files to basedpyright then ruff, with intel on basedpyright only", () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-python-"));
   try {
-    // Both `.py` and `.pyi` stubs open as python and run both always-on servers, primary first.
-    expect(serversForPath("src/main.py")).toEqual(["basedpyright", "ruff"]);
-    expect(serversForPath("stubs/typed.pyi")).toEqual(["basedpyright", "ruff"]);
+    // Both `.py` and `.pyi` stubs open as python. The language lists both type checkers; a repo with
+    // No ty signal runs the default one plus the always-on linter.
+    expect(activeServersForPath("src/main.py", repo)).toEqual(["basedpyright", "ruff"]);
+    expect(activeServersForPath("stubs/typed.pyi", repo)).toEqual(["basedpyright", "ruff"]);
     expect(lspLanguageId("src/main.py")).toBe("python");
     expect(lspLanguageId("stubs/typed.pyi")).toBe("python");
     // Code-intel is basedpyright's; ruff lints only, so it never surfaces for a pull or warm.
-    expect(serversProviding("src/main.py", "hover")).toEqual(["basedpyright"]);
-    expect(serversProviding("src/main.py", "references")).toEqual(["basedpyright"]);
-    expect(serversProviding("src/main.py", "implementation")).toEqual(["basedpyright"]);
+    expect(serversProviding("src/main.py", "hover", repo)).toEqual(["basedpyright"]);
+    expect(serversProviding("src/main.py", "references", repo)).toEqual(["basedpyright"]);
+    expect(serversProviding("src/main.py", "implementation", repo)).toEqual(["basedpyright"]);
     expect(intelLanguage("src/main.py", repo)).toBe("basedpyright");
   } finally {
     rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("a repo that opted into ty runs ty instead of basedpyright, never both", () => {
+  const tyRepo = mkdtempSync(join(tmpdir(), "stet-ty-"));
+  const plain = mkdtempSync(join(tmpdir(), "stet-ty-"));
+  writeFileSync(
+    join(tyRepo, "pyproject.toml"),
+    '[dependency-groups]\ndev = ["ty>=0.0.58", "pytest"]\n',
+  );
+
+  try {
+    // The two type checkers are mutually exclusive: the repo's choice runs and the other is off, so
+    // The panel never shows two type checkers' findings for the same code.
+    expect(activeServersForPath("src/main.py", tyRepo)).toEqual(["ty", "ruff"]);
+    expect(activeServersForPath("src/main.py", plain)).toEqual(["basedpyright", "ruff"]);
+    // Intel follows the same gate, so a ty repo never acquires (or downloads) basedpyright.
+    expect(serversProviding("src/main.py", "hover", tyRepo)).toEqual(["ty"]);
+    expect(intelLanguage("src/main.py", tyRepo)).toBe("ty");
+    // Every intel pull stet makes is ty's except implementation, which reports as unsupported
+    // Rather than keeping a second type checker alive to answer it.
+    expect(serversProviding("src/main.py", "implementation", tyRepo)).toEqual([]);
+  } finally {
+    rmSync(tyRepo, { force: true, recursive: true });
+    rmSync(plain, { force: true, recursive: true });
   }
 });
 
@@ -131,13 +157,13 @@ test("lspLanguageId maps non-JS/TS file types to their LSP language ids", () => 
 test("serversProviding keeps only servers whose static hint can answer the intent", () => {
   // Only typescript declares definition/references; oxlint pushes diagnostics and declares neither,
   // So intel never acquires it for a code-intel pull.
-  expect(serversProviding("src/a.ts", "definition")).toEqual(["typescript"]);
-  expect(serversProviding("src/a.tsx", "references")).toEqual(["typescript"]);
-  expect(serversProviding("src/a.ts", "implementation")).toEqual(["typescript"]);
+  expect(serversProviding("src/a.ts", "definition", "/repo")).toEqual(["typescript"]);
+  expect(serversProviding("src/a.tsx", "references", "/repo")).toEqual(["typescript"]);
+  expect(serversProviding("src/a.ts", "implementation", "/repo")).toEqual(["typescript"]);
   // Json and yaml only push diagnostics (validation-only), so they never surface for a code-intel pull.
-  expect(serversProviding("package.json", "definition")).toEqual([]);
-  expect(serversProviding("config.yaml", "hover")).toEqual([]);
-  expect(serversProviding("README.md", "definition")).toEqual([]);
+  expect(serversProviding("package.json", "definition", "/repo")).toEqual([]);
+  expect(serversProviding("config.yaml", "hover", "/repo")).toEqual([]);
+  expect(serversProviding("README.md", "definition", "/repo")).toEqual([]);
 });
 
 test("resolveServerCommand returns undefined for a language with no registered server", () => {

@@ -9,13 +9,13 @@ import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
-// A `.txt` fixture has no language server advertising `implementation`, so the pull resolves
-// Empty without spawning one: this stays off a real server (env-dependent, slow, and it would
-// Pollute the shared runtime), the way intel-service.test.ts covers the pull's result branches
-// Against a fake peer. Here the point is the state action's own surface: the in-flight indicator
-// It shares with go-to-definition, and the `implementations` overlay it opens.
+// A `.txt` fixture has no language server advertising `implementation`, which is also the shape of
+// A Python repo on ty (every other intel pull, but not this one). This stays off a real server
+// (env-dependent, slow, and it would pollute the shared runtime), the way intel-service.test.ts
+// Covers the pull's result branches against a fake peer. Here the point is the state action's own
+// Surface: what it says when nothing can answer, and the `implementations` overlay it opens.
 describe("find-implementations", () => {
-  test("acknowledges Shift+I instantly, then the status bar settles to the result", async () => {
+  test("says implementations are unsupported rather than claiming there are none", async () => {
     const repoRoot = createFixtureRepo("stet-impl-", {
       "notes.txt": "alpha\n",
       "package.json": `${JSON.stringify({ name: "impl-fixture" })}\n`,
@@ -34,19 +34,21 @@ describe("find-implementations", () => {
       // Caret lands on `bravo` (a symbol) on the added line, so the guards pass.
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
-      // Mirrors go-to-definition: the indicator is set synchronously, before the pull is awaited.
+      // Nothing can answer for a `.txt`, so no request is issued: the in-flight indicator the
+      // Action shares with go-to-definition (covered in definition.render.test.tsx, on this same
+      // Fixture) never appears, because there is nothing to wait for.
       const pending = state.findImplementations();
-      expect(state.statusRight()).toContain("resolving implementations…");
-      expect(state.statusRightLevel()).toBe("info");
+      expect(state.statusRight()).not.toContain("resolving implementations…");
 
       await pending;
 
-      // No capable server for a `.txt`, so the pull resolves empty and the status bar drops the
-      // In-flight indicator for the resolved notice with its info glyph.
-      const settled = await settleUntil("status bar settles to the result", (frame) =>
-        frame.includes("ℹ no implementations"),
+      // An empty pull would render as "no implementations", which reads as a claim about the code.
+      // The notice names the real reason instead.
+      const settled = await settleUntil("status bar shows the unsupported notice", (frame) =>
+        frame.includes("ℹ no implementation support for this file type"),
       );
-      expect(settled).not.toContain("resolving implementations…");
+      expect(settled).not.toContain("no implementations");
+      expect(state.statusRightLevel()).toBe("info");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

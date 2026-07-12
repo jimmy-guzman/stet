@@ -89,9 +89,10 @@ navigation then work for those files exactly as they do for the built-ins.
 A language entry declares the file types it owns (`extensions`, and `filenames`
 for exact names like `Dockerfile`) and the `servers` that analyze them. A
 server is either the name of a built-in (`typescript`, `oxlint`, `biome`,
-`json`, `yaml`, `rust-analyzer`, `basedpyright`, `ruff`) or an inline command,
-optionally with `initializationOptions` and `settings` passed to the server
-as-is (`{repoRoot}` and `{repoUri}` in string values are replaced per repository).
+`json`, `yaml`, `rust-analyzer`, `basedpyright`, `ty`, `ruff`) or an inline
+command, optionally with `initializationOptions` and `settings` passed to the
+server as-is (`{repoRoot}` and `{repoUri}` in string values are replaced per
+repository).
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -109,6 +110,8 @@ as-is (`{repoRoot}` and `{repoUri}` in string values are replaced per repository
     // change a built-in: unset fields are inherited, "servers" replaces the
     // list, so leaving oxlint out turns it off for the JS/TS family
     "typescript": { "servers": ["typescript", "biome"] },
+    // pick Python's type checker yourself instead of letting stet detect it
+    "python": { "servers": ["ty", "ruff"] },
   },
 }
 ```

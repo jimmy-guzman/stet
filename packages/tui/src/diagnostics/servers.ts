@@ -16,6 +16,7 @@ import { LspProcess } from "./lsp-process";
 import type { LspSpawnError } from "./lsp-process";
 import { cachedBinaryPath, Provisioner } from "./provision";
 import type { ProvisionChannel, ProvisionSpec } from "./provision";
+import { pythonTypeChecker } from "./python";
 import { LspRequestError } from "./transport";
 import type { LspConnection } from "./transport";
 
@@ -83,7 +84,9 @@ interface ServerSpec {
    * When set, the server runs only in repos this predicate accepts. oxlint/typescript run in every
    * JS/TS repo, but a competing linter like Biome should activate only where the repo opted into it
    * (a `biome.json`), the way an editor's Biome extension does, so it neither downloads into repos
-   * that don't use it nor duplicates oxlint's findings.
+   * that don't use it nor duplicates oxlint's findings. Python's two type checkers use it for a
+   * mutual exclusion rather than an opt-in: both gate on the same `pythonTypeChecker` answer, so a
+   * repo runs exactly one of them.
    */
   readonly detect?: (repoRoot: string) => boolean;
 }
@@ -94,7 +97,8 @@ interface ServerSpec {
 // By choice; the table is small and slow-moving). A language lists
 // Every server that analyzes it (typescript type-checks the JS/TS family, oxlint lints the same
 // Files) and the per-file results merge. A server with a `detect` gate runs only where its
-// Predicate accepts the repo (Biome needs a biome config).
+// Predicate accepts the repo (Biome needs a biome config), which is also how a language with more
+// Than one type checker picks the repo's (python lists both basedpyright and ty, and runs one).
 //
 // `provision.packages` pin exact versions, never a bare name that resolves `@latest`: the tier-3
 // Download is otherwise nondeterministic (whatever the registry serves that day) and would pull a
@@ -108,10 +112,12 @@ export const registry: Record<string, ServerSpec> = {
   // Extension; the npm package ships `basedpyright-langserver`. It type-checks Python and answers
   // The code-intel pulls, the typescript-language-server analog. Zero-config: it reads
   // Pyrightconfig/pyproject on its own and pulls `python.*` settings the transport's null default
-  // Answers, so it needs no handshake extras.
+  // Answers, so it needs no handshake extras. It is Python's default checker, not its only one: a
+  // Repo that opted into ty runs ty instead, so the two never double-report the same code.
   "basedpyright": {
     args: ["--stdio"],
     binary: "basedpyright-langserver",
+    detect: (repoRoot) => pythonTypeChecker(repoRoot) === "basedpyright",
     // Verified against its `initialize` result: it advertises every intel provider stet uses,
     // Implementation included.
     provides: [
@@ -244,6 +250,51 @@ export const registry: Record<string, ServerSpec> = {
       tag: "2026-07-06",
     },
   },
+  // Astral's Python type checker, run over its LSP (`ty server`). It is the basedpyright alternative,
+  // Not an addition: `detect` runs it only where the repo opted into it, and turns basedpyright off
+  // There, so the panel shows what the project's own `ty check` shows. Same cargo-dist release shape
+  // As ruff, so it comes through the same sha256-pinned `tar.gz` binary channel. Its `initialize`
+  // Result advertises every intel provider stet pulls except `implementation`, hence its absence
+  // Below; a ty repo reports that key as unsupported rather than keeping a second type checker alive
+  // To answer it.
+  "ty": {
+    args: ["server"],
+    binary: "ty",
+    detect: (repoRoot) => pythonTypeChecker(repoRoot) === "ty",
+    provides: ["definition", "references", "hover", "documentSymbol", "callHierarchy"],
+    provision: {
+      archive: "tar.gz",
+      assets: [
+        {
+          arch: "arm64",
+          asset: "ty-aarch64-apple-darwin.tar.gz",
+          os: "darwin",
+          sha256: "eab18cbeec298d9b59a374d3b49b5e17827118119a0a43d47f25eb847c93b390",
+        },
+        {
+          arch: "x64",
+          asset: "ty-x86_64-apple-darwin.tar.gz",
+          os: "darwin",
+          sha256: "6bb09b2941ada692fdaf295883904a59a652bb49e068fb95e04523039e412065",
+        },
+        {
+          arch: "arm64",
+          asset: "ty-aarch64-unknown-linux-gnu.tar.gz",
+          os: "linux",
+          sha256: "62dcb82bfc10bc538eb7cd45dfa9a6f9d9f6eec9f05480bda63b26decbd948fd",
+        },
+        {
+          arch: "x64",
+          asset: "ty-x86_64-unknown-linux-gnu.tar.gz",
+          os: "linux",
+          sha256: "1e756543bc02420dbd63189ace4316fa7f3dbf7800b066d3b9db477b215894e0",
+        },
+      ],
+      kind: "binary",
+      repo: "astral-sh/ty",
+      tag: "0.0.58",
+    },
+  },
   "typescript": {
     args: ["--stdio"],
     binary: "typescript-language-server",
@@ -346,9 +397,11 @@ const builtinLanguages: Record<string, Language> = {
   css: { extensions: { css: "css" }, servers: ["biome"] },
   graphql: { extensions: { graphql: "graphql" }, servers: ["biome"] },
   json: { extensions: { json: "json", jsonc: "jsonc" }, servers: ["json", "biome"] },
-  // The basedpyright server type-checks and answers intel; ruff lints (always-on, the default
-  // Python linter, not a competitor to one, so no `detect` gate). `.pyi` stubs open as python too.
-  python: { extensions: { py: "python", pyi: "python" }, servers: ["basedpyright", "ruff"] },
+  // The repo's type checker (basedpyright, or ty where the repo opted into it) type-checks and
+  // Answers intel; exactly one of the two ever runs, gated on `pythonTypeChecker`. ruff lints
+  // (always-on, the default Python linter, not a competitor to one, so no `detect` gate). `.pyi`
+  // Stubs open as python too.
+  python: { extensions: { py: "python", pyi: "python" }, servers: ["basedpyright", "ty", "ruff"] },
   rust: { extensions: { rs: "rust" }, servers: ["rust-analyzer"] },
   typescript: {
     extensions: {
@@ -682,9 +735,16 @@ export function activeServersForPath(path: string, repoRoot: string): string[] {
   return serversForPath(path).filter((server) => active.has(server));
 }
 
-/** Servers for this path that statically declare they can answer `capability`, in declared order. */
-export function serversProviding(path: string, capability: Capability): string[] {
-  return serversForPath(path).filter((server) => registry[server]?.provides.includes(capability));
+/**
+ * The file's active servers that statically declare they can answer `capability`, in declared
+ * order. Gated on the repo the same way diagnostics are: a server the repo turned off (a Python
+ * repo's unused type checker) must not be selected for intel either, or intel would acquire, and
+ * provision, a server the repo never opted into.
+ */
+export function serversProviding(path: string, capability: Capability, repoRoot: string): string[] {
+  return activeServersForPath(path, repoRoot).filter((server) =>
+    registry[server]?.provides.includes(capability),
+  );
 }
 
 const intelCapabilities = new Set<Capability>([

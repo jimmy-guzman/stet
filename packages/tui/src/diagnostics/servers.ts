@@ -1292,7 +1292,21 @@ export const LanguageServersLive = Layer.effect(
         lookupServer(key).pipe(
           Effect.tap((handle) =>
             Effect.sync(() => live.set(key, handle)).pipe(
-              Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => void live.delete(key)))),
+              Effect.andThen(
+                Effect.addFinalizer(() =>
+                  Effect.sync(() => {
+                    // Retract only the handle this entry installed. `RcMap.invalidate` drops a
+                    // Still-referenced key from the pool *without* closing its scope (the intel
+                    // Warm-hold keeps a reference for the whole session), so a replacement server
+                    // Can be spawned and registered here long before the old entry's finalizer
+                    // Finally runs. A blind `delete(key)` would then retract the live server, and
+                    // The watched-files channel would go silently dead for the rest of the session.
+                    if (live.get(key) === handle) {
+                      live.delete(key);
+                    }
+                  }),
+                ),
+              ),
             ),
           ),
         ),

@@ -600,7 +600,7 @@ export function DiffView() {
                 >
                   <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.faint}>
                     {`${markerGlyph(row())
-                      .padStart(numberWidth() + 1)
+                      .padStart(numberWidth() + 1 + (state.blameEnabled() ? 1 : 0))
                       .padEnd(gutterWidth())}${markerLabel(row())}`}
                   </text>
                 </box>

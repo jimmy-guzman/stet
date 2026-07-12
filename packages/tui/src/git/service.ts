@@ -168,10 +168,9 @@ export const GitLive = Layer.effect(
           Effect.mapError(toGitError),
         );
       },
-      // Blame the diff's right side. Exit 128 is a path git can't blame (untracked or brand-new):
-      // The state layer already knows those files are wholly uncommitted from the model, so allow
-      // It and parse the empty stdout to an empty list instead of failing the load.
       blame: (repoRoot, path, side) => {
+        // Exit 128 is an unblameable path (untracked); the model already treats those as wholly
+        // Uncommitted, so parse its empty stdout to an empty list rather than fail the load.
         const parsed = (args: readonly string[], stdin?: string) =>
           process
             .run(args, repoRoot, {
@@ -183,12 +182,10 @@ export const GitLive = Layer.effect(
               Effect.map((result) => parseBlamePorcelain(result.stdout)),
               Effect.mapError(toGitError),
             );
-        // A worktree/empty/omitted side, or an unchanged file, blames the working-tree file.
         if (side === undefined || side.kind !== "git") {
           return parsed(blameArgs(path));
         }
-        // `<rev>:path` blames at that revision; `:path` (the index) has no rev, so read its staged
-        // Content with `git show` and blame it via `--contents=-`, keeping line numbers aligned.
+        // The index side (`:path`) has no rev, so blame its staged content piped from `git show`.
         const rev = side.spec.slice(0, side.spec.indexOf(":"));
         return rev === ""
           ? process.run(["git", "show", side.spec], repoRoot, { allowedExitCodes: [0, 128] }).pipe(

@@ -613,3 +613,34 @@ test("a server correcting itself out of band nudges exactly one re-check", async
 
   expect(rechecks).toBe(1);
 });
+
+test("a first publish for a document no run ever sent nudges only when it carries findings", async () => {
+  let rechecks = 0;
+  await withPeer(
+    (peer) =>
+      Effect.gen(function* run() {
+        // No `clearPublished`, so no awaited window: this is a server reporting on a file stet never
+        // Opened (a cross-file report). Findings there are news, and nothing else would render them.
+        yield* peer.reply(publish("file:///never-opened.py", [{ message: "unresolved import" }]));
+        yield* notificationsSent(peer);
+      }),
+    Effect.sync(() => {
+      rechecks += 1;
+    }),
+  );
+  expect(rechecks).toBe(1);
+
+  let empties = 0;
+  await withPeer(
+    (peer) =>
+      Effect.gen(function* run() {
+        // A clean first publish says nothing changed from the nothing we had, so it is not news.
+        yield* peer.reply(publish("file:///never-opened.py", []));
+        yield* notificationsSent(peer);
+      }),
+    Effect.sync(() => {
+      empties += 1;
+    }),
+  );
+  expect(empties).toBe(0);
+});

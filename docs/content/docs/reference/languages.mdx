@@ -153,11 +153,19 @@ that cache: packages distributed through `npm` (this path needs `npm` on your
 ## Installing dependencies while stet is open
 
 Agents install dependencies constantly, and a language server that never hears
-about it keeps reporting imports it can no longer resolve. stet tells the
-servers about on-disk changes as they happen, including inside gitignored
-directories like `.venv/` and `node_modules/`, so `uv add fastapi` or
-`npm install` clears the errors on its own. You do not need to restart, and you
-do not need to press `r`.
+about it keeps reporting imports it can no longer resolve. stet tells each
+server about the on-disk changes it asked to hear about, as they happen,
+including inside gitignored directories like `.venv/`.
+
+In Python, that means running `uv add fastapi` while stet is open clears the
+`Import "fastapi" could not be resolved` errors on its own: basedpyright has no
+file watcher of its own, so this is the only way it learns a package arrived.
+You do not need to restart, and you do not need to press `r`.
+
+<Callout>
+  Servers that watch the filesystem themselves, like rust-analyzer and tsserver, keep doing so and
+  pick up `cargo add` or `npm install` through their own watchers.
+</Callout>
 
 <Callout>
   If a server does get stuck, `R` restarts the language servers for the repo. `r` only re-reads what

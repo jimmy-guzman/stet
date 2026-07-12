@@ -4,8 +4,10 @@
  * `postprocess.includeProcessedMarkdown`; without it the pages compile to JSX with no markdown
  * left.
  *
- * Unlike `releases.ts`/`version.ts`, this flow has no safe fallback: its only failure is that
- * misconfiguration, so the build should fail rather than quietly publish empty pages.
+ * Unlike `releases.ts`/`version.ts`, this flow has no safe fallback. Every failure it wraps is a
+ * defect in the content or the config (that misconfiguration, or a page whose compiled module fails
+ * to load), never a transient outage, so the build should fail rather than quietly publish empty
+ * pages.
  */
 
 import { Data, Effect } from "effect";

@@ -4,10 +4,11 @@
  * The pool keeps a server warm across the many poll-driven pulls and releases it once the last
  * reference drops, so a worktree switch transparently swaps to a fresh server for the new root.
  */
-import { existsSync } from "node:fs";
+import { existsSync, watch } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Context, Data, Effect, Layer, RcMap } from "effect";
+import { Context, Data, Effect, Layer, Queue, RcMap, Stream } from "effect";
 import type { Scope } from "effect";
 
 import { resolveBinary } from "./checker";
@@ -17,6 +18,8 @@ import { cachedBinaryPath, Provisioner } from "./provision";
 import type { ProvisionChannel, ProvisionSpec } from "./provision";
 import { LspRequestError } from "./transport";
 import type { LspConnection } from "./transport";
+import { watchedFileEvent } from "./watched-files";
+import type { WatchedFileEvent } from "./watched-files";
 import { evaluateWhen, parseWhen } from "./when";
 import type { ManifestCache, When } from "./when";
 
@@ -212,6 +215,12 @@ export const registry: Record<string, ServerSpec> = {
   "rust-analyzer": {
     args: [],
     binary: "rust-analyzer",
+    // `files.watcher` defaults to `client`, so advertising `didChangeWatchedFiles` would flip
+    // Rust-analyzer off its own `notify` backend and onto stet's event stream. It watches itself
+    // Correctly today (which is why `cargo add` already works), and stet has no reason to take that
+    // Over: pinning `server` keeps it self-watching, so the watched-files channel is a no-op for
+    // Rust. Helix ships the same pin for the same reason.
+    initializationOptions: { files: { watcher: "server" } },
     provides: [
       "definition",
       "references",
@@ -1073,8 +1082,19 @@ export function performHandshake(
           window: { workDoneProgress: true },
           // `diagnostics.refreshSupport` tells the server it may nudge a re-pull via
           // `workspace/diagnostic/refresh`; a server that pulls its settings (oxlint) adds its
-          // Workspace caps alongside.
-          workspace: { diagnostics: { refreshSupport: true }, ...config?.workspaceCapabilities },
+          // Workspace caps alongside. `didChangeWatchedFiles` is the other half of document sync:
+          // Without it a server never learns about a file it does not own as a document (a package
+          // Installed into `.venv`/`node_modules`, a `tsconfig.json` edit), so its resolution caches
+          // Go stale and never recover. basedpyright does no filesystem watching of its own and
+          // Gates its whole watch feature on `dynamicRegistration`, so this is the only channel by
+          // Which it can learn anything about disk. `relativePatternSupport` is what makes it
+          // Register its Python search paths (an out-of-worktree venv), which `watchedBases` then
+          // Watches; declining it would leave a conda/pyenv env unrecoverable without a restart.
+          workspace: {
+            diagnostics: { refreshSupport: true },
+            didChangeWatchedFiles: { dynamicRegistration: true, relativePatternSupport: true },
+            ...config?.workspaceCapabilities,
+          },
         },
         initializationOptions: config?.initializationOptions,
         processId: process.pid,
@@ -1098,11 +1118,96 @@ export function performHandshake(
   });
 }
 
+// The debounce the whole ecosystem converged on: both the git watcher here and the LSP file watchers
+// In Zed and Neovim coalesce a burst into one notification at 100ms.
+const BASE_DEBOUNCE_MS = 100;
+
+/**
+ * A watch on one directory a server named that stet's worktree watcher cannot see: the Python
+ * search paths pyright registers when the venv is a conda/pyenv/global env rather than an in-repo
+ * `.venv`.
+ *
+ * **Non-recursive on purpose.** An install, uninstall, or upgrade always touches direct children of
+ * `site-packages` (`fastapi/`, `fastapi-x.y.dist-info/`, a `.pth` file), and pyright reloads its
+ * library wholesale on any single matching event, so one handle per base carries the whole signal.
+ * Watching a large conda env recursively would mean one inotify handle per directory, which is the
+ * exhaustion that made Neovim disable this feature on Linux outright; deriving watchers from server
+ * globs is exactly the trap being avoided here. A failed watch is swallowed, as the git watcher's
+ * is: that base simply goes unwatched, which is where stet already was.
+ */
+function baseChanges(base: string) {
+  return Stream.callback<readonly WatchedFileEvent[]>(
+    (queue) =>
+      Effect.gen(function* watchBase() {
+        // Path -> whether it was renamed (appeared/vanished) rather than rewritten in place. A
+        // Package install is a *creation* under the search path, and that distinction is what makes
+        // Pyright rescan for it rather than merely re-read what it already knew (`watchedFileEvent`).
+        const pending = new Map<string, boolean>();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const flush = () => {
+          timer = undefined;
+          const events = [...pending].map(([name, renamed]) =>
+            watchedFileEvent(join(base, name), renamed),
+          );
+          // Keep the batch if the offer is dropped, and retry: a lost batch here is a dependency
+          // Install the server never hears about, which is the bug this whole channel exists to fix.
+          if (Queue.offerUnsafe(queue, events)) {
+            pending.clear();
+          } else if (pending.size > 0) {
+            timer = setTimeout(flush, BASE_DEBOUNCE_MS);
+          }
+        };
+        const watcher = (() => {
+          try {
+            const started = watch(base, { recursive: false }, (event, filename) => {
+              if (typeof filename !== "string") {
+                return;
+              }
+              pending.set(filename, (pending.get(filename) ?? false) || event === "rename");
+              if (timer !== undefined) {
+                clearTimeout(timer);
+              }
+              timer = setTimeout(flush, BASE_DEBOUNCE_MS);
+            });
+            started.on("error", () => {});
+            return started;
+          } catch {
+            return undefined;
+          }
+        })();
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (timer !== undefined) {
+              clearTimeout(timer);
+            }
+            watcher?.close();
+          }),
+        );
+        return yield* Effect.never;
+      }),
+    { bufferSize: 1, strategy: "dropping" },
+  );
+}
+
 function connectServer(command: readonly string[], repoRoot: string, config?: HandshakeConfig) {
   return Effect.gen(function* connect() {
     const lsp = yield* LspProcess;
     const connection = yield* lsp.start(command, repoRoot, config?.onRequest);
     const handle = yield* performHandshake(connection, repoRoot, config);
+    // Watch the bases the server registers outside the worktree, re-keying whenever its registrations
+    // Change (`switchMap` tears down the previous set, so an unregister stops its watch). The fiber
+    // Lives in the connection's scope, so every handle dies with the server.
+    yield* Effect.forkScoped(
+      connection.watchedBases.pipe(
+        Stream.switchMap((bases) =>
+          Stream.mergeAll(
+            bases.map((base) => baseChanges(base)),
+            { concurrency: "unbounded" },
+          ),
+        ),
+        Stream.runForEach((events) => connection.watchedFilesChanged(events)),
+      ),
+    );
     // Best-effort graceful teardown before the child is killed on scope close.
     yield* Effect.addFinalizer(() =>
       connection
@@ -1151,6 +1256,22 @@ export class LanguageServers extends Context.Service<
       ServerUnavailable | ServerInstalling | LspSpawnError | LspRequestError,
       Scope.Scope
     >;
+    /**
+     * Tell every live server for this repo about on-disk changes, each filtered against its own
+     * registered globs. Broadcast from the pool rather than from a keeper, so a server held only by
+     * the intel warm-hold hears about them too.
+     */
+    readonly notifyWatchedFiles: (
+      repoRoot: string,
+      events: readonly WatchedFileEvent[],
+    ) => Effect.Effect<void>;
+    /**
+     * Evict this repo's pooled servers so the next run brings up fresh ones. The escape hatch
+     * behind `R`, for a server that cannot be told about a change (a linter that reads its config
+     * once at startup) or has simply wedged. Callers close their keepers first, or the dropped pool
+     * references keep the old children alive.
+     */
+    readonly restart: (repoRoot: string) => Effect.Effect<void>;
   }
 >()("stet/LanguageServers") {}
 
@@ -1160,7 +1281,40 @@ export const LanguageServersLive = Layer.effect(
   LanguageServers,
   Effect.gen(function* languageServers() {
     const provisioner = yield* Provisioner;
-    const pool = yield* RcMap.make({ idleTimeToLive: "30 seconds", lookup: lookupServer });
+    // `RcMap` can hand a handle back but cannot enumerate the ones it is holding (`RcMap.get` would
+    // Acquire, spawning a server rather than listing one), so mirror the live handles here. The
+    // Finalizer runs on the pool entry's own scope, so an idled-out or evicted server drops out of
+    // The mirror by construction.
+    const live = new Map<string, ServerHandle>();
+    const pool = yield* RcMap.make({
+      idleTimeToLive: "30 seconds",
+      lookup: (key: string) =>
+        lookupServer(key).pipe(
+          Effect.tap((handle) =>
+            Effect.sync(() => live.set(key, handle)).pipe(
+              Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => void live.delete(key)))),
+            ),
+          ),
+        ),
+    });
+
+    // The pool key is "<language> <repoRoot>" and a language never contains a space.
+    const keysFor = (repoRoot: string) =>
+      [...live.keys()].filter((key) => key.endsWith(` ${repoRoot}`));
+
+    const notifyWatchedFiles = (repoRoot: string, events: readonly WatchedFileEvent[]) =>
+      Effect.suspend(() =>
+        Effect.forEach(
+          keysFor(repoRoot),
+          (key) => live.get(key)?.connection.watchedFilesChanged(events) ?? Effect.void,
+          { discard: true },
+        ),
+      );
+
+    const restart = (repoRoot: string) =>
+      Effect.suspend(() =>
+        Effect.forEach(keysFor(repoRoot), (key) => RcMap.invalidate(pool, key), { discard: true }),
+      );
 
     // Connect through the warm pool; if the pooled server died (its stdout closed), evict it and
     // Bring up a fresh one, so a crash mid-session recovers on the next run.
@@ -1217,6 +1371,6 @@ export const LanguageServersLive = Layer.effect(
         );
       });
 
-    return { acquire };
+    return { acquire, notifyWatchedFiles, restart };
   }),
 );

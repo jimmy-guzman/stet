@@ -150,6 +150,20 @@ that cache: packages distributed through `npm` (this path needs `npm` on your
   show as unavailable instead of waiting forever.
 </Callout>
 
+## Installing dependencies while stet is open
+
+Agents install dependencies constantly, and a language server that never hears
+about it keeps reporting imports it can no longer resolve. stet tells the
+servers about on-disk changes as they happen, including inside gitignored
+directories like `.venv/` and `node_modules/`, so `uv add fastapi` or
+`npm install` clears the errors on its own. You do not need to restart, and you
+do not need to press `r`.
+
+<Callout>
+  If a server does get stuck, `R` restarts the language servers for the repo. `r` only re-reads what
+  they already believe, which is why it cannot clear a stale cache on its own.
+</Callout>
+
 ## Add your own languages
 
 The `languages` config key routes any file type to any language server on

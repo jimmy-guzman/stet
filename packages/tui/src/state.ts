@@ -37,8 +37,9 @@ import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { LspProcess } from "./diagnostics/lsp-process";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import { intelLanguage, serversProviding } from "./diagnostics/servers";
+import { intelLanguage, LanguageServers, serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
+import { watchedFileEvent } from "./diagnostics/watched-files";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
 import { followScrollTop } from "./diff/follow";
@@ -2477,8 +2478,47 @@ function createState() {
     } finally {
       if (checksController === controller) {
         setChecksRunning(false);
+        if (recheckPending) {
+          recheckPending = false;
+          void runChecks(gitModel());
+        }
       }
     }
+  }
+
+  // A server with news no run is waiting for (its own post-install re-analysis, or an explicit
+  // `workspace/diagnostic/refresh`). It must not abort the run in flight: that run's own sends are
+  // What provoked most of these, and restarting it each time would starve it. Defer instead, which
+  // Terminates by construction: the follow-up run finds no changed text, so it sends the server
+  // Nothing, so it provokes no further publishes and no further nudge.
+  let recheckPending = false;
+  function requestRecheck() {
+    if (checksRunning()) {
+      recheckPending = true;
+      return;
+    }
+    void runChecks(gitModel());
+  }
+
+  /**
+   * `R`: bring the repo's language servers back up from scratch. The escape hatch for a server that
+   * cannot be told about a change (a linter that reads its config once at startup) or has wedged;
+   * every editor ships one. Keepers first, or the pool eviction leaves the old children alive.
+   */
+  async function restartLanguageServers() {
+    const model = gitModel();
+    if (model.repoRoot === "") {
+      return;
+    }
+    notify("restarting language servers");
+    await runtime
+      .runPromise(
+        Diagnostics.use((diagnostics) => diagnostics.resetServers(model.repoRoot)).pipe(
+          Effect.andThen(LanguageServers.use((servers) => servers.restart(model.repoRoot))),
+        ),
+      )
+      .catch(() => {});
+    void runChecks(model);
   }
 
   // A download starting/finishing drives the live "installing…" status: add on start, drop on
@@ -2510,8 +2550,10 @@ function createState() {
       ),
     ),
   );
-  // A server nudging `workspace/diagnostic/refresh` (rust-analyzer after a cargo-check cycle)
-  // Re-runs checks, exactly like a finished download; a nudge from another repo's pooled server
+  // A server with news no run is waiting for: an explicit `workspace/diagnostic/refresh` nudge
+  // (rust-analyzer after a cargo-check cycle), or a server that re-published on its own once it
+  // Changed its mind (pyright re-analyzing after a dependency install invalidated its imports).
+  // Both re-run checks, exactly like a finished download. A nudge from another repo's pooled server
   // (a just-switched-away worktree) is ignored rather than churning the current one.
   runtime.runFork(
     LspProcess.use((lsp) =>
@@ -2519,7 +2561,7 @@ function createState() {
         Effect.flatMap((refreshedRoot) =>
           Effect.sync(() => {
             if (refreshedRoot === gitModel().repoRoot) {
-              void runChecks(gitModel());
+              requestRecheck();
             }
           }),
         ),
@@ -3928,10 +3970,35 @@ function createState() {
             // Server reads, so drop the repo's cached intel. Gate on tracked-ness: the watcher also
             // Sees gitignored churn (`node_modules/`, `dist/`) an agent generates, which must not
             // Wipe the warm cache, and a git-internal or nameless batch carries no path at all.
-            Stream.tap((paths) =>
-              paths.some((path) => repoFilePaths().has(path) || gitModel().changedByPath.has(path))
+            Stream.tap((changes) =>
+              changes.some(
+                (change) =>
+                  repoFilePaths().has(change.path) || gitModel().changedByPath.has(change.path),
+              )
                 ? Intel.use((intel) => intel.invalidate(root, [])).pipe(Effect.ignore)
                 : Effect.void,
+            ),
+            // Tell the language servers about the same batch, the *whole* batch: this is the one
+            // Place the gitignored paths above are deliberately excluded from are exactly what is
+            // Wanted. A package landing in `.venv/` or `node_modules/` is invisible to git and so to
+            // Every other consumer here, but it is precisely what invalidates a server's resolution
+            // Cache, and basedpyright has no filesystem watcher of its own to notice it. Each server
+            // Filters the batch against the globs it registered, so a server that asked for nothing
+            // Is sent nothing. No cap and no ignore list: VS Code stopped excluding `node_modules`
+            // For this exact reason, and unlike Neovim we derive no watchers from the globs, so a
+            // Burst costs a glob match rather than an inotify handle. The 100ms debounce and the
+            // Path `Set` in the watcher already coalesce an install's thousands of writes.
+            Stream.tap((changes) =>
+              changes.length === 0
+                ? Effect.void
+                : LanguageServers.use((servers) =>
+                    servers.notifyWatchedFiles(
+                      root,
+                      changes.map((change) =>
+                        watchedFileEvent(join(root, change.path), change.renamed),
+                      ),
+                    ),
+                  ).pipe(Effect.ignore),
             ),
             Stream.map(() => undefined),
           );
@@ -4243,6 +4310,7 @@ function createState() {
     resetSidebarWidth,
     resetState,
     resolveViewerDecoration,
+    restartLanguageServers,
     revealLineForJump,
     runChecks,
     scope,

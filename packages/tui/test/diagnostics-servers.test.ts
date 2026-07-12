@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 
 import { loadConfigText } from "@/config/load";
 import {
@@ -18,6 +18,7 @@ import {
   lspLanguageId,
   performHandshake,
   registerLanguages,
+  registry,
   resolveServerCommand,
   restoreLanguages,
   serversForPath,
@@ -463,6 +464,7 @@ test("handshake parses advertised providers into the capability set", async () =
     clearPublished: () => Effect.void,
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: (method) => Effect.sync(() => void notified.push(method)),
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
@@ -488,6 +490,8 @@ test("handshake parses advertised providers into the capability set", async () =
             }
           : null;
       }),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -511,6 +515,25 @@ test("handshake parses advertised providers into the capability set", async () =
       textDocument: { documentSymbol: { hierarchicalDocumentSymbolSupport: true } },
     },
   });
+  // Basedpyright does no filesystem watching of its own and installs its watch feature only when the
+  // Client advertises `dynamicRegistration`, so without this it never learns a dependency was
+  // Installed. `relativePatternSupport` is what makes it register its Python search paths, which is
+  // The only way an out-of-repo venv (conda, pyenv) is ever covered.
+  expect(initializeParams).toMatchObject({
+    capabilities: {
+      workspace: {
+        didChangeWatchedFiles: { dynamicRegistration: true, relativePatternSupport: true },
+      },
+    },
+  });
+});
+
+test("rust-analyzer keeps watching its own files rather than depending on ours", () => {
+  // Its `files.watcher` defaults to `client`, so advertising didChangeWatchedFiles would otherwise
+  // Flip it off its own `notify` backend and onto stet's event stream. It watches correctly today.
+  expect(handshakeConfigFor(registry["rust-analyzer"] ?? {}, "/repo")).toMatchObject({
+    initializationOptions: { files: { watcher: "server" } },
+  });
 });
 
 test("handshake yields an empty capability set when no providers are advertised", async () => {
@@ -520,6 +543,7 @@ test("handshake yields an empty capability set when no providers are advertised"
     clearPublished: () => Effect.void,
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
@@ -528,6 +552,8 @@ test("handshake yields an empty capability set when no providers are advertised"
         new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
       ),
     request: () => Effect.succeed({ capabilities: {} }),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -545,6 +571,7 @@ test("handshake treats a malformed provider value as unsupported", async () => {
     clearPublished: () => Effect.void,
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
@@ -560,6 +587,8 @@ test("handshake treats a malformed provider value as unsupported", async () => {
           referencesProvider: 0,
         },
       }),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -578,6 +607,7 @@ test("handshake advertises pull diagnostics and refresh support, and parses diag
     clearPublished: () => Effect.void,
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
@@ -594,6 +624,8 @@ test("handshake advertises pull diagnostics and refresh support, and parses diag
           },
         };
       }),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
 

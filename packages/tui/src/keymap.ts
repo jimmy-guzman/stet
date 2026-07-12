@@ -681,8 +681,14 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "r") {
+      if (key.name === "r" && !key.shift) {
         void state.runChecks(state.gitModel());
+        return;
+      }
+
+      // `r` re-reads what the servers already think; `R` throws the servers away and asks again.
+      if (key.name === "R" || (key.name === "r" && key.shift)) {
+        void state.restartLanguageServers();
         return;
       }
 

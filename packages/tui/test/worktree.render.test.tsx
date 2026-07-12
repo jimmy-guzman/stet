@@ -93,14 +93,19 @@ describe("worktree picker", () => {
       mockInput.pressKey("w");
       const picker = await settleUntil(
         "worktree summaries",
-        (frame) => frame.includes("busy-branch") && frame.includes("2 changed"),
+        (frame) => frame.includes("busy-branch") && frame.includes("now"),
       );
 
-      // The worktree an agent just wrote in reads as work plus a fresh age; the one nobody has
-      // Touched reads as clean. `relativeTime` calls anything under a minute "now".
-      expect(picker).toContain("2 changed");
-      expect(picker).toContain("now");
-      expect(picker).toContain("clean");
+      // Every worktree carries an age, and the one just written in sorts to the top. `relativeTime`
+      // Calls anything under a minute "now", and the fixture just committed, so both read "now".
+      const rows = picker
+        .split("\n")
+        .filter((line) => /busy-branch|● (?<default>main|master)/.test(line));
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toContain("busy-branch");
+      for (const row of rows) {
+        expect(row).toContain("now");
+      }
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
@@ -108,7 +113,7 @@ describe("worktree picker", () => {
     }
   }, 20_000);
 
-  test("counts and ages hold their columns whatever the label, badges, or activity", async () => {
+  test("the age holds its column whatever the marker, label, or badges", async () => {
     const repoRoot = createFixtureRepo("stet-worktree-align-", { "README.md": "# Fixture\n" });
     const busyRoot = `${repoRoot}-busy`;
     const lockedRoot = `${repoRoot}-locked`;
@@ -133,26 +138,26 @@ describe("worktree picker", () => {
       mockInput.pressKey("w");
       const frame = await settleUntil(
         "worktree rows",
-        (candidate) => candidate.includes("2 changed") && candidate.includes("locked"),
+        (candidate) => candidate.includes("busy-branch") && candidate.includes("locked"),
       );
 
-      // A row with no age used to render a whitespace-only cell, which measures zero cells in a flex
-      // Row and slid every column right of it out of line. The count column is the witness: a long
-      // Label, a `locked` badge, and a missing age must all leave its right edge where it was.
-      const countEnds = new Set(
+      // Cells that render nothing (the marker box on every row but the current one) used to be
+      // Whitespace-only `<text>`s, which measure zero cells in a flex row and slid everything right
+      // Of them out of line. The age is the witness: an absent marker, a long label, and a `locked`
+      // Badge must all leave it exactly where it was.
+      const ageStarts = new Set(
         frame
           .split("\n")
-          // The header bar carries its own `N changed`; the picker rows are the ones naming a branch.
-          .filter((line) => /feat\/|chore\/|docs\/|● master/.test(line))
+          .filter((line) => /feat\/|chore\/|docs\/|● (?<default>main|master)/.test(line))
           .map((line) => {
-            const match = /(?:\d+ changed|clean)/.exec(line);
-            return match === null ? -1 : match.index + match[0].length;
+            const match = /\bnow\b/.exec(line);
+            return match === null ? -1 : match.index;
           }),
       );
 
-      expect(countEnds.size).toBeGreaterThan(0);
-      expect(countEnds.has(-1)).toBe(false);
-      expect(countEnds.size).toBe(1);
+      expect(ageStarts.size).toBeGreaterThan(0);
+      expect(ageStarts.has(-1)).toBe(false);
+      expect(ageStarts.size).toBe(1);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

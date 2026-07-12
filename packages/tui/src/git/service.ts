@@ -38,7 +38,13 @@ import {
 } from "./provenance";
 import { parseSearchOutput, searchArgs } from "./search";
 import type { SearchMatch, SearchOptions } from "./search";
-import { parseWorktreeList, summarizeWorktree, worktreeStatusArgs } from "./worktree";
+import {
+  commitTimeArgs,
+  parseCommitTimes,
+  parseWorktreeList,
+  summarizeWorktree,
+  worktreeStatusArgs,
+} from "./worktree";
 import type { Worktree, WorktreeSummary } from "./worktree";
 
 function toGitError(error: CommandError) {
@@ -130,11 +136,14 @@ export class Git extends Context.Service<
     ) => Effect.Effect<SearchMatch[], GitError>;
     readonly worktrees: (repoRoot: string) => Effect.Effect<Worktree[], GitError>;
     /**
-     * How much uncommitted work sits in each of the given worktrees, and when each last moved. A
-     * worktree that cannot be read (a pruned one whose directory is gone) is omitted rather than
-     * failing the batch, so one dead worktree never costs the caller the live ones.
+     * When each of the given worktrees was last touched, by an agent or by git. A worktree that
+     * cannot be read (a pruned one whose directory is gone) is omitted rather than failing the
+     * batch, so one dead worktree never costs the caller the live ones.
      */
-    readonly worktreeSummaries: (paths: readonly string[]) => Effect.Effect<WorktreeSummary[]>;
+    readonly worktreeSummaries: (
+      worktrees: readonly Worktree[],
+      repoRoot: string,
+    ) => Effect.Effect<WorktreeSummary[]>;
   }
 >()("stet/Git") {}
 
@@ -410,17 +419,37 @@ export const GitLive = Layer.effect(
           Effect.map((result) => parseSearchOutput(result.stdoutBytes)),
           Effect.mapError(toGitError),
         ),
-      worktreeSummaries: (paths) =>
-        Effect.all(
-          paths.map((path) =>
-            process.run(worktreeStatusArgs, path).pipe(
-              retryTransient,
-              Effect.map((result) => summarizeWorktree(path, result.stdout)),
-              Effect.orElseSucceed(() => undefined),
+      // Every worktree's HEAD resolves against the one shared object database, so their commit times
+      // Come back in a single call rather than one per worktree. It is the portable floor under the
+      // Reflog mtime (a repository can have reflogs turned off), so a failure here is not fatal.
+      worktreeSummaries: (worktrees, repoRoot) => {
+        const heads = worktrees.map((worktree) => worktree.head).filter((head) => head !== "");
+        const commitTimes =
+          heads.length === 0
+            ? Effect.succeed(new Map<string, number>())
+            : process.run(commitTimeArgs(heads), repoRoot).pipe(
+                Effect.map((result) => parseCommitTimes(result.stdout)),
+                Effect.orElseSucceed(() => new Map<string, number>()),
+              );
+
+        return commitTimes.pipe(
+          Effect.flatMap((times) =>
+            Effect.all(
+              worktrees.map((worktree) =>
+                process.run(worktreeStatusArgs, worktree.path).pipe(
+                  retryTransient,
+                  Effect.map((result) =>
+                    summarizeWorktree(worktree.path, result.stdout, times.get(worktree.head)),
+                  ),
+                  Effect.orElseSucceed(() => undefined),
+                ),
+              ),
+              { concurrency: "unbounded" },
             ),
           ),
-          { concurrency: "unbounded" },
-        ).pipe(Effect.map((summaries) => summaries.filter((summary) => summary !== undefined))),
+          Effect.map((summaries) => summaries.filter((summary) => summary !== undefined)),
+        );
+      },
       worktrees: (repoRoot) =>
         process.run(["git", "worktree", "list", "--porcelain", "-z"], repoRoot).pipe(
           retryTransient,

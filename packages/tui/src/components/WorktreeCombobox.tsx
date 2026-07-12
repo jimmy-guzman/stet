@@ -2,6 +2,7 @@ import type { ScrollBoxRenderable } from "@opentui/core";
 import { batch, createEffect, Index, Show } from "solid-js";
 
 import { recencyFraction } from "@/git/activity";
+import { WORKTREE_ACTIVE_MS } from "@/git/worktree";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { worktreeLabel } from "@/ui-helpers";
@@ -11,9 +12,8 @@ import { collapseHome, truncate, truncateLeft } from "@/utils/text";
 
 // Every cell is a fixed-width box, never a padded string: a whitespace-only `<text>` measures zero
 // Cells in a flex row, so a worktree with no age would pull the columns right of it out of line.
-// `999 changed` is the widest count and `11mo` the widest age `relativeTime` produces.
+// `11mo` is the widest age `relativeTime` produces.
 const MARKER_CELLS = 2;
-const COUNT_CELLS = 11;
 const AGE_CELLS = 4;
 const GAP = 2;
 // The branch is the row's identity, so it is the column that gets what it needs first (a truncated
@@ -21,9 +21,9 @@ const GAP = 2;
 // Left-truncated path stops carrying enough tail to be worth the cells, so the row drops it: which
 // Worktree is busy outranks where it sits on disk.
 const LABEL_MIN = 8;
-const LABEL_MAX = 28;
+const LABEL_MAX = 34;
 const PATH_MIN = 12;
-const PATH_MAX = 24;
+const PATH_MAX = 32;
 
 export function WorktreeCombobox() {
   const theme = useTheme();
@@ -36,7 +36,7 @@ export function WorktreeCombobox() {
   const repoRoot = () => state.gitModel().repoRoot;
 
   // Cells the label and path share, once the fixed columns and their gaps are spoken for.
-  const slack = () => state.overlayWidth() - 2 - MARKER_CELLS - GAP - COUNT_CELLS - GAP - AGE_CELLS;
+  const slack = () => state.overlayWidth() - 2 - MARKER_CELLS - GAP - AGE_CELLS;
   const pathCells = () => {
     const remainder = slack() - GAP - Math.min(LABEL_MAX, slack() - GAP - PATH_MIN);
     return slack() - GAP - PATH_MIN < LABEL_MIN ? 0 : Math.min(PATH_MAX, remainder);
@@ -44,18 +44,19 @@ export function WorktreeCombobox() {
   const labelCells = () =>
     pathCells() === 0 ? Math.max(LABEL_MIN, slack()) : slack() - GAP - pathCells();
 
-  // A worktree whose summary has not landed yet, or whose directory is gone so it can never be read,
-  // Leaves its cells empty rather than guessing at a count. The columns stay reserved either way, so
-  // A summary arriving never shifts the row.
-  const countText = (changed: number | undefined) =>
-    changed === undefined ? "" : changed === 0 ? "clean" : `${changed} changed`;
+  // The age is the row: how long ago an agent (or git) last touched that worktree. A worktree whose
+  // Summary has not landed, or whose directory is gone so it can never be read, leaves the cell
+  // Empty rather than guessing. The column stays reserved either way, so a summary never shifts the
+  // Row.
   const ageText = (at: number | undefined) =>
     at === undefined ? "" : relativeTime(Math.floor(at / 1000), Math.floor(state.now() / 1000));
-  // The age is this row's recency cue, so it carries the fade the dot carries elsewhere: pink while
-  // An agent is working in that worktree, cooling into the faint gray the ramp ends on as it goes
-  // Quiet. The word itself is the signal, so the row still reads under NO_COLOR; color only ranks it.
+  // It carries the fade the dot carries elsewhere: pink while an agent is working in that worktree,
+  // Cooling into the faint gray the ramp ends on as it goes quiet. It ramps over WORKTREE_ACTIVE_MS,
+  // Not the 30s a changed file stays fresh for, so it agrees with the header's "N worktrees active"
+  // Instead of reading fully faded while the header insists the worktree is busy. The word itself is
+  // The signal, so the row still reads under NO_COLOR; color only ranks it.
   const ageColor = (at: number | undefined) => {
-    const fraction = recencyFraction(at, state.now());
+    const fraction = recencyFraction(at, state.now(), WORKTREE_ACTIVE_MS);
     return fraction === undefined
       ? theme.colors.text.faint
       : lerpHex(theme.colors.recency.fresh, theme.colors.recency.aged, fraction);
@@ -188,27 +189,6 @@ export function WorktreeCombobox() {
                           fg={theme.colors.severity.warning}
                         >
                           {badges()}
-                        </text>
-                      </Show>
-                    </box>
-                    <box
-                      width={COUNT_CELLS}
-                      marginLeft={GAP}
-                      flexShrink={0}
-                      flexDirection="row"
-                      justifyContent="flex-end"
-                    >
-                      <Show when={countText(summary()?.changed) !== ""}>
-                        <text
-                          wrapMode="none"
-                          height={1}
-                          fg={
-                            (summary()?.changed ?? 0) > 0
-                              ? theme.colors.text.secondary
-                              : theme.colors.text.faint
-                          }
-                        >
-                          {countText(summary()?.changed)}
                         </text>
                       </Show>
                     </box>

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   mergeWorktreeSummaries,
   orderWorktrees,
+  parseCommitTimes,
   parseWorktreeList,
   parseWorktreeStatusPaths,
   summarizeWorktree,
@@ -25,8 +26,8 @@ function worktree(path: string, branch: string): Worktree {
   };
 }
 
-function summary(path: string, changed: number, lastActivityAt?: number): WorktreeSummary {
-  return { changed, lastActivityAt, path };
+function summary(path: string, lastActivityAt: number | undefined): WorktreeSummary {
+  return { lastActivityAt, path };
 }
 
 describe("parseWorktreeList", () => {
@@ -120,71 +121,118 @@ describe("parseWorktreeStatusPaths", () => {
   });
 });
 
+describe("parseCommitTimes", () => {
+  test("reads each sha's commit time, in milliseconds", () => {
+    const times = parseCommitTimes("abc123 1783795743\ndef456 1783874190\n");
+    expect(times.get("abc123")).toBe(1_783_795_743_000);
+    expect(times.get("def456")).toBe(1_783_874_190_000);
+  });
+
+  test("returns nothing for empty output", () => {
+    expect(parseCommitTimes("").size).toBe(0);
+  });
+});
+
 describe("summarizeWorktree", () => {
-  test("counts the changed files and takes the newest of their mtimes", () => {
+  test("takes the newest mtime among the uncommitted files", () => {
     const repoRoot = createFixtureRepo("stet-worktree-summary-", { "a.ts": "const a = 1\n" });
     try {
       writeFileSync(join(repoRoot, "old.ts"), "const old = 1\n");
       writeFileSync(join(repoRoot, "new.ts"), "const fresh = 1\n");
       utimesSync(
         join(repoRoot, "old.ts"),
-        new Date(1_000_000_000_000),
-        new Date(1_000_000_000_000),
+        new Date(2_000_000_000_000),
+        new Date(2_000_000_000_000),
       );
       utimesSync(
         join(repoRoot, "new.ts"),
-        new Date(1_700_000_000_000),
-        new Date(1_700_000_000_000),
+        new Date(2_100_000_000_000),
+        new Date(2_100_000_000_000),
       );
 
-      const result = summarizeWorktree(repoRoot, "?? old.ts\0?? new.ts\0");
+      const result = summarizeWorktree(repoRoot, "?? old.ts\0?? new.ts\0", undefined);
 
-      expect(result.changed).toBe(2);
-      expect(result.lastActivityAt).toBe(1_700_000_000_000);
+      expect(result.lastActivityAt).toBe(2_100_000_000_000);
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   });
 
-  test("reports a clean worktree as no changes and no activity", () => {
-    expect(summarizeWorktree("/repo", "")).toEqual({
-      changed: 0,
-      lastActivityAt: undefined,
-      path: "/repo",
-    });
+  // The bug this whole model exists to fix: edits alone go to zero the moment an agent commits,
+  // Which is exactly when it was busiest. A clean worktree that was just committed to is active.
+  test("stays active on a clean worktree that was just committed to", () => {
+    const result = summarizeWorktree("/repo", "", 2_100_000_000_000);
+    expect(result.lastActivityAt).toBe(2_100_000_000_000);
   });
 
-  test("reports no activity when the only changed file is one that no longer exists", () => {
-    expect(summarizeWorktree("/repo", " D gone.ts\0")).toMatchObject({
-      changed: 1,
+  test("prefers whichever is newer, the uncommitted edit or the commit", () => {
+    const repoRoot = createFixtureRepo("stet-worktree-newer-", { "a.ts": "const a = 1\n" });
+    try {
+      writeFileSync(join(repoRoot, "edit.ts"), "const edited = 1\n");
+      utimesSync(
+        join(repoRoot, "edit.ts"),
+        new Date(2_000_000_000_000),
+        new Date(2_000_000_000_000),
+      );
+
+      // A commit newer than the edit wins, and an older one loses to it.
+      expect(summarizeWorktree(repoRoot, "?? edit.ts\0", 2_100_000_000_000).lastActivityAt).toBe(
+        2_100_000_000_000,
+      );
+      expect(summarizeWorktree(repoRoot, "?? edit.ts\0", 1_000_000_000_000).lastActivityAt).toBe(
+        2_000_000_000_000,
+      );
+    } finally {
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("reads the reflog, so a checkout or rebase counts even with nothing uncommitted", () => {
+    const repoRoot = createFixtureRepo("stet-worktree-reflog-", { "a.ts": "const a = 1\n" });
+    try {
+      // The fixture's own commit wrote logs/HEAD moments ago; no commit time is passed, so the
+      // Reflog is the only signal left and it must still register the worktree as freshly touched.
+      const result = summarizeWorktree(repoRoot, "", undefined);
+      expect(result.lastActivityAt).toBeGreaterThan(Date.now() - 60_000);
+    } finally {
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("reports no activity when there is nothing to read at all", () => {
+    expect(summarizeWorktree("/repo-does-not-exist", "", undefined)).toEqual({
       lastActivityAt: undefined,
+      path: "/repo-does-not-exist",
     });
   });
 });
 
 describe("mergeWorktreeSummaries", () => {
   test("keeps the previous map when nothing moved, so an idle poll wakes nothing", () => {
-    const previous = new Map([["/repo", summary("/repo", 2, 1000)]]);
-    expect(mergeWorktreeSummaries(previous, [summary("/repo", 2, 1000)])).toBe(previous);
+    const previous = new Map([["/repo", summary("/repo", 1000)]]);
+    expect(mergeWorktreeSummaries(previous, [summary("/repo", 1000)])).toBe(previous);
   });
 
   test("replaces the map when a worktree's activity advances", () => {
-    const previous = new Map([["/repo", summary("/repo", 2, 1000)]]);
-    const merged = mergeWorktreeSummaries(previous, [summary("/repo", 2, 2000)]);
+    const previous = new Map([["/repo", summary("/repo", 1000)]]);
+    const merged = mergeWorktreeSummaries(previous, [summary("/repo", 2000)]);
     expect(merged).not.toBe(previous);
     expect(merged.get("/repo")?.lastActivityAt).toBe(2000);
   });
 
   test("replaces the map when a worktree appears", () => {
-    const previous = new Map([["/repo", summary("/repo", 0)]]);
-    const merged = mergeWorktreeSummaries(previous, [summary("/repo", 0), summary("/side", 3, 50)]);
+    const previous = new Map([["/repo", summary("/repo", undefined)]]);
+    const merged = mergeWorktreeSummaries(previous, [
+      summary("/repo", undefined),
+      summary("/side", 50),
+    ]);
     expect(merged).not.toBe(previous);
     expect(merged.size).toBe(2);
   });
 });
 
 describe("orderWorktrees", () => {
-  test("pins the main worktree first, then ranks the rest by how recently they moved", () => {
+  test("ranks worktrees by how recently they were touched, with no pin for main", () => {
     const list = [
       worktree("/repo/quiet", "quiet"),
       worktree("/repo/hot", "hot"),
@@ -192,25 +240,22 @@ describe("orderWorktrees", () => {
       worktree("/repo/warm", "warm"),
     ];
     const summaries = new Map([
-      ["/repo/hot", summary("/repo/hot", 4, 9000)],
-      ["/repo/warm", summary("/repo/warm", 1, 5000)],
-      ["/repo", summary("/repo", 7, 9999)],
+      ["/repo/hot", summary("/repo/hot", 9000)],
+      ["/repo/warm", summary("/repo/warm", 5000)],
+      ["/repo", summary("/repo", 3000)],
     ]);
 
-    expect(orderWorktrees(list, summaries, "/repo").map((entry) => entry.branch)).toEqual([
-      "main",
+    expect(orderWorktrees(list, summaries).map((entry) => entry.branch)).toEqual([
       "hot",
       "warm",
+      "main",
       "quiet",
     ]);
   });
 
   test("sorts worktrees with no activity by path, so the quiet tail is stable", () => {
     const list = [worktree("/repo/b", "b"), worktree("/repo/a", "a")];
-    expect(orderWorktrees(list, new Map(), "/nowhere").map((entry) => entry.branch)).toEqual([
-      "a",
-      "b",
-    ]);
+    expect(orderWorktrees(list, new Map()).map((entry) => entry.branch)).toEqual(["a", "b"]);
   });
 });
 
@@ -229,33 +274,67 @@ describe("worktrees in a fixture repo", () => {
     }
   });
 
-  test("summarizes each worktree's own changed set, and skips one whose directory is gone", async () => {
+  test("summarizes every worktree, and skips one whose directory is gone", async () => {
     const repoRoot = createFixtureRepo("stet-worktree-summaries-", { "a.ts": "const a = 1\n" });
-    // Outside the repo, so the main worktree stays genuinely clean: a nested worktree is itself an
-    // Untracked entry in its parent, which would count as a change here (real setups gitignore it).
     const linkedRoot = `${repoRoot}-linked`;
     try {
       runGit(repoRoot, ["worktree", "add", "-b", "side", linkedRoot]);
       writeFileSync(join(linkedRoot, "one.ts"), "const one = 1\n");
-      writeFileSync(join(linkedRoot, "two.ts"), "const two = 2\n");
 
-      const summaries = await loadWorktreeSummaries([
+      const worktrees = await loadWorktrees(repoRoot);
+      const summaries = await loadWorktreeSummaries(
+        [...worktrees, worktree(`${repoRoot}-does-not-exist`, "gone")],
         repoRoot,
-        linkedRoot,
-        `${repoRoot}-does-not-exist`,
-      ]);
+      );
 
+      // The dead worktree is dropped rather than failing the batch; the live ones both report a real
+      // Age, because even a clean worktree has just been committed to by the fixture.
       expect(summaries).toHaveLength(2);
-      expect(summaries.find((entry) => entry.path === repoRoot)).toMatchObject({
-        changed: 0,
-        lastActivityAt: undefined,
-      });
-      const linked = summaries.find((entry) => entry.path === linkedRoot);
-      expect(linked?.changed).toBe(2);
-      expect(linked?.lastActivityAt).toBeGreaterThan(0);
+      for (const entry of summaries) {
+        expect(entry.lastActivityAt).toBeGreaterThan(Date.now() - 60_000);
+      }
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
       rmSync(linkedRoot, { force: true, recursive: true });
+    }
+  });
+
+  // The regression, end to end through the real service: an agent that commits its work leaves a
+  // Clean worktree, and the old model read that as dead. It must outrank a dirty but stale one.
+  test("ranks a just-committed clean worktree above a worktree with stale uncommitted edits", async () => {
+    const repoRoot = createFixtureRepo("stet-worktree-rank-", { "a.ts": "const a = 1\n" });
+    const staleRoot = `${repoRoot}-stale`;
+    const committedRoot = `${repoRoot}-committed`;
+    try {
+      runGit(repoRoot, ["worktree", "add", "-b", "stale", staleRoot]);
+      runGit(repoRoot, ["worktree", "add", "-b", "committed", committedRoot]);
+
+      // A worktree left dirty a long time ago: edits, but nothing recent.
+      writeFileSync(join(staleRoot, "wip.ts"), "const wip = 1\n");
+      utimesSync(
+        join(staleRoot, "wip.ts"),
+        new Date(1_600_000_000_000),
+        new Date(1_600_000_000_000),
+      );
+
+      // A worktree an agent just finished in: committed, so it holds nothing uncommitted at all.
+      writeFileSync(join(committedRoot, "done.ts"), "const done = 1\n");
+      runGit(committedRoot, ["add", "."]);
+      runGit(committedRoot, ["commit", "-m", "agent finished"]);
+
+      const worktrees = await loadWorktrees(repoRoot);
+      const summaries = await loadWorktreeSummaries(worktrees, repoRoot);
+      const byPath = new Map(summaries.map((entry) => [entry.path, entry]));
+      const ordered = orderWorktrees(worktrees, byPath);
+
+      expect(ordered[0]?.path).toBe(committedRoot);
+      expect(byPath.get(staleRoot)?.lastActivityAt).toBeLessThan(
+        byPath.get(committedRoot)?.lastActivityAt ?? 0,
+      );
+    } finally {
+      rmSync(repoRoot, { force: true, recursive: true });
+      rmSync(staleRoot, { force: true, recursive: true });
+      rmSync(committedRoot, { force: true, recursive: true });
     }
   });
 });

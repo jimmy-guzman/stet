@@ -14,6 +14,7 @@ import type { ChangedFile, GitModel } from "@/git/model";
 import { Git, GitLive } from "@/git/service";
 import { defaultExpandedDirectories, expandAncestorsForPath } from "@/git/tree";
 import type { FileTreeRow } from "@/git/tree";
+import type { Worktree } from "@/git/worktree";
 import { ProcessLive } from "@/process";
 import { state } from "@/state";
 import { stripGitEnv } from "@/utils/env";
@@ -54,10 +55,10 @@ export function loadWorktrees(repoRoot: string) {
   );
 }
 
-export function loadWorktreeSummaries(paths: readonly string[]) {
+export function loadWorktreeSummaries(worktrees: readonly Worktree[], repoRoot: string) {
   return Effect.runPromise(
     Git.pipe(
-      Effect.flatMap((git) => git.worktreeSummaries(paths)),
+      Effect.flatMap((git) => git.worktreeSummaries(worktrees, repoRoot)),
       Effect.provide(GitTestLive),
     ),
   );
@@ -111,7 +112,7 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setNotice(undefined);
     state.setGitModel(model);
     state.setRepoRoot(model.repoRoot);
-    // The fixture repo is its own main worktree, as it is at startup: the picker pins main first.
+    // The fixture repo is its own main worktree, as it is at startup (the header reads it).
     state.setMainWorktreePath(model.repoRoot);
     state.setLastChange(Date.now());
     state.seedNav(selected);

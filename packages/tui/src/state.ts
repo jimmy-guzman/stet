@@ -63,7 +63,6 @@ import {
   lastChangedAt,
   latestActivity,
   RECENT_MS,
-  recencyLevel,
   recordActivity,
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
@@ -90,7 +89,12 @@ import {
   expandAncestorsForPath,
   flattenTree,
 } from "./git/tree";
-import { mergeWorktreeSummaries, orderWorktrees, PEER_SUMMARY_MS } from "./git/worktree";
+import {
+  mergeWorktreeSummaries,
+  orderWorktrees,
+  PEER_SUMMARY_MS,
+  WORKTREE_ACTIVE_MS,
+} from "./git/worktree";
 import type { Worktree, WorktreeSummary } from "./git/worktree";
 import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./intel/protocol";
 import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from "./intel/references";
@@ -886,16 +890,19 @@ function createState() {
     );
   });
 
-  // The worktrees an agent is working in *right now*, excluding the one being inspected: those whose
-  // Newest changed-file mtime still falls inside the same RECENT_MS window every other recency cue
-  // Decays over. `latestAt` feeds the header cue's dot, so the whole group fades out together as the
-  // Other worktrees go quiet. Uncommitted work that has simply been sitting there is not "active";
-  // The picker is where that shows up.
+  // The worktrees an agent is working in right now, excluding the one being inspected. The window is
+  // WORKTREE_ACTIVE_MS, not the 30s a changed file stays fresh for: an agent pauses for minutes at a
+  // Time and is still working there, so the shorter window would blink the cue off underneath it.
+  // `latestAt` feeds the header cue's dot, so the whole group fades out together as the others go
+  // Quiet.
   const activeWorktrees = createMemo(() => {
     const root = repoRoot();
     const at = now();
     const peers = [...worktreeSummaries().values()].filter(
-      (summary) => summary.path !== root && recencyLevel(summary.lastActivityAt, at) !== "none",
+      (summary) =>
+        summary.path !== root &&
+        summary.lastActivityAt !== undefined &&
+        at - summary.lastActivityAt < WORKTREE_ACTIVE_MS,
     );
     return {
       count: peers.length,
@@ -3453,9 +3460,9 @@ function createState() {
   // The only writer of `worktreeSummaries`. Reached from two places: the picker's
   // Open (so a single-worktree repo, which the background poll skips, still fills
   // Its row) and the peer poll below.
-  function refreshWorktreeSummaries(list: readonly Worktree[]) {
+  function refreshWorktreeSummaries(list: readonly Worktree[], root: string) {
     return runtime
-      .runPromise(Git.use((git) => git.worktreeSummaries(list.map((worktree) => worktree.path))))
+      .runPromise(Git.use((git) => git.worktreeSummaries(list, root)))
       .then((summaries) => {
         setWorktreeSummaries((previous) => mergeWorktreeSummaries(previous, summaries));
       })
@@ -3477,10 +3484,10 @@ function createState() {
       .runPromise(Git.use((git) => git.worktrees(root)))
       .then((list) => {
         const selectable = list.filter((worktree) => !worktree.bare);
-        // Ordered once, here: the rows read their counts and dots live from the
-        // Summary map, but the order is fixed at open, so a summary landing while
-        // The picker is up can never reshuffle the list under the cursor.
-        const ordered = orderWorktrees(selectable, worktreeSummaries(), mainWorktreePath());
+        // Ordered once, here: the rows read their ages live from the summary map,
+        // But the order is fixed at open, so a summary landing while the picker is
+        // Up can never reshuffle the list under the cursor.
+        const ordered = orderWorktrees(selectable, worktreeSummaries());
         batch(() => {
           setWorktrees(ordered);
           // Seed the highlight on the current worktree only when no query has been
@@ -3495,7 +3502,7 @@ function createState() {
               : 0,
           );
         });
-        void refreshWorktreeSummaries(ordered);
+        void refreshWorktreeSummaries(ordered, root);
       })
       .catch((error: unknown) => {
         batch(() => {
@@ -3906,10 +3913,10 @@ function createState() {
   });
 
   // Keep every worktree's summary warm, so the header can say that an agent is working
-  // Somewhere else and the picker opens on real numbers instead of a loading row. Polled
-  // Rather than watched: only the active worktree earns an fs watcher, and the recency this
-  // Feeds is a file mtime, so a poll that runs late still reports an exact age (only its
-  // Appearance lags, by at most one tick out of the 30s RECENT_MS window).
+  // Somewhere else and the picker opens on real ages instead of a loading row. Polled
+  // Rather than watched: only the active worktree earns an fs watcher, and the ages this
+  // Feeds are real timestamps (a file mtime, a reflog mtime, a commit date), so a poll that
+  // Runs late still reports an exact age; only its appearance lags, by at most one tick.
   //
   // `git worktree list` is also the discovery mechanism, so it cannot be resolved once at
   // Startup: an agent can create a worktree mid-session. It is a cheap directory read, and a
@@ -3929,7 +3936,7 @@ function createState() {
             const list = yield* git.worktrees(root).pipe(Effect.orElseSucceed(() => []));
             const selectable = list.filter((worktree) => !worktree.bare);
             if (selectable.length > 1) {
-              yield* Effect.promise(() => refreshWorktreeSummaries(selectable));
+              yield* Effect.promise(() => refreshWorktreeSummaries(selectable, root));
             }
             yield* Effect.sleep(PEER_SUMMARY_MS);
           }
@@ -3940,23 +3947,27 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // Tick the recency clock once a second while activity is recent, then stop. Drives the
+  // Tick the recency clock once a second while anything is still fading, then stop. Drives the
   // Tree's fading recency dots, the status bar's fading activity path, and the header's
-  // Other-worktree cue (all read now()). Peer activity keys it too, not just this worktree's
-  // Log: the whole point of the cue is that it lights while the worktree you are sitting in
-  // Is quiet, and without this its dot would freeze mid-fade and its age would stop advancing.
+  // Other-worktree cue (all read now()). The two sources decay over different windows, so each
+  // Keeps the clock awake for its own: a changed file for RECENT_MS, a worktree being worked in
+  // For the much longer WORKTREE_ACTIVE_MS. Peer activity has to key it at all, or the cue's dot
+  // Would freeze mid-fade and its age would stop advancing while the worktree you sit in is quiet.
   createEffect(() => {
-    const latest = Math.max(
-      latestActivity(activityLog())?.at ?? 0,
+    const fileAt = latestActivity(activityLog())?.at ?? 0;
+    const worktreeAt = Math.max(
+      0,
       ...[...worktreeSummaries().values()].map((summary) => summary.lastActivityAt ?? 0),
     );
-    if (latest === 0 || Date.now() - latest >= RECENT_MS) {
+    const fading = () =>
+      Date.now() - fileAt < RECENT_MS || Date.now() - worktreeAt < WORKTREE_ACTIVE_MS;
+    if ((fileAt === 0 && worktreeAt === 0) || !fading()) {
       setNow(Date.now());
       return;
     }
     const timer = setInterval(() => {
       setNow(Date.now());
-      if (Date.now() - latest >= RECENT_MS) {
+      if (!fading()) {
         clearInterval(timer);
       }
     }, 1000);

@@ -4,6 +4,7 @@ import { Show } from "solid-js";
 
 import { scopeLabel } from "@/cli";
 import { RecencyDot } from "@/components/RecencyDot";
+import { WORKTREE_ACTIVE_MS } from "@/git/worktree";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { truncate } from "@/utils/text";
@@ -148,7 +149,11 @@ export function HeaderBar() {
           {(text) => (
             <box flexDirection="row" onMouseDown={() => state.openWorktreePicker()}>
               <text fg={theme.colors.text.secondary}>{SEP}</text>
-              <RecencyDot at={state.activeWorktrees().latestAt} marginRight={1} />
+              <RecencyDot
+                at={state.activeWorktrees().latestAt}
+                window={WORKTREE_ACTIVE_MS}
+                marginRight={1}
+              />
               <text fg={theme.colors.text.muted}>{text()}</text>
             </box>
           )}

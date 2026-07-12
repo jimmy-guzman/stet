@@ -36,9 +36,9 @@ beneath, and it stays.
   scoped to the changes or the whole tree.
 - Switches scope from a picker (all changes, staged, unstaged, since launch, or
   the last commit) and between git worktrees in place.
-- Shows which worktree an agent is working in: the picker lists each one with
-  its changed count and how recently it moved, busiest first, and the header
-  says when another worktree is churning while you watch this one.
+- Shows which worktree an agent is working in: the picker ranks worktrees by how
+  recently each was touched (an edit, a commit, a checkout), busiest first, and
+  the header says when another worktree is active while you watch this one.
 - Watches the filesystem and refreshes as the agent changes files, keeping the
   current file and selection stable.
 - Marks recent activity and lets you jump to the latest touched file.

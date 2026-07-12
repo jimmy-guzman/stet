@@ -73,14 +73,16 @@ export function recencyLevel(at: number | undefined, now: number): RecencyLevel 
 
 /**
  * Position of an activity within its decay window, 0 (just now) to 1 (about to Age out), or
- * undefined once it has aged past RECENT_MS (no dot). Drives the Recency dot's continuous color
- * ramp.
+ * undefined once it has aged past the window (no dot). Drives the Recency dot's continuous color
+ * ramp. `window` is a parameter because a worktree stays "being worked in" for far longer than a
+ * file stays "just changed" (see WORKTREE_ACTIVE_MS); a caller that does not pass one gets the
+ * file-level RECENT_MS.
  */
-export function recencyFraction(at: number | undefined, now: number) {
+export function recencyFraction(at: number | undefined, now: number, window = RECENT_MS) {
   if (at === undefined) {
     return undefined;
   }
 
   const elapsed = now - at;
-  return elapsed >= RECENT_MS ? undefined : Math.max(0, elapsed / RECENT_MS);
+  return elapsed >= window ? undefined : Math.max(0, elapsed / window);
 }

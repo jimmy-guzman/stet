@@ -4,6 +4,7 @@ const links = [
   { label: "GitHub", href: "https://github.com/jimmy-guzman/stet" },
   { label: "npm", href: "https://npmx.dev/package/@jimmy.codes/stet" },
   { label: "Changelog", href: "/changelog" },
+  { label: "llms.txt", href: "/llms.txt" },
   {
     label: "MIT License",
     href: "https://github.com/jimmy-guzman/stet/blob/main/LICENSE",

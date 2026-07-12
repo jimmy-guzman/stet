@@ -426,6 +426,9 @@ function createState() {
   const [blameByLine, setBlameByLine] = createSignal<ReadonlyMap<number, BlameLine>>(new Map());
   const [sessionCommits, setSessionCommits] = createSignal<ReadonlySet<string>>(new Set());
   const [branchCommits, setBranchCommits] = createSignal<ReadonlySet<string>>(new Set());
+  // The branch base is session-stable, so it is resolved on its own (per repo), separate from the
+  // Commit set that refreshes on the model drain.
+  const [branchBaseSha, setBranchBaseSha] = createSignal<string | undefined>(undefined);
   const [fileFirstSha, setFileFirstSha] = createSignal<string | undefined>(undefined);
   const [openFileWhollyNew, setOpenFileWhollyNew] = createSignal(false);
   const toggleBlame = () => setBlameEnabled((enabled) => !enabled);
@@ -969,13 +972,38 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // The branch base (`merge-base HEAD <default-branch>`) and the commits since it
-  // (`branchBase..HEAD`), which bound the "this branch" tier (a superset of the session set; the
-  // Ordered classify separates them). Resolved once per session on a model drain, gated on the
-  // Rail; a repo with no default branch leaves the set empty, folding the branch tier away.
-  // Disabling the rail clears it (like the blame effect).
+  // The branch base (`merge-base HEAD <default-branch>`) is session-stable, so resolve it once per
+  // Repo (keyed on `repoRoot`, not the model drain), gated on the rail; its `symbolic-ref` plus
+  // Merge-base calls stay off the hot refresh path. A repo with no default branch leaves it
+  // Undefined, folding the branch tier away.
   createEffect(() => {
     if (!blameEnabled()) {
+      setBranchBaseSha(undefined);
+      return;
+    }
+    const root = repoRoot();
+    const controller = new AbortController();
+    runtime
+      .runPromise(
+        Git.use((git) => git.branchBase(root)),
+        { signal: controller.signal },
+      )
+      .then((base) => {
+        if (!controller.signal.aborted) {
+          setBranchBaseSha(base);
+        }
+      })
+      .catch(() => {});
+    onCleanup(() => controller.abort());
+  });
+
+  // The commits since the branch base (`branchBase..HEAD`), bounding the "this branch" tier (a
+  // Superset of the session set; the ordered classify separates them). Re-run on a model drain (a
+  // New commit moves HEAD) and when the base resolves, but only a bare rev-list, not the merge-base
+  // Resolution above. Disabling the rail clears it (like the blame effect).
+  createEffect(() => {
+    const base = branchBaseSha();
+    if (!blameEnabled() || base === undefined) {
       setBranchCommits(new Set<string>());
       return;
     }
@@ -983,18 +1011,10 @@ function createState() {
     const controller = new AbortController();
     runtime
       .runPromise(
-        Git.use((git) =>
-          git
-            .branchBase(model.repoRoot)
-            .pipe(
-              Effect.flatMap((base) =>
-                base === undefined
-                  ? Effect.succeed(new Set<string>())
-                  : git.commitsSince(model.repoRoot, base),
-              ),
-            ),
-        ),
-        { signal: controller.signal },
+        Git.use((git) => git.commitsSince(model.repoRoot, base)),
+        {
+          signal: controller.signal,
+        },
       )
       .then((shas) => {
         if (!controller.signal.aborted) {
@@ -1005,26 +1025,47 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // Per-line blame plus the file's first commit (the `initial` boundary) for the open file,
-  // Refreshed on the same trigger as the diff. A wholly-new file (untracked/added) is
-  // Unblameable, so skip the git calls and mark every line uncommitted from the model; otherwise
-  // Map each blame line by its working-tree line number for O(1) rail lookups. Abort/re-run on
-  // File switch like the diff pipeline so a stale blame never lands.
+  // The open file's introducing commit (the `initial` boundary) is static per path, so resolve it
+  // On a file switch (keyed on `selectedPath`/`repoRoot`), not on every model drain like blame; an
+  // Untracked file has no history and resolves to undefined. Disabling the rail clears it.
+  createEffect(() => {
+    const path = selectedPath();
+    if (!blameEnabled() || path === undefined) {
+      setFileFirstSha(undefined);
+      return;
+    }
+    const root = repoRoot();
+    const controller = new AbortController();
+    runtime
+      .runPromise(
+        Git.use((git) => git.fileFirstCommit(root, path)),
+        { signal: controller.signal },
+      )
+      .then((sha) => {
+        if (!controller.signal.aborted && selectedPath() === path) {
+          setFileFirstSha(sha);
+        }
+      })
+      .catch(() => {});
+    onCleanup(() => controller.abort());
+  });
+
+  // Per-line blame for the open file, refreshed on the same trigger as the diff. A wholly-new file
+  // (untracked/added) is unblameable, so skip the git call and mark every line uncommitted from the
+  // Model; otherwise map each blame line by its line number for O(1) rail lookups. The previous
+  // File's map is cleared before the async reload so its lines never decorate this file, and the
+  // Reload aborts/re-runs on a file switch like the diff pipeline so a stale blame never lands.
   createEffect(() => {
     if (!blameEnabled()) {
       batch(() => {
         setBlameByLine(new Map());
-        setFileFirstSha(undefined);
         setOpenFileWhollyNew(false);
       });
       return;
     }
     const src = diffSource();
     if (src === undefined) {
-      batch(() => {
-        setBlameByLine(new Map());
-        setFileFirstSha(undefined);
-      });
+      setBlameByLine(new Map());
       return;
     }
     const kind = src.model.changedByPath.get(src.path)?.kind;
@@ -1032,40 +1073,31 @@ function createState() {
       batch(() => {
         setOpenFileWhollyNew(true);
         setBlameByLine(new Map());
-        setFileFirstSha(undefined);
       });
       return;
     }
-    setOpenFileWhollyNew(false);
+    // Clear the previous file's blame before the async reload so its lines never decorate this one.
+    batch(() => {
+      setOpenFileWhollyNew(false);
+      setBlameByLine(new Map());
+    });
     // Blame the diff's right side, not always the working tree: a `staged`/`last-commit`/`commit`
-    // Scope shows the index or a revision, whose line numbers only match the rail when blamed at
-    // That same rev. `worktree`/`empty` sides (and unchanged files) blame the working tree.
-    const newSide = src.file === undefined ? undefined : fileDiffSides(src.scope, src.file).newSide;
-    const rev = newSide?.kind === "git" ? newSide.spec.split(":")[0] || undefined : undefined;
+    // Scope shows the index or a revision, whose line numbers only match the rail when blamed there.
+    // `worktree`/`empty` sides (and unchanged files) blame the working tree.
+    const side = src.file === undefined ? undefined : fileDiffSides(src.scope, src.file).newSide;
     const controller = new AbortController();
     runtime
       .runPromise(
-        Git.use((git) =>
-          Effect.all(
-            [
-              git.blame(src.model.repoRoot, src.path, rev),
-              git.fileFirstCommit(src.model.repoRoot, src.path),
-            ],
-            { concurrency: "unbounded" },
-          ),
-        ),
+        Git.use((git) => git.blame(src.model.repoRoot, src.path, side)),
         {
           signal: controller.signal,
         },
       )
-      .then(([lines, firstSha]) => {
+      .then((lines) => {
         if (controller.signal.aborted || selectedPath() !== src.path) {
           return;
         }
-        batch(() => {
-          setBlameByLine(new Map(lines.map((line) => [line.line, line])));
-          setFileFirstSha(firstSha);
-        });
+        setBlameByLine(new Map(lines.map((line) => [line.line, line])));
       })
       .catch(() => {});
     onCleanup(() => controller.abort());
@@ -1637,9 +1669,6 @@ function createState() {
     const value = counts();
     return `${value.errors > 0 ? `${levelGlyph("error")}${value.errors}` : ""}${value.warnings > 0 ? ` ${levelGlyph("warning")}${value.warnings}` : ""}`.trim();
   });
-  // The caret line's provenance for the status bar: the band (its glyph + color) plus a
-  // Compact detail. An uncommitted line reads as working tree; a committed line as its age,
-  // Author, and summary. Undefined when the rail is off or the caret sits on a removed row.
   // The caret line's commit for the status bar: `author · age · subject` for a committed line
   // (the band is the leading glyph the bar draws, not repeated in words), `uncommitted · working
   // Tree` otherwise. Undefined when the rail is off or the caret sits on a row git can't attribute.
@@ -1654,8 +1683,9 @@ function createState() {
         ? "uncommitted · working tree"
         : [
             provenance.blame.author,
-            // `now()` is milliseconds; `relativeTime` and `authorTime` are unix seconds.
-            relativeTime(provenance.blame.authorTime, now() / 1000),
+            // The true wall clock in seconds, not the recency `now()` signal, which freezes ~30s
+            // After the last git activity and would under-report the age in an idle session.
+            relativeTime(provenance.blame.authorTime, Date.now() / 1000),
             provenance.blame.summary,
           ]
             .filter((part) => part !== "")
@@ -1737,12 +1767,20 @@ function createState() {
     }
     const provisioning = provisioningStatus();
     const displayStatus = provisioning ?? (checksRunning() ? "checking…" : status());
+    // A glyph belongs only to an actual status message. Activity alone is ambient and idle is
+    // Empty, so neither carries a level: the bar renders the text bare, never a lone glyph.
+    const level =
+      displayStatus === ""
+        ? undefined
+        : provisioning !== undefined || checksRunning()
+          ? "info"
+          : statusLevel();
     // In provenance mode the caret line's commit fills the whole bar (a blame inspector),
     // Replacing the ambient recent-file + status lead. The transient tiers above (intel pull,
-    // Held notice, cursor finding) return before this, so an error or an acknowledgment is
-    // Never hidden behind blame.
+    // Held notice, cursor finding) and an error/warning-level ambient status (a failed check)
+    // Preempt it, so a real problem is never hidden behind blame; a plain "checking…"/idle does not.
     const commit = caretProvenanceDetail();
-    if (commit !== undefined) {
+    if (commit !== undefined && level !== "error" && level !== "warning") {
       // Truncate against the bar's two paddings plus the band glyph + its space lead.
       const text = truncate(commit.text, Math.max(1, terminalWidth() - 4));
       return {
@@ -1777,15 +1815,6 @@ function createState() {
         : truncateLeft(recent.path, Math.max(1, textBudget - displayStatus.length));
     const message = truncate(displayStatus, Math.max(1, textBudget - activityPath.length));
     const text = [activityPath, message].filter((part) => part !== "").join(" · ");
-    // A glyph belongs only to an actual status message. Activity alone is ambient
-    // And idle is empty, so neither carries a level: the bar renders the text bare,
-    // Never a lone glyph.
-    const level =
-      displayStatus === ""
-        ? undefined
-        : provisioning !== undefined || checksRunning()
-          ? "info"
-          : statusLevel();
     // The recent file's git change kind tints the path (the tree's changed-file color);
     // Its timestamp feeds both the fading tint and the recency dot the bar draws.
     const changeKind =

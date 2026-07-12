@@ -10,25 +10,29 @@ export interface BlameLine {
   summary: string;
 }
 
-/** Blame's sentinel sha for a working-tree line that is not yet committed. */
-const UNCOMMITTED_SHA = "0000000000000000000000000000000000000000";
-
 export function blameArgs(path: string, rev?: string) {
   return ["git", "blame", "--porcelain", ...(rev === undefined ? [] : [rev]), "--", path];
+}
+
+// Blame the content piped on stdin (the diff's right side) as this path's working copy, so a
+// Side with no revision (the index) can be blamed with line numbers that match the shown rows.
+export function blameContentsArgs(path: string) {
+  return ["git", "blame", "--porcelain", "--contents=-", "--", path];
 }
 
 // `--porcelain` opens each line entry with `<sha> <orig> <final> [<count>]`, emits the
 // Extended headers (author/author-time/summary/...) only on a sha's first appearance, and
 // Closes the entry with a TAB-prefixed content line. So we carry each sha's metadata in a
 // Map and resolve every line (first or repeat) against it, keying on the final line number.
-// The all-zero sha marks an uncommitted working-tree line.
+// The all-zero sha (any length) marks an uncommitted working-tree line; the sha is 40 hex in a
+// SHA-1 repo and 64 in a SHA-256 one.
 export function parseBlamePorcelain(stdout: string): BlameLine[] {
   const meta = new Map<string, { author: string; authorTime: number; summary: string }>();
   const lines: BlameLine[] = [];
   let sha: string | undefined;
   let lineNumber = 0;
   for (const record of stdout.split("\n")) {
-    const header = /^(?<sha>[0-9a-f]{40}) \d+ (?<final>\d+)/.exec(record);
+    const header = /^(?<sha>[0-9a-f]{40,64}) \d+ (?<final>\d+)/.exec(record);
     if (header?.groups !== undefined) {
       sha = header.groups.sha;
       lineNumber = Number.parseInt(header.groups.final ?? "", 10);
@@ -45,7 +49,7 @@ export function parseBlamePorcelain(stdout: string): BlameLine[] {
         line: lineNumber,
         sha,
         summary: info?.summary ?? "",
-        uncommitted: sha === UNCOMMITTED_SHA,
+        uncommitted: /^0+$/.test(sha),
       });
       continue;
     }

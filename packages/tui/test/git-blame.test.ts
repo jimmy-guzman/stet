@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Effect, Layer } from "effect";
 
 import { blameArgs, parseBlamePorcelain } from "@/git/blame";
+import type { PatchSide } from "@/git/file-patch";
 import { Git, GitLive } from "@/git/service";
 import { ProcessLive } from "@/process";
 
@@ -14,10 +15,10 @@ const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
 const ZERO = "0".repeat(40);
 
-const blame = (repoRoot: string, path: string, rev?: string) =>
+const blame = (repoRoot: string, path: string, side?: PatchSide) =>
   Effect.runPromise(
     Git.pipe(
-      Effect.flatMap((git) => git.blame(repoRoot, path, rev)),
+      Effect.flatMap((git) => git.blame(repoRoot, path, side)),
       Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
     ),
   );
@@ -119,6 +120,30 @@ describe("parseBlamePorcelain", () => {
       [3, "Jane Doe", "first"],
     ]);
   });
+
+  test("parses 64-char SHA-256 headers and flags an all-zero sha as uncommitted", () => {
+    const sha256 = "a".repeat(64);
+    const stream = [
+      `${sha256} 1 1 1`,
+      "author Jane Doe",
+      "author-time 1700000000",
+      "summary commit",
+      "filename f.txt",
+      "\tline one",
+      `${"0".repeat(64)} 2 2 1`,
+      "author Not Committed Yet",
+      "author-time 1700000100",
+      "summary wip",
+      "\tline two",
+      "",
+    ].join("\n");
+
+    const lines = parseBlamePorcelain(stream);
+    expect(lines.map((entry) => [entry.sha, entry.uncommitted])).toEqual([
+      [sha256, false],
+      ["0".repeat(64), true],
+    ]);
+  });
 });
 
 describe("Git.blame", () => {
@@ -142,7 +167,7 @@ describe("Git.blame", () => {
     expect(await blame(repo, "new.txt")).toEqual([]);
   });
 
-  test("blames the given revision, not the working tree", async () => {
+  test("blames a git-revision side, not the working tree", async () => {
     const repo = createFixtureRepo("git-blame-rev-", { "a.txt": "one\ntwo\n" });
     writeFileSync(join(repo, "a.txt"), "one\ntwo\nthree\n");
     runGit(repo, ["add", "."]);
@@ -155,8 +180,21 @@ describe("Git.blame", () => {
     expect(worktree[3]?.uncommitted).toBe(true);
 
     // At the first commit the file had two lines, all committed.
-    const atFirst = await blame(repo, "a.txt", "HEAD~1");
+    const atFirst = await blame(repo, "a.txt", { kind: "git", spec: "HEAD~1:a.txt" });
     expect(atFirst).toHaveLength(2);
     expect(atFirst.some((line) => line.uncommitted)).toBe(false);
+  });
+
+  test("blames the index side (staged content) via --contents, ignoring unstaged edits", async () => {
+    const repo = createFixtureRepo("git-blame-index-", { "a.txt": "one\n" });
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+    runGit(repo, ["add", "."]); // Index now has two lines
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\nthree\n"); // Unstaged third line on top
+
+    // The index (`:a.txt`) has two lines; the second is staged-but-not-committed.
+    const index = await blame(repo, "a.txt", { kind: "git", spec: ":a.txt" });
+    expect(index).toHaveLength(2);
+    expect(index[0]?.uncommitted).toBe(false);
+    expect(index[1]?.uncommitted).toBe(true);
   });
 });

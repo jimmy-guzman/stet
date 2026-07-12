@@ -4,7 +4,7 @@ import type { DiffScope } from "@/cli";
 import { Process } from "@/process";
 import type { CommandError } from "@/process";
 
-import { blameArgs, parseBlamePorcelain } from "./blame";
+import { blameArgs, blameContentsArgs, parseBlamePorcelain } from "./blame";
 import type { BlameLine } from "./blame";
 import { GitError } from "./errors";
 import {
@@ -69,13 +69,13 @@ export class Git extends Context.Service<
       file: ChangedFile,
     ) => Effect.Effect<BinaryDiff, GitError>;
     /**
-     * Per-line git blame of the file at `rev` (the diff's right side), or the working tree when
-     * omitted; empty for a path git can't blame.
+     * Per-line git blame of the diff's right `side` (a revision, or the index via `--contents`), or
+     * the working tree when the side is omitted/worktree; empty for a path git can't blame.
      */
     readonly blame: (
       repoRoot: string,
       path: string,
-      rev?: string,
+      side?: PatchSide,
     ) => Effect.Effect<BlameLine[], GitError>;
     /**
      * Merge-base of HEAD with the default branch (where this branch left it); undefined when none
@@ -168,15 +168,35 @@ export const GitLive = Layer.effect(
           Effect.mapError(toGitError),
         );
       },
-      // Exit 128 is a path git can't blame (untracked or brand-new): the state layer already
-      // Knows those files are wholly uncommitted from the model, so allow it and parse the
-      // Empty stdout to an empty list instead of failing the load.
-      blame: (repoRoot, path, rev) =>
-        process.run(blameArgs(path, rev), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
-          retryTransient,
-          Effect.map((result) => parseBlamePorcelain(result.stdout)),
-          Effect.mapError(toGitError),
-        ),
+      // Blame the diff's right side. Exit 128 is a path git can't blame (untracked or brand-new):
+      // The state layer already knows those files are wholly uncommitted from the model, so allow
+      // It and parse the empty stdout to an empty list instead of failing the load.
+      blame: (repoRoot, path, side) => {
+        const parsed = (args: readonly string[], stdin?: string) =>
+          process
+            .run(args, repoRoot, {
+              allowedExitCodes: [0, 128],
+              ...(stdin === undefined ? {} : { stdin }),
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((result) => parseBlamePorcelain(result.stdout)),
+              Effect.mapError(toGitError),
+            );
+        // A worktree/empty/omitted side, or an unchanged file, blames the working-tree file.
+        if (side === undefined || side.kind !== "git") {
+          return parsed(blameArgs(path));
+        }
+        // `<rev>:path` blames at that revision; `:path` (the index) has no rev, so read its staged
+        // Content with `git show` and blame it via `--contents=-`, keeping line numbers aligned.
+        const rev = side.spec.slice(0, side.spec.indexOf(":"));
+        return rev === ""
+          ? process.run(["git", "show", side.spec], repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+              Effect.mapError(toGitError),
+              Effect.flatMap((shown) => parsed(blameContentsArgs(path), shown.stdout)),
+            )
+          : parsed(blameArgs(path, rev));
+      },
       // The default branch's `origin/HEAD` ref, then local `main`/`master`, is tried in turn; the
       // First whose merge-base with HEAD resolves is the branch base. Exit 1/128 (missing ref, no
       // Common ancestor) is a normal miss, not a failure, so the fallback continues.

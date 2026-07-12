@@ -4,6 +4,8 @@ import type { DiffScope } from "@/cli";
 import { Process } from "@/process";
 import type { CommandError } from "@/process";
 
+import { blameArgs, blameContentsArgs, parseBlamePorcelain } from "./blame";
+import type { BlameLine } from "./blame";
 import { GitError } from "./errors";
 import {
   buildFilePatch,
@@ -27,6 +29,14 @@ import {
   untrackedDiffArgs,
 } from "./model";
 import type { ChangedFile, GitModel, Worktree } from "./model";
+import {
+  commitsSinceArgs,
+  defaultBranchArgs,
+  firstCommitArgs,
+  mergeBaseArgs,
+  parseFirstCommit,
+  parseRevList,
+} from "./provenance";
 import { parseSearchOutput, searchArgs } from "./search";
 import type { SearchMatch, SearchOptions } from "./search";
 
@@ -58,6 +68,20 @@ export class Git extends Context.Service<
       scope: DiffScope,
       file: ChangedFile,
     ) => Effect.Effect<BinaryDiff, GitError>;
+    /**
+     * Per-line git blame of the diff's right `side` (a revision, or the index via `--contents`), or
+     * the working tree when the side is omitted/worktree; empty for a path git can't blame.
+     */
+    readonly blame: (
+      repoRoot: string,
+      path: string,
+      side?: PatchSide,
+    ) => Effect.Effect<BlameLine[], GitError>;
+    /**
+     * Merge-base of HEAD with the default branch (where this branch left it); undefined when none
+     * resolves.
+     */
+    readonly branchBase: (repoRoot: string) => Effect.Effect<string | undefined, GitError>;
     readonly changedFiles: (
       repoRoot: string,
       scope: DiffScope,
@@ -65,11 +89,18 @@ export class Git extends Context.Service<
       Pick<GitModel, "changed" | "changedByPath" | "scopeKey" | "branch">,
       GitError
     >;
+    /** Commit SHAs reachable from HEAD but not `base`, i.e. everything committed this session. */
+    readonly commitsSince: (repoRoot: string, base: string) => Effect.Effect<Set<string>, GitError>;
     readonly fileDiff: (
       repoRoot: string,
       scope: DiffScope,
       file: ChangedFile,
     ) => Effect.Effect<string, GitError>;
+    /** The commit that introduced the file, or undefined when it can't be resolved. */
+    readonly fileFirstCommit: (
+      repoRoot: string,
+      path: string,
+    ) => Effect.Effect<string | undefined, GitError>;
     /**
      * The full text of the side an expanded gap reveals (the new side, or the old side for a
      * deletion). Loaded lazily on the first gap expansion in a file, never on the diff hot path.
@@ -137,6 +168,57 @@ export const GitLive = Layer.effect(
           Effect.mapError(toGitError),
         );
       },
+      blame: (repoRoot, path, side) => {
+        // Exit 128 is an unblameable path (untracked); the model already treats those as wholly
+        // Uncommitted, so parse its empty stdout to an empty list rather than fail the load.
+        const parsed = (args: readonly string[], stdin?: string) =>
+          process
+            .run(args, repoRoot, {
+              allowedExitCodes: [0, 128],
+              ...(stdin === undefined ? {} : { stdin }),
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((result) => parseBlamePorcelain(result.stdout)),
+              Effect.mapError(toGitError),
+            );
+        if (side === undefined || side.kind !== "git") {
+          return parsed(blameArgs(path));
+        }
+        // The index side (`:path`) has no rev, so blame its staged content piped from `git show`.
+        const rev = side.spec.slice(0, side.spec.indexOf(":"));
+        return rev === ""
+          ? process.run(["git", "show", side.spec], repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+              Effect.mapError(toGitError),
+              Effect.flatMap((shown) => parsed(blameContentsArgs(path), shown.stdout)),
+            )
+          : parsed(blameArgs(path, rev));
+      },
+      // The default branch's `origin/HEAD` ref, then local `main`/`master`, is tried in turn; the
+      // First whose merge-base with HEAD resolves is the branch base. Exit 1/128 (missing ref, no
+      // Common ancestor) is a normal miss, not a failure, so the fallback continues.
+      branchBase: (repoRoot) => {
+        const mergeBase = (ref: string) =>
+          process
+            .run(mergeBaseArgs(ref), repoRoot, { allowedExitCodes: [0, 1, 128] })
+            .pipe(Effect.map((result) => result.stdout.trim() || undefined));
+        return process.run(defaultBranchArgs(), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+          Effect.flatMap((result) =>
+            [result.stdout.trim(), "main", "master"]
+              .filter((ref) => ref !== "")
+              .reduce<Effect.Effect<string | undefined, CommandError>>(
+                (found, ref) =>
+                  found.pipe(
+                    Effect.flatMap((base) =>
+                      base === undefined ? mergeBase(ref) : Effect.succeed(base),
+                    ),
+                  ),
+                Effect.succeed(undefined),
+              ),
+          ),
+          Effect.mapError(toGitError),
+        );
+      },
       changedFiles: (repoRoot, scope) =>
         Effect.all(
           [
@@ -158,6 +240,14 @@ export const GitLive = Layer.effect(
               porcelain.stdout,
             ),
           ),
+          Effect.mapError(toGitError),
+        ),
+      // Exit 128 is an unborn HEAD or an unknown base ref; the empty set then means "nothing
+      // Committed this session", so every committed line reads as `earlier`.
+      commitsSince: (repoRoot, base) =>
+        process.run(commitsSinceArgs(base), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+          retryTransient,
+          Effect.map((result) => parseRevList(result.stdout)),
           Effect.mapError(toGitError),
         ),
       // The per-file patch is computed in-process from the scope's two endpoints
@@ -213,6 +303,14 @@ export const GitLive = Layer.effect(
           ),
         );
       },
+      // Exit 128 is an unborn HEAD or a path with no history; the empty stdout parses to
+      // Undefined, so no line reads `initial` rather than failing the load.
+      fileFirstCommit: (repoRoot, path) =>
+        process.run(firstCommitArgs(path), repoRoot, { allowedExitCodes: [0, 128] }).pipe(
+          retryTransient,
+          Effect.map((result) => parseFirstCommit(result.stdout)),
+          Effect.mapError(toGitError),
+        ),
       fileSource: (repoRoot, scope, file) => {
         const { newSide, oldSide } = fileDiffSides(scope, file);
         return fetchSide(repoRoot, file.kind === "deleted" ? oldSide : newSide, file.path).pipe(

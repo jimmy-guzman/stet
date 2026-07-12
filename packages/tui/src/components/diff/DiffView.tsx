@@ -17,6 +17,7 @@ import { caretCell } from "@/viewer/anchor";
 
 import { CommandMenu } from "../CommandMenu";
 import { isRightClick } from "../mouse";
+import { provenanceGlyph } from "../provenance";
 import { CaretCard } from "./CaretCard";
 import { createLineMeasurer } from "./line-measure";
 
@@ -145,8 +146,9 @@ export function DiffView() {
   });
   // The gutter is a change bar, the number, then the glyph: fixed cells left of the code,
   // So a clean line reserves the bar/glyph columns and never shifts (bar + number + space
-  // + glyph + space).
-  const gutterWidth = () => numberWidth() + 4;
+  // + glyph + space). The provenance rail adds one fixed cell on the far left when on, so
+  // Turning it on grows the gutter by exactly one column and never oscillates per line.
+  const gutterWidth = () => numberWidth() + 4 + (state.blameEnabled() ? 1 : 0);
 
   const contentWidth = () =>
     Math.max(1, state.terminalWidth() - state.sidebarWidth() - 2 - gutterWidth());
@@ -465,6 +467,20 @@ export function DiffView() {
       : theme.colors.severity[severity];
   };
 
+  // The provenance rail: a width-1 band cell (blank on a row git can't attribute, so the
+  // Gutter never shifts), the band's glyph weight colored by its provenance token. Only
+  // Rendered when the rail is on; the gutter reserves its cell in `gutterWidth`. Returns glyph
+  // And color together so the one `provenanceForRow` lookup serves both (memoized per row below).
+  const railCell = (row: DiffLineRow) => {
+    const provenance = state.provenanceForRow(row);
+    return provenance === undefined
+      ? { color: theme.colors.diff.lineNumberFg, glyph: " " }
+      : {
+          color: theme.colors.provenance[provenance.band],
+          glyph: provenanceGlyph(provenance.band),
+        };
+  };
+
   // Each line's background: a find match wins, else a faint add/remove tint (the change
   // Bar and colored number carry the diff state; this is just a subtle block cue). The
   // Cursor lift brightens whatever state the line has rather than replacing it, so a
@@ -584,133 +600,146 @@ export function DiffView() {
                 >
                   <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.faint}>
                     {`${markerGlyph(row())
-                      .padStart(numberWidth() + 1)
+                      .padStart(numberWidth() + 1 + (state.blameEnabled() ? 1 : 0))
                       .padEnd(gutterWidth())}${markerLabel(row())}`}
                   </text>
                 </box>
               }
             >
-              {(line) => (
-                <box
-                  // Own the line selection here, so disable OpenTUI's native text
-                  // Selection on the row (it would otherwise start its own drag
-                  // Highlight and copy button, fighting our band).
-                  ref={(el) => (el.selectable = false)}
-                  width="100%"
-                  flexDirection="row"
-                  // Explicit per-row height in both modes, from the same `heights()`
-                  // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
-                  // Transition does not relayout the text leaf, so a `z` toggle into
-                  // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
-                  height={heights()[window().start + rowIndex] ?? 1}
-                  onMouseDown={(event: MouseEvent) => {
-                    event.stopPropagation();
-                    // Shift-click extends a whole-line selection to the clicked row,
-                    // Keeping the anchor; a plain click sets the caret (and clears any
-                    // Selection via setCursorRow), landing on the clicked word.
-                    if (event.modifiers.shift) {
-                      batch(() => {
-                        state.setFocusedPane("diff");
-                        state.extendSelectionTo(line().navIndex);
-                      });
-                      return;
-                    }
-                    // Remember where a drag would start from, so onMouseDrag can
-                    // Follow the pointer by the event's live y (see navIndexForRow).
-                    dragOrigin = { rowIndex: window().start + rowIndex, y: event.y };
-                    batch(() => {
-                      state.setFocusedPane("diff");
-                      state.setCursorRow(line().navIndex);
-                      // Land the caret on the clicked word: map the screen x onto a
-                      // Content column (past the sidebar, viewer border, gutter, sign),
-                      // Then snap to the word that owns it.
-                      const content = line()
-                        .spans.map((part) => part.text)
-                        .join("");
-                      // The horizontal scroll offset only applies in scroll mode; in
-                      // Wrap mode there is none (a click on a wrapped continuation row
-                      // Stays approximate, the v1 wrap caret limitation).
-                      const column =
-                        event.x -
-                        (state.sidebarWidth() + 1 + gutterWidth()) +
-                        (wrap() ? 0 : scrollX());
-                      if (column >= 0) {
-                        const index = columnToIndex(content, column);
-                        state.setCursorColumn(wordAt(content, index)?.start ?? index);
-                      } else {
-                        // A click on the gutter/sign selects the line, not a symbol:
-                        // `y` then copies path:line.
-                        state.setCaretLineLevel(true);
-                      }
-                    });
-                    // A right-click opens the context menu on the symbol just landed
-                    // On (outside the batch above so the caret memos are fresh when the
-                    // Menu reads them); a left-click leaves today's caret-move behavior.
-                    if (isRightClick(event)) {
-                      state.openCommandMenu("viewer");
-                    }
-                  }}
-                  // Drag extends the selection. OpenTUI pins drag events to the first
-                  // Row once captured, so derive the target row from the live event.y
-                  // Against the press origin rather than this handler's own `line()`.
-                  onMouseDrag={(event: MouseEvent) => {
-                    event.stopPropagation();
-                    const origin = dragOrigin;
-                    if (origin === undefined) {
-                      return;
-                    }
-                    const targetRow = Math.max(
-                      0,
-                      Math.min(origin.rowIndex + (event.y - origin.y), rows().length - 1),
-                    );
-                    const nav = navIndexForRow(targetRow);
-                    if (nav !== undefined) {
-                      batch(() => {
-                        state.setFocusedPane("diff");
-                        state.extendSelectionTo(nav);
-                      });
-                    }
-                  }}
-                  onMouseDragEnd={() => {
-                    dragOrigin = undefined;
-                  }}
-                >
-                  <text
-                    ref={(el) => (el.selectable = false)}
-                    fg={changeBarColor(line())}
-                    bg={gutterBackground(line())}
-                  >
-                    {changeBar(line())}
-                  </text>
-                  <text
-                    ref={(el) => (el.selectable = false)}
-                    fg={gutterNumberColor(line())}
-                    bg={gutterBackground(line())}
-                  >
-                    {`${lineLabel(line())} `}
-                  </text>
-                  <text
-                    ref={(el) => (el.selectable = false)}
-                    fg={diagnosticColor(line())}
-                    bg={gutterBackground(line())}
-                  >
-                    {`${diagnosticGlyph(line())} `}
-                  </text>
+              {(line) => {
+                // One provenance lookup per row, shared by the rail's glyph and color.
+                const rail = createMemo(() => railCell(line()));
+                return (
                   <box
+                    // Own the line selection here, so disable OpenTUI's native text
+                    // Selection on the row (it would otherwise start its own drag
+                    // Highlight and copy button, fighting our band).
                     ref={(el) => (el.selectable = false)}
-                    flexGrow={1}
-                    backgroundColor={contentBackground(line())}
+                    width="100%"
+                    flexDirection="row"
+                    // Explicit per-row height in both modes, from the same `heights()`
+                    // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
+                    // Transition does not relayout the text leaf, so a `z` toggle into
+                    // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
+                    height={heights()[window().start + rowIndex] ?? 1}
+                    onMouseDown={(event: MouseEvent) => {
+                      event.stopPropagation();
+                      // Shift-click extends a whole-line selection to the clicked row,
+                      // Keeping the anchor; a plain click sets the caret (and clears any
+                      // Selection via setCursorRow), landing on the clicked word.
+                      if (event.modifiers.shift) {
+                        batch(() => {
+                          state.setFocusedPane("diff");
+                          state.extendSelectionTo(line().navIndex);
+                        });
+                        return;
+                      }
+                      // Remember where a drag would start from, so onMouseDrag can
+                      // Follow the pointer by the event's live y (see navIndexForRow).
+                      dragOrigin = { rowIndex: window().start + rowIndex, y: event.y };
+                      batch(() => {
+                        state.setFocusedPane("diff");
+                        state.setCursorRow(line().navIndex);
+                        // Land the caret on the clicked word: map the screen x onto a
+                        // Content column (past the sidebar, viewer border, gutter, sign),
+                        // Then snap to the word that owns it.
+                        const content = line()
+                          .spans.map((part) => part.text)
+                          .join("");
+                        // The horizontal scroll offset only applies in scroll mode; in
+                        // Wrap mode there is none (a click on a wrapped continuation row
+                        // Stays approximate, the v1 wrap caret limitation).
+                        const column =
+                          event.x -
+                          (state.sidebarWidth() + 1 + gutterWidth()) +
+                          (wrap() ? 0 : scrollX());
+                        if (column >= 0) {
+                          const index = columnToIndex(content, column);
+                          state.setCursorColumn(wordAt(content, index)?.start ?? index);
+                        } else {
+                          // A click on the gutter/sign selects the line, not a symbol:
+                          // `y` then copies path:line.
+                          state.setCaretLineLevel(true);
+                        }
+                      });
+                      // A right-click opens the context menu on the symbol just landed
+                      // On (outside the batch above so the caret memos are fresh when the
+                      // Menu reads them); a left-click leaves today's caret-move behavior.
+                      if (isRightClick(event)) {
+                        state.openCommandMenu("viewer");
+                      }
+                    }}
+                    // Drag extends the selection. OpenTUI pins drag events to the first
+                    // Row once captured, so derive the target row from the live event.y
+                    // Against the press origin rather than this handler's own `line()`.
+                    onMouseDrag={(event: MouseEvent) => {
+                      event.stopPropagation();
+                      const origin = dragOrigin;
+                      if (origin === undefined) {
+                        return;
+                      }
+                      const targetRow = Math.max(
+                        0,
+                        Math.min(origin.rowIndex + (event.y - origin.y), rows().length - 1),
+                      );
+                      const nav = navIndexForRow(targetRow);
+                      if (nav !== undefined) {
+                        batch(() => {
+                          state.setFocusedPane("diff");
+                          state.extendSelectionTo(nav);
+                        });
+                      }
+                    }}
+                    onMouseDragEnd={() => {
+                      dragOrigin = undefined;
+                    }}
                   >
-                    <StyledLine
-                      row={line()}
-                      wrap={wrap()}
-                      width={contentWidth()}
-                      scrollX={scrollX()}
-                      caret={isCursor(line()) ? caretRange() : undefined}
-                    />
+                    <Show when={state.blameEnabled()}>
+                      <text
+                        ref={(el) => (el.selectable = false)}
+                        fg={rail().color}
+                        bg={gutterBackground(line())}
+                      >
+                        {rail().glyph}
+                      </text>
+                    </Show>
+                    <text
+                      ref={(el) => (el.selectable = false)}
+                      fg={changeBarColor(line())}
+                      bg={gutterBackground(line())}
+                    >
+                      {changeBar(line())}
+                    </text>
+                    <text
+                      ref={(el) => (el.selectable = false)}
+                      fg={gutterNumberColor(line())}
+                      bg={gutterBackground(line())}
+                    >
+                      {`${lineLabel(line())} `}
+                    </text>
+                    <text
+                      ref={(el) => (el.selectable = false)}
+                      fg={diagnosticColor(line())}
+                      bg={gutterBackground(line())}
+                    >
+                      {`${diagnosticGlyph(line())} `}
+                    </text>
+                    <box
+                      ref={(el) => (el.selectable = false)}
+                      flexGrow={1}
+                      backgroundColor={contentBackground(line())}
+                    >
+                      <StyledLine
+                        row={line()}
+                        wrap={wrap()}
+                        width={contentWidth()}
+                        scrollX={scrollX()}
+                        caret={isCursor(line()) ? caretRange() : undefined}
+                      />
+                    </box>
                   </box>
-                </box>
-              )}
+                );
+              }}
             </Show>
           )}
         </Index>

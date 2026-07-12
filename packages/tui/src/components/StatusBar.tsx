@@ -6,6 +6,7 @@ import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
+import { provenanceGlyph } from "./provenance";
 import { RecencyDot } from "./RecencyDot";
 
 export function StatusBar() {
@@ -46,21 +47,40 @@ export function StatusBar() {
       paddingRight={1}
       backgroundColor={theme.colors.surface.base}
     >
-      <text fg={theme.colors.text.muted}>{state.statusHint()}</text>
-      <box flexDirection="row">
-        <RecencyDot at={state.statusRightRecencyAt()} marginRight={1} />
-        <Show when={state.statusRightPath()}>
-          <text fg={pathFg()}>{state.statusRightPath()}</text>
-        </Show>
-        <Show when={hasBothGroups()}>
-          <text>{"  "}</text>
-        </Show>
-        {/* Glyph and message share one span (both level-colored), so no empty <text>
-            sits between them to paint a phantom cell. */}
-        <Show when={state.statusRightMessage()}>
-          <text fg={status().messageFg}>{`${status().glyph}${state.statusRightMessage()}`}</text>
-        </Show>
-      </box>
+      {/* In provenance mode the caret line's commit fills the bar (a blame inspector),
+          taking the hint's place; the right group is hidden so it spans the width. A
+          transient tier (notice, finding, intel) clears the commit and restores both. The
+          band glyph leads it (the same mark the rail draws), the way the recency dot leads
+          the recent-file path. */}
+      <Show
+        when={state.statusProvenanceCommit()}
+        fallback={<text fg={theme.colors.text.muted}>{state.statusHint()}</text>}
+      >
+        {(commit) => (
+          <box flexDirection="row">
+            <text fg={theme.colors.provenance[commit().band]} marginRight={1}>
+              {provenanceGlyph(commit().band)}
+            </text>
+            <text fg={theme.colors.text.secondary}>{commit().text}</text>
+          </box>
+        )}
+      </Show>
+      <Show when={state.statusProvenanceCommit() === undefined}>
+        <box flexDirection="row">
+          <RecencyDot at={state.statusRightRecencyAt()} marginRight={1} />
+          <Show when={state.statusRightPath()}>
+            <text fg={pathFg()}>{state.statusRightPath()}</text>
+          </Show>
+          <Show when={hasBothGroups()}>
+            <text>{"  "}</text>
+          </Show>
+          {/* Glyph and message share one span (both level-colored), so no empty <text>
+              sits between them to paint a phantom cell. */}
+          <Show when={state.statusRightMessage()}>
+            <text fg={status().messageFg}>{`${status().glyph}${state.statusRightMessage()}`}</text>
+          </Show>
+        </box>
+      </Show>
     </box>
   );
 }

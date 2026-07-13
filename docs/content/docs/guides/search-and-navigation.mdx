@@ -20,11 +20,18 @@ counter tracks your place, and `esc` clears the search.
 ## Search file contents
 
 Press `ctrl-f` to open the project search pane. Results group by file with
-syntax-highlighted context around each match. `ctrl-r` toggles regex, `ctrl-x`
-toggles case sensitivity, a filter field narrows by glob (`!` excludes, e.g.
-`src/ !*.test.ts`), `ctrl-g` toggles between the changed files and the whole
-tree, and `ctrl-s` picks the scope without leaving the pane. Jumping to a match
-keeps your query and results, so `ctrl-f` brings them right back.
+syntax-highlighted context around each match.
+
+| Control      | Action                                              |
+| ------------ | --------------------------------------------------- |
+| `ctrl-r`     | toggle regular-expression matching                  |
+| `ctrl-x`     | toggle case sensitivity                             |
+| filter field | include or exclude globs, such as `src/ !*.test.ts` |
+| `ctrl-g`     | search changed files or the whole tree              |
+| `ctrl-s`     | choose a diff scope without leaving the pane        |
+
+Open a match to jump to its file. stet keeps the query and results, so
+`ctrl-f` restores the same search.
 
 ![Project content search listing matches for a term across several files](/screenshots/search.png)
 

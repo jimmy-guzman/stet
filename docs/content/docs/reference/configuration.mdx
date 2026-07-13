@@ -5,8 +5,9 @@ description: Set a permanent theme and editor for stet through an optional confi
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Configuration is optional. Without it, stet follows your terminal's light and
-dark appearance and uses sensible defaults.
+Configuration is optional. Without it, stet uses its built-in `dark` or `light`
+theme to match your terminal and reads editor commands from environment
+variables, with `vim` as the terminal-editor fallback.
 
 ## Location
 
@@ -112,13 +113,19 @@ as-is (`{repoRoot}` and `{repoUri}` in string values are replaced per repository
 }
 ```
 
-Servers you name here are programs stet runs, and any executable on your
-machine works: a command resolves from the repo's own `node_modules/.bin`,
-then your `PATH` (a `go install`ed gopls, a brew-installed lua-language-server,
-a gem-installed solargraph), and an absolute path is used as-is. They are never
-auto-downloaded. The config is yours alone: stet never reads language servers
-from the repository being inspected, so cloning a repo can never make stet
-execute a command it ships.
+For a built-in server name, stet looks in the repo's `node_modules/.bin`, then
+your `PATH`, then its cache. If none has the server, stet downloads its pinned
+package or binary. See [how servers are
+found](/docs/reference/languages#how-servers-are-found) for the download paths.
+
+An inline `command` can run any executable on your machine. stet resolves it
+from the repo's own `node_modules/.bin`, then your `PATH`, or uses an absolute
+path as-is. Examples include `gopls` installed with `go install`,
+`lua-language-server` installed with `brew`, and `solargraph` installed as a
+gem. stet never downloads an executable for an inline command.
+
+stet reads inline server commands only from your global config. It never reads
+language-server commands from the repository being inspected.
 
 <Callout>
   An entry that does not validate is reported in a notice and skipped; the rest of the config still

@@ -15,4 +15,6 @@ Release-please tracks only `packages/tui`, so commits that touch nothing under i
 - **Commit with `bunx gitzy`** (conventional commits, `type(scope): summary` with a leading gitmoji). Keep the emoji; never add a co-author or AI sign-off trailer.
 - **PR description uses two sections and nothing else:** `## What` and `## Why`. No AI-attribution line anywhere.
 - **Writing:** no em dashes; no `---` section dividers where a heading already does the job; straight quotes in prose; sentence case subheadings.
+- **Technical prose:** state behavior directly and fact-check it against source or observed output. Avoid metaphors, vague claims, rhetorical setups, and negative-list buildup.
+- **Technical literals:** use inline code for commands, flags, keybindings, paths, filenames, environment variables, config keys and values, executables, and package names. Do not code-style product prose or general concepts.
 - **After introducing a new pattern, feature, convention, or structural change, ask whether the relevant `AGENTS.md` and/or `README.md` should be updated, then apply the changes.**

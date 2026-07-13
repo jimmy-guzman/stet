@@ -52,6 +52,10 @@ export default function Page() {
           and latest activity, without putting stet in the agent loop.
         </p>
         <InstallCommand command={`curl -fsSL ${siteUrl}/install | bash`} />
+        <p className="max-w-xl text-sm text-fd-muted-foreground text-balance">
+          Run <code className="font-mono text-fd-foreground">stet</code> in a Git repository. The
+          repository tree opens beside the file viewer.
+        </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/docs"
@@ -94,14 +98,15 @@ export default function Page() {
       </section>
 
       <section className="mx-auto w-full max-w-3xl px-4 py-20 text-center">
-        <h2 className="font-mono text-2xl font-bold tracking-tight">It only inspects</h2>
+        <h2 className="font-mono text-2xl font-bold tracking-tight">A read-only view</h2>
         <p className="mx-auto mt-4 max-w-xl text-fd-muted-foreground text-balance">
-          No approvals, no accept/reject protocol, no generated reviews, no PR workflow, no
-          database. The agent never hears from stet, only from you.
+          stet reads repository state and displays it. You decide what to tell the agent and whether
+          to accept its changes. stet does not send messages, modify repository files, or keep a
+          project database.
         </p>
         <p className="mx-auto mt-6 max-w-xl font-mono text-sm text-fd-muted-foreground text-balance">
-          Stet is the proofreader's mark for "let it stand": strike a word out, add dots beneath,
-          and it stays.
+          The name comes from the proofreader's mark for "let it stand": strike a word out, add dots
+          beneath, and it stays.
         </p>
         <div className="mt-8">
           <Link

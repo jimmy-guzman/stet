@@ -10,8 +10,9 @@ that drive diagnostics. Every request here is a read: it never writes to the
 repo.
 
 <Callout>
-  No language server installed? stet fetches one on first use (preferring the repo's own, then your
-  `PATH`), so this works out of the box. Pass `--no-lsp-download` to turn that off.
+  For built-in languages, stet looks for a language server in the repo's own `node_modules/.bin`,
+  then your `PATH`, then its cache. If none has one, stet downloads a pinned server on first use.
+  Pass `--no-lsp-download` to turn downloads off.
 </Callout>
 
 ## Go to definition

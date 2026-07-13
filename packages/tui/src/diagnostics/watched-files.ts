@@ -45,22 +45,22 @@ export interface WatcherRegistration {
 
 const METHOD = "workspace/didChangeWatchedFiles";
 
+/**
+ * Determines whether a value is a non-null object.
+ *
+ * @param value - The value to inspect
+ * @returns `true` if the value is a non-null object, `false` otherwise.
+ */
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
 /**
- * The LSP change type for a path the filesystem watcher just reported. `fs.watch` reports a rename
- * when a path appears or vanishes and a change when it is rewritten in place, so presence on disk
- * separates the first pair and the flag separates them from the second.
+ * Classifies a filesystem path as created, changed, or deleted.
  *
- * **Created vs Changed is load-bearing, not cosmetic.** basedpyright rescans its import search
- * paths for _new_ packages only when at least one event in a batch is a Create; a batch of pure
- * Changes downgrades it to `LibraryWatcherContentOnlyChanged`, which re-reads the library files it
- * already knew about and so never discovers the package that was just installed. Reporting an
- * install as a Change leaves `Import "x" could not be resolved` on screen forever, which is the
- * bug. The converse matters too: reporting an ordinary edit as a Create would push pyright's source
- * watcher from a cheap `markFilesDirty` into a full reanalysis on every save.
+ * @param path - The filesystem path to classify
+ * @param renamed - Whether the filesystem event was reported as a rename
+ * @returns The path and its corresponding LSP file change type
  */
 export function watchedFileEvent(path: string, renamed: boolean): WatchedFileEvent {
   if (!existsSync(path)) {
@@ -69,6 +69,12 @@ export function watchedFileEvent(path: string, renamed: boolean): WatchedFileEve
   return { path, type: renamed ? 1 : 2 };
 }
 
+/**
+ * Extracts a URI string from a direct string or an object with a string `uri` property.
+ *
+ * @param baseUri - The URI value to inspect
+ * @returns The extracted URI string, or `undefined` when the value has no valid URI
+ */
 function baseUriString(baseUri: unknown) {
   if (typeof baseUri === "string") {
     return baseUri;
@@ -76,6 +82,12 @@ function baseUriString(baseUri: unknown) {
   return isObject(baseUri) && typeof baseUri.uri === "string" ? baseUri.uri : undefined;
 }
 
+/**
+ * Converts a file URI value into a filesystem path.
+ *
+ * @param baseUri - A URI string or an object containing a `uri` string
+ * @returns The corresponding filesystem path, or `undefined` when the value is invalid or does not use a file URI
+ */
 function baseDirectory(baseUri: unknown) {
   const uri = baseUriString(baseUri);
   if (uri === undefined) {
@@ -90,10 +102,10 @@ function baseDirectory(baseUri: unknown) {
 }
 
 /**
- * The directory an absolute glob is rooted at: its leading components up to the first wildcard.
- * This is what turns `/opt/pyenv/versions/3.14/lib/**` into a base that can actually be _watched_,
- * rather than a pattern that only ever gets matched against events some other watcher happened to
- * deliver.
+ * Determines the directory prefix before the first wildcard in a path pattern.
+ *
+ * @param pattern - The path pattern to inspect
+ * @returns The literal directory prefix, or the path separator when no prefix exists
  */
 function literalPrefix(pattern: string) {
   const parts = pattern.split(sep);
@@ -101,6 +113,14 @@ function literalPrefix(pattern: string) {
   return (wildcard === -1 ? parts.slice(0, -1) : parts.slice(0, wildcard)).join(sep) || sep;
 }
 
+/**
+ * Compiles a file-watch pattern relative to its appropriate filesystem base.
+ *
+ * @param pattern - A workspace-relative or absolute glob pattern, or an object containing a pattern and base URI
+ * @param kind - The watch-kind bitmask associated with the pattern
+ * @param repoRoot - The workspace root used for relative patterns
+ * @returns The compiled watcher, or `undefined` when the pattern has an unsupported shape or invalid base URI
+ */
 function compileGlob(
   pattern: unknown,
   kind: number,
@@ -122,6 +142,13 @@ function compileGlob(
   return undefined;
 }
 
+/**
+ * Compiles valid file-watcher registrations from client registration options.
+ *
+ * @param registerOptions - Registration options containing watcher definitions
+ * @param repoRoot - Absolute workspace root used for relative patterns
+ * @returns Compiled watchers, or an empty array when the options are invalid
+ */
 function compileWatchers(registerOptions: unknown, repoRoot: string) {
   if (!isObject(registerOptions) || !Array.isArray(registerOptions.watchers)) {
     return [];
@@ -138,6 +165,12 @@ function compileWatchers(registerOptions: unknown, repoRoot: string) {
     .filter((watcher) => watcher !== undefined);
 }
 
+/**
+ * Determines whether a value identifies a watched-file capability registration.
+ *
+ * @param value - The value to check
+ * @returns `true` if the value has a string `id` and the watched-files method, `false` otherwise.
+ */
 function isWatcherRegistration(
   value: unknown,
 ): value is { id: string; method: string; registerOptions?: unknown } {
@@ -145,10 +178,11 @@ function isWatcherRegistration(
 }
 
 /**
- * The file-watching registrations in a `client/registerCapability` payload. A server registers
- * other methods through the same request (formatting, code actions); those are dropped, since stet
- * honors only file watching. A registration whose globs all fail to compile is dropped too, so it
- * can never sit in the map matching nothing.
+ * Parses file-watching registrations from a client capability-registration payload.
+ *
+ * @param params - The capability-registration payload to parse
+ * @param repoRoot - The workspace root used to resolve relative watcher patterns
+ * @returns Compiled file-watching registrations with at least one valid watcher
  */
 export function parseWatcherRegistrations(params: unknown, repoRoot: string) {
   if (!isObject(params) || !Array.isArray(params.registrations)) {
@@ -163,7 +197,12 @@ export function parseWatcherRegistrations(params: unknown, repoRoot: string) {
     .filter((registration) => registration.watchers.length > 0) satisfies WatcherRegistration[];
 }
 
-/** The registration ids a `client/unregisterCapability` payload drops. */
+/**
+ * Extracts watcher registration IDs from an unregister capability payload.
+ *
+ * @param params - The capability payload to parse
+ * @returns The IDs of valid file-watcher registrations
+ */
 export function parseWatcherUnregistrations(params: unknown) {
   if (!isObject(params) || !Array.isArray(params.unregisterations)) {
     return [];
@@ -173,6 +212,11 @@ export function parseWatcherUnregistrations(params: unknown) {
     .map((registration) => registration.id);
 }
 
+/**
+ * Determines whether a filesystem event matches a compiled watcher.
+ *
+ * @returns `true` if the event type is enabled and its path matches the watcher, `false` otherwise.
+ */
 function matchesWatcher(watcher: CompiledWatcher, event: WatchedFileEvent) {
   // A server that registered for creates only must not be handed changes and deletions: the `kind`
   // Filter is the client's job, and honoring it is what keeps a create-only search-path watcher from
@@ -189,7 +233,11 @@ function matchesWatcher(watcher: CompiledWatcher, event: WatchedFileEvent) {
   return watcher.glob.match(within);
 }
 
-/** Whether any registered watcher asked to hear about this change. */
+/**
+ * Determines whether a filesystem event matches any registered watcher.
+ *
+ * @returns `true` if any watcher matches the event, `false` otherwise.
+ */
 export function matchesWatchers(
   registrations: readonly WatcherRegistration[],
   event: WatchedFileEvent,
@@ -200,13 +248,10 @@ export function matchesWatchers(
 }
 
 /**
- * Registered bases that lie outside the worktree: the Python search paths pyright names when the
- * venv is a conda/pyenv/global env rather than an in-repo `.venv`. The worktree watcher never sees
- * these, so each one needs a watch of its own or the server is told nothing about them.
+ * Identifies watcher bases located outside the worktree.
  *
- * Sorted, so the list is a function of the base _set_: the transport announces only a list that
- * moved, and a re-registration naming the same paths in a different order must not read as a change
- * and tear every watch down.
+ * @param repoRoot - The absolute path of the worktree root
+ * @returns A sorted list of unique watcher bases outside the worktree
  */
 export function outOfTreeBases(registrations: readonly WatcherRegistration[], repoRoot: string) {
   return [

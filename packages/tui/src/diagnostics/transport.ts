@@ -152,6 +152,15 @@ function parseDiagnosticReport(value: unknown): ParsedReport | undefined {
   return undefined;
 }
 
+/**
+ * Creates an LSP connection over the supplied message transport.
+ *
+ * @param channel - The inbound and outbound JSON-RPC message transport
+ * @param repoRoot - The repository root used to resolve watched-file registrations
+ * @param onRequest - Handles server-to-client requests that are not handled internally
+ * @param onRecheck - Runs when the server requests refreshed diagnostics
+ * @returns The LSP connection API
+ */
 export function makeTransport(
   channel: LspTransportChannel,
   repoRoot: string,

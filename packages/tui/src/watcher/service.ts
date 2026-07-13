@@ -40,6 +40,12 @@ export class Watcher extends Context.Service<
   }
 >()("stet/Watcher") {}
 
+/**
+ * Creates a stream of debounced filesystem changes for the specified watch roots.
+ *
+ * @param roots - Watch roots used to monitor worktree files
+ * @returns Batches of worktree changes, including whether each path involved a rename
+ */
 function watchStream(roots: ReturnType<typeof watchRoots>) {
   return Stream.callback<readonly WatchedChange[]>(
     (queue) =>

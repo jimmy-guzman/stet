@@ -393,6 +393,11 @@ function isSubsequence(query: string, target: string) {
   return i === query.length;
 }
 
+/**
+ * Creates the reactive state and actions for the git diff viewer.
+ *
+ * @returns The application state accessors, derived values, and actions
+ */
 function createState() {
   // Every signal below is created through `tracked`, which records how to restore that signal's
   // Initial value. `resetState` replays the lot, so the reset can never drift from the signals it

@@ -26,7 +26,11 @@ interface HostEffects {
 // (help > worktree > palette > global > pane-specific). The order of the early
 // Returns is load-bearing: an open overlay must swallow keys before any later
 // Branch can act on them. Reads use the live signal values (not a render
-// Snapshot); writes are wrapped in one `batch` so a keypress is one update.
+/**
+ * Creates a keyboard event handler for the application.
+ *
+ * @returns A handler that processes key events and updates application state.
+ */
 export function createKeyHandler(host: HostEffects) {
   const cycleFind = (direction: number) => {
     const matches = state.findMatches();

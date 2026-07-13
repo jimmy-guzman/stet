@@ -213,10 +213,11 @@ function syncDocuments(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
 }
 
 /**
- * Closes the awaited window on every run exit, interrupts included: once this run has read (or
- * abandoned) the bucket, any further publish is the server correcting itself and must nudge a
- * re-check. Leaving a URI awaited past the run would swallow exactly the correction this whole
- * channel exists to deliver.
+ * Collects diagnostics for the specified files and ends the server's publish-wait state when collection completes.
+ *
+ * @param repoRoot - The repository root containing the files
+ * @param files - The files to collect diagnostics for
+ * @returns The collected diagnostics and per-file resolution outcomes
  */
 function collectDiagnostics(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
   return collectOnce(keeper, repoRoot, files).pipe(
@@ -224,6 +225,12 @@ function collectDiagnostics(keeper: Keeper, repoRoot: string, files: ChangedFile
   );
 }
 
+/**
+ * Collects diagnostics for the specified files using the server's supported diagnostic mechanism.
+ *
+ * @param repoRoot - The repository root containing the files
+ * @returns Collected diagnostics and per-file resolution, pending, and failure states
+ */
 function collectOnce(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
   return Effect.gen(function* collect() {
     const { dirty, held, pending } = yield* syncDocuments(keeper, repoRoot, files);
@@ -529,7 +536,13 @@ export const DiagnosticsLive = Layer.effect(
 
     // A file resolves to every server that handles its extension (typescript and oxlint both claim
     // The JS/TS family), so it runs through each concurrently and emits a fresh merged snapshot as
-    // Each server finishes, rather than waiting for the slowest before showing anything.
+    /**
+     * Streams merged diagnostic snapshots as language servers complete.
+     *
+     * @param files - Files to analyze; deleted files are excluded.
+     * @param prior - Previous file states used while diagnostics are still pending.
+     * @returns A stream of diagnostic checker updates.
+     */
     function run(
       repoRoot: string,
       files: ChangedFile[],

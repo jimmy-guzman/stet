@@ -1,6 +1,6 @@
 ---
 title: Scopes & worktrees
-description: Choose what the diff compares and switch between git worktrees in place.
+description: Choose what the diff compares, and see which worktree an agent is working in.
 ---
 
 ## Switch scope
@@ -17,8 +17,20 @@ You can also start in a scope from the command line with `stet --staged` or
 
 ## Switch worktrees
 
-Press `w` to jump between git worktrees without leaving the view. Type to filter
-by branch or path, `↑`/`↓` to move, `⏎` to switch. The tree, diffs, polling, and
-checks all re-point at the chosen worktree.
+Press `w` to jump between git worktrees without leaving the view. The list is
+ranked by how recently each worktree was touched, so the one an agent is working
+in sits at the top, with its age beside it (`now`, `5m`, `3h`). Type to filter by
+branch, `↑`/`↓` to move, `⏎` to switch. The tree, diffs, polling, and checks all
+re-point at the chosen worktree. The full path of the highlighted worktree reads
+out below the list.
 
-![The worktree combobox with a filter input listing worktrees, the current one marked](/screenshots/worktree-picker.png)
+![The worktree picker, worktrees ranked by how recently each was touched, each with its age, and the highlighted one's full path below the list](/screenshots/worktree-picker.png)
+
+Touched means anything an agent or git did there: an uncommitted edit, a commit,
+a checkout, a rebase. Uncommitted changes alone would not be enough, because a
+worktree would go quiet the moment an agent committed its work, which is exactly
+when it had been busiest.
+
+While you inspect one worktree, the header says when the others are active
+(`● 2 worktrees active`), and fades the cue out as they go quiet. Click it to
+open the picker.

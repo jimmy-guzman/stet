@@ -88,18 +88,24 @@ navigation then work for those files exactly as they do for the built-ins.
 
 A language entry declares the file types it owns (`extensions`, and `filenames`
 for exact names like `Dockerfile`) and the `servers` that analyze them. A server
-is written one of three ways:
+entry is written one of these ways:
 
-| Form                                   | What it is                                                 |
-| -------------------------------------- | ---------------------------------------------------------- |
-| `"biome"`                              | a built-in, by name                                        |
-| `{ "server": "biome", "when": [...] }` | a built-in, run only in repos matching `when`              |
-| `{ "command": [...], "when"?: [...] }` | any command on your machine, optionally gated the same way |
+| Form                                   | What it is                                                  |
+| -------------------------------------- | ----------------------------------------------------------- |
+| `"biome"`                              | a built-in, by name; it runs                                |
+| `{ "server": "biome", "when": [...] }` | a built-in, run only in repos matching `when`               |
+| `{ "command": [...], "when"?: [...] }` | any command on your machine, optionally gated the same way  |
+| `{ "firstOf": [entries...] }`          | candidates in preference order; the first that applies runs |
 
 The built-in names are `typescript`, `oxlint`, `biome`, `json`, `yaml`,
 `rust-analyzer`, `basedpyright`, `ty`, and `ruff`. An inline command also takes
 `initializationOptions` and `settings`, passed to the server as-is (`{repoRoot}`
 and `{repoUri}` in string values are replaced per repository).
+
+This is the same grammar stet's own built-in table is written in: Biome ships
+with `"when": ["biome.json", "biome.jsonc"]`, and Python's server list is
+`[{ "firstOf": ["ty", "basedpyright"] }, "ruff"]`. There is no gate a built-in
+can express that your config cannot.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -135,8 +141,14 @@ say) and the language keeps its built-in list, detection included.
 
 `when` is how you say it yourself. This config is global, so it applies to every
 repo you open, and a server with nothing to gate it runs everywhere, reporting
-findings in projects that never asked for it. List the paths that mark a repo as
-one of yours, and the server runs where any of them exists:
+findings in projects that never asked for it. A `when` is one condition or an
+any-of list of them, and a condition takes one of three shapes:
+
+| Condition                                          | Holds when                                         |
+| -------------------------------------------------- | -------------------------------------------------- |
+| `"biome.json"`                                     | that path exists at the repository root            |
+| `{ "file": "...", "key": ["a", "b"] }`             | that key path exists in a TOML or JSON(C) manifest |
+| `{ "file": "pyproject.toml", "dependency": "ty" }` | a pyproject declares that dependency anywhere      |
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -144,7 +156,7 @@ one of yours, and the server runs where any of them exists:
     "typescript": {
       "servers": [
         "typescript", // always
-        { "server": "biome", "when": ["biome.json", "biome.jsonc"] }, // Biome's own gate, restored
+        { "server": "biome", "when": ["biome.json", "biome.jsonc"] }, // where the repo opted in
         { "command": ["house-lsp", "--stdio"], "when": [".houserc"] }, // yours, only where it applies
       ],
     },
@@ -152,11 +164,40 @@ one of yours, and the server runs where any of them exists:
 }
 ```
 
-Paths are relative to the repository root, and any single match activates the
-server. `when` covers the "this repo has that config file" shape, which is
-exactly what Biome's own gate is. It is paths, not predicates, so it cannot
-express stet's Python gate, which reads a declared dependency out of
-`pyproject.toml`.
+`key` is an array of segments (manifest keys may contain dots), and the file is
+parsed as TOML or JSONC by its extension, so npm dependencies are reachable as
+keys: `{ "file": "package.json", "key": ["devDependencies", "@biomejs/biome"] }`.
+`dependency` exists because pyproject declares dependencies as requirement
+strings (`"ty>=0.0.58"`) that need name parsing; it is supported for
+`pyproject.toml` only. A missing or malformed manifest simply means the
+condition is not met.
+
+### Pick one of several servers
+
+`firstOf` runs exactly one of its candidates: the first whose condition holds.
+Inside the group, a bare built-in name keeps its own gate (the group exists to
+pick by condition), and a candidate with no condition always applies, which
+makes it the fallback. This is how Python's type checker works out of the box,
+and how you would slot in a third:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "languages": {
+    "python": {
+      "servers": [
+        {
+          "firstOf": [
+            { "command": ["mypy-ls"], "when": ["mypy.ini"] }, // yours, where its config is
+            "ty", // ty's own gate: ty.toml, [tool.ty], or a declared dependency
+            "basedpyright", // no condition: the fallback
+          ],
+        },
+        "ruff",
+      ],
+    },
+  },
+}
+```
 
 Built-in server names use stet's pinned definitions and standard [server
 discovery and provisioning

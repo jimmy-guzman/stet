@@ -259,6 +259,84 @@ test("a `when` binds to the language it was written for, not to the server every
   }
 });
 
+// `firstOf` is how competing servers stay mutually exclusive: candidates in preference order, the
+// First whose gate accepts the repo runs. Inside the group a bare built-in keeps its registry gate
+// (the group's whole meaning is "pick by condition"), so a user reproduces the built-in Python
+// Behavior verbatim without copying ty's gate.
+test("a config firstOf group reproduces the built-in checker selection", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  const tyRepo = mkdtempSync(join(tmpdir(), "stet-group-"));
+  const plain = mkdtempSync(join(tmpdir(), "stet-group-"));
+  writeFileSync(join(tyRepo, "pyproject.toml"), '[dependency-groups]\ndev = ["ty"]\n');
+
+  try {
+    const { config } = loadConfigText(`{
+      "languages": {
+        "python": { "servers": [{ "firstOf": ["ty", "basedpyright"] }, "ruff"] },
+      },
+    }`);
+    const resolved = resolveLanguages(config.languages ?? {});
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    expect(activeServersForPath("src/main.py", tyRepo)).toEqual(["ty", "ruff"]);
+    expect(activeServersForPath("src/main.py", plain)).toEqual(["basedpyright", "ruff"]);
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+    rmSync(tyRepo, { force: true, recursive: true });
+    rmSync(plain, { force: true, recursive: true });
+  }
+});
+
+test("a bare name is unconditional in the flat list but keeps its gate inside firstOf", () => {
+  const languageSnapshot = snapshotLanguages();
+  const serverSnapshot = snapshotServers();
+  const repo = mkdtempSync(join(tmpdir(), "stet-group-"));
+
+  try {
+    // The same server, named both ways: flat "biome" must run (the user stated it), while the
+    // Group's "biome" answers to its registry gate, which this repo (no biome config) fails, so
+    // The group falls through to its unconditional candidate.
+    const { config } = loadConfigText(`{
+      "languages": {
+        "css": { "servers": ["biome"] },
+        "typescript": { "servers": [{ "firstOf": ["biome", "typescript"] }] },
+      },
+    }`);
+    const resolved = resolveLanguages(config.languages ?? {});
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    registerLanguages(resolved.languages);
+
+    expect(activeServersForPath("src/a.css", repo)).toEqual(["biome"]);
+    expect(activeServersForPath("src/a.ts", repo)).toEqual(["typescript"]);
+  } finally {
+    restoreLanguages(languageSnapshot);
+    restoreServers(serverSnapshot);
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("firstOf groups don't nest, and an empty group is dropped with a reason", () => {
+  const { issues, languages } = resolveLanguages({
+    typescript: {
+      servers: [
+        { firstOf: [{ firstOf: ["typescript"] }] },
+        { firstOf: ["not-a-server"] },
+        "typescript",
+      ],
+    },
+  });
+
+  expect(issues).toContain('language "typescript": firstOf groups don\'t nest');
+  expect(issues).toContain('language "typescript": unknown server "not-a-server"');
+  expect(issues).toContain('language "typescript": firstOf resolved no candidates');
+  expect(languages.typescript?.servers).toEqual([{ server: "typescript" }]);
+});
+
 test("a malformed server entry is reported and skipped, the rest of the list stands", () => {
   const { issues, languages: resolved } = resolveLanguages({
     typescript: {
@@ -284,9 +362,10 @@ test("a malformed server entry is reported and skipped, the rest of the list sta
   );
   expect(issues).toContain('language "typescript": unknown server "bimoe"');
   expect(issues).toContain('language "typescript": a built-in server takes only "when"');
-  expect(issues).toContain('language "typescript": when must be a non-empty array of repo paths');
+  expect(issues).toContain('language "typescript": when must not be empty');
   // Every bad entry dropped out; the one good one survives, so a typo never sinks the whole list.
-  expect(resolved.typescript?.servers).toEqual(["typescript"]);
+  // A config bare name resolves to the unconditional { server } form: named, so it runs.
+  expect(resolved.typescript?.servers).toEqual([{ server: "typescript" }]);
 });
 
 test("routes an exact filename ahead of its extension", () => {
@@ -613,7 +692,7 @@ test("resolveLanguages turns a new language into routable file types and synthes
   // File types map to the language key as their LSP languageId; a leading dot is tolerated.
   expect(languages.elixir).toMatchObject({
     extensions: { ex: "elixir", exs: "elixir" },
-    servers: ["elixir/elixir-ls"],
+    servers: [{ server: "elixir/elixir-ls" }],
   });
   const spec = servers["elixir/elixir-ls"];
   expect(spec).toMatchObject({
@@ -635,7 +714,8 @@ test("resolveLanguages overrides a built-in's servers while inheriting its file 
   expect(issues).toEqual([]);
   expect(servers).toEqual({});
   // The list replaced (oxlint dropped); the inherited extensions keep their per-extension ids.
-  expect(languages.typescript?.servers).toEqual(["typescript", "biome"]);
+  // Bare config names resolve unconditional: naming biome runs it, biome.json or not.
+  expect(languages.typescript?.servers).toEqual([{ server: "typescript" }, { server: "biome" }]);
   expect(languages.typescript?.extensions).toMatchObject({
     ts: "typescript",
     tsx: "typescriptreact",
@@ -648,7 +728,7 @@ test("resolveLanguages reports and drops an unknown built-in server reference", 
   });
 
   expect(issues).toEqual(['language "typescript": unknown server "eslint"']);
-  expect(languages.typescript?.servers).toEqual(["typescript"]);
+  expect(languages.typescript?.servers).toEqual([{ server: "typescript" }]);
 });
 
 test("resolveLanguages skips invalid entries without sinking the rest", () => {

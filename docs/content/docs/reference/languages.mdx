@@ -50,11 +50,13 @@ findings merge per file, each tagged with its own source label. A linter that
 competes with an always-on default activates only where the repo opted into
 it, the way an editor extension would. Where a language has competing type
 checkers, stet runs the one the repo opted into and only that one, so the same
-code is never type-checked twice. Both of those are stet guessing, and it yields
-to you: [naming a language's servers](/docs/reference/configuration#languages)
-turns detection off for that language, and a server's
-[`when`](/docs/reference/configuration#run-a-server-only-in-some-repos) is how
-you write the gate yourself.
+code is never type-checked twice. Both rules are written as data in the same
+grammar [your config uses](/docs/reference/configuration#languages): a server's
+[`when`](/docs/reference/configuration#run-a-server-only-in-some-repos) says
+which repos it runs in, and a
+[`firstOf` group](/docs/reference/configuration#pick-one-of-several-servers)
+picks exactly one of several candidates. Naming a language's servers yourself
+replaces stet's choices with yours.
 
 ### TypeScript & JavaScript
 
@@ -79,9 +81,12 @@ So the warnings you see are the ones your CI gates on.
 
 A repo counts as a ty repo when it has a `ty.toml` or `.ty.toml`, a `[tool.ty]`
 table in `pyproject.toml`, or ty among its declared dependencies (a dependency
-group, an optional-dependencies extra, or `[tool.uv] dev-dependencies`). Naming
-the servers yourself in [your config](/docs/reference/configuration#languages)
-overrides the choice in either direction:
+group, an optional-dependencies extra, or `[tool.uv] dev-dependencies`). That
+rule is not private machinery: it is ty's `when` gate, and the one-checker rule
+is a `firstOf` group, both written in the exact grammar
+[your config uses](/docs/reference/configuration#languages), so you can
+reproduce, re-gate, or replace the whole arrangement. Naming the servers
+yourself overrides the choice in either direction:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {

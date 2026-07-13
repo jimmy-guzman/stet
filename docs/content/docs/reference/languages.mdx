@@ -25,12 +25,11 @@ through [your config](/docs/reference/configuration#languages).
 
 ## Syntax highlighting
 
-Any language [Shiki](https://shiki.style/) bundles highlights out of the box,
-200 and counting. stet picks the grammar from the file's name, exact names
-like `Dockerfile` included, and loads it on demand. Every surface that shows
-code shares the same highlighter and theme: the diff,
-the full file, search results, hover cards, and reference previews. A file
-type nothing recognizes falls back to plain text.
+[Shiki](https://shiki.style/) bundles grammars for more than 200 languages. stet
+picks the grammar from the file's name, including exact names such as
+`Dockerfile`, and loads it on demand. The diff, full-file view, search results,
+hover cards, and reference previews share the same highlighter and theme. An
+unrecognized file type falls back to plain text.
 
 ## Folding
 
@@ -96,11 +95,13 @@ and for Python, through the same servers that produce their diagnostics. See
 
 ## How servers are found
 
-A server resolves from the repo's own `node_modules/.bin`, then your `PATH`.
-If neither has it, stet downloads one into `~/.cache/stet/lsp`, pinned to an
-exact version: npm packages for the servers npm distributes (this path needs
-`npm` on your `PATH`), or a sha256-verified GitHub release binary for the
-servers it doesn't (rust-analyzer, ruff). Pass `--no-lsp-download` (or set
+A server resolves from the repo's own `node_modules/.bin`, then your `PATH`,
+then an existing pinned copy in stet's LSP cache. That cache is
+`$XDG_CACHE_HOME/stet/lsp` when `XDG_CACHE_HOME` is set, and
+`~/.cache/stet/lsp` otherwise. If none has the server, stet downloads it into
+that cache: packages distributed through `npm` (this path needs `npm` on your
+`PATH`), or a SHA-256-verified GitHub release binary for the servers it doesn't
+(`rust-analyzer`, `ruff`). Pass `--no-lsp-download` (or set
 `STET_NO_LSP_DOWNLOAD`) to turn downloads off.
 
 <Callout>

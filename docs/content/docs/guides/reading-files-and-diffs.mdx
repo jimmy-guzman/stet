@@ -22,13 +22,13 @@ full file, and `f` to load the full content when a large file is truncated.
 
 ## Line provenance
 
-Press `a` to place every line on a provenance timeline in the gutter, git blame
-reframed around how recent each line is and how much of it is yours: uncommitted
-in the working tree, committed this session (since stet launched), committed on
-this branch, changed since the file's first commit, or original to it. The rail
-is a calm weight ramp, brightest for the newest lines and fading as code settles,
-so it reads as a gradient rather than a label. Move the caret and the status bar
-reads out that line's commit as a blame inspector: its author, age, and subject.
+Press `a` to show each line's Git history in the gutter. Git blame supplies the
+per-line commit attribution. stet maps each line to one of five tiers, newest to
+oldest: uncommitted in the working tree, committed since stet launched,
+committed earlier on the current branch, committed after the file's first
+commit, or committed when the file was first added. The gutter uses brighter
+marks for newer tiers. Move the caret to show that line's commit author, age,
+and subject in the status bar.
 
 ![stet's line provenance rail: a gutter timeline of each line's git history, with the caret line's commit read out in the status bar](/screenshots/provenance.png)
 
@@ -57,12 +57,18 @@ any marker to toggle it.
 
 ## Tabs and history
 
-Browsing the tree previews files in a single view, shown in italic to mark it as
-ephemeral, so nothing piles up. `<` and `>` step back and forward through where
-you have been, restoring each spot's cursor and scroll. Press `ctrl-t` to pin
-the current file as a tab (or double-click it in the tree); `{` and `}` switch
-tabs and `ctrl-w` closes one. Each tab carries its own history and remembered
-position.
+Browsing the tree previews files in a single view. The italic filename marks
+the preview as temporary.
+
+| Control             | Action                                                       |
+| ------------------- | ------------------------------------------------------------ |
+| `<` / `>`           | move back or forward and restore the saved cursor and scroll |
+| `ctrl-t`            | pin or unpin the current file as a tab                       |
+| double-click a file | pin the file as a tab                                        |
+| `{` / `}`           | switch to the previous or next tab                           |
+| `ctrl-w`            | close the current tab                                        |
+
+Each tab keeps its own navigation history, cursor, and scroll position.
 
 ![The tab strip with pinned, diff-status-tinted tabs](/screenshots/tabs.png)
 

@@ -54,11 +54,12 @@ export function WorktreeCombobox() {
   // Row.
   const ageText = (at: number | undefined) =>
     at === undefined ? "" : relativeTime(Math.floor(at / 1000), Math.floor(state.now() / 1000));
-  // It carries the fade the dot carries elsewhere: pink while an agent is working in that worktree,
-  // Cooling into the faint gray the ramp ends on as it goes quiet. It ramps over WORKTREE_ACTIVE_MS,
-  // Not the 30s a changed file stays fresh for: an agent pauses for minutes at a time and is still
-  // Working there, so the file-level window would grey out a worktree that is plainly still busy.
-  // The word itself is the signal, so the row still reads under NO_COLOR; color only ranks it.
+  // It carries the fade the dot carries elsewhere: pink on a worktree touched just now, cooling into
+  // The faint gray the ramp ends on as it goes quieter. It ramps over WORKTREE_ACTIVE_MS, not the
+  // 30s a changed file stays fresh for, because work there arrives in bursts with pauses of minutes
+  // Between them; the file-level window would grey out a worktree that was touched a minute ago.
+  // This ranks recent activity, it does not claim anyone is still there. The word itself is the
+  // Signal, so the row still reads under NO_COLOR; color only ranks it.
   const ageColor = (at: number | undefined) => {
     const fraction = recencyFraction(at, state.now(), WORKTREE_ACTIVE_MS);
     return fraction === undefined

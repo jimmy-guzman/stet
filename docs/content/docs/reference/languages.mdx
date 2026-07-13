@@ -169,7 +169,9 @@ You do not need to restart, and you do not need to press `r`.
 
 <Callout>
   If a server does get stuck, `R` restarts the language servers for the repo. `r` only re-reads what
-  they already believe, which is why it cannot clear a stale cache on its own.
+  they already believe, which is why it cannot clear a stale cache on its own. `R` is also the
+  fallback where filesystem watching is unavailable (some sandboxes and containers): installs go
+  unnoticed there, so press `R` after installing.
 </Callout>
 
 ## Add your own languages

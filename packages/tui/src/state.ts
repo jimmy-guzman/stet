@@ -2512,12 +2512,16 @@ function createState() {
    * the document keepers, and the intel warm-hold, which pins its server for the whole session.
    * Miss the warm-hold and `R` leaves the wedged child running and merely spawns a second one
    * beside it.
+   *
+   * `restartingServers` doubles as the re-entry guard, flipped before the first await so a second
+   * `R` mid-teardown drops instead of re-running the whole sequence.
    */
   async function restartLanguageServers() {
     const model = gitModel();
-    if (model.repoRoot === "") {
+    if (model.repoRoot === "" || restartingServers()) {
       return;
     }
+    setRestartingServers(true);
     notify("restarting language servers");
 
     // The run in flight holds handles to the children about to be killed; left alone, its requests
@@ -2529,7 +2533,6 @@ function createState() {
     // Flushes; the signal is what stops it re-acquiring until the pool has been evicted.
     const closing = warmHoldClosed;
     warmHoldController?.abort();
-    setRestartingServers(true);
     await closing;
 
     await runtime

@@ -81,6 +81,16 @@ test("out-of-tree bases are the ones the worktree watcher cannot see", () => {
   expect(outOfTreeBases(registrations, REPO)).toEqual([venv]);
 });
 
+test("out-of-tree bases are sorted, not registration-ordered", () => {
+  const pyenv = join(sep, "opt", "pyenv", "versions", "3.14", "lib", "site-packages");
+  const conda = join(sep, "home", "me", "conda", "envs", "app");
+  const registrations = parseWatcherRegistrations(pyrightRegistration([pyenv, conda]), REPO);
+
+  // A function of the base set: a re-registration naming the same paths in another order must
+  // Compare equal upstream instead of tearing the watchers down and rebuilding them.
+  expect(outOfTreeBases(registrations, REPO)).toEqual([conda, pyenv]);
+});
+
 test("registrations for other methods are ignored", () => {
   const registrations = parseWatcherRegistrations(
     {

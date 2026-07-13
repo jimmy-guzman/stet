@@ -203,6 +203,10 @@ export function matchesWatchers(
  * Registered bases that lie outside the worktree: the Python search paths pyright names when the
  * venv is a conda/pyenv/global env rather than an in-repo `.venv`. The worktree watcher never sees
  * these, so each one needs a watch of its own or the server is told nothing about them.
+ *
+ * Sorted, so the list is a function of the base _set_: the transport announces only a list that
+ * moved, and a re-registration naming the same paths in a different order must not read as a change
+ * and tear every watch down.
  */
 export function outOfTreeBases(registrations: readonly WatcherRegistration[], repoRoot: string) {
   return [
@@ -212,5 +216,5 @@ export function outOfTreeBases(registrations: readonly WatcherRegistration[], re
         .map((watcher) => watcher.base)
         .filter((base) => base !== repoRoot && !base.startsWith(`${repoRoot}${sep}`)),
     ),
-  ];
+  ].toSorted((a, b) => a.localeCompare(b));
 }

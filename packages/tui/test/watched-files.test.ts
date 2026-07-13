@@ -202,3 +202,27 @@ test("an absolute glob outside the worktree is watched, not just matched", () =>
   );
   expect(matchesWatchers(registrations, { path: join(REPO, "main.py"), type: 2 })).toBe(false);
 });
+
+test("an absolute pattern naming one exact file is rooted at its directory", () => {
+  // No wildcard at all, so the literal prefix is every component but the filename. A server pinning
+  // A single config outside the repo still has to yield a directory, since a file is not watchable
+  // As a base.
+  const config = join(sep, "etc", "pyrightconfig.json");
+  const registrations = parseWatcherRegistrations(
+    {
+      registrations: [
+        {
+          id: "config",
+          method: "workspace/didChangeWatchedFiles",
+          registerOptions: { watchers: [{ globPattern: config }] },
+        },
+      ],
+    },
+    REPO,
+  );
+
+  expect(outOfTreeBases(registrations, REPO)).toEqual([join(sep, "etc")]);
+  expect(matchesWatchers(registrations, { path: config, type: 2 })).toBe(true);
+  // Its sibling in the same watched directory is not what the server asked for.
+  expect(matchesWatchers(registrations, { path: join(sep, "etc", "hosts"), type: 2 })).toBe(false);
+});

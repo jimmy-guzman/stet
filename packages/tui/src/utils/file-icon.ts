@@ -17,12 +17,14 @@
  * dev-gradle (also build/settings.gradle(.kts), gradlew(.bat), gradle.properties,
  * gradle-wrapper.properties), maven seti-maven (pom.xml), node dev-nodejs_small, tsconfig
  * seti-tsconfig, bun dev-bun (also bunfig.toml), docker dev-docker, make seti-makefile, license
- * seti-license (also NOTICE and license-style filenames), git dev-git, config/env/conf seti-config
- * (also the dotfile fallback), book fa-book, csv seti-csv, http fa-paper_plane, sql dev-database,
- * txt md-file_document, procfile seti-heroku (the Heroku/Foreman process file), astro custom-astro,
- * pdf fa-file_pdf_o, video fa-file_video_o, symlink oct-file_symlink_file, test cod-beaker (any
- * test/spec/cy file, one glyph across every language so "test-ness" reads the same everywhere
- * rather than mixing a symbol with per-framework brand logos), storybook dev-storybook
+ * seti-license (also NOTICE and license-style filenames), git dev-git, config/env/conf/ini
+ * seti-config (also the dotfile fallback), book fa-book (readme.md and a bare README), csv
+ * seti-csv, http fa-paper_plane, sql dev-database, txt md-file_document, procfile seti-heroku (the
+ * Heroku/Foreman process file), mako oct-project_template (Nerd Fonts has no Mako mark, and a Mako
+ * file is a template first: it names the output it renders, not the language it is written in),
+ * astro custom-astro, pdf fa-file_pdf_o, video fa-file_video_o, symlink oct-file_symlink_file, test
+ * cod-beaker (any test/spec/cy file, one glyph across every language so "test-ness" reads the same
+ * everywhere rather than mixing a symbol with per-framework brand logos), storybook dev-storybook
  * (.stories./.story. files), xls/xlsx seti-xls (the same Excel workbook artifact across both
  * container versions, paired with csv's seti-csv from the same Seti family but kept distinct since
  * a CSV is plain text, not a workbook), cpuprofile cod-flame (a CPU profile is conventionally
@@ -40,6 +42,7 @@ const JAVA = "\u{e738}";
 const GRADLE = "\u{e7f2}";
 const RUBY = "\u{e739}";
 const LICENSE = "\u{e60a}";
+const BOOK = "\u{f02d}";
 const TEST = "\u{ea79}";
 const STORYBOOK = "\u{e8b3}";
 
@@ -53,7 +56,10 @@ const BY_STEM = new Map([
   ["makefile", "\u{e673}"],
   [".gitignore", "\u{e702}"],
   [".env", CONFIG],
-  ["readme.md", "\u{f02d}"],
+  ["readme.md", BOOK],
+  // An extensionless README (Alembic's migrations/README, and the plain-text convention it
+  // Follows) is still a readme; only the exact name matches, so readme.css stays a stylesheet.
+  ["readme", BOOK],
   ["codeowners", "\u{f510}"],
   ["procfile", "\u{e607}"],
   // JVM build files: the Gradle/Maven glyph beats the kotlin/groovy extension glyph,
@@ -92,6 +98,9 @@ const BY_SUFFIX = new Map([
   ["html", "\u{e736}"],
   ["http", "\u{f1d8}"],
   ["astro", "\u{e6b3}"],
+  // A Mako template (Alembic's script.py.mako, and Mako's own .mako views) is marked as a
+  // Template, not as the language it renders: Nerd Fonts has no Mako glyph to brand it with.
+  ["mako", "\u{f505}"],
   ["pdf", "\u{f1c1}"],
   ["rs", "\u{e7a8}"],
   ["py", "\u{e73c}"],
@@ -102,6 +111,7 @@ const BY_SUFFIX = new Map([
   ["zsh", "\u{ebca}"],
   ["toml", "\u{e6b2}"],
   ["conf", CONFIG],
+  ["ini", CONFIG],
   ["yml", "\u{e8eb}"],
   ["yaml", "\u{e8eb}"],
   ["lock", "\u{f023}"],

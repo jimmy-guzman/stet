@@ -134,7 +134,7 @@ normally activate only where a repo opted into them: Biome needs a `biome.json`,
 and Python's type checker is picked from what the repo declares. That detection
 exists to guess what you want, so once you say it, stet stops guessing. Name
 `biome` and it runs with or without a `biome.json`; name a Python type checker
-and it runs whatever the repo declares. Leave `servers` out (to add a file type,
+and it runs regardless of what the repo declares. Leave `servers` out (to add a file type,
 say) and the language keeps its built-in list, detection included.
 
 ### Run a server only in some repos

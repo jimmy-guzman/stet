@@ -76,7 +76,7 @@ import {
   EMPTY_TREE_SHA,
   mergeChanged,
 } from "./git/model";
-import type { ChangedFile, GitModel, Worktree } from "./git/model";
+import type { ChangedFile, GitModel } from "./git/model";
 import { classifyProvenance } from "./git/provenance";
 import type { Provenance } from "./git/provenance";
 import { filterPathspecs } from "./git/search";
@@ -89,6 +89,13 @@ import {
   expandAncestorsForPath,
   flattenTree,
 } from "./git/tree";
+import {
+  mergeWorktreeSummaries,
+  orderWorktrees,
+  PEER_SUMMARY_MS,
+  WORKTREE_ACTIVE_MS,
+} from "./git/worktree";
+import type { Worktree, WorktreeSummary } from "./git/worktree";
 import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./intel/protocol";
 import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from "./intel/references";
 import type { ReferenceResult } from "./intel/references";
@@ -528,6 +535,12 @@ function createState() {
   const [worktreeComboboxIndex, setWorktreeComboboxIndex] = createSignal(0);
   const [worktreeComboboxQuery, setWorktreeComboboxQuery] = createSignal("");
   const [worktrees, setWorktrees] = createSignal<Worktree[] | undefined>(undefined);
+  // How much work sits in each worktree and when it last moved, keyed by worktree
+  // Path. Repository-wide (not scoped to the active worktree), so a worktree switch
+  // Leaves it valid. Written only by `refreshWorktreeSummaries`.
+  const [worktreeSummaries, setWorktreeSummaries] = createSignal<Map<string, WorktreeSummary>>(
+    new Map(),
+  );
   const [helpDialogOpen, setHelpDialogOpen] = createSignal(false);
   const [quitConfirmOpen, setQuitConfirmOpen] = createSignal(false);
   const [themeComboboxOpen, setThemeComboboxOpen] = createSignal(false);
@@ -875,6 +888,32 @@ function createState() {
         `${worktreeLabel(worktree)} ${collapseHome(worktree.path)}`.toLowerCase(),
       ),
     );
+  });
+
+  // The worktrees an agent is working in right now, excluding the one being inspected. The window is
+  // WORKTREE_ACTIVE_MS, not the 30s a changed file stays fresh for: an agent pauses for minutes at a
+  // Time and is still working there, so the shorter window would blink the cue off underneath it.
+  // `latestAt` feeds the header cue's dot, so the whole group fades out together as the others go
+  // Quiet.
+  const activeWorktrees = createMemo(() => {
+    const root = repoRoot();
+    const at = now();
+    const peers = [...worktreeSummaries().values()].filter(
+      (summary) =>
+        summary.path !== root &&
+        summary.lastActivityAt !== undefined &&
+        at - summary.lastActivityAt < WORKTREE_ACTIVE_MS,
+    );
+    return {
+      count: peers.length,
+      latestAt: peers.reduce<number | undefined>(
+        (latest, summary) =>
+          latest === undefined || (summary.lastActivityAt ?? 0) > latest
+            ? summary.lastActivityAt
+            : latest,
+        undefined,
+      ),
+    };
   });
 
   // --- coherent diff-pane snapshot (the freeze fix) ---
@@ -3418,13 +3457,39 @@ function createState() {
     }
   }
 
+  // The only writer of `worktreeSummaries`. Reached from two places: the picker's
+  // Open (so a single-worktree repo, which the background poll skips, still fills
+  // Its row) and the peer poll below.
+  function refreshWorktreeSummaries(list: readonly Worktree[], root: string) {
+    return runtime
+      .runPromise(Git.use((git) => git.worktreeSummaries(list, root)))
+      .then((summaries) => {
+        setWorktreeSummaries((previous) => mergeWorktreeSummaries(previous, summaries));
+      })
+      .catch(() => {});
+  }
+
+  function openWorktreePicker() {
+    batch(() => {
+      setWorktreeComboboxOpen(true);
+      setWorktreeComboboxIndex(0);
+      setWorktreeComboboxQuery("");
+      setWorktrees(undefined);
+    });
+    loadWorktrees(gitModel().repoRoot);
+  }
+
   function loadWorktrees(root: string) {
     runtime
       .runPromise(Git.use((git) => git.worktrees(root)))
       .then((list) => {
         const selectable = list.filter((worktree) => !worktree.bare);
+        // Ordered once, here: the rows read their ages live from the summary map,
+        // But the order is fixed at open, so a summary landing while the picker is
+        // Up can never reshuffle the list under the cursor.
+        const ordered = orderWorktrees(selectable, worktreeSummaries());
         batch(() => {
-          setWorktrees(selectable);
+          setWorktrees(ordered);
           // Seed the highlight on the current worktree only when no query has been
           // Typed while loading was in flight; a query filters the list, so the
           // Full-list position could be out of range. The input resets to 0 on type.
@@ -3432,11 +3497,12 @@ function createState() {
             worktreeComboboxQuery() === ""
               ? Math.max(
                   0,
-                  selectable.findIndex((worktree) => worktree.path === root),
+                  ordered.findIndex((worktree) => worktree.path === root),
                 )
               : 0,
           );
         });
+        void refreshWorktreeSummaries(ordered, root);
       })
       .catch((error: unknown) => {
         batch(() => {
@@ -3846,17 +3912,66 @@ function createState() {
     onCleanup(() => controller.abort());
   });
 
-  // Tick the recency clock once a second while activity is recent, then stop. Drives the
-  // Tree's fading recency dots and the status bar's fading activity path (both read now()).
+  // Keep every worktree's summary warm, so the header can say that an agent is working
+  // Somewhere else and the picker opens on real ages instead of a loading row. Polled
+  // Rather than watched: only the active worktree earns an fs watcher, and the ages this
+  // Feeds are real timestamps (a file mtime, a reflog mtime, a commit date), so a poll that
+  // Runs late still reports an exact age; only its appearance lags, by at most one tick.
+  //
+  // `git worktree list` is also the discovery mechanism, so it cannot be resolved once at
+  // Startup: an agent can create a worktree mid-session. It is a cheap directory read, and a
+  // Repo with a single worktree stops there, never paying for a `git status` it has no peer
+  // To compare against.
   createEffect(() => {
-    const latest = latestActivity(activityLog());
-    if (latest === undefined || Date.now() - latest.at >= RECENT_MS) {
+    const root = repoRoot();
+    if (root === "") {
+      return;
+    }
+    const controller = new AbortController();
+    runtime
+      .runPromise(
+        Effect.gen(function* peerSummaryLoop() {
+          const git = yield* Git;
+          while (true) {
+            const list = yield* git.worktrees(root).pipe(Effect.orElseSucceed(() => []));
+            const selectable = list.filter((worktree) => !worktree.bare);
+            if (selectable.length > 1) {
+              yield* Effect.promise(() => refreshWorktreeSummaries(selectable, root));
+            }
+            yield* Effect.sleep(PEER_SUMMARY_MS);
+          }
+        }),
+        { signal: controller.signal },
+      )
+      .catch(() => {});
+    onCleanup(() => controller.abort());
+  });
+
+  // Tick the recency clock once a second while anything is still fading, then stop. Drives the
+  // Tree's fading recency dots, the status bar's fading activity path, the header's other-worktree
+  // Cue, and every age in the worktree picker (all read now()). The two sources decay over different
+  // Windows, so each keeps the clock awake for its own: a changed file for RECENT_MS, a worktree
+  // Being worked in for the much longer WORKTREE_ACTIVE_MS.
+  //
+  // `worktreeAt` spans **every** worktree, unlike `activeWorktrees`, which filters to peers because
+  // The header cue is about elsewhere. The picker fades an age for the worktree you are *in* too, so
+  // Excluding it would freeze that row 30s after its last edit (once the file log ages out of
+  // RECENT_MS), leaving it reading `now` in fresh pink minutes after the agent stopped.
+  createEffect(() => {
+    const fileAt = latestActivity(activityLog())?.at ?? 0;
+    const worktreeAt = Math.max(
+      0,
+      ...[...worktreeSummaries().values()].map((summary) => summary.lastActivityAt ?? 0),
+    );
+    const fading = () =>
+      Date.now() - fileAt < RECENT_MS || Date.now() - worktreeAt < WORKTREE_ACTIVE_MS;
+    if ((fileAt === 0 && worktreeAt === 0) || !fading()) {
       setNow(Date.now());
       return;
     }
     const timer = setInterval(() => {
       setNow(Date.now());
-      if (Date.now() - latest.at >= RECENT_MS) {
+      if (!fading()) {
         clearInterval(timer);
       }
     }, 1000);
@@ -3928,6 +4043,7 @@ function createState() {
 
   return {
     activateTab,
+    activeWorktrees,
     activityLog,
     allProblemItems,
     availableUpdate,
@@ -4011,7 +4127,6 @@ function createState() {
     lineMap,
     loadCommits,
     loadFullContent,
-    loadWorktrees,
     mainView,
     mainWorktreePath,
     moveFocus,
@@ -4029,6 +4144,7 @@ function createState() {
     openSymbols,
     openThemePicker,
     openViewerDecoration,
+    openWorktreePicker,
     overflow,
     overlayLeft,
     overlayWidth,
@@ -4152,6 +4268,7 @@ function createState() {
     setWorktreeComboboxIndex,
     setWorktreeComboboxOpen,
     setWorktreeComboboxQuery,
+    setWorktreeSummaries,
     setWorktrees,
     showFileContent,
     showHover,
@@ -4204,6 +4321,7 @@ function createState() {
     worktreeComboboxOpen,
     worktreeComboboxQuery,
     worktreeComboboxResults,
+    worktreeSummaries,
     worktrees,
   };
 }

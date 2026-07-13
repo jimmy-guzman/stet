@@ -3826,7 +3826,10 @@ function createState() {
             Effect.catch(() =>
               Effect.sync(() => {
                 const main = mainWorktreePath();
-                if (!existsSync(root) || (main !== "" && !existsSync(main))) {
+                if (
+                  repoRoot() === root &&
+                  (!existsSync(root) || (main !== "" && !existsSync(main)))
+                ) {
                   setCurrentWorktreeDeleted(true);
                 }
               }),

@@ -9,8 +9,8 @@ import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
 
-const FOLDER = "\u{f07b}";
-const FOLDER_OPEN = "\u{f07c}";
+const FOLDER = "\u{f0256}";
+const FOLDER_OPEN = "\u{f0dcf}";
 const SYMLINK = "\u{f481}";
 const CHEVRONS = /[▸▾]/u;
 

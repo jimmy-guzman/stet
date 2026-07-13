@@ -4,6 +4,12 @@ import { preloadDiffHighlighter } from "@/diff/engine";
 // Tests toggle this explicitly and restore it.
 process.env.STET_NO_LSP_DOWNLOAD = "1";
 
+// A production exit must become a test failure, never a successful early exit
+// That lets Bun report a false green without its suite summary.
+process.exit = (code) => {
+  throw new Error(`unexpected process.exit(${String(code)}) during tests`);
+};
+
 // Warm the diff highlighter once so render tests don't race the one-time Shiki
 // Load (the first diff would otherwise time out the settle helper).
 await preloadDiffHighlighter();

@@ -4,6 +4,7 @@ import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
 import type { GitModel } from "@/git/model";
+import { state } from "@/state";
 
 import { makeSettleUntil, seedState } from "./helpers";
 
@@ -24,6 +25,9 @@ const emptyModel: GitModel = {
 // And undefined selection must render without throwing — every effect (refresh,
 // Diff, title, recovery) guards on that pre-load state.
 test("renders the shell before any model is seeded", async () => {
+  // A deleted fixture can flip this long-lived signal after the prior renderer
+  // Is destroyed. Seeding the next test must clear it before App reacts.
+  state.setCurrentWorktreeDeleted(true);
   seedState(emptyModel, allScope);
   const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
     height: 24,

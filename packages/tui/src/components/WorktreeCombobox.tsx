@@ -16,14 +16,11 @@ import { collapseHome, truncate, truncateLeft } from "@/utils/text";
 const MARKER_CELLS = 2;
 const AGE_CELLS = 4;
 const GAP = 2;
-// The branch is the row's identity, so it is the column that gets what it needs first (a truncated
-// Branch name is what the picker is for) and the path lives on the leftovers. Below its floor a
-// Left-truncated path stops carrying enough tail to be worth the cells, so the row drops it: which
-// Worktree is busy outranks where it sits on disk.
 const LABEL_MIN = 8;
-const LABEL_MAX = 34;
-const PATH_MIN = 12;
-const PATH_MAX = 32;
+// The overlay's border takes two cells and each row's own padding takes two more, so the columns
+// Have four fewer than `overlayWidth`. Budgeting against the padding alone overruns the row by
+// Exactly the border, and the renderer silently clips the overrun off the right edge.
+const CHROME_CELLS = 4;
 
 export function WorktreeCombobox() {
   const theme = useTheme();
@@ -34,15 +31,22 @@ export function WorktreeCombobox() {
   });
 
   const repoRoot = () => state.gitModel().repoRoot;
+  const highlighted = () => state.worktreeComboboxResults()?.[state.worktreeComboboxIndex()];
 
-  // Cells the label and path share, once the fixed columns and their gaps are spoken for.
-  const slack = () => state.overlayWidth() - 2 - MARKER_CELLS - GAP - AGE_CELLS;
-  const pathCells = () => {
-    const remainder = slack() - GAP - Math.min(LABEL_MAX, slack() - GAP - PATH_MIN);
-    return slack() - GAP - PATH_MIN < LABEL_MIN ? 0 : Math.min(PATH_MAX, remainder);
-  };
+  // The label takes every cell the fixed columns leave, so a branch name stops truncating.
   const labelCells = () =>
-    pathCells() === 0 ? Math.max(LABEL_MIN, slack()) : slack() - GAP - pathCells();
+    Math.max(LABEL_MIN, state.overlayWidth() - CHROME_CELLS - MARKER_CELLS - GAP - AGE_CELLS);
+  // The path is one line for the highlighted worktree, not a column on every row: the worktrees of a
+  // Repo share a long prefix, so a per-row path left-truncated to a fixed width slices that shared
+  // Prefix at a different offset on every row (`…trees/`, `…ude/`, `…ees/`) and cuts the leaf, the
+  // Only part that differs. Here it is complete: a real path fits the full overlay width, and
+  // TruncateLeft only ever fires on a genuinely narrow terminal.
+  const detailPath = () => {
+    const worktree = highlighted();
+    return worktree === undefined
+      ? ""
+      : truncateLeft(collapseHome(worktree.path), state.overlayWidth() - CHROME_CELLS);
+  };
 
   // The age is the row: how long ago an agent (or git) last touched that worktree. A worktree whose
   // Summary has not landed, or whose directory is gone so it can never be read, leaves the cell
@@ -70,7 +74,7 @@ export function WorktreeCombobox() {
   }
 
   function onSubmit() {
-    const worktree = state.worktreeComboboxResults()?.[state.worktreeComboboxIndex()];
+    const worktree = highlighted();
     if (worktree === undefined) {
       state.setWorktreeComboboxOpen(false);
     } else {
@@ -205,13 +209,6 @@ export function WorktreeCombobox() {
                         </text>
                       </Show>
                     </box>
-                    <Show when={pathCells() > 0}>
-                      <box width={pathCells()} marginLeft={GAP} flexShrink={0} flexDirection="row">
-                        <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
-                          {truncateLeft(collapseHome(worktree().path), pathCells())}
-                        </text>
-                      </box>
-                    </Show>
                   </box>
                 );
               }}
@@ -219,6 +216,13 @@ export function WorktreeCombobox() {
           </Show>
         </Show>
       </scrollbox>
+      {/* Where the highlighted worktree actually lives. Fixed height whether or not a row is
+          highlighted (loading, no matches), so the overlay never shifts under the hint. */}
+      <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={theme.colors.surface.panel}>
+        <text wrapMode="none" height={1} fg={theme.colors.text.secondary}>
+          {detailPath()}
+        </text>
+      </box>
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
         <text fg={theme.colors.text.muted}>↑↓ navigate · ⏎ switch · esc close</text>
       </box>

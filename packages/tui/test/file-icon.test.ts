@@ -39,6 +39,26 @@ describe("fileIcon", () => {
     expect(fileIcon("notes.txt")).not.toBe(fileIcon("LICENSE.txt"));
   });
 
+  test("marks .ini with the config glyph, like .conf", () => {
+    expect(fileIcon("alembic.ini")).toBe("\u{e615}");
+    expect(fileIcon("alembic.ini")).toBe(fileIcon("nginx.conf"));
+    expect(fileIcon("tox.ini")).not.toBe("\u{ea7b}");
+  });
+
+  test("marks a .mako template with the template glyph, not its rendered language", () => {
+    expect(fileIcon("script.py.mako")).toBe("\u{f505}");
+    expect(fileIcon("base.mako")).toBe("\u{f505}");
+    // A Python template is a template: it does not get the .py glyph.
+    expect(fileIcon("script.py.mako")).not.toBe(fileIcon("main.py"));
+  });
+
+  test("marks an extensionless README with the book glyph", () => {
+    expect(fileIcon("README")).toBe("\u{f02d}");
+    expect(fileIcon("README")).toBe(fileIcon("readme.md"));
+    // Only the exact name is a readme, so an extension still wins on any other readme.* file.
+    expect(fileIcon("readme.css")).toBe("\u{e749}");
+  });
+
   test("marks Procfile with the Heroku glyph by exact filename", () => {
     expect(fileIcon("Procfile")).toBe("\u{e607}");
     expect(fileIcon("procfile")).toBe(fileIcon("Procfile"));

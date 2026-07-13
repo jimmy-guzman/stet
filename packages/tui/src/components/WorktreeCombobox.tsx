@@ -219,7 +219,7 @@ export function WorktreeCombobox() {
       {/* Where the highlighted worktree actually lives. Fixed height whether or not a row is
           highlighted (loading, no matches), so the overlay never shifts under the hint. */}
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={theme.colors.surface.panel}>
-        <text wrapMode="none" height={1} fg={theme.colors.text.secondary}>
+        <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
           {detailPath()}
         </text>
       </box>

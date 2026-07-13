@@ -12,7 +12,10 @@ import { join } from "node:path";
 type WhenCondition =
   | string
   | { readonly file: string; readonly key: readonly string[] }
-  | { readonly file: string; readonly dependency: string };
+  // The literal matches what `parseWhen` enforces: pyproject is the one manifest whose dependencies
+  // Are requirement strings needing name parsing, so a gate pointing `dependency` anywhere else is
+  // A type error, not a silently-false condition.
+  | { readonly file: "pyproject.toml"; readonly dependency: string };
 
 export type When = WhenCondition | readonly WhenCondition[];
 

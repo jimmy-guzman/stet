@@ -10,9 +10,9 @@ that drive diagnostics. Every request here is a read: it never writes to the
 repo.
 
 <Callout>
-  For built-in languages, stet looks for a language server in the repo's own `node_modules/.bin`,
-  then your `PATH`, then its cache. If none has one, stet downloads a pinned server on first use.
-  Pass `--no-lsp-download` to turn downloads off.
+  stet can use installed language servers or provision missing built-ins on first use. See [how
+  servers are found](/docs/reference/languages#how-servers-are-found) for the discovery order, cache
+  paths, and download opt-out.
 </Callout>
 
 ## Go to definition

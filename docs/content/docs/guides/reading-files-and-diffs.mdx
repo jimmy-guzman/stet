@@ -22,12 +22,13 @@ full file, and `f` to load the full content when a large file is truncated.
 
 ## Line provenance
 
-Press `a` to show each line's Git history in the gutter. Git blame assigns each
-line to one of five tiers, newest to oldest: uncommitted in the working tree,
-committed since stet launched, committed earlier on the current branch,
-committed after the file's first commit, or committed when the file was first
-added. The gutter uses brighter marks for newer tiers. Move the caret to show
-that line's commit author, age, and subject in the status bar.
+Press `a` to show each line's Git history in the gutter. Git blame supplies the
+per-line commit attribution. stet maps each line to one of five tiers, newest to
+oldest: uncommitted in the working tree, committed since stet launched,
+committed earlier on the current branch, committed after the file's first
+commit, or committed when the file was first added. The gutter uses brighter
+marks for newer tiers. Move the caret to show that line's commit author, age,
+and subject in the status bar.
 
 ![stet's line provenance rail: a gutter timeline of each line's git history, with the caret line's commit read out in the status bar](/screenshots/provenance.png)
 

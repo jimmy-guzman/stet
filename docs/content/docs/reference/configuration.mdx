@@ -113,10 +113,9 @@ as-is (`{repoRoot}` and `{repoUri}` in string values are replaced per repository
 }
 ```
 
-For a built-in server name, stet looks in the repo's `node_modules/.bin`, then
-your `PATH`, then its cache. If none has the server, stet downloads its pinned
-package or binary. See [how servers are
-found](/docs/reference/languages#how-servers-are-found) for the download paths.
+Built-in server names use stet's pinned definitions and standard [server
+discovery and provisioning
+flow](/docs/reference/languages#how-servers-are-found).
 
 An inline `command` can run any executable on your machine. stet resolves it
 from the repo's own `node_modules/.bin`, then your `PATH`, or uses an absolute
@@ -124,8 +123,9 @@ path as-is. Examples include `gopls` installed with `go install`,
 `lua-language-server` installed with `brew`, and `solargraph` installed as a
 gem. stet never downloads an executable for an inline command.
 
-stet reads inline server commands only from your global config. It never reads
-language-server commands from the repository being inspected.
+stet reads inline server entries only from your global config. It does not read
+server configuration from the repository being inspected, although a configured
+executable may resolve from that repository's `node_modules/.bin`.
 
 <Callout>
   An entry that does not validate is reported in a notice and skipped; the rest of the config still

@@ -4,20 +4,25 @@
  * requests get a minimal reply so the server never blocks, notifications are logged. Decoupled from
  * the process so it can be driven by a fake in-process peer in tests.
  */
-import { pathToFileURL } from "node:url";
-
 import { Data, Deferred, Effect, Queue, Stream } from "effect";
 import type { Cause } from "effect";
 
 import { isJsonRpcNotification, isJsonRpcRequest, isJsonRpcResponse } from "./jsonrpc";
 import type { JsonRpcMessage } from "./jsonrpc";
 import {
-  matchesWatchers,
   outOfTreeBases,
   parseWatcherRegistrations,
   parseWatcherUnregistrations,
+  watchedFileChanges,
 } from "./watched-files";
-import type { WatchedFileEvent, WatcherRegistration } from "./watched-files";
+import type { WatchedPathChange, WatcherRegistration } from "./watched-files";
+
+/**
+ * Paths per synchronous slice while typing a watcher batch. Each path costs a stat (~6us measured),
+ * so this bounds one uninterrupted pass to well under a 16ms frame; the fiber yields between
+ * slices.
+ */
+const MATERIALIZE_CHUNK = 256;
 
 export class LspRequestError extends Data.TaggedError("LspRequestError")<{
   readonly method: string;
@@ -88,10 +93,16 @@ export interface LspConnection {
   readonly endPublishWait: Effect.Effect<void>;
   /**
    * Forward on-disk changes the server asked to hear about (`workspace/didChangeWatchedFiles`),
-   * filtered against its own registered globs. A no-op for a server that registered nothing, so a
-   * self-watching server (rust-analyzer, pinned to `files.watcher: server`) is never disturbed.
+   * filtered against its own registered globs. Takes the raw batch, **untyped**, and matches before
+   * it types: a server that registered nothing returns in O(1) without touching a path, so a
+   * self-watching server (rust-analyzer, pinned to `files.watcher: server`) costs nothing at all.
+   * `root` is what the paths are relative to (the worktree, or an out-of-tree registered base).
    */
-  readonly watchedFilesChanged: (events: readonly WatchedFileEvent[]) => Effect.Effect<void>;
+  readonly watchedFilesChanged: (
+    root: string,
+    changes: readonly WatchedPathChange[],
+    isTracked: (path: string) => boolean,
+  ) => Effect.Effect<void>;
   /**
    * The out-of-worktree directories this server asked to watch, re-emitted whenever its
    * registrations change. A stream rather than a getter because registrations arrive
@@ -434,15 +445,43 @@ export function makeTransport(
       pullDiagnostics,
       request,
       watchedBases: Stream.fromQueue(baseUpdates),
-      watchedFilesChanged: (events: readonly WatchedFileEvent[]) =>
+      watchedFilesChanged: (
+        root: string,
+        changes: readonly WatchedPathChange[],
+        isTracked: (path: string) => boolean,
+      ) =>
         Effect.suspend(() => {
+          // The early-out, before a single path is touched. A server that registered nothing is sent
+          // Nothing, and after rust-analyzer's `files.watcher: server` pin that is every built-in but
+          // Basedpyright, so in a JS/TS or Rust repo this whole channel costs one map lookup per
+          // Batch. It has to come first: an install's batch is tens of thousands of paths and typing
+          // Even one of them is a stat (see `watchedFileChanges`).
+          if (registrations.size === 0 || changes.length === 0) {
+            return Effect.void;
+          }
           const registered = [...registrations.values()];
-          const changes = events
-            .filter((event) => matchesWatchers(registered, event))
-            .map((event) => ({ type: event.type, uri: pathToFileURL(event.path).href }));
-          return changes.length === 0
-            ? Effect.void
-            : notify("workspace/didChangeWatchedFiles", { changes });
+          // Slice the batch and yield between slices. pyright registers `**`, so in a Python repo
+          // Every path an install writes really is claimed and really must be stat'd; doing that in
+          // One synchronous pass is a multi-hundred-millisecond hole in the render loop. Chunking
+          // Keeps each pass well under a frame and hands the loop back in between, so the batch costs
+          // Latency instead of dropped frames, and no event is dropped to buy that.
+          return Effect.forEach(
+            Array.from({ length: Math.ceil(changes.length / MATERIALIZE_CHUNK) }, (_, index) =>
+              changes.slice(index * MATERIALIZE_CHUNK, (index + 1) * MATERIALIZE_CHUNK),
+            ),
+            (slice) =>
+              Effect.sync(() => watchedFileChanges(registered, root, slice, isTracked)).pipe(
+                Effect.tap(() => Effect.yieldNow),
+              ),
+            { concurrency: 1 },
+          ).pipe(
+            Effect.flatMap((slices) => {
+              const events = slices.flat();
+              return events.length === 0
+                ? Effect.void
+                : notify("workspace/didChangeWatchedFiles", { changes: events });
+            }),
+          );
         }),
       whenProjectLoaded: Effect.suspend(() =>
         loaded ? Effect.void : Deferred.await(projectLoaded),

@@ -19,11 +19,11 @@ import {
   snapshotServers,
 } from "@/diagnostics/servers";
 import type { LspConnection } from "@/diagnostics/transport";
-import type { WatchedFileEvent } from "@/diagnostics/watched-files";
+import type { WatchedPathChange } from "@/diagnostics/watched-files";
 
-/** A connection that records the watched-file events the pool routed to it. No process, no mocks. */
+/** A connection that records the watched-file changes the pool routed to it. No process, no mocks. */
 function fakeConnection() {
-  const received: WatchedFileEvent[] = [];
+  const received: WatchedPathChange[] = [];
   const connection: LspConnection = {
     changeDocument: () => Effect.void,
     clearPublished: () => Effect.void,
@@ -36,7 +36,7 @@ function fakeConnection() {
     pullDiagnostics: () => Effect.die("unused"),
     request: () => Effect.succeed({ capabilities: {} }),
     watchedBases: Stream.empty,
-    watchedFilesChanged: (events) => Effect.sync(() => void received.push(...events)),
+    watchedFilesChanged: (_root, changes) => Effect.sync(() => void received.push(...changes)),
     whenProjectLoaded: Effect.void,
   };
   return { connection, received };
@@ -114,9 +114,11 @@ test("a server evicted while still referenced does not retract its replacement",
           // Immediate one.
           yield* adjust("31 seconds");
 
-          yield* servers.notifyWatchedFiles(repo, [
-            { path: join(repo, "site-packages", "fastapi", "__init__.py"), type: 1 },
-          ]);
+          yield* servers.notifyWatchedFiles(
+            repo,
+            [{ path: join("site-packages", "fastapi", "__init__.py"), renamed: true }],
+            () => false,
+          );
         }),
         // One combined provide: the pool's idle timer reads the same clock `adjust` drives, so the
         // Test must not build a second TestClock in a separate layer.

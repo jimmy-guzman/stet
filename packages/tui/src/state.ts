@@ -39,7 +39,6 @@ import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problem
 import { Provisioner } from "./diagnostics/provision";
 import { intelLanguage, LanguageServers, serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
-import { watchedFileEvent } from "./diagnostics/watched-files";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
 import { followScrollTop } from "./diff/follow";
@@ -4022,34 +4021,34 @@ function createState() {
             // Place the gitignored paths above are deliberately excluded from are exactly what is
             // Wanted. A package landing in `.venv/` or `node_modules/` is invisible to git and so to
             // Every other consumer here, but it is precisely what invalidates a server's resolution
-            // Cache, and basedpyright has no filesystem watcher of its own to notice it. Each server
-            // Filters the batch against the globs it registered, so a server that asked for nothing
-            // Is sent nothing. No cap and no ignore list: VS Code stopped excluding `node_modules`
-            // For this exact reason, and unlike Neovim we derive no watchers from the globs, so a
-            // Burst costs a glob match rather than an inotify handle. The 100ms debounce and the
-            // Path `Set` in the watcher already coalesce an install's thousands of writes.
-            Stream.tap((changes) =>
-              changes.length === 0
-                ? Effect.void
-                : LanguageServers.use((servers) =>
-                    servers.notifyWatchedFiles(
-                      root,
-                      changes.map((change) => {
-                        // A rename over a path git already knows is an atomic save (write-temp then
-                        // Rename, which vim and most formatters do), not an appearance. Calling that
-                        // A create would drag pyright's source watcher out of a cheap dirty-mark and
-                        // Into a full reanalysis on every save. A rename to a path git has never
-                        // Heard of *is* an appearance: a new source file, or the package that just
-                        // Landed in gitignored `.venv/`, which is the event the whole channel exists
-                        // For. Git's own view of the tree is what separates the two.
-                        const known =
-                          repoFilePaths().has(change.path) ||
-                          gitModel().changedByPath.has(change.path);
-                        return watchedFileEvent(join(root, change.path), change.renamed && !known);
-                      }),
-                    ),
-                  ).pipe(Effect.ignore),
-            ),
+            // Cache, and basedpyright has no filesystem watcher of its own to notice it. No cap and
+            // No ignore list: any cap drops a signal some server needed (pyright's `**` source
+            // Watcher dirty-marks per file), and unlike Neovim we derive no watchers from the globs,
+            // So a burst costs a glob match rather than an inotify handle.
+            //
+            // The batch goes down **raw**, and nothing here touches a path. Typing a change is a
+            // Synchronous `existsSync` (`fs.watch` calls both an appearance and a vanishing a
+            // "rename", so only the disk can tell them apart), and an install hands us tens of
+            // Thousands of paths at once: typing them here, before the globs have said whether any
+            // Server even wants them, measured 207ms of frozen render loop per `bun install` in a
+            // Repo where *no* server consumes this channel. So each server matches first and types
+            // Only what it claimed. `isTracked` is the one thing the servers cannot know and must be
+            // Told: git's view of the tree, which is what separates an atomic save (a rename over a
+            // Path git already knows, as vim and most formatters do) from a genuine appearance.
+            Stream.tap((changes) => {
+              if (changes.length === 0) {
+                return Effect.void;
+              }
+              const trackedPaths = repoFilePaths();
+              const { changedByPath } = gitModel();
+              return LanguageServers.use((servers) =>
+                servers.notifyWatchedFiles(
+                  root,
+                  changes,
+                  (path) => trackedPaths.has(path) || changedByPath.has(path),
+                ),
+              ).pipe(Effect.ignore);
+            }),
             Stream.map(() => undefined),
           );
           const safetyTicks = Stream.fromEffect(

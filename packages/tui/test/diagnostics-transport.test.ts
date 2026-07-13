@@ -1,4 +1,6 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -10,7 +12,11 @@ import type { JsonRpcMessage } from "@/diagnostics/jsonrpc";
 import { makeTransport } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
 
-const REPO = join(sep, "repo");
+// A real directory: forwarding a watched change types it by reading the disk, since `fs.watch` calls
+// Both an appearance and a vanishing a "rename" and only presence tells them apart.
+const REPO = mkdtempSync(join(tmpdir(), "stet-transport-"));
+
+afterAll(() => rmSync(REPO, { force: true, recursive: true }));
 
 interface Peer {
   connection: LspConnection;
@@ -469,6 +475,9 @@ function notificationsSent(peer: Peer) {
 
 // The registration basedpyright sends once the client advertises `dynamicRegistration`: a catch-all
 // Over the workspace, plus one `RelativePattern` per Python search path (a venv outside the repo).
+/** Git's view of the path, the tiebreak that separates an atomic save from a genuine appearance. */
+const NOT_TRACKED = () => false;
+
 const watchRegistration = (searchPath?: string) => ({
   id: 1,
   jsonrpc: "2.0" as const,
@@ -498,15 +507,22 @@ const publish = (uri: string, diagnostics: unknown[]) => ({
 });
 
 test("a registered server is told about a package installed into the venv", async () => {
-  const installed = join(REPO, ".venv", "lib", "site-packages", "fastapi", "__init__.py");
+  const installed = join(".venv", "lib", "site-packages", "fastapi", "__init__.py");
+  mkdirSync(join(REPO, ".venv", "lib", "site-packages", "fastapi"), { recursive: true });
+  writeFileSync(join(REPO, installed), "x\n");
+
   const [answer, notifications] = await withPeer((peer) =>
     Effect.gen(function* run() {
       yield* peer.reply(watchRegistration());
       const response = yield* Queue.take(peer.sent);
-      yield* peer.connection.watchedFilesChanged([
-        { path: installed, type: 2 },
-        { path: join(sep, "outside", "the", "repo.py"), type: 2 },
-      ]);
+      yield* peer.connection.watchedFilesChanged(
+        REPO,
+        [
+          { path: installed, renamed: true },
+          { path: join("..", "outside", "the", "repo.py"), renamed: true },
+        ],
+        NOT_TRACKED,
+      );
       return [response, yield* notificationsSent(peer)] as const;
     }),
   );
@@ -517,17 +533,20 @@ test("a registered server is told about a package installed into the venv", asyn
     {
       jsonrpc: "2.0",
       method: "workspace/didChangeWatchedFiles",
-      // The path outside the worktree matched no glob, so it was not forwarded.
-      params: { changes: [{ type: 2, uri: pathToFileURL(installed).href }] },
+      // The package that just landed is a Create, which is the only thing that makes pyright rescan
+      // Its search paths; the path outside the worktree matched no glob, so it was not forwarded.
+      params: { changes: [{ type: 1, uri: pathToFileURL(join(REPO, installed)).href }] },
     },
   ]);
 });
 
 test("a server that registered nothing is never sent watched-file changes", async () => {
   // Rust-analyzer, pinned to `files.watcher: server`, registers no globs and keeps watching itself.
+  // It must also cost nothing: with no registrations the batch returns before a path is even typed,
+  // Which is what keeps an install's tens of thousands of writes off the render thread.
   const notifications = await withPeer((peer) =>
     peer.connection
-      .watchedFilesChanged([{ path: join(REPO, "src", "main.rs"), type: 2 }])
+      .watchedFilesChanged(REPO, [{ path: join("src", "main.rs"), renamed: true }], NOT_TRACKED)
       .pipe(Effect.andThen(notificationsSent(peer))),
   );
 
@@ -546,7 +565,11 @@ test("unregistering drops the globs, so nothing is forwarded after it", async ()
         params: { unregisterations: [{ id: "watch", method: "workspace/didChangeWatchedFiles" }] },
       });
       yield* Queue.take(peer.sent);
-      yield* peer.connection.watchedFilesChanged([{ path: join(REPO, "a.py"), type: 2 }]);
+      yield* peer.connection.watchedFilesChanged(
+        REPO,
+        [{ path: "a.py", renamed: true }],
+        NOT_TRACKED,
+      );
       return yield* notificationsSent(peer);
     }),
   );

@@ -11,16 +11,34 @@
  * lifetimes, this module owns the parsing and the matching, so both unit-test like `git/tree`.
  */
 import { existsSync } from "node:fs";
-import { isAbsolute, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isAbsolute, join, relative, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** LSP `FileChangeType`: created, changed, deleted. */
 type FileChangeType = 1 | 2 | 3;
 
-export interface WatchedFileEvent {
+interface WatchedFileEvent {
   /** Absolute path. */
   readonly path: string;
   readonly type: FileChangeType;
+}
+
+/**
+ * One path the filesystem watcher reported, before anything has decided whether a server wants it.
+ * Deliberately untyped (no `FileChangeType`): typing a change costs a stat, so it must not happen
+ * until a glob has claimed the path. Structurally the watcher's own `WatchedChange`, restated here
+ * so the diagnostics domain owns the shape of its input rather than depending on the watcher's.
+ */
+export interface WatchedPathChange {
+  /** Relative to the root passed alongside it. */
+  readonly path: string;
+  readonly renamed: boolean;
+}
+
+/** The LSP `FileEvent` shape sent on the wire. */
+interface FileEvent {
+  readonly type: FileChangeType;
+  readonly uri: string;
 }
 
 interface CompiledWatcher {
@@ -72,7 +90,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * @param renamed - Whether the filesystem event was reported as a rename
  * @returns The path and its corresponding LSP file change type
  */
-export function watchedFileEvent(path: string, renamed: boolean): WatchedFileEvent {
+function watchedFileEvent(path: string, renamed: boolean): WatchedFileEvent {
   if (!existsSync(path)) {
     return { path, type: 3 };
   }
@@ -231,19 +249,8 @@ export function parseWatcherUnregistrations(params: unknown) {
     .map((registration) => registration.id);
 }
 
-/**
- * Determines whether a filesystem event matches a compiled watcher.
- *
- * @returns `true` if the event type is enabled and its path matches the watcher, `false` otherwise.
- */
-function matchesWatcher(watcher: CompiledWatcher, event: WatchedFileEvent) {
-  // A server that registered for creates only must not be handed changes and deletions: the `kind`
-  // Filter is the client's job, and honoring it is what keeps a create-only search-path watcher from
-  // Being dragged into a full reanalysis on every save.
-  if ((watcher.kind & KIND_BIT[event.type]) === 0) {
-    return false;
-  }
-  const within = relative(watcher.base, event.path);
+function matchesPath(watcher: CompiledWatcher, path: string) {
+  const within = relative(watcher.base, path);
   // `relative` escapes with `..` (or stays absolute across drives) exactly when the path lies
   // Outside the base, which is the set of paths this watcher did not ask for.
   if (within === "" || within === ".." || within.startsWith(`..${sep}`) || isAbsolute(within)) {
@@ -253,17 +260,86 @@ function matchesWatcher(watcher: CompiledWatcher, event: WatchedFileEvent) {
 }
 
 /**
- * Whether any registered watcher asked to hear about this change.
+ * The `WatchKind` bits the registered watchers want for this path, OR'd together; `0` means no
+ * server asked about it at all.
  *
- * @returns `true` if any watcher matches the event, `false` otherwise.
+ * **Matching the path is separate from matching the kind because the kind costs a syscall.** A
+ * change's LSP type is only knowable by stat'ing it (`fs.watch` reports one `rename` for both an
+ * appearance and a vanishing, so presence on disk is the only evidence), and an install fires this
+ * for every file it writes: 32k `existsSync` calls on the one thread that also renders the TUI is a
+ * multi-hundred-millisecond freeze. So the caller matches the path first, and only pays the stat
+ * for a path some watcher actually claimed, then filters the resulting type through `acceptsKind`.
+ *
+ * The accepted set is unchanged by the split: `∃w. kindBit(w) ∧ pathMatch(w)` is exactly
+ * `(⋁_{pathMatch(w)} kind(w)) & bit ≠ 0`. Honoring the bitmask is still the client's job, and it is
+ * what keeps a create-only search-path watcher from being dragged into a full reanalysis on a
+ * save.
+ *
+ * @param path - The absolute path that changed
+ * @returns The OR of every matching watcher's `kind`, or `0` when none match
  */
-export function matchesWatchers(
+export function watchedKindMask(registrations: readonly WatcherRegistration[], path: string) {
+  let mask = 0;
+  for (const registration of registrations) {
+    for (const watcher of registration.watchers) {
+      if (matchesPath(watcher, path)) {
+        mask |= watcher.kind;
+      }
+    }
+  }
+  return mask;
+}
+
+/**
+ * Whether a watcher that wants `mask` asked to hear about a change of this type.
+ *
+ * @returns `true` if the mask carries the type's `WatchKind` bit
+ */
+function acceptsKind(mask: number, type: FileChangeType) {
+  return (mask & KIND_BIT[type]) !== 0;
+}
+
+/**
+ * The LSP `FileEvent`s a batch of raw watcher changes produces for these registrations: match the
+ * path, then and only then pay the stat that types it.
+ *
+ * **The order is the whole point.** An agent's `bun install` or `uv sync` hands this tens of
+ * thousands of paths in one batch, and `watchedFileEvent` is a synchronous `existsSync` on the one
+ * thread that also renders the TUI (Bun runs JS single-threaded, so 32k stats measured 207ms of
+ * frozen frames and queued keystrokes). Typing every path and letting the caller discard the ones
+ * no server claimed made every JS/TS/Rust repo pay that freeze for a channel it does not even
+ * consume, since basedpyright is the only built-in that registers globs. Matching first makes the
+ * stat unreachable for a path nobody asked about.
+ *
+ * `isTracked` is git's view of the path, the tiebreak `fs.watch` cannot give: a rename over a path
+ * git already knows is an atomic save (write-temp then rename, which vim and most formatters do),
+ * so calling it a create would drag pyright's source watcher out of a cheap dirty-mark and into a
+ * full reanalysis on every save. A rename to a path git has never heard of _is_ an appearance: a
+ * new source file, or the package that just landed in gitignored `.venv/`, which is the event this
+ * whole channel exists for. A vanished path still reports Deleted regardless, because the stat, not
+ * the flag, is what decides that.
+ *
+ * @param root - The directory `change.path` is relative to (the worktree, or an out-of-tree base)
+ * @param isTracked - Whether git knows this path, keyed by the same relative path
+ * @returns The events to send, empty when no watcher claimed any of them
+ */
+export function watchedFileChanges(
   registrations: readonly WatcherRegistration[],
-  event: WatchedFileEvent,
+  root: string,
+  changes: readonly WatchedPathChange[],
+  isTracked: (path: string) => boolean,
 ) {
-  return registrations.some((registration) =>
-    registration.watchers.some((watcher) => matchesWatcher(watcher, event)),
-  );
+  return changes.flatMap((change): FileEvent[] => {
+    const path = join(root, change.path);
+    const mask = watchedKindMask(registrations, path);
+    if (mask === 0) {
+      return [];
+    }
+    const event = watchedFileEvent(path, change.renamed && !isTracked(change.path));
+    return acceptsKind(mask, event.type)
+      ? [{ type: event.type, uri: pathToFileURL(path).href }]
+      : [];
+  });
 }
 
 /**

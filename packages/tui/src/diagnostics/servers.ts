@@ -18,8 +18,7 @@ import { cachedBinaryPath, Provisioner } from "./provision";
 import type { ProvisionChannel, ProvisionSpec } from "./provision";
 import { LspRequestError } from "./transport";
 import type { LspConnection } from "./transport";
-import { watchedFileEvent } from "./watched-files";
-import type { WatchedFileEvent } from "./watched-files";
+import type { WatchedPathChange } from "./watched-files";
 import { evaluateWhen, parseWhen } from "./when";
 import type { ManifestCache, When } from "./when";
 
@@ -1126,6 +1125,9 @@ export function performHandshake(
 // In Zed and Neovim coalesce a burst into one notification at 100ms.
 const BASE_DEBOUNCE_MS = 100;
 
+/** Nothing under an out-of-tree registered base is in the git tree, so nothing there is tracked. */
+const NEVER_TRACKED = () => false;
+
 /**
  * A watch on one directory a server named that stet's worktree watcher cannot see: the Python
  * search paths pyright registers when the venv is a conda/pyenv/global env rather than an in-repo
@@ -1142,7 +1144,7 @@ const BASE_DEBOUNCE_MS = 100;
  * @param base - The directory to watch.
  */
 function baseChanges(base: string) {
-  return Stream.callback<readonly WatchedFileEvent[]>(
+  return Stream.callback<readonly WatchedPathChange[]>(
     (queue) =>
       Effect.gen(function* watchBase() {
         // Path -> whether it was renamed (appeared/vanished) rather than rewritten in place. A
@@ -1152,12 +1154,10 @@ function baseChanges(base: string) {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const flush = () => {
           timer = undefined;
-          const events = [...pending].map(([name, renamed]) =>
-            watchedFileEvent(join(base, name), renamed),
-          );
+          const changes = [...pending].map(([path, renamed]) => ({ path, renamed }));
           // Keep the batch if the offer is dropped, and retry: a lost batch here is a dependency
           // Install the server never hears about, which is the bug this whole channel exists to fix.
-          if (Queue.offerUnsafe(queue, events)) {
+          if (Queue.offerUnsafe(queue, changes)) {
             pending.clear();
           } else if (pending.size > 0) {
             timer = setTimeout(flush, BASE_DEBOUNCE_MS);
@@ -1216,11 +1216,17 @@ function connectServer(command: readonly string[], repoRoot: string, config?: Ha
       connection.watchedBases.pipe(
         Stream.switchMap((bases) =>
           Stream.mergeAll(
-            bases.map((base) => baseChanges(base)),
+            bases.map((base) =>
+              baseChanges(base).pipe(Stream.map((changes) => ({ base, changes }))),
+            ),
             { concurrency: "unbounded" },
           ),
         ),
-        Stream.runForEach((events) => connection.watchedFilesChanged(events)),
+        // An out-of-tree base is a package directory, never part of the git tree, so nothing under it
+        // Is ever tracked: every rename there is a genuine appearance, which is the install itself.
+        Stream.runForEach(({ base, changes }) =>
+          connection.watchedFilesChanged(base, changes, NEVER_TRACKED),
+        ),
       ),
     );
     // Best-effort graceful teardown before the child is killed on scope close.
@@ -1274,11 +1280,13 @@ export class LanguageServers extends Context.Service<
     /**
      * Tell every live server for this repo about on-disk changes, each filtered against its own
      * registered globs. Broadcast from the pool rather than from a keeper, so a server held only by
-     * the intel warm-hold hears about them too.
+     * the intel warm-hold hears about them too. The batch stays **raw** all the way down: typing a
+     * path costs a stat, and only the server's own globs know whether any path is worth one.
      */
     readonly notifyWatchedFiles: (
       repoRoot: string,
-      events: readonly WatchedFileEvent[],
+      changes: readonly WatchedPathChange[],
+      isTracked: (path: string) => boolean,
     ) => Effect.Effect<void>;
     /**
      * Evict this repo's pooled servers so the next run brings up fresh ones. The escape hatch
@@ -1331,11 +1339,17 @@ export const LanguageServersLive = Layer.effect(
     const keysFor = (repoRoot: string) =>
       [...live.keys()].filter((key) => key.endsWith(` ${repoRoot}`));
 
-    const notifyWatchedFiles = (repoRoot: string, events: readonly WatchedFileEvent[]) =>
+    const notifyWatchedFiles = (
+      repoRoot: string,
+      changes: readonly WatchedPathChange[],
+      isTracked: (path: string) => boolean,
+    ) =>
       Effect.suspend(() =>
         Effect.forEach(
           keysFor(repoRoot),
-          (key) => live.get(key)?.connection.watchedFilesChanged(events) ?? Effect.void,
+          (key) =>
+            live.get(key)?.connection.watchedFilesChanged(repoRoot, changes, isTracked) ??
+            Effect.void,
           { discard: true },
         ),
       );

@@ -30,7 +30,15 @@ export function RecencyDot(props: {
   return (
     <Show when={color()}>
       {(fg) => (
-        <text fg={fg()} marginLeft={props.marginLeft} marginRight={props.marginRight}>
+        // A decorative mark, never content: opting the glyph out of OpenTUI's text selection keeps a
+        // Drag over it (the header's clickable worktree cue, a tree row) from painting a stray
+        // Highlight. Selection is stet's, and nothing here is worth selecting.
+        <text
+          ref={(el) => (el.selectable = false)}
+          fg={fg()}
+          marginLeft={props.marginLeft}
+          marginRight={props.marginRight}
+        >
           ●
         </text>
       )}

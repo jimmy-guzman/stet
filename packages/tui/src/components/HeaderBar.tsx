@@ -147,14 +147,27 @@ export function HeaderBar() {
         </Show>
         <Show when={cueText()}>
           {(text) => (
-            <box flexDirection="row" onMouseDown={() => state.openWorktreePicker()}>
-              <text fg={theme.colors.text.secondary}>{SEP}</text>
+            // Non-selectable so a click (or a drag across it) opens the picker without starting an
+            // OpenTUI text selection; the cue is clickable chrome, not content. The text leaves need
+            // It too, not just the box: OpenTUI hit-tests the leaf a drag lands on, so a selectable
+            // `<text>` inside a non-selectable box still paints a stray highlight (as the tab strip
+            // And the diff rows already found). `RecencyDot` opts its own glyph out.
+            <box
+              ref={(el) => (el.selectable = false)}
+              flexDirection="row"
+              onMouseDown={() => state.openWorktreePicker()}
+            >
+              <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.secondary}>
+                {SEP}
+              </text>
               <RecencyDot
                 at={state.activeWorktrees().latestAt}
                 window={WORKTREE_ACTIVE_MS}
                 marginRight={1}
               />
-              <text fg={theme.colors.text.muted}>{text()}</text>
+              <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.muted}>
+                {text()}
+              </text>
             </box>
           )}
         </Show>

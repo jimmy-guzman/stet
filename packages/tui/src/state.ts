@@ -3948,11 +3948,15 @@ function createState() {
   });
 
   // Tick the recency clock once a second while anything is still fading, then stop. Drives the
-  // Tree's fading recency dots, the status bar's fading activity path, and the header's
-  // Other-worktree cue (all read now()). The two sources decay over different windows, so each
-  // Keeps the clock awake for its own: a changed file for RECENT_MS, a worktree being worked in
-  // For the much longer WORKTREE_ACTIVE_MS. Peer activity has to key it at all, or the cue's dot
-  // Would freeze mid-fade and its age would stop advancing while the worktree you sit in is quiet.
+  // Tree's fading recency dots, the status bar's fading activity path, the header's other-worktree
+  // Cue, and every age in the worktree picker (all read now()). The two sources decay over different
+  // Windows, so each keeps the clock awake for its own: a changed file for RECENT_MS, a worktree
+  // Being worked in for the much longer WORKTREE_ACTIVE_MS.
+  //
+  // `worktreeAt` spans **every** worktree, unlike `activeWorktrees`, which filters to peers because
+  // The header cue is about elsewhere. The picker fades an age for the worktree you are *in* too, so
+  // Excluding it would freeze that row 30s after its last edit (once the file log ages out of
+  // RECENT_MS), leaving it reading `now` in fresh pink minutes after the agent stopped.
   createEffect(() => {
     const fileAt = latestActivity(activityLog())?.at ?? 0;
     const worktreeAt = Math.max(

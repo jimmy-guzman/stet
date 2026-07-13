@@ -56,7 +56,17 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Classifies a filesystem path as created, changed, or deleted.
+ * The LSP change type for a path the filesystem watcher just reported. `fs.watch` reports a rename
+ * when a path appears or vanishes and a change when it is rewritten in place, so presence on disk
+ * separates the first pair and the flag separates them from the second.
+ *
+ * **Created vs Changed is load-bearing, not cosmetic.** basedpyright rescans its import search
+ * paths for _new_ packages only when at least one event in a batch is a Create; a batch of pure
+ * Changes downgrades it to `LibraryWatcherContentOnlyChanged`, which re-reads the library files it
+ * already knew about and so never discovers the package that was just installed. Reporting an
+ * install as a Change leaves `Import "x" could not be resolved` on screen forever, which is the
+ * bug. The converse matters too: reporting an ordinary edit as a Create would push pyright's source
+ * watcher from a cheap `markFilesDirty` into a full reanalysis on every save.
  *
  * @param path - The filesystem path to classify
  * @param renamed - Whether the filesystem event was reported as a rename
@@ -86,7 +96,8 @@ function baseUriString(baseUri: unknown) {
  * Converts a file URI value into a filesystem path.
  *
  * @param baseUri - A URI string or an object containing a `uri` string
- * @returns The corresponding filesystem path, or `undefined` when the value is invalid or does not use a file URI
+ * @returns The corresponding filesystem path, or `undefined` when the value is invalid or does not
+ *   use a file URI
  */
 function baseDirectory(baseUri: unknown) {
   const uri = baseUriString(baseUri);
@@ -102,7 +113,10 @@ function baseDirectory(baseUri: unknown) {
 }
 
 /**
- * Determines the directory prefix before the first wildcard in a path pattern.
+ * The directory an absolute glob is rooted at: its leading components up to the first wildcard.
+ * This is what turns `/opt/pyenv/versions/3.14/lib/**` into a base that can actually be _watched_,
+ * rather than a pattern that only ever gets matched against events some other watcher happened to
+ * deliver.
  *
  * @param pattern - The path pattern to inspect
  * @returns The literal directory prefix, or the path separator when no prefix exists
@@ -116,10 +130,12 @@ function literalPrefix(pattern: string) {
 /**
  * Compiles a file-watch pattern relative to its appropriate filesystem base.
  *
- * @param pattern - A workspace-relative or absolute glob pattern, or an object containing a pattern and base URI
+ * @param pattern - A workspace-relative or absolute glob pattern, or an object containing a pattern
+ *   and base URI
  * @param kind - The watch-kind bitmask associated with the pattern
  * @param repoRoot - The workspace root used for relative patterns
- * @returns The compiled watcher, or `undefined` when the pattern has an unsupported shape or invalid base URI
+ * @returns The compiled watcher, or `undefined` when the pattern has an unsupported shape or
+ *   invalid base URI
  */
 function compileGlob(
   pattern: unknown,
@@ -178,7 +194,10 @@ function isWatcherRegistration(
 }
 
 /**
- * Parses file-watching registrations from a client capability-registration payload.
+ * The file-watching registrations in a `client/registerCapability` payload. A server registers
+ * other methods through the same request (formatting, code actions); those are dropped, since stet
+ * honors only file watching. A registration whose globs all fail to compile is dropped too, so it
+ * can never sit in the map matching nothing.
  *
  * @param params - The capability-registration payload to parse
  * @param repoRoot - The workspace root used to resolve relative watcher patterns
@@ -198,7 +217,7 @@ export function parseWatcherRegistrations(params: unknown, repoRoot: string) {
 }
 
 /**
- * Extracts watcher registration IDs from an unregister capability payload.
+ * The registration ids a `client/unregisterCapability` payload drops.
  *
  * @param params - The capability payload to parse
  * @returns The IDs of valid file-watcher registrations
@@ -234,7 +253,7 @@ function matchesWatcher(watcher: CompiledWatcher, event: WatchedFileEvent) {
 }
 
 /**
- * Determines whether a filesystem event matches any registered watcher.
+ * Whether any registered watcher asked to hear about this change.
  *
  * @returns `true` if any watcher matches the event, `false` otherwise.
  */
@@ -248,7 +267,13 @@ export function matchesWatchers(
 }
 
 /**
- * Identifies watcher bases located outside the worktree.
+ * Registered bases that lie outside the worktree: the Python search paths pyright names when the
+ * venv is a conda/pyenv/global env rather than an in-repo `.venv`. The worktree watcher never sees
+ * these, so each one needs a watch of its own or the server is told nothing about them.
+ *
+ * Sorted, so the list is a function of the base _set_: the transport announces only a list that
+ * moved, and a re-registration naming the same paths in a different order must not read as a change
+ * and tear every watch down.
  *
  * @param repoRoot - The absolute path of the worktree root
  * @returns A sorted list of unique watcher bases outside the worktree

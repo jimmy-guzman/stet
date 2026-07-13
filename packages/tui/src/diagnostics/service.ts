@@ -213,7 +213,10 @@ function syncDocuments(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
 }
 
 /**
- * Collects diagnostics for the specified files and ends the server's publish-wait state when collection completes.
+ * Closes the awaited window on every run exit, interrupts included: once this run has read (or
+ * abandoned) the bucket, any further publish is the server correcting itself and must nudge a
+ * re-check. Leaving a URI awaited past the run would swallow exactly the correction this whole
+ * channel exists to deliver.
  *
  * @param repoRoot - The repository root containing the files
  * @param files - The files to collect diagnostics for
@@ -534,10 +537,10 @@ export const DiagnosticsLive = Layer.effect(
       return state;
     }
 
-    // A file resolves to every server that handles its extension (typescript and oxlint both claim
-    // The JS/TS family), so it runs through each concurrently and emits a fresh merged snapshot as
     /**
-     * Streams merged diagnostic snapshots as language servers complete.
+     * A file resolves to every server that handles its extension (typescript and oxlint both claim
+     * the JS/TS family), so it runs through each concurrently and emits a fresh merged snapshot as
+     * each server finishes, rather than waiting for the slowest before showing anything.
      *
      * @param files - Files to analyze; deleted files are excluded.
      * @param prior - Previous file states used while diagnostics are still pending.

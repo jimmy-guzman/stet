@@ -1040,7 +1040,9 @@ function parseCapabilities(initializeResult: unknown): Set<Capability> {
 }
 
 /**
- * Performs the read-only LSP initialization handshake for a repository.
+ * The LSP lifecycle handshake for a read-only client: `initialize` advertising only read-only
+ * capabilities (diagnostics plus the code-intel pulls; no edit/format/rename), then `initialized`.
+ * The server's advertised `*Provider`s decide which intents `capabilities` carries.
  *
  * @param repoRoot - The repository root used for workspace initialization
  * @param config - Optional initialization options, workspace capabilities, and request handler
@@ -1125,9 +1127,17 @@ export function performHandshake(
 const BASE_DEBOUNCE_MS = 100;
 
 /**
- * Watches a directory for direct child changes and emits debounced file events.
+ * A watch on one directory a server named that stet's worktree watcher cannot see: the Python
+ * search paths pyright registers when the venv is a conda/pyenv/global env rather than an in-repo
+ * `.venv`.
  *
- * Failed watcher initialization is ignored, and events are retried when the stream queue is full.
+ * **Non-recursive on purpose.** An install, uninstall, or upgrade always touches direct children of
+ * `site-packages` (`fastapi/`, `fastapi-x.y.dist-info/`, a `.pth` file), and pyright reloads its
+ * library wholesale on any single matching event, so one handle per base carries the whole signal.
+ * Watching a large conda env recursively would mean one inotify handle per directory, which is the
+ * exhaustion that made Neovim disable this feature on Linux outright; deriving watchers from server
+ * globs is exactly the trap being avoided here. A failed watch is swallowed, as the git watcher's
+ * is: that base simply goes unwatched, which is where stet already was.
  *
  * @param base - The directory to watch.
  */
@@ -1186,7 +1196,8 @@ function baseChanges(base: string) {
 }
 
 /**
- * Starts an LSP server, completes its handshake, and monitors registered external bases for file changes.
+ * Starts an LSP server, completes its handshake, and monitors registered external bases for file
+ * changes.
  *
  * @param command - The server executable and its arguments
  * @param repoRoot - The repository root used to start and initialize the server

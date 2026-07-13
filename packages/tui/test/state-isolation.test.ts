@@ -49,13 +49,16 @@ test("the armed timer never fires into this test's notice", async () => {
 // Await. A reset landing in that window has to stop the whole chain: guarding only the refresh is
 // Not enough, because it would merely start late, capture the new epoch, and pass its own check.
 test("a worktree load in flight when a reset lands never writes into the next test", async () => {
+  // The repo has to exist before it can be cleaned up, so its creation is the one step outside the
+  // Try; everything that can fail after it (adding the peer worktree, loading, seeding) sits inside,
+  // So a setup failure still takes the fixture directories with it.
   const repoRoot = createFixtureRepo("stet-isolation-", { "README.md": "# Fixture\n" });
-  runGit(repoRoot, ["worktree", "add", "-b", "peer", `${repoRoot}-peer`]);
-
-  const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-  seedState(model, { kind: "all", ref: "HEAD" });
 
   try {
+    runGit(repoRoot, ["worktree", "add", "-b", "peer", `${repoRoot}-peer`]);
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+
     state.openWorktreePicker();
     state.resetState();
     await Bun.sleep(1500);

@@ -114,6 +114,7 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setRepoRoot(model.repoRoot);
     // The fixture repo is its own main worktree, as it is at startup (the header reads it).
     state.setMainWorktreePath(model.repoRoot);
+    state.setCurrentWorktreeDeleted(false);
     state.setLastChange(Date.now());
     state.seedNav(selected);
     state.setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);

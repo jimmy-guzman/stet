@@ -89,6 +89,7 @@ Reactive state is SolidJS-native (signals/memos); async IO is Effect v4 (beta). 
 - **Prefer clarity over DRY in tests.** Inline setup, repeat literals, skip shared fixtures when they'd obscure the case under test. A test's job is to be readable in isolation; the pull toward DRY that makes production code better usually makes tests worse.
 - **Test real behavior, not hypothetical behavior.** Cover the cases the contract actually promises. Do not manufacture edge cases the code doesn't claim to handle just to pad coverage.
 - **Avoid mocks.** Test the actual implementation; reach for a mock only when a real dependency is genuinely unavailable, and never duplicate the code's own logic into the test.
+- **A test never exits the runner.** `test/setup.ts` replaces `process.exit` with a throwing function, so reaching a production exit path fails the active test and Bun always prints its suite summary. Render tests seed the global state through `seedState`, which must reset long-lived signals such as `currentWorktreeDeleted` before mounting the next `App`; a deleted fixture's background heartbeat must never leak into the next renderer.
 
 ## Writing
 

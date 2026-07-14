@@ -221,6 +221,18 @@ function attach(lang: string) {
   return promise;
 }
 
+// The library keys its table on extensions, so a config dotfile (whose whole name
+// Is the stem) reads as plain text. These are the exact names, matched the way the
+// Icon and diagnostics lookups already match theirs: `.npmrc` is INI (git's own
+// Config format, and Linguist's "NPM Config" is grouped under it), `.prettierrc`
+// Is JSON, resolved as jsonc since that grammar tokenizes plain JSON identically
+// And colors comments instead of leaving them bare. Not a `*rc` rule: `.zshrc` and
+// `.vimrc` are neither.
+const BY_NAME = new Map([
+  [".npmrc", "ini"],
+  [".prettierrc", "jsonc"],
+]);
+
 // Resolve against the basename, not the full repo-relative path: the library's
 // Extensionless filename keys (`Dockerfile`, `Makefile`, ...) match by exact
 // String equality, so a `docker/Dockerfile` would otherwise miss and fall back to
@@ -234,6 +246,10 @@ function attach(lang: string) {
  */
 export function languageForPath(name: string) {
   const base = name.slice(name.lastIndexOf("/") + 1);
+  const named = BY_NAME.get(base);
+  if (named !== undefined) {
+    return named;
+  }
   if (base.endsWith(".gradle")) {
     return "groovy";
   }

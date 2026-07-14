@@ -132,6 +132,26 @@ index 1111111..2222222 100644
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 
+  test("renders an .npmrc with syntax highlighting", async () => {
+    const npmrcPatch = `diff --git a/.npmrc b/.npmrc
+index 1111111..2222222 100644
+--- a/.npmrc
++++ b/.npmrc
+@@ -1,1 +1,1 @@
+-save-exact=false
++save-exact=true
+`;
+    const render = await renderDiff({ full: false, maxLines: 1600, patch: npmrcPatch });
+
+    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    if (added === undefined) {
+      throw new Error("expected an addition row");
+    }
+    expect(added.spans.map((span) => span.text).join("")).toBe("save-exact=true");
+    expect(added.spans.length).toBeGreaterThan(1);
+    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+  });
+
   test("renders an unknown extension as plain text without throwing", async () => {
     const unknownPatch = `diff --git a/notes.zzzz b/notes.zzzz
 index 1111111..2222222 100644
@@ -171,5 +191,21 @@ describe("languageForPath", () => {
     expect(languageForPath("script/stet.rb.tmpl")).toBe("ruby");
     expect(languageForPath("a/b/Formula.rb")).toBe("ruby");
     expect(languageForPath("config.yaml.tmpl")).toBe("text");
+  });
+
+  test("resolves config dotfiles by name in any directory", () => {
+    expect(languageForPath(".npmrc")).toBe("ini");
+    expect(languageForPath("packages/tui/.npmrc")).toBe("ini");
+    expect(languageForPath(".prettierrc")).toBe("jsonc");
+  });
+
+  test("leaves a config dotfile's extension variants to the library", () => {
+    expect(languageForPath(".prettierrc.json")).toBe("json");
+    expect(languageForPath(".prettierrc.yaml")).toBe("yaml");
+    expect(languageForPath(".prettierrc.js")).toBe("javascript");
+  });
+
+  test("resolves dotfiles by exact name, not by an rc suffix", () => {
+    expect(languageForPath(".nvmrc")).toBe("text");
   });
 });

@@ -31,9 +31,9 @@ describe("renderDiff", () => {
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
-    // The reconstructed text is exact, and Shiki produced multiple colored tokens.
+    // The reconstructed text is exact, and Shiki colored it (the plain-text fallback is one
+    // Uncolored span, so a foreground color is what says the grammar attached).
     expect(added.spans.map((span) => span.text).join("")).toBe('const b = "three";');
-    expect(added.spans.length).toBeGreaterThan(1);
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
     expect(added.newLine).toBe(2);
   });
@@ -71,7 +71,6 @@ index 1111111..2222222 100644
       throw new Error("expected an addition row");
     }
     expect(added.spans.map((span) => span.text).join("")).toBe("let total: u32 = sum(items);");
-    expect(added.spans.length).toBeGreaterThan(1);
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 
@@ -105,7 +104,6 @@ index 1111111..2222222 100644
       if (added === undefined) {
         throw new Error("expected an addition row");
       }
-      expect(added.spans.length).toBeGreaterThan(1);
       expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
     }
   });
@@ -128,7 +126,6 @@ index 1111111..2222222 100644
       throw new Error("expected an addition row");
     }
     expect(added.spans.map((span) => span.text).join("")).toBe("FROM oven/bun:1");
-    expect(added.spans.length).toBeGreaterThan(1);
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 

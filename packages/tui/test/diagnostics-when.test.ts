@@ -103,6 +103,25 @@ describe("dependency conditions", () => {
     ).toBe(false);
   });
 
+  test("matches Poetry's tables, whose keys are the names", () => {
+    expect(inRepo({ "pyproject.toml": '[tool.poetry.dependencies]\nty = "^0.0.58"\n' }, when)).toBe(
+      true,
+    );
+    expect(
+      inRepo(
+        { "pyproject.toml": '[tool.poetry.group.dev.dependencies]\nty = { version = "*" }\n' },
+        when,
+      ),
+    ).toBe(true);
+    // The pre-1.2 legacy list still ships in older projects.
+    expect(inRepo({ "pyproject.toml": '[tool.poetry.dev-dependencies]\nty = "*"\n' }, when)).toBe(
+      true,
+    );
+    expect(
+      inRepo({ "pyproject.toml": '[tool.poetry.dependencies]\npython = "^3.12"\n' }, when),
+    ).toBe(false);
+  });
+
   test("a bare or malformed pyproject is not met", () => {
     expect(inRepo({}, when)).toBe(false);
     expect(inRepo({ "pyproject.toml": "[project\nname = " }, when)).toBe(false);

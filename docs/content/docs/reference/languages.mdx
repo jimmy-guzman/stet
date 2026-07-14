@@ -81,7 +81,8 @@ So the warnings you see are the ones your CI gates on.
 
 A repo counts as a ty repo when it has a `ty.toml` or `.ty.toml`, a `[tool.ty]`
 table in `pyproject.toml`, or ty among its declared dependencies (a dependency
-group, an optional-dependencies extra, or `[tool.uv] dev-dependencies`). That
+group, an optional-dependencies extra, `[tool.uv] dev-dependencies`, or a
+Poetry dependency table). That
 rule is not private machinery: it is ty's `when` gate, and the one-checker rule
 is a `firstOf` group, both written in the exact grammar
 [your config uses](/docs/reference/configuration#languages), so you can

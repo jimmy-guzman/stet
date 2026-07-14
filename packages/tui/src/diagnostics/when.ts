@@ -89,18 +89,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Every requirement list a pyproject can declare: runtime, extras, dependency groups, uv's own.
- * pyproject is the one manifest whose dependencies are requirement strings needing name parsing;
+ * Every dependency a pyproject can declare: the PEP 508 requirement lists (runtime, extras,
+ * dependency groups, uv's own), which need name parsing, plus Poetry's tables (runtime, its legacy
+ * dev list, its groups), whose keys are the names. pyproject is the one manifest that needs this;
  * npm and Cargo declare theirs as keys, which the `key` condition already reaches.
  */
 function declaredDependencies(pyproject: Record<string, unknown>) {
   const project = isRecord(pyproject.project) ? pyproject.project : {};
   const tool = isRecord(pyproject.tool) ? pyproject.tool : {};
   const uv = isRecord(tool.uv) ? tool.uv : {};
+  const poetry = isRecord(tool.poetry) ? tool.poetry : {};
   const groups = [pyproject["dependency-groups"], project["optional-dependencies"]]
     .filter(isRecord)
     .flatMap((record) => Object.values(record));
-  return [project.dependencies, uv["dev-dependencies"], ...groups].flatMap(requirementNames);
+  const poetryTables = [
+    poetry.dependencies,
+    poetry["dev-dependencies"],
+    ...(isRecord(poetry.group)
+      ? Object.values(poetry.group)
+          .filter(isRecord)
+          .map((group) => group.dependencies)
+      : []),
+  ];
+  return [
+    ...[project.dependencies, uv["dev-dependencies"], ...groups].flatMap(requirementNames),
+    ...poetryTables.filter(isRecord).flatMap(Object.keys).map(normalizeDistributionName),
+  ];
 }
 
 /** The distribution names in a PEP 508 requirement list, normalized per PEP 503. */

@@ -83,12 +83,12 @@ interface ServerSpec {
   /**
    * When set, the server runs only in repos the gate accepts. oxlint/typescript run in every JS/TS
    * repo, but a competing linter like Biome should activate only where the repo opted into it (a
-   * `biome.json`), the way an editor's Biome extension does, so it neither downloads into repos
-   * that don't use it nor duplicates oxlint's findings. Data, not a predicate, like
-   * `initializationOptions`: the registry writes the same `when` grammar the config does, so a
-   * user's gate and a built-in's are one mechanism, and there is deliberately no code escape hatch
-   * (a gate the grammar can't express gets a new condition in `when.ts`, which config then gets for
-   * free).
+   * `biome.json`), the way an editor's Biome extension does, so it neither runs nor downloads in
+   * repos that don't use it (where it does run, it overlaps oxlint and the per-file merge unions
+   * both, like any shared file type). Data, not a predicate, like `initializationOptions`: the
+   * registry writes the same `when` grammar the config does, so a user's gate and a built-in's are
+   * one mechanism, and there is deliberately no code escape hatch (a gate the grammar can't express
+   * gets a new condition in `when.ts`, which config then gets for free).
    */
   readonly when?: When;
 }

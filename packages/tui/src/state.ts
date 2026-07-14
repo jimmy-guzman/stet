@@ -94,6 +94,7 @@ import {
   orderWorktrees,
   PEER_SUMMARY_MS,
   WORKTREE_ACTIVE_MS,
+  worktreePathTails,
 } from "./git/worktree";
 import type { Worktree, WorktreeSummary } from "./git/worktree";
 import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./intel/protocol";
@@ -113,7 +114,7 @@ import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
 import { relativeTime } from "./utils/relative-time";
-import { collapseHome, truncate, truncateLeft } from "./utils/text";
+import { truncate, truncateLeft } from "./utils/text";
 import {
   back,
   canBack,
@@ -903,7 +904,9 @@ function createState() {
   };
   // `undefined` while the worktree list is still loading (so the picker keeps its
   // Loading state); otherwise the subsequence-filtered list, matching the branch
-  // Label and path so a query can narrow by either.
+  // Label and the path's distinguishing tail so a query can narrow by either. The
+  // Prefix the worktrees share is deliberately not in the haystack: it is the same
+  // Text in every row, so it can only ever match all of them at once.
   const worktreeComboboxResults = createMemo(() => {
     const list = worktrees();
     if (list === undefined) {
@@ -913,10 +916,11 @@ function createState() {
     if (query === "") {
       return list;
     }
+    const tails = worktreePathTails(list);
     return list.filter((worktree) =>
       isSubsequence(
         query,
-        `${worktreeLabel(worktree)} ${collapseHome(worktree.path)}`.toLowerCase(),
+        `${worktreeLabel(worktree)} ${tails.get(worktree.path) ?? ""}`.toLowerCase(),
       ),
     );
   });

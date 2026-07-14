@@ -21,9 +21,11 @@ as `stet <ref>`.
 Press `w` to jump between git worktrees without leaving the view. The list is
 ranked by how recently each worktree was touched, so the one an agent is working
 in sits at the top, with its age beside it (`now`, `5m`, `3h`). Type to filter by
-branch, `↑`/`↓` to move, `⏎` to switch. The tree, diffs, polling, and checks all
-re-point at the chosen worktree. The full path of the highlighted worktree reads
-out below the list.
+branch or by the worktree's own folder, `↑`/`↓` to move, `⏎` to switch. The
+directory prefix every worktree shares is not matched, since it is the same text
+in every row and would only ever match all of them at once. The tree, diffs,
+polling, and checks all re-point at the chosen worktree. The full path of the
+highlighted worktree reads out below the list.
 
 ![The worktree picker, worktrees ranked by how recently each was touched, each with its age, and the highlighted one's full path below the list](/screenshots/worktree-picker.png)
 

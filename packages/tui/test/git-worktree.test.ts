@@ -9,6 +9,7 @@ import {
   parseWorktreeList,
   parseWorktreeStatusPaths,
   summarizeWorktree,
+  worktreePathTails,
 } from "@/git/worktree";
 import type { Worktree, WorktreeSummary } from "@/git/worktree";
 
@@ -336,5 +337,44 @@ describe("worktrees in a fixture repo", () => {
       rmSync(staleRoot, { force: true, recursive: true });
       rmSync(committedRoot, { force: true, recursive: true });
     }
+  });
+});
+
+describe("worktreePathTails", () => {
+  test("keeps only what differs when the worktrees are nested under the main one", () => {
+    const tails = worktreePathTails([
+      worktree("/repo", "main"),
+      worktree("/repo/.claude/worktrees/fix-header", "fix/header"),
+    ]);
+
+    // The main worktree *is* the shared prefix, so it has no distinguishing path text at all.
+    expect(tails.get("/repo")).toBe("");
+    expect(tails.get("/repo/.claude/worktrees/fix-header")).toBe(".claude/worktrees/fix-header");
+  });
+
+  test("splits siblings on segments, so a shared parent never slices a leaf mid-name", () => {
+    const tails = worktreePathTails([
+      worktree("/tmp/repo", "main"),
+      worktree("/tmp/repo-linked", "side"),
+    ]);
+
+    // Compared character by character the prefix would be `/tmp/repo`, leaving `` and `-linked`.
+    expect(tails.get("/tmp/repo")).toBe("repo");
+    expect(tails.get("/tmp/repo-linked")).toBe("repo-linked");
+  });
+
+  test("keeps the whole path when the worktrees share no directory", () => {
+    const tails = worktreePathTails([worktree("/a/one", "main"), worktree("/b/two", "side")]);
+
+    expect(tails.get("/a/one")).toBe("a/one");
+    expect(tails.get("/b/two")).toBe("b/two");
+  });
+
+  test("leaves a lone worktree nothing to narrow by", () => {
+    expect(worktreePathTails([worktree("/repo", "main")]).get("/repo")).toBe("");
+  });
+
+  test("returns nothing for no worktrees", () => {
+    expect(worktreePathTails([]).size).toBe(0);
   });
 });

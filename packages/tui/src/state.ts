@@ -2498,6 +2498,9 @@ function createState() {
   // Terminates by construction: the follow-up run finds no changed text, so it sends the server
   // Nothing, so it provokes no further publishes and no further nudge.
   let recheckPending = false;
+  onReset(() => {
+    recheckPending = false;
+  });
   function requestRecheck() {
     if (checksRunning()) {
       recheckPending = true;
@@ -2530,6 +2533,13 @@ function createState() {
 
     // The run in flight holds handles to the children about to be killed; left alone, its requests
     // Come back as "connection closed" and flash a red `failed` badge over every file it was checking.
+    //
+    // Drop the deferred re-check *before* aborting, or the abort itself resurrects it: the run's exit
+    // Path fires a pending re-check, and that fresh run re-acquires the very pool entries the restart
+    // Is about to evict. `RcMap.invalidate` skips a still-referenced entry, so the wedged child would
+    // Survive with a replacement beside it, which is the same hole the warm-hold teardown below
+    // Closes. Nothing is lost: this restart ends with a run of its own.
+    recheckPending = false;
     checksController?.abort();
 
     // Drop the warm-hold and wait for its scope to actually close. Aborting the controller directly

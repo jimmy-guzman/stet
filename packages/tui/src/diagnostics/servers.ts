@@ -5,7 +5,6 @@
  * reference drops, so a worktree switch transparently swaps to a fresh server for the new root.
  */
 import { existsSync, watch } from "node:fs";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Context, Data, Effect, Layer, Queue, RcMap, Stream } from "effect";
@@ -1335,9 +1334,12 @@ export const LanguageServersLive = Layer.effect(
         ),
     });
 
-    // The pool key is "<language> <repoRoot>" and a language never contains a space.
+    // The pool key is "<language> <repoRoot>", split at its first space exactly as `lookupServer`
+    // Splits it: a language never contains a space, a repo path may. Comparing the root portion for
+    // Equality, rather than matching the key's suffix, is what keeps the two parses from disagreeing
+    // And one repo from claiming another whose path happens to end with " <this root>".
     const keysFor = (repoRoot: string) =>
-      [...live.keys()].filter((key) => key.endsWith(` ${repoRoot}`));
+      [...live.keys()].filter((key) => key.slice(key.indexOf(" ") + 1) === repoRoot);
 
     const notifyWatchedFiles = (
       repoRoot: string,

@@ -207,3 +207,28 @@ export function orderWorktrees(
 
   return worktrees.toSorted((a, b) => activity(b) - activity(a) || a.path.localeCompare(b.path));
 }
+
+/**
+ * Each worktree's path keyed to the part that actually tells it apart: the segments after the
+ * prefix every worktree shares. That prefix is identical in every entry, so as filter text it can
+ * only ever produce a false match (`dev` matching all of them through `/Developer/`), never
+ * separate two of them, which leaves the tail as the only part that distinguishes. Compared segment
+ * by segment, not character by character, so a shared parent cannot slice a leaf mid-name:
+ * `/t/repo` and `/t/repo-linked` share `/t`, not `/t/repo`. The worktree that _is_ the prefix (the
+ * main one, when the others are nested under it) has no distinguishing text and gets an empty
+ * tail.
+ */
+export function worktreePathTails(worktrees: readonly Worktree[]) {
+  const paths = worktrees.map((worktree) => worktree.path.split("/"));
+  const first = paths[0];
+  if (first === undefined) {
+    return new Map<string, string>();
+  }
+
+  const mismatch = first.findIndex((segment, index) =>
+    paths.some((other) => other[index] !== segment),
+  );
+  const shared = mismatch === -1 ? first.length : mismatch;
+
+  return new Map(paths.map((segments) => [segments.join("/"), segments.slice(shared).join("/")]));
+}

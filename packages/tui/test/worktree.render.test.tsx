@@ -227,14 +227,30 @@ describe("worktree picker", () => {
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
 
-      mockInput.pressKey("w");
-      await settleUntil("worktree picker", (frame) => frame.includes("side-branch"));
+      // The main worktree is the row carrying the current-worktree marker, so it is the witness for
+      // Both halves of the filter: it starts on screen, and typing a branch that is not its own
+      // Takes it off.
+      const mainRow = /● (?<default>main|master)/;
 
+      mockInput.pressKey("w");
+      await settleUntil(
+        "worktree picker",
+        (frame) => frame.includes("side-branch") && mainRow.test(frame),
+      );
+
+      // Both queries below are matched against the branch plus the path's *distinguishing tail*,
+      // Which this fixture owns end to end (`main` with no tail, `side-branch .wt`). Neither can be
+      // Satisfied through the temp directory the fixture does not choose. When the picker filtered
+      // On the whole absolute path, `branchzzz` was a subsequence of it whenever the random mkdtemp
+      // Suffix happened to carry two more z's, the row survived, and this test failed on ~1.5% of
+      // Runs.
       await mockInput.typeText("branch");
-      const filtered = await settleUntil("filtered to side-branch", (frame) =>
-        frame.includes("side-branch"),
+      const filtered = await settleUntil(
+        "filtered to side-branch",
+        (frame) => frame.includes("side-branch") && !mainRow.test(frame),
       );
       expect(filtered).toContain("side-branch");
+      expect(filtered).not.toMatch(mainRow);
 
       await mockInput.typeText("zzz");
       const empty = await settleUntil(

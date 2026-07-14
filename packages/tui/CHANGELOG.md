@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.4](https://github.com/jimmy-guzman/stet/compare/stet-v0.7.3...stet-v0.7.4) (2026-07-14)
+
+
+### Features
+
+* **icons:** ✨ add icons for alembic.ini, .mako, & README ([#286](https://github.com/jimmy-guzman/stet/issues/286)) ([98822cd](https://github.com/jimmy-guzman/stet/commit/98822cdf6d087fdf1c9d8e3c43e7e49a350897fe))
+* **worktree:** ✨ surface which worktree agents are working in ([#284](https://github.com/jimmy-guzman/stet/issues/284)) ([b78fcac](https://github.com/jimmy-guzman/stet/commit/b78fcacd366ed2c5ad8fff9f9149dcd9c8a74b96))
+
+
+### Bug Fixes
+
+* **header:** 🐛 drop the worktree-activity cue ([#287](https://github.com/jimmy-guzman/stet/issues/287)) ([621c9ae](https://github.com/jimmy-guzman/stet/commit/621c9ae5e27f2b098a6b9c86fa3ee4c04a5f14de))
+* **worktree:** 🐛 avoid stale worktree-deletion exits ([#288](https://github.com/jimmy-guzman/stet/issues/288)) ([7637d74](https://github.com/jimmy-guzman/stet/commit/7637d748e0df863b62d190bf1a1f36d3c5bcb727))
+* **worktree:** 🐛 filter the picker by what tells worktrees apart ([#293](https://github.com/jimmy-guzman/stet/issues/293)) ([d2067dd](https://github.com/jimmy-guzman/stet/commit/d2067dd6f10c03adae1921b5daf046274c413d05))
+
 ## [0.7.3](https://github.com/jimmy-guzman/stet/compare/stet-v0.7.2...stet-v0.7.3) (2026-07-12)
 
 

@@ -31,9 +31,9 @@ describe("renderDiff", () => {
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
-    // The reconstructed text is exact, and Shiki produced multiple colored tokens.
+    // The reconstructed text is exact, and Shiki colored it (the plain-text fallback is one
+    // Uncolored span, so a foreground color is what says the grammar attached).
     expect(added.spans.map((span) => span.text).join("")).toBe('const b = "three";');
-    expect(added.spans.length).toBeGreaterThan(1);
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
     expect(added.newLine).toBe(2);
   });
@@ -71,7 +71,6 @@ index 1111111..2222222 100644
       throw new Error("expected an addition row");
     }
     expect(added.spans.map((span) => span.text).join("")).toBe("let total: u32 = sum(items);");
-    expect(added.spans.length).toBeGreaterThan(1);
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 
@@ -105,7 +104,6 @@ index 1111111..2222222 100644
       if (added === undefined) {
         throw new Error("expected an addition row");
       }
-      expect(added.spans.length).toBeGreaterThan(1);
       expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
     }
   });
@@ -128,7 +126,25 @@ index 1111111..2222222 100644
       throw new Error("expected an addition row");
     }
     expect(added.spans.map((span) => span.text).join("")).toBe("FROM oven/bun:1");
-    expect(added.spans.length).toBeGreaterThan(1);
+    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+  });
+
+  test("renders an .npmrc with syntax highlighting", async () => {
+    const npmrcPatch = `diff --git a/.npmrc b/.npmrc
+index 1111111..2222222 100644
+--- a/.npmrc
++++ b/.npmrc
+@@ -1,1 +1,1 @@
+-save-exact=false
++save-exact=true
+`;
+    const render = await renderDiff({ full: false, maxLines: 1600, patch: npmrcPatch });
+
+    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    if (added === undefined) {
+      throw new Error("expected an addition row");
+    }
+    expect(added.spans.map((span) => span.text).join("")).toBe("save-exact=true");
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 
@@ -171,5 +187,21 @@ describe("languageForPath", () => {
     expect(languageForPath("script/stet.rb.tmpl")).toBe("ruby");
     expect(languageForPath("a/b/Formula.rb")).toBe("ruby");
     expect(languageForPath("config.yaml.tmpl")).toBe("text");
+  });
+
+  test("resolves config dotfiles by name in any directory", () => {
+    expect(languageForPath(".npmrc")).toBe("ini");
+    expect(languageForPath("packages/tui/.npmrc")).toBe("ini");
+    expect(languageForPath(".prettierrc")).toBe("jsonc");
+  });
+
+  test("leaves a config dotfile's extension variants to the library", () => {
+    expect(languageForPath(".prettierrc.json")).toBe("json");
+    expect(languageForPath(".prettierrc.yaml")).toBe("yaml");
+    expect(languageForPath(".prettierrc.js")).toBe("javascript");
+  });
+
+  test("resolves dotfiles by exact name, not by an rc suffix", () => {
+    expect(languageForPath(".nvmrc")).toBe("text");
   });
 });

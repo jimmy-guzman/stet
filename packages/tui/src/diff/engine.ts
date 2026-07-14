@@ -221,6 +221,16 @@ function attach(lang: string) {
   return promise;
 }
 
+/**
+ * Config dotfiles, whose whole name is the stem: the library keys its table on extensions, so these
+ * fall through to plain text without an exact-name match. `jsonc` over `json` because it tokenizes
+ * plain JSON identically and colors comments. Exact names, not a `*rc` rule (`.zshrc` is neither).
+ */
+const BY_NAME = new Map([
+  [".npmrc", "ini"],
+  [".prettierrc", "jsonc"],
+]);
+
 // Resolve against the basename, not the full repo-relative path: the library's
 // Extensionless filename keys (`Dockerfile`, `Makefile`, ...) match by exact
 // String equality, so a `docker/Dockerfile` would otherwise miss and fall back to
@@ -234,6 +244,10 @@ function attach(lang: string) {
  */
 export function languageForPath(name: string) {
   const base = name.slice(name.lastIndexOf("/") + 1);
+  const named = BY_NAME.get(base);
+  if (named !== undefined) {
+    return named;
+  }
   if (base.endsWith(".gradle")) {
     return "groovy";
   }

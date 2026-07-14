@@ -31,6 +31,11 @@ picks the grammar from the file's name, including exact names such as
 hover cards, and reference previews share the same highlighter and theme. An
 unrecognized file type falls back to plain text.
 
+Config dotfiles carry no extension to pick a grammar from, so they resolve by
+name: `.npmrc` highlights as INI and `.prettierrc` as JSONC, so a comment in it
+reads as a comment. Their extension variants, such as `.prettierrc.json` and
+`.prettierrc.yaml`, already resolve on the extension.
+
 ## Folding
 
 Press `z` to fold the block at the caret: code folds by indentation in every

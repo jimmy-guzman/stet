@@ -221,13 +221,11 @@ function attach(lang: string) {
   return promise;
 }
 
-// The library keys its table on extensions, so a config dotfile (whose whole name
-// Is the stem) reads as plain text. These are the exact names, matched the way the
-// Icon and diagnostics lookups already match theirs: `.npmrc` is INI (git's own
-// Config format, and Linguist's "NPM Config" is grouped under it), `.prettierrc`
-// Is JSON, resolved as jsonc since that grammar tokenizes plain JSON identically
-// And colors comments instead of leaving them bare. Not a `*rc` rule: `.zshrc` and
-// `.vimrc` are neither.
+/**
+ * Config dotfiles, whose whole name is the stem: the library keys its table on extensions, so these
+ * fall through to plain text without an exact-name match. `jsonc` over `json` because it tokenizes
+ * plain JSON identically and colors comments. Exact names, not a `*rc` rule (`.zshrc` is neither).
+ */
 const BY_NAME = new Map([
   [".npmrc", "ini"],
   [".prettierrc", "jsonc"],

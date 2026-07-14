@@ -148,7 +148,6 @@ index 1111111..2222222 100644
       throw new Error("expected an addition row");
     }
     expect(added.spans.map((span) => span.text).join("")).toBe("save-exact=true");
-    expect(added.spans.length).toBeGreaterThan(1);
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 

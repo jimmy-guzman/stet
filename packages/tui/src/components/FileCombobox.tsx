@@ -122,7 +122,7 @@ export function FileCombobox() {
                   onMouseDown={() => openPath(path())}
                 >
                   <box flexDirection="row">
-                    <FileIcon name={path().split("/").at(-1) ?? path()} />
+                    <FileIcon path={path()} />
                     <HighlightedPath
                       path={path}
                       query={() => state.fileComboboxQuery()}

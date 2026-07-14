@@ -37,7 +37,7 @@ import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { LspProcess } from "./diagnostics/lsp-process";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import { intelLanguage, LanguageServers, serversProviding } from "./diagnostics/servers";
+import { hasIntelServer, LanguageServers, serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -2659,9 +2659,7 @@ function createState() {
       return prev;
     }
     const path = selectedPath();
-    return path !== undefined && intelLanguage(path, root) !== undefined
-      ? { path, root }
-      : undefined;
+    return path !== undefined && hasIntelServer(path) ? { path, root } : undefined;
   });
   // The warm-hold's fiber, so a restart can release the pool reference it pins and then wait for the
   // Scope to actually close. `RcMap.invalidate` skips a still-referenced entry, so a server the user
@@ -2845,10 +2843,8 @@ function createState() {
     }
     const { line, path } = caret;
     const requestRoot = repoRoot();
-    // No server advertises `implementation` for this file's language (ty answers every other intel
-    // Pull but not this one), so a pull would return `[]` and its "no implementations" notice would
-    // Read as a false claim. Say what is actually true instead, without issuing a request.
-    if (serversProviding(path, "implementation", requestRoot).length === 0) {
+    const providers = await serversProviding(path, "implementation", requestRoot);
+    if (providers.length === 0) {
       notify("no implementation support for this file type");
       return;
     }
@@ -3156,9 +3152,11 @@ function createState() {
     symbolsPath = path;
     symbolsRoot = repoRoot();
     symbolsFile = selectedFile();
+    const requestRoot = symbolsRoot;
     // No server advertises `documentSymbol` for this language, so a pull would return `[]` and read
     // As "no symbols" (a false claim). Short-circuit to a distinct state without issuing a request.
-    if (serversProviding(path, "documentSymbol", symbolsRoot).length === 0) {
+    const providers = await serversProviding(path, "documentSymbol", requestRoot);
+    if (providers.length === 0) {
       symbolsController = undefined;
       batch(() => {
         setSymbolsResults([]);
@@ -3171,7 +3169,6 @@ function createState() {
     }
     const controller = new AbortController();
     symbolsController = controller;
-    const requestRoot = symbolsRoot;
     batch(() => {
       setSymbolsResults([]);
       setSymbolsIndex(0);

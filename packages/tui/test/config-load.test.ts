@@ -86,12 +86,14 @@ describe("loadConfigText", () => {
     expect(issues).toHaveLength(1);
   });
 
-  test("language entries load raw; the resolver validates them later", () => {
+  test("registry entries load raw; their resolvers validate them later", () => {
     const { config, issues } = loadConfigText(
-      `{ "languages": { "python": { "extensions": ["py"], "servers": [{ "command": ["pyright-langserver", "--stdio"] }] } } }`,
+      `{ "files": { "lua": { "extensions": ["lua"], "language": "lua" } }, "languages": { "lua": { "languageId": "lua", "servers": ["lua"] } }, "servers": { "lua": { "command": ["lua-language-server"] } } }`,
     );
 
     expect(issues).toEqual([]);
-    expect(config.languages).toMatchObject({ python: { extensions: ["py"] } });
+    expect(config.files).toMatchObject({ lua: { extensions: ["lua"] } });
+    expect(config.languages).toMatchObject({ lua: { languageId: "lua" } });
+    expect(config.servers).toMatchObject({ lua: { command: ["lua-language-server"] } });
   });
 });

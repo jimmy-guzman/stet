@@ -153,7 +153,7 @@ export function ReferencesOverlay() {
                   <Show when={asHeader(row())}>
                     {(header) => (
                       <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-                        <FileIcon name={header().path.split("/").at(-1) ?? header().path} />
+                        <FileIcon path={header().path} />
                         <text fg={theme.colors.text.strong}>{header().path}</text>
                       </box>
                     )}

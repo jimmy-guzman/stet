@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { fileIcon, folderIcon, symlinkIcon } from "@/utils/file-icon";
+import { fileIcon, fileIconModel, folderIcon, symlinkIcon } from "@/utils/file-icon";
 
 describe("fileIcon", () => {
   test("matches by extension", () => {
@@ -110,6 +110,7 @@ describe("fileIcon", () => {
   test("prefers an exact filename over its extension", () => {
     // Package.json is a json file, but the stem entry beats the .json extension glyph.
     expect(fileIcon("package.json")).toBe("\u{e718}");
+    expect(fileIconModel("package.json").name).toBe("node");
     expect(fileIcon("package.json")).not.toBe(fileIcon("generic.json"));
     // Bunfig.toml gets the bun glyph, not the generic toml glyph.
     expect(fileIcon("bunfig.toml")).toBe("\u{e76f}");
@@ -160,12 +161,15 @@ describe("fileIcon", () => {
   test("falls back to a config glyph for unmatched dotfiles", () => {
     expect(fileIcon(".editorconfig")).toBe("\u{e615}");
     expect(fileIcon(".npmrc")).toBe("\u{e615}");
+    expect(fileIcon(".ts")).toBe(fileIcon(".npmrc"));
+    expect(fileIcon(".ts")).not.toBe(fileIcon("main.ts"));
     // A recognized suffix still wins over the dotfile fallback.
     expect(fileIcon(".prettierrc.json")).toBe("\u{eb0f}");
   });
 
   test("matches dotfiles by full name", () => {
     expect(fileIcon(".gitignore")).toBe("\u{e702}");
+    expect(fileIcon("nested/.gitignore")).toBe(fileIcon(".gitignore"));
   });
 
   test("is case-insensitive", () => {

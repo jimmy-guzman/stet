@@ -183,13 +183,16 @@ export function Viewer() {
     if (view === undefined) {
       return undefined;
     }
-    const name = view.path.split("/").pop() ?? view.path;
     const content = view.fileContent;
     if (view.showFileContent && content?.kind === "binary") {
-      return { diff: undefined, name, single: { bytes: content.bytes, image: content.image } };
+      return {
+        diff: undefined,
+        path: view.path,
+        single: { bytes: content.bytes, image: content.image },
+      };
     }
     if (view.binary !== undefined) {
-      return { diff: view.binary, name, single: undefined };
+      return { diff: view.binary, path: view.path, single: undefined };
     }
     return undefined;
   };
@@ -379,7 +382,7 @@ export function Viewer() {
             >
               {(preview) => (
                 <BinaryPreview
-                  name={preview().name}
+                  path={preview().path}
                   height={state.viewerHeight()}
                   single={preview().single}
                   diff={preview().diff}

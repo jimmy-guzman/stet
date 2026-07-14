@@ -177,6 +177,7 @@ describe("languageForPath", () => {
   test("resolves extension-based files, including nested paths", () => {
     expect(languageForPath("src/index.ts")).toBe("typescript");
     expect(languageForPath("nginx.conf")).toBe("nginx");
+    expect(languageForPath("templates/view.blade.php")).toBe("blade");
   });
 
   test("keeps the .gradle Groovy override on the basename", () => {
@@ -190,6 +191,8 @@ describe("languageForPath", () => {
   });
 
   test("resolves config dotfiles by name in any directory", () => {
+    expect(languageForPath(".env")).toBe("dotenv");
+    expect(languageForPath("packages/tui/.env")).toBe("dotenv");
     expect(languageForPath(".npmrc")).toBe("ini");
     expect(languageForPath("packages/tui/.npmrc")).toBe("ini");
     expect(languageForPath(".prettierrc")).toBe("jsonc");
@@ -201,7 +204,10 @@ describe("languageForPath", () => {
     expect(languageForPath(".prettierrc.js")).toBe("javascript");
   });
 
-  test("resolves dotfiles by exact name, not by an rc suffix", () => {
+  test("resolves bare dotfiles only by exact name", () => {
+    expect(languageForPath(".env.local")).toBe("text");
+    expect(languageForPath(".ts")).toBe("text");
+    expect(languageForPath(".json")).toBe("text");
     expect(languageForPath(".nvmrc")).toBe("text");
   });
 });

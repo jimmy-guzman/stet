@@ -81,8 +81,9 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
   worktrees, and themes
 - [Keybindings](https://stet.jimmy.codes/docs/reference/keybindings): every
   shortcut (or press `?` in the app)
-- [Configuration](https://stet.jimmy.codes/docs/reference/configuration): themes
-  and editor setup at `~/.config/stet/config.jsonc` (or `config.json`)
+- [Configuration](https://stet.jimmy.codes/docs/reference/configuration): themes,
+  file associations, icons, language servers, and editor setup at
+  `~/.config/stet/config.jsonc` (or `config.json`)
 
 ## Requirements
 

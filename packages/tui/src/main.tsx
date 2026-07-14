@@ -10,8 +10,10 @@ import { App } from "./App";
 import { helpText, parseCommand } from "./cli";
 import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
-import { registerLanguages, registerServers, resolveLanguages } from "./diagnostics/servers";
+import { registerServers, resolveServers } from "./diagnostics/servers";
 import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
+import { resolveFileSupportConfig } from "./file-support/config";
+import { registerFileSupport } from "./file-support/registry";
 import type { GitModel } from "./git/model";
 import { Git } from "./git/service";
 import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
@@ -95,15 +97,16 @@ try {
   registerThemes(themes);
   setSelection(config.theme);
 
-  // Register configured languages and their inline servers the same way, before the app runtime
-  // Builds, so the first diagnostics run already sees them.
-  const {
-    issues: languageIssues,
-    languages: configLanguages,
-    servers: configServers,
-  } = resolveLanguages(config.languages ?? {});
-  registerServers(configServers);
-  registerLanguages(configLanguages);
+  // Resolve servers first because language profiles validate their named references. Everything
+  // Registers before the runtime builds, so diff, icons, diagnostics, and intel share one startup
+  // Snapshot for the full session.
+  const { issues: serverIssues, servers } = resolveServers(config.servers ?? {});
+  registerServers(servers);
+  const { issues: fileSupportIssues, registry: fileSupport } = resolveFileSupportConfig(
+    config,
+    new Set(Object.keys(servers)),
+  );
+  registerFileSupport(fileSupport);
 
   // Create the renderer up front and detect the terminal's dark/light appearance
   // Before the first runtime use (which warms the diff highlighter), so the whole
@@ -206,7 +209,7 @@ try {
       void state.runChecks(model);
 
       // A bad config never blocks startup; the first issue surfaces as a notice.
-      const issues = [...configIssues, ...themeIssues, ...languageIssues];
+      const issues = [...configIssues, ...themeIssues, ...serverIssues, ...fileSupportIssues];
       if (issues.length > 0) {
         state.notify(issues[0] ?? "config has issues");
       }

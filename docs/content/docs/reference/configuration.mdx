@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Set a permanent theme and editor for stet through an optional config file.
+description: Configure themes, editors, file associations, icons, and language servers.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -61,6 +61,10 @@ inherits another theme and overrides only the tokens you name. Its `"syntax"` is
 a bundled [Shiki](https://shiki.style/) theme name, or an object overriding
 individual tokens (`keyword`, `string`, and so on).
 
+The dynamic `icon` token map colors named icons. It accepts built-in and user-defined icon names.
+The built-in themes color recognizable file types while structural and generic icons stay muted; an
+icon with no color entry falls back to `text.muted`.
+
 ```jsonc title="~/.config/stet/config.jsonc"
 {
   // follow the terminal, with a custom theme on each side
@@ -80,142 +84,146 @@ move or hover to preview the whole UI live, `enter` (or click) to apply, `esc`
 to revert. The switch lasts the session; the config file is where a theme is
 made permanent.
 
-## Languages
+## File support
 
-Use `languages` to add languages backed by your own language servers, or to
-change which servers run for a built-in language. Diagnostics and code
-navigation then work for those files exactly as they do for the built-ins.
+File support is four named registries layered over stet's built-ins:
 
-A language entry declares the file types it owns (`extensions`, and `filenames`
-for exact names like `Dockerfile`) and the `servers` that analyze them. A server
-entry is written one of these ways:
+- `files` matches paths and selects syntax, icon, and language facets.
+- `icons` maps icon names to Nerd Font glyphs.
+- `languages` maps profile names to an LSP `languageId` and ordered server entries.
+- `servers` maps server names to commands, repository conditions, initialization and settings data,
+  and static capability hints.
 
-| Form                                   | What it is                                                  |
-| -------------------------------------- | ----------------------------------------------------------- |
-| `"biome"`                              | a built-in, by name; it runs                                |
-| `{ "server": "biome", "when": [...] }` | a built-in, run only in repos matching `when`               |
-| `{ "command": [...], "when"?: [...] }` | any command on your machine, optionally gated the same way  |
-| `{ "firstOf": [entries...] }`          | candidates in preference order; the first that applies runs |
+Each registry has its own entry shape, but they share the same named layering behavior. An object
+with an existing name inherits fields it does not set, a new name adds an entry, and `false` removes
+an entry. Arrays replace inherited arrays. Icon entries are glyph strings rather than objects. An
+invalid entry reports a notice and leaves its built-in unchanged; an unknown icon, language, or
+syntax referenced by a file association drops only that facet.
 
-The built-in names are `typescript`, `oxlint`, `biome`, `json`, `yaml`,
-`rust-analyzer`, `basedpyright`, `ty`, and `ruff`. An inline command also takes
-`initializationOptions` and `settings`, passed to the server as-is (`{repoRoot}`
-and `{repoUri}` in string values are replaced per repository).
+### Add a language
 
-This is the same grammar stet's own built-in table is written in: Biome ships
-with `"when": ["biome.json", "biome.jsonc"]`, and Python's server list is
-`[{ "firstOf": ["ty", "basedpyright"] }, "ruff"]`. There is no gate a built-in
-can express that your config cannot.
+The four registries keep each concern reusable. This complete Lua example adds a command, an LSP
+profile, a file association, and an icon:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
-  "languages": {
-    // add a language: file types + at least one server
+  "servers": {
     "lua": {
-      "extensions": ["lua"],
-      "servers": [{ "command": ["lua-language-server"] }],
+      "command": ["lua-language-server"],
+      "capabilities": ["definition", "references", "hover", "documentSymbol"],
     },
-    // route exact filenames
-    "docker": {
-      "filenames": ["Dockerfile"],
-      "servers": [{ "command": ["docker-langserver", "--stdio"] }],
-    },
-    // change a built-in: unset fields are inherited, "servers" replaces the
-    // list, so leaving oxlint out turns it off for the JS/TS family
-    "typescript": { "servers": ["typescript", "biome"] },
-    // pick Python's type checker yourself instead of letting stet detect it
-    "python": { "servers": ["ty", "ruff"] },
+  },
+  "languages": {
+    "lua": { "languageId": "lua", "servers": ["lua"] },
+  },
+  "icons": {
+    "lua": "\ue620",
+  },
+  "files": {
+    "lua": { "extensions": ["lua"], "syntax": "lua", "icon": "lua", "language": "lua" },
+  },
+  "themes": {
+    "my-dark": { "base": "dark", "icon": { "lua": "#71c1f7" } },
   },
 }
 ```
 
-Naming `servers` turns detection off for that language. Some built-in servers
-normally activate only where a repo opted into them: Biome needs a `biome.json`,
-and Python's type checker is picked from what the repo declares. That detection
-exists to guess what you want, so once you say it, stet stops guessing. Name
-`biome` and it runs with or without a `biome.json`; name a Python type checker
-and it runs regardless of what the repo declares. Leave `servers` out (to add a file type,
-say) and the language keeps its built-in list, detection included.
+A configured command resolves from the repo's `node_modules/.bin`, then `PATH`, or runs an absolute
+path as-is. User commands are never auto-provisioned. Overriding a built-in server's `command` also
+drops its trusted built-in provisioning definition.
 
-### Run a server only in some repos
+### Match files
 
-`when` is how you say it yourself. This config is global, so it applies to every
-repo you open, and a server with nothing to gate it runs everywhere, reporting
-findings in projects that never asked for it. A `when` is one condition or an
-any-of list of them, and a condition takes one of three shapes:
+A file association accepts `filenames`, `globs`, `extensions`, and `dotfiles`. Extensions are bare
+suffixes without a leading dot. A glob containing `/` matches the full repo-relative POSIX path; any
+other glob matches only the basename. Matching is case-sensitive unless `caseSensitive` is `false`.
 
-| Condition                                          | Holds when                                         |
-| -------------------------------------------------- | -------------------------------------------------- |
-| `"biome.json"`                                     | that path exists at the repository root            |
-| `{ "file": "...", "key": ["a", "b"] }`             | that key path exists in a TOML or JSON(C) manifest |
-| `{ "file": "pyproject.toml", "dependency": "ty" }` | a pyproject declares that dependency anywhere      |
+Each association may set `syntax`, `icon`, and `language`. Built-in and user associations
+participate in the same cascade, and each facet resolves independently by specificity: exact
+filename, glob, extension, then dotfile fallback. At the same specificity, a later association wins;
+user entries are registered after built-ins. Setting a facet to `false` blocks lower matches for
+that facet: syntax becomes plain text, icon becomes the generic file glyph, or LSP support is
+disabled.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
+  "files": {
+    "generated": {
+      "globs": ["generated/**/*.ts"],
+      "syntax": "typescript",
+      "icon": false,
+      "language": false,
+    },
+    "docker-compose": {
+      "filenames": ["compose.yaml", "compose.yml"],
+      "syntax": "yaml",
+      "icon": "docker",
+      "language": "yaml",
+    },
+  },
+}
+```
+
+Without a matching syntax facet, stet asks its bundled filename inference for a Shiki grammar.
+Bare dotfiles do not masquerade as extensions. Without an icon match it uses `file`; without a
+language match it starts no server.
+
+### Configure servers and selection
+
+A server accepts `command`, `when`, `initializationOptions`, `settings`, and `capabilities`.
+`{repoRoot}` and `{repoUri}` placeholders in initialization and settings string values are replaced
+per repository. Capability hints may contain `definition`, `references`, `hover`, `documentSymbol`,
+`callHierarchy`, `implementation`, and `pullDiagnostics`; the server's initialize reply remains the
+authoritative check.
+
+`when` is declarative data, never a shell command. It accepts a repo-relative path, a manifest key,
+or a Python dependency declaration. An array means any condition may match:
+
+```jsonc
+"when": [
+  "deno.json",
+  "deno.jsonc",
+  { "file": "package.json", "key": ["devDependencies", "some-server"] },
+  { "file": "pyproject.toml", "dependency": "some-server" },
+]
+```
+
+A bare server name in a language uses that server's default `when`. `{ "server": "name" }` is
+unconditional, and adding `when` to that object supplies an entry-specific condition. A `firstOf`
+group selects its first eligible candidate. This lets one profile express a repository-selected
+primary server without duplicating file associations:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "servers": {
+    "deno": {
+      "command": ["deno", "lsp"],
+      "when": ["deno.json", "deno.jsonc"],
+    },
+  },
   "languages": {
     "typescript": {
-      "servers": [
-        "typescript", // always
-        { "server": "biome", "when": ["biome.json", "biome.jsonc"] }, // where the repo opted in
-        { "command": ["house-lsp", "--stdio"], "when": [".houserc"] }, // yours, only where it applies
-      ],
+      "servers": [{ "firstOf": ["deno", "typescript"] }, "oxlint", "biome"],
     },
   },
 }
 ```
 
-`key` is an array of segments (manifest keys may contain dots), and the file is
-parsed as TOML or JSONC by its extension, so npm dependencies are reachable as
-keys: `{ "file": "package.json", "key": ["devDependencies", "@biomejs/biome"] }`.
-`dependency` exists because pyproject declares dependencies as requirement
-strings (`"ty>=0.0.58"`) that need name parsing; it is supported for
-`pyproject.toml` only. A missing or malformed manifest simply means the
-condition is not met.
+Python uses the same grammar: `[{ "firstOf": ["ty", "basedpyright"] }, "ruff"]` prefers ty where
+the repository opted into it and falls back to basedpyright. Reuse that list to keep detection, or
+write `{ "server": "ty" }` or `{ "server": "basedpyright" }` to force one checker.
 
-### Pick one of several servers
+Set `when` to `false` on a server override to remove its built-in default condition. Set an entire
+server, language, icon, or file association to `false` to disable it.
 
-`firstOf` runs exactly one of its candidates: the first whose condition holds.
-Inside the group, a bare built-in name keeps its own gate (the group exists to
-pick by condition), and a candidate with no condition always applies, which
-makes it the fallback. This is how Python's type checker works out of the box,
-and how you would slot in a third:
-
-```jsonc title="~/.config/stet/config.jsonc"
-{
-  "languages": {
-    "python": {
-      "servers": [
-        {
-          "firstOf": [
-            { "command": ["mypy-ls"], "when": ["mypy.ini"] }, // yours, where its config is
-            "ty", // ty's own gate: ty.toml, [tool.ty], or a declared dependency
-            "basedpyright", // no condition: the fallback
-          ],
-        },
-        "ruff",
-      ],
-    },
-  },
-}
-```
-
-Built-in server names use stet's pinned definitions and standard [server
-discovery and provisioning
-flow](/docs/reference/languages#how-servers-are-found).
-
-An inline `command` can run any executable on your machine. stet resolves it
-from the repo's own `node_modules/.bin`, then your `PATH`, or uses an absolute
-path as-is. Examples include `gopls` installed with `go install`,
-`lua-language-server` installed with `brew`, and `solargraph` installed as a
-gem. stet never downloads an executable for an inline command.
-
-stet reads inline server entries only from your global config. It does not read
-server configuration from the repository being inspected, although a configured
-executable may resolve from that repository's `node_modules/.bin`.
+stet reads commands only from your global config. It never reads a server command from the
+repository being inspected, although a configured executable may resolve from that repository's
+`node_modules/.bin`.
 
 <Callout>
-  An entry that does not validate is reported in a notice and skipped; the rest of the config still
-  applies.
+  An entry that does not validate is reported in a notice; the rest of the config still applies.
+  Invalid whole-entry overrides retain their built-in, while invalid references on a file
+  association drop only the affected facet.
 </Callout>
 
 ## Environment variables

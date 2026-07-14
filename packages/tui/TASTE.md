@@ -33,6 +33,7 @@ The rules are stack-agnostic. Where one is specific to a graphical or web platfo
 - Keep text and UI marks legible against their surface; treat a comfortable contrast as a floor, not a target.
 - Borders and dividers should be barely there. Low-contrast separation reads as calm.
 - Dark mode is not inverted light mode. Re-derive it. Soften white text, lower saturation.
+- File-type icons are the narrow exception to a monochrome chrome: recognizable brands keep their identity, unbranded formats reuse the existing stet palette, and structural or generic icons stay muted. Color should identify the type without making the tree louder than its contents.
 - Never signal state by color alone. Pair it with a glyph, text, or shape, so it reads under `NO_COLOR` and for colorblind users.
 
 ## 3. Space and layout
@@ -98,7 +99,7 @@ The rules are stack-agnostic. Where one is specific to a graphical or web platfo
 
 - Keyboard-operable end to end. Focus order follows visual order.
 - There is no DOM or ARIA in a terminal. The accessibility surface is `NO_COLOR`, `FORCE_COLOR`, and the absence of a Nerd Font; carry meaning in text and glyphs so it survives all three.
-- Meaningful glyphs and icons carry a text fallback (stet's icons are monochrome and `--no-icons` drops them); decorative ones add nothing a reader must announce.
+- Meaningful glyphs and icons carry a text fallback (stet's restrained type colors are optional and `--no-icons` drops the glyphs); decorative ones add nothing a reader must announce.
 - Trap focus only in overlays, and return it to where it came from on close.
 - Test each surface with color and icons off (`NO_COLOR=1`, `--no-icons`) at least once. If it still reads, it is accessible.
 

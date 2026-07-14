@@ -5,11 +5,11 @@ description: What stet gives every language, and which get diagnostics and code 
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Language support is layered. Every file in the repo gets syntax highlighting,
-a file-type icon, and structural folding, whatever the language. Language
-servers add diagnostics for the languages the table marks, TypeScript and
-Rust get full code navigation on top, and you can wire anything else up
-through [your config](/docs/reference/configuration#languages).
+Language support is layered. Named file associations select syntax, icons, and
+LSP profiles independently. Every recognized file gets syntax highlighting, a
+file-type icon, and structural folding; language servers add diagnostics and
+code intelligence for the profiles the table marks. You can change any layer
+through [your config](/docs/reference/configuration#file-support).
 
 | Language                | Highlighting | Folding    | Diagnostics   | Code intelligence |
 | ----------------------- | ------------ | ---------- | ------------- | ----------------- |
@@ -44,9 +44,12 @@ language, markdown folds by heading section. See
 
 ## File icons
 
-The tree shows a Nerd Font icon per file type, resolved by exact filename
-first, then extension. Pass `--no-icons` for a plain tree if your terminal
-font lacks the glyphs.
+Recognized file types use restrained colored Nerd Font icons; structural and
+generic icons remain muted. Recognizable brands keep their identity, while
+unbranded formats reuse stet's palette. The same named icon and theme color
+appears in every file-list surface. Matching follows exact filename, glob,
+extension, and dotfile specificity; `--no-icons` keeps every layout stable while
+hiding the glyphs if your terminal font lacks them.
 
 ## Diagnostics
 
@@ -56,12 +59,10 @@ competes with an always-on default activates only where the repo opted into
 it, the way an editor extension would. Where a language has competing type
 checkers, stet runs the one the repo opted into and only that one, so the same
 code is never type-checked twice. Both rules are written as data in the same
-grammar [your config uses](/docs/reference/configuration#languages): a server's
-[`when`](/docs/reference/configuration#run-a-server-only-in-some-repos) says
-which repos it runs in, and a
-[`firstOf` group](/docs/reference/configuration#pick-one-of-several-servers)
-picks exactly one of several candidates. Naming a language's servers yourself
-replaces stet's choices with yours.
+grammar [your config uses](/docs/reference/configuration#configure-servers-and-selection): a
+server's `when` says which repos it runs in, and a `firstOf` group picks exactly one of several
+candidates. A language profile can reuse those defaults or override a candidate with an
+unconditional `{ "server": "name" }` or its own `when`.
 
 ### TypeScript & JavaScript
 
@@ -90,14 +91,14 @@ group, an optional-dependencies extra, `[tool.uv] dev-dependencies`, or a
 Poetry dependency table). That
 rule is not private machinery: it is ty's `when` gate, and the one-checker rule
 is a `firstOf` group, both written in the exact grammar
-[your config uses](/docs/reference/configuration#languages), so you can
-reproduce, re-gate, or replace the whole arrangement. Naming the servers
-yourself overrides the choice in either direction:
+[your config uses](/docs/reference/configuration#configure-servers-and-selection), so you can
+reproduce, re-gate, or replace the whole arrangement. Bare names retain their server's default
+gate; use the object form when you want to force a checker regardless of repository signals:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
   "languages": {
-    "python": { "servers": ["basedpyright", "ruff"] },
+    "python": { "servers": [{ "server": "basedpyright" }, "ruff"] },
   },
 }
 ```
@@ -176,21 +177,26 @@ You do not need to restart, and you do not need to press `r`.
 
 ## Add your own languages
 
-The `languages` config key routes any file type to any language server on
-your machine, and can change which servers run for the built-in languages:
+Custom support connects a named `server`, `language` profile, and `file`
+association. The registries stay separate so several associations can reuse one
+LSP profile and several profiles can reuse one server:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
+  "servers": {
+    "lua": { "command": ["lua-language-server"] },
+  },
   "languages": {
-    "lua": {
-      "extensions": ["lua"],
-      "servers": [{ "command": ["lua-language-server"] }],
-    },
+    "lua": { "languageId": "lua", "servers": ["lua"] },
+  },
+  "files": {
+    "lua": { "extensions": ["lua"], "syntax": "lua", "language": "lua" },
   },
 }
 ```
 
-Servers you name are any executable on your machine; stet resolves them
-locally and never runs a command the inspected repository ships. See
-[configuration](/docs/reference/configuration#languages) for the full shape:
-filename routing, server options, and overriding built-ins.
+Server conditions and `firstOf` groups let the same profile select a different
+server by repository. stet resolves user-configured commands locally and never
+runs a command declared by the inspected repository. See
+[configuration](/docs/reference/configuration#file-support) for matching,
+icons, gates, server options, and overriding or disabling built-ins.

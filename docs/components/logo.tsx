@@ -11,7 +11,10 @@ export function Logo({ version }: { version?: string }) {
         </span>
       </span>
       {version ? (
-        <span className="rounded bg-fd-muted px-1.5 py-0.5 font-mono text-[0.65rem] text-fd-muted-foreground">
+        <span
+          title="latest release"
+          className="rounded bg-fd-muted px-1.5 py-0.5 font-mono text-[0.65rem] text-fd-muted-foreground"
+        >
           v{version}
         </span>
       ) : null}

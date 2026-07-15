@@ -2,6 +2,8 @@
 
 `docs/` is the stet documentation site: Fumadocs v16 on Next.js (App Router, Turbopack), a standalone Bun workspace (`@stet/docs`) deployed to Vercel with the root directory set to `docs`. Release-please does not track this workspace, so docs-only changes never cut a CLI release.
 
+The site deploys from `main` on every push while the CLI release is gated to `packages/tui`, so the docs track `main` and can run ahead of the published version. That drift is stated, not hidden: the version-facing truth lives in release-derived surfaces (the nav version badge from `lib/version.ts`, and the Releases-API changelog), and a development-version banner on the docs pages (`components/dev-banner.tsx`, mounted in `app/docs/layout.tsx`) says so and links to the changelog. The deploy is deliberately not gated to releases, since those release-derived surfaces already carry the released version.
+
 ## Stack
 
 - Bun for scripts and dependencies; pin every dependency to an exact version (no `^`/`~`), matching the rest of the repo.

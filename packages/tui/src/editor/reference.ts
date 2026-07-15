@@ -122,10 +122,10 @@ export function openExternalCommand(path: string, platform: string = process.pla
  * pass so a value that itself contains a placeholder (a path with `{line}` in it) is never
  * re-substituted.
  *
- * When `line` is undefined the line argument disappears in whatever surface form it took: a
- * combined token like `{file}:{line}` keeps the file (the `:{line}` is stripped), a lone `{line}`
- * token (e.g. `+{line}`) is dropped, and a bare option flag whose only value is that lone token
- * (JetBrains' `--line {line}`) is dropped along with it.
+ * When `line` is undefined the line argument disappears in whatever surface form it took: a token
+ * that also carries `{file}` or `{repo}` keeps that path (the `:{line}` is stripped), a lone
+ * `{line}` token (e.g. `+{line}`) is dropped, and a bare option flag whose only value is that lone
+ * token (JetBrains' `--line {line}`) is dropped along with it.
  */
 export function buildEditorCommand(
   template: string,
@@ -136,7 +136,10 @@ export function buildEditorCommand(
   const tokens = template.split(/\s+/).filter((token) => token !== "");
   const noLine = line === undefined;
   const isLoneLine = (token: string | undefined) =>
-    token !== undefined && token.includes("{line}") && !token.includes("{file}");
+    token !== undefined &&
+    token.includes("{line}") &&
+    !token.includes("{file}") &&
+    !token.includes("{repo}");
   return tokens
     .filter((token, index) => {
       if (!noLine) {

@@ -77,6 +77,12 @@ describe("buildEditorCommand", () => {
     ).toEqual(["idea", "/repo", "/repo/src/foo.ts"]);
   });
 
+  test("keeps a combined {repo}:{line} token when no line is provided", () => {
+    expect(
+      buildEditorCommand("myide {repo}:{line}", "/repo/src/foo.ts", undefined, "/repo"),
+    ).toEqual(["myide", "/repo"]);
+  });
+
   test("does not re-substitute a placeholder that appears inside a value", () => {
     expect(buildEditorCommand("code {file}", "/repo/a{line}b.ts", 5, "/repo")).toEqual([
       "code",

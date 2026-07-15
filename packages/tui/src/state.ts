@@ -2842,24 +2842,34 @@ function createState() {
       return;
     }
     const { line, path } = caret;
+    const controller = new AbortController();
+    intelController = controller;
     const requestRoot = repoRoot();
+    const requestFile = selectedFile();
+    const position = { character: cursorColumn(), line: line - 1 };
     const providers = await serversProviding(path, "implementation", requestRoot);
+    if (
+      intelController !== controller ||
+      controller.signal.aborted ||
+      repoRoot() !== requestRoot ||
+      selectedPath() !== path ||
+      selectedFile() !== requestFile ||
+      cursorLineNumber() !== line ||
+      cursorColumn() !== position.character
+    ) {
+      return;
+    }
     if (providers.length === 0) {
       notify("no implementation support for this file type");
       return;
     }
-    const controller = new AbortController();
-    intelController = controller;
     await resolveAndJump(
       controller,
       requestRoot,
       "resolving implementations…",
       "implementations",
       { none: "no implementations", outside: "implementations outside repo" },
-      () =>
-        Intel.use((intel) =>
-          intel.implementation(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
-        ),
+      () => Intel.use((intel) => intel.implementation(requestRoot, path, position)),
     );
   }
 
@@ -3153,20 +3163,7 @@ function createState() {
     symbolsRoot = repoRoot();
     symbolsFile = selectedFile();
     const requestRoot = symbolsRoot;
-    // No server advertises `documentSymbol` for this language, so a pull would return `[]` and read
-    // As "no symbols" (a false claim). Short-circuit to a distinct state without issuing a request.
-    const providers = await serversProviding(path, "documentSymbol", requestRoot);
-    if (providers.length === 0) {
-      symbolsController = undefined;
-      batch(() => {
-        setSymbolsResults([]);
-        setSymbolsIndex(0);
-        setSymbolsScrollTop(0);
-        setSymbolsStatus("unsupported");
-        setSymbolsOpen(true);
-      });
-      return;
-    }
+    const requestFile = symbolsFile;
     const controller = new AbortController();
     symbolsController = controller;
     batch(() => {
@@ -3176,6 +3173,23 @@ function createState() {
       setSymbolsStatus("loading");
       setSymbolsOpen(true);
     });
+    // No server advertises `documentSymbol` for this language, so a pull would return `[]` and read
+    // As "no symbols" (a false claim). Short-circuit to a distinct state without issuing a request.
+    const providers = await serversProviding(path, "documentSymbol", requestRoot);
+    if (
+      symbolsController !== controller ||
+      controller.signal.aborted ||
+      repoRoot() !== requestRoot ||
+      selectedPath() !== path ||
+      selectedFile() !== requestFile
+    ) {
+      return;
+    }
+    if (providers.length === 0) {
+      symbolsController = undefined;
+      setSymbolsStatus("unsupported");
+      return;
+    }
     try {
       const symbols = await runtime.runPromise(
         Intel.use((intel) => intel.symbols(requestRoot, path)),

@@ -31,14 +31,14 @@ function pathInsideRepo(repoRoot: string, file: string) {
     : undefined;
 }
 
-function parseManifest(path: string) {
-  return Bun.file(path)
-    .text()
-    .then((text) => {
-      const parsed = path.endsWith(".toml") ? Bun.TOML.parse(text) : Bun.JSONC.parse(text);
-      return isRecord(parsed) ? parsed : undefined;
-    })
-    .catch(() => undefined);
+async function parseManifest(path: string) {
+  try {
+    const text = await Bun.file(path).text();
+    const parsed = path.endsWith(".toml") ? Bun.TOML.parse(text) : Bun.JSONC.parse(text);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readManifest(file: string, repoRoot: string, manifests: ManifestCache) {
@@ -89,6 +89,7 @@ function declaredDependencies(pyproject: Record<string, unknown>) {
     ...requirementNames(uv["dev-dependencies"]),
     ...requirementGroups,
     ...recordKeys(poetry.dependencies),
+    ...recordKeys(poetry["dev-dependencies"]),
     ...poetryGroups,
   ]);
 }
@@ -100,7 +101,14 @@ async function evaluateCondition(
 ) {
   if (typeof condition === "string") {
     const path = pathInsideRepo(repoRoot, condition);
-    return path === undefined ? false : Bun.file(path).exists();
+    if (path === undefined) {
+      return false;
+    }
+    try {
+      return await Bun.file(path).exists();
+    } catch {
+      return false;
+    }
   }
   const manifest = await readManifest(condition.file, repoRoot, manifests);
   if (manifest === undefined) {
@@ -138,6 +146,10 @@ export function parseWhen(value: unknown): { issues: string[]; when?: When } {
   const issues: string[] = [];
   const conditions = raw.flatMap((entry): WhenCondition[] => {
     if (typeof entry === "string") {
+      if (entry.includes("\0")) {
+        issues.push("a when path must not contain a null byte");
+        return [];
+      }
       if (entry === "" || isAbsolute(entry) || entry.split("/").includes("..")) {
         issues.push("a when path must stay inside the repository");
         return [];
@@ -152,6 +164,10 @@ export function parseWhen(value: unknown): { issues: string[]; when?: When } {
       (field) => field !== "file" && field !== "key" && field !== "dependency",
     );
     issues.push(...unknown.map((field) => `unknown when field "${field}"`));
+    if (typeof entry.file === "string" && entry.file.includes("\0")) {
+      issues.push("a when file must not contain a null byte");
+      return [];
+    }
     if (
       typeof entry.file !== "string" ||
       entry.file === "" ||

@@ -34,7 +34,10 @@ describe("symbols overlay", () => {
     try {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
-      void state.findSymbols();
+      const pending = state.findSymbols();
+      expect(state.symbolsOpen()).toBe(true);
+      expect(state.symbolsStatus()).toBe("loading");
+      await pending;
       const unsupported = await settleUntil("unsupported screen", (frame) =>
         frame.includes("no symbol support"),
       );

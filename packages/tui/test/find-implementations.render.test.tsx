@@ -55,6 +55,36 @@ describe("find-implementations", () => {
     }
   }, 20_000);
 
+  test("drops capability results after the open file changes", async () => {
+    const repoRoot = createFixtureRepo("stet-impl-", {
+      "notes.txt": "alpha\n",
+      "other.txt": "one\n",
+    });
+    writeFileSync(join(repoRoot, "notes.txt"), "alpha\nbravo charlie\n");
+    writeFileSync(join(repoRoot, "other.txt"), "one\ntwo three\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
+
+      const pending = state.findImplementations();
+      state.selectFile("other.txt");
+      await pending;
+
+      expect(state.statusRight()).not.toContain("no implementation support");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
   test("opens the implementations overlay without the call-hierarchy direction hint", async () => {
     const repoRoot = createFixtureRepo("stet-impl-", {
       "notes.txt": "alpha\n",

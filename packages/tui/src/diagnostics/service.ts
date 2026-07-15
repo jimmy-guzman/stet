@@ -21,7 +21,13 @@ import type { ChangedFile } from "@/git/model";
 import { stateForResolvedChecker } from "./checker";
 import type { CheckerFileState, CheckerName, Diagnostic } from "./checker";
 import { isLspDiagnostic, mapLspDiagnostic } from "./protocol";
-import { activeServerGates, activeServers, LanguageServers, lspLanguageId } from "./servers";
+import {
+  activeServerGates,
+  activeServers,
+  LanguageServers,
+  lspLanguageId,
+  serverRepoKey,
+} from "./servers";
 import type { ServerGates, ServerHandle } from "./servers";
 import type { LspConnection } from "./transport";
 
@@ -349,7 +355,7 @@ export const DiagnosticsLive = Layer.effect(
     // One keeper per (server, repo): reused warm across runs, rebuilt (documents reopened fresh by
     // The next sync, since `sent` starts empty) when the pooled server died in between.
     const acquireKeeper = (language: string, repoRoot: string) => {
-      const key = `${language} ${repoRoot}`;
+      const key = serverRepoKey(language, repoRoot);
       return Effect.gen(function* acquire() {
         const existing = keepers.get(key);
         if (existing !== undefined) {

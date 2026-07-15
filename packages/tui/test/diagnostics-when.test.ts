@@ -31,6 +31,8 @@ test("when reads manifest keys and Python dependency declarations", async () => 
       'dev = ["ty>=0.0.58"]',
       "[tool.uv]",
       'dev-dependencies = ["mypy"]',
+      "[tool.poetry.dev-dependencies]",
+      'basedpyright = "^1.0"',
       "[tool.poetry.group.lint.dependencies]",
       'ruff = "^0.15"',
       "[tool.ty]",
@@ -44,6 +46,9 @@ test("when reads manifest keys and Python dependency declarations", async () => 
     expect(await evaluateWhen({ dependency: "ruff", file: "pyproject.toml" }, repo)).toBe(true);
     expect(await evaluateWhen({ dependency: "ty", file: "pyproject.toml" }, repo)).toBe(true);
     expect(await evaluateWhen({ dependency: "mypy", file: "pyproject.toml" }, repo)).toBe(true);
+    expect(await evaluateWhen({ dependency: "basedpyright", file: "pyproject.toml" }, repo)).toBe(
+      true,
+    );
     expect(
       await evaluateWhen({ dependency: "typing-extensions", file: "pyproject.toml" }, repo),
     ).toBe(false);
@@ -59,6 +64,16 @@ test("a missing or malformed manifest rejects its conditions without throwing", 
     expect(await evaluateWhen({ file: "pyproject.toml", key: ["tool", "ty"] }, repo)).toBe(false);
     expect(await evaluateWhen({ dependency: "ty", file: "pyproject.toml" }, repo)).toBe(false);
     expect(await evaluateWhen({ file: "missing.json", key: ["tool"] }, repo)).toBe(false);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("invalid filesystem paths reject their conditions without throwing", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "stet-when-"));
+  try {
+    expect(await evaluateWhen("bad\0path", repo)).toBe(false);
+    expect(await evaluateWhen({ file: "bad\0path", key: ["tool", "ty"] }, repo)).toBe(false);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -80,5 +95,9 @@ test("parseWhen validates every condition shape", () => {
   );
   expect(parseWhen([{ file: "x.toml", frobnicate: true, key: ["a"] }]).issues).toContain(
     'unknown when field "frobnicate"',
+  );
+  expect(parseWhen("bad\0path").issues).toContain("a when path must not contain a null byte");
+  expect(parseWhen([{ file: "bad\0path", key: ["tool"] }]).issues).toContain(
+    "a when file must not contain a null byte",
   );
 });

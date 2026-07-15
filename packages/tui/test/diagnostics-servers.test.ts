@@ -4,12 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Stream } from "effect";
+import { Effect, Layer, Queue, Stream } from "effect";
 
+import { LspProcess } from "@/diagnostics/lsp-process";
+import { Provisioner } from "@/diagnostics/provision";
 import {
   activeServersForPath,
   handshakeConfigFor,
   intelLanguage,
+  LanguageServers,
+  LanguageServersLive,
   lspLanguageId,
   performHandshake,
   registry,
@@ -17,6 +21,7 @@ import {
   resolveServerCommand,
   resolveServers,
   restoreServers,
+  serverRepoKey,
   serversForPath,
   serversProviding,
   snapshotServers,
@@ -468,6 +473,69 @@ test("registered user server commands resolve as-is", () => {
     registerServers(resolved.servers);
 
     expect(resolveServerCommand("probe", "/some/repo")).toEqual(["/bin/ls", "--stdio"]);
+  } finally {
+    restoreServers(snapshot);
+  }
+});
+
+test("server and repository identities do not collide when names contain spaces", () => {
+  expect(serverRepoKey("lua server", "/repo")).not.toBe(serverRepoKey("lua", "server /repo"));
+});
+
+test("the server pool preserves configured names containing spaces", async () => {
+  const snapshot = snapshotServers();
+  const refreshes = await Effect.runPromise(Queue.unbounded<string>());
+  const starts = await Effect.runPromise(Queue.unbounded<string>());
+  const completions = await Effect.runPromise(Queue.unbounded<string>());
+  let startedCommand: readonly string[] = [];
+  const connection: LspConnection = {
+    changeDocument: () => Effect.void,
+    clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
+    closed: Effect.succeed(false),
+    endPublishWait: Effect.void,
+    notify: () => Effect.void,
+    openDocument: () => Effect.void,
+    published: Effect.succeed(new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
+    request: (method) => Effect.succeed(method === "initialize" ? { capabilities: {} } : null),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
+    whenProjectLoaded: Effect.void,
+  };
+  const lspProcess = Layer.succeed(LspProcess)({
+    refreshes,
+    start: (command) =>
+      Effect.sync(() => {
+        startedCommand = command;
+        return connection;
+      }),
+  });
+  const provisioner = Layer.succeed(Provisioner)({
+    completions,
+    ensure: () => Effect.succeed({ kind: "disabled" }),
+    starts,
+  });
+  const layer = LanguageServersLive.pipe(Layer.provide(Layer.mergeAll(lspProcess, provisioner)));
+
+  try {
+    const resolved = resolveServers({ "lua server": { command: ["/bin/ls", "--stdio"] } });
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* acquireSpacedServer() {
+          const servers = yield* LanguageServers;
+          yield* servers.acquire("lua server", "/repo");
+        }),
+      ).pipe(Effect.provide(layer)),
+    );
+
+    expect(startedCommand).toEqual(["/bin/ls", "--stdio"]);
   } finally {
     restoreServers(snapshot);
   }

@@ -894,9 +894,17 @@ function connectServer(command: readonly string[], repoRoot: string, config?: Ha
   });
 }
 
-// The pool key is "<language> <repoRoot>"; the language never contains a space, so the first space
-// Is always the separator even when the repo path does. The explicit return type unifies the
-// Ternary's two distinct Effect types into the one shape RcMap's lookup expects.
+export function serverRepoKey(server: string, repoRoot: string) {
+  return `${server.length}:${server}${repoRoot}`;
+}
+
+function serverRepoFromKey(key: string) {
+  const separator = key.indexOf(":");
+  const serverStart = separator + 1;
+  const repoStart = serverStart + Number.parseInt(key.slice(0, separator), 10);
+  return { repoRoot: key.slice(repoStart), server: key.slice(serverStart, repoStart) };
+}
+
 function lookupServer(
   key: string,
 ): Effect.Effect<
@@ -904,9 +912,7 @@ function lookupServer(
   ServerUnavailable | LspSpawnError | LspRequestError,
   LspProcess | Scope.Scope
 > {
-  const separator = key.indexOf(" ");
-  const language = key.slice(0, separator);
-  const repoRoot = key.slice(separator + 1);
+  const { repoRoot, server: language } = serverRepoFromKey(key);
   const command = resolveServerCommand(language, repoRoot);
   if (command === undefined) {
     return Effect.fail(
@@ -990,12 +996,8 @@ export const LanguageServersLive = Layer.effect(
         ),
     });
 
-    // The pool key is "<language> <repoRoot>", split at its first space exactly as `lookupServer`
-    // Splits it: a language never contains a space, a repo path may. Comparing the root portion for
-    // Equality, rather than matching the key's suffix, is what keeps the two parses from disagreeing
-    // And one repo from claiming another whose path happens to end with " <this root>".
     const keysFor = (repoRoot: string) =>
-      [...live.keys()].filter((key) => key.slice(key.indexOf(" ") + 1) === repoRoot);
+      [...live.keys()].filter((key) => serverRepoFromKey(key).repoRoot === repoRoot);
 
     const notifyWatchedFiles = (
       repoRoot: string,
@@ -1028,7 +1030,7 @@ export const LanguageServersLive = Layer.effect(
     // Connect through the warm pool; if the pooled server died (its stdout closed), evict it and
     // Bring up a fresh one, so a crash mid-session recovers on the next run.
     const fromPool = (language: string, repoRoot: string) => {
-      const key = `${language} ${repoRoot}`;
+      const key = serverRepoKey(language, repoRoot);
       return RcMap.get(pool, key).pipe(
         Effect.flatMap((handle) =>
           handle.connection.closed.pipe(

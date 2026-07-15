@@ -11,15 +11,17 @@ import { Provisioner } from "@/diagnostics/provision";
 import {
   LanguageServers,
   LanguageServersLive,
-  registerLanguages,
   registerServers,
-  restoreLanguages,
   restoreServers,
-  snapshotLanguages,
   snapshotServers,
 } from "@/diagnostics/servers";
 import type { LspConnection } from "@/diagnostics/transport";
 import type { WatchedPathChange } from "@/diagnostics/watched-files";
+import {
+  registerFileSupport,
+  restoreFileSupport,
+  snapshotFileSupport,
+} from "@/file-support/registry";
 
 /** A connection that records the watched-file changes the pool routed to it. No process, no mocks. */
 function fakeConnection() {
@@ -44,12 +46,15 @@ function fakeConnection() {
 
 test("a server evicted while still referenced does not retract its replacement", async () => {
   const snapshotS = snapshotServers();
-  const snapshotL = snapshotLanguages();
+  const snapshotF = snapshotFileSupport();
   const repo = mkdtempSync(join(tmpdir(), "pool-"));
   // `bun` is on PATH, so the command resolves and the pool takes the normal (non-provisioning) path;
   // The fake LspProcess below means nothing is ever actually spawned.
   registerServers({ fakelsp: { args: [], binary: "bun", provides: [] } });
-  registerLanguages({ fake: { extensions: { fake: "fake" }, servers: ["fakelsp"] } });
+  const fileSupport = snapshotFileSupport();
+  fileSupport.files.set("fake", { extensions: ["fake"], language: "fake" });
+  fileSupport.languages.set("fake", { languageId: "fake", servers: ["fakelsp"] });
+  registerFileSupport(fileSupport);
 
   const spawned: ReturnType<typeof fakeConnection>[] = [];
   const lspProcess = Layer.effect(
@@ -137,7 +142,7 @@ test("a server evicted while still referenced does not retract its replacement",
     expect(spawned[0]?.received).toHaveLength(0);
   } finally {
     restoreServers(snapshotS);
-    restoreLanguages(snapshotL);
+    restoreFileSupport(snapshotF);
     rmSync(repo, { force: true, recursive: true });
   }
 });

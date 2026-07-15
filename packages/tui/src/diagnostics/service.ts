@@ -21,8 +21,14 @@ import type { ChangedFile } from "@/git/model";
 import { stateForResolvedChecker } from "./checker";
 import type { CheckerFileState, CheckerName, Diagnostic } from "./checker";
 import { isLspDiagnostic, mapLspDiagnostic } from "./protocol";
-import { activeServerGates, activeServers, LanguageServers, lspLanguageId } from "./servers";
-import type { ServerHandle } from "./servers";
+import {
+  activeServerGates,
+  activeServers,
+  LanguageServers,
+  lspLanguageId,
+  serverRepoKey,
+} from "./servers";
+import type { ServerGates, ServerHandle } from "./servers";
 import type { LspConnection } from "./transport";
 
 export interface CheckerUpdate {
@@ -349,7 +355,7 @@ export const DiagnosticsLive = Layer.effect(
     // One keeper per (server, repo): reused warm across runs, rebuilt (documents reopened fresh by
     // The next sync, since `sent` starts empty) when the pooled server died in between.
     const acquireKeeper = (language: string, repoRoot: string) => {
-      const key = `${language} ${repoRoot}`;
+      const key = serverRepoKey(language, repoRoot);
       return Effect.gen(function* acquire() {
         const existing = keepers.get(key);
         if (existing !== undefined) {
@@ -552,61 +558,61 @@ export const DiagnosticsLive = Layer.effect(
       prior?: ReadonlyMap<string, CheckerFileState>,
     ) {
       const changed = files.filter((file) => file.kind !== "deleted");
-      // Evaluate each server's repo gate once for this run, then reuse it per file (and per snapshot
-      // Emission below) so a filesystem-stat gate like Biome's isn't re-checked for every file.
-      const gates = activeServerGates(repoRoot);
-      const serversFor = (path: string) => activeServers(path, gates);
-      const noServer = noServerState(serversFor, changed);
-      const languages = [...new Set(changed.flatMap((file) => serversFor(file.path)))];
-      if (languages.length === 0) {
-        return Stream.fromEffect(
-          releaseStaleKeepers(repoRoot, new Set()).pipe(
-            Effect.as({ checker: "diagnostics", state: noServer } satisfies CheckerUpdate),
+      const runWithGates = (gates: ServerGates) => {
+        const serversFor = (path: string) => activeServers(path, gates);
+        const noServer = noServerState(serversFor, changed);
+        const languages = [...new Set(changed.flatMap((file) => serversFor(file.path)))];
+        if (languages.length === 0) {
+          return Stream.fromEffect(
+            releaseStaleKeepers(repoRoot, new Set()).pipe(
+              Effect.as({ checker: "diagnostics", state: noServer } satisfies CheckerUpdate),
+            ),
+          );
+        }
+
+        const perLanguage = languages.map((language) =>
+          Stream.fromEffect(
+            // The keeper owns the server's lifetime across runs; no per-run scope to close.
+            stateForLanguage(
+              repoRoot,
+              language,
+              changed.filter((file) => serversFor(file.path).includes(language)),
+            ).pipe(Effect.map((map) => ({ language, map }))),
           ),
         );
-      }
 
-      const perLanguage = languages.map((language) =>
-        Stream.fromEffect(
-          // The keeper owns the server's lifetime across runs; no per-run scope to close.
-          stateForLanguage(
-            repoRoot,
-            language,
-            changed.filter((file) => serversFor(file.path).includes(language)),
-          ).pipe(Effect.map((map) => ({ language, map }))),
-        ),
-      );
+        const merged = Stream.mergeAll(perLanguage, { concurrency: "unbounded" }).pipe(
+          Stream.scan(
+            { done: new Set<string>(), maps: [] as Map<string, CheckerFileState>[] },
+            (accumulator, next) => ({
+              done: new Set(accumulator.done).add(next.language),
+              maps: [...accumulator.maps, next.map],
+            }),
+          ),
+          // Drop the empty seed scan emits before the first server finishes.
+          Stream.drop(1),
+          Stream.map(
+            (accumulator) =>
+              ({
+                checker: "diagnostics",
+                state: snapshot(
+                  serversFor,
+                  changed,
+                  accumulator.done,
+                  accumulator.maps,
+                  noServer,
+                  prior,
+                ),
+              }) satisfies CheckerUpdate,
+          ),
+        );
 
-      const merged = Stream.mergeAll(perLanguage, { concurrency: "unbounded" }).pipe(
-        Stream.scan(
-          { done: new Set<string>(), maps: [] as Map<string, CheckerFileState>[] },
-          (accumulator, next) => ({
-            done: new Set(accumulator.done).add(next.language),
-            maps: [...accumulator.maps, next.map],
-          }),
-        ),
-        // Drop the empty seed scan emits before the first server finishes.
-        Stream.drop(1),
-        Stream.map(
-          (accumulator) =>
-            ({
-              checker: "diagnostics",
-              state: snapshot(
-                serversFor,
-                changed,
-                accumulator.done,
-                accumulator.maps,
-                noServer,
-                prior,
-              ),
-            }) satisfies CheckerUpdate,
-        ),
-      );
-
-      // The repo sweep runs once, before any keeper for this run is acquired.
-      return Stream.fromEffect(releaseStaleKeepers(repoRoot, new Set(languages))).pipe(
-        Stream.flatMap(() => merged),
-      );
+        // The repo sweep runs once, before any keeper for this run is acquired.
+        return Stream.fromEffect(releaseStaleKeepers(repoRoot, new Set(languages))).pipe(
+          Stream.flatMap(() => merged),
+        );
+      };
+      return Stream.unwrap(activeServerGates(repoRoot).pipe(Effect.map(runWithGates)));
     }
 
     return { resetServers, run };

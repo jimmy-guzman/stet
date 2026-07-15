@@ -9,10 +9,13 @@ const ThemeSelection = Schema.Union([
 // Partial is only a valid theme once merged over its base.
 export const UserConfigSchema = Schema.Struct({
   editor: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
+  files: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  icons: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
   ide: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
-  // Entries stay raw like `themes`; `resolveLanguages` validates each, since a partial entry is
-  // Only a valid language once merged over its built-in.
+  // Registry entries stay raw like `themes`; each resolver validates partial overrides only after
+  // Merging them over their built-in entry.
   languages: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  servers: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
   theme: Schema.optionalKey(ThemeSelection),
   themes: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 });

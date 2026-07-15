@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import { builtinIcons } from "@/file-support/builtins";
 import { darkTheme } from "@/theme/dark";
+import { lightTheme } from "@/theme/light";
 import {
   registerThemes,
   resolveThemes,
@@ -18,6 +20,111 @@ describe("themeForName", () => {
 
   test("falls back to dark for an unknown name", () => {
     expect(themeForName("does-not-exist")).toBe(darkTheme);
+  });
+});
+
+describe("built-in icon colors", () => {
+  test("uses the curated file icon palette", () => {
+    const coloredIcons = [
+      "astro",
+      "bun",
+      "codeowners",
+      "css",
+      "csv",
+      "database",
+      "docker",
+      "git",
+      "go",
+      "gradle",
+      "groovy",
+      "heroku",
+      "html",
+      "http",
+      "image",
+      "java",
+      "javascript",
+      "json",
+      "kotlin",
+      "license",
+      "make",
+      "markdown",
+      "maven",
+      "node",
+      "pdf",
+      "profile",
+      "python",
+      "react",
+      "readme",
+      "ruby",
+      "rust",
+      "scala",
+      "shell",
+      "spreadsheet",
+      "storybook",
+      "test",
+      "toml",
+      "tsconfig",
+      "typescript",
+      "video",
+      "yaml",
+    ];
+
+    expect(Object.keys(darkTheme.icon)).toEqual(coloredIcons);
+    expect(Object.keys(lightTheme.icon)).toEqual(coloredIcons);
+  });
+
+  test("accounts for every built-in icon as colored or intentionally muted", () => {
+    const mutedIcons = [
+      "config",
+      "document",
+      "file",
+      "folder",
+      "folder-open",
+      "lock",
+      "symlink",
+      "template",
+    ];
+
+    expect(
+      [...builtinIcons.keys()].filter((icon) => darkTheme.icon[icon] === undefined).toSorted(),
+    ).toEqual(mutedIcons);
+    expect(
+      [...builtinIcons.keys()].filter((icon) => lightTheme.icon[icon] === undefined).toSorted(),
+    ).toEqual(mutedIcons);
+    expect(Object.keys(darkTheme.icon).filter((icon) => !builtinIcons.has(icon))).toEqual([]);
+    expect(Object.keys(lightTheme.icon).filter((icon) => !builtinIcons.has(icon))).toEqual([]);
+  });
+
+  test("keeps every icon color visible across its theme surfaces", () => {
+    const channel = (hex: string, offset: number) => {
+      const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (hex: string) =>
+      0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
+    const contrast = (foreground: string, background: string) => {
+      const values = [luminance(foreground), luminance(background)].toSorted((a, b) => b - a);
+      return (values[0] + 0.05) / (values[1] + 0.05);
+    };
+    const failures = Object.entries({ dark: darkTheme, light: lightTheme }).flatMap(
+      ([appearance, theme]) =>
+        Object.entries(theme.icon).flatMap(([icon, color]) =>
+          Object.entries({
+            base: theme.surface.base,
+            cursor: theme.surface.cursor,
+            panel: theme.surface.panel,
+          })
+            .map(([surface, background]) => ({
+              appearance,
+              contrast: contrast(color, background),
+              icon,
+              surface,
+            }))
+            .filter((result) => result.contrast < 3),
+        ),
+    );
+
+    expect(failures).toEqual([]);
   });
 });
 
@@ -72,6 +179,17 @@ describe("resolveThemes", () => {
     expect(issues).toEqual([]);
     expect(themes.get("soft")?.tokens.accent.primary).toBe("#abcdef");
     expect(themes.get("soft")?.tokens.surface.base).toBe(darkTheme.surface.base);
+  });
+
+  test("merges dynamic icon colors over a base", () => {
+    const { issues, themes } = resolveThemes({
+      soft: { base: "dark", icon: { lua: "#abcdef", typescript: "#123456" } },
+    });
+
+    expect(issues).toEqual([]);
+    expect(themes.get("soft")?.tokens.icon.lua).toBe("#abcdef");
+    expect(themes.get("soft")?.tokens.icon.typescript).toBe("#123456");
+    expect(themes.get("soft")?.tokens.icon.folder).toBeUndefined();
   });
 
   test("resolves a base that is another custom theme", () => {

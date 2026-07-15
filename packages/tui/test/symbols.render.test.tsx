@@ -10,11 +10,12 @@ import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
-// A `.txt` fixture has no server advertising `documentSymbol`, so `findSymbols` resolves to the
-// Unsupported state without a request or a spawned server (the same reasoning as the references
-// Render test). These tests exercise the overlay surface: it opens on the request, renders each
-// State with the shared footer, follows the cursor when the list overflows, and closes on escape
-// Or repo/file/content drift.
+// A `.txt` fixture has no possible server advertising `documentSymbol`, so `findSymbols` opens
+// Directly to the unsupported state, synchronously and without a request or a spawned server: the
+// Sync capability pre-gate settles it before any async gate pull, so no `loading` flash shows (the
+// Same reasoning as the references render test). These tests exercise the overlay surface: it opens
+// On the request, renders each state with the shared footer, follows the cursor when the list
+// Overflows, and closes on escape or repo/file/content drift.
 describe("symbols overlay", () => {
   test("opens on find-symbols, renders the unsupported screen, and closes on escape", async () => {
     const repoRoot = createFixtureRepo("stet-symbols-", {
@@ -34,7 +35,11 @@ describe("symbols overlay", () => {
     try {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
-      void state.findSymbols();
+      const pending = state.findSymbols();
+      expect(state.symbolsOpen()).toBe(true);
+      // The sync pre-gate settles an unsupported file type at once, with no `loading` flash.
+      expect(state.symbolsStatus()).toBe("unsupported");
+      await pending;
       const unsupported = await settleUntil("unsupported screen", (frame) =>
         frame.includes("no symbol support"),
       );

@@ -171,7 +171,7 @@ export function ProblemsPanel() {
                           paddingRight={1}
                         >
                           <box flexDirection="row">
-                            <FileIcon name={item().path.split("/").at(-1) ?? item().path} />
+                            <FileIcon path={item().path} />
                             <text fg={theme.colors.text.strong}>
                               {truncate(
                                 item().path,

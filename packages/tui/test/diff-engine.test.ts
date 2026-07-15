@@ -177,6 +177,7 @@ describe("languageForPath", () => {
   test("resolves extension-based files, including nested paths", () => {
     expect(languageForPath("src/index.ts")).toBe("typescript");
     expect(languageForPath("nginx.conf")).toBe("nginx");
+    expect(languageForPath("templates/view.blade.php")).toBe("blade");
   });
 
   test("keeps the .gradle Groovy override on the basename", () => {
@@ -185,11 +186,15 @@ describe("languageForPath", () => {
 
   test("peels a .rb.tmpl template to Ruby, leaving other .tmpl files as text", () => {
     expect(languageForPath("script/stet.rb.tmpl")).toBe("ruby");
+    expect(languageForPath("script/STET.RB.TMPL")).toBe("ruby");
     expect(languageForPath("a/b/Formula.rb")).toBe("ruby");
     expect(languageForPath("config.yaml.tmpl")).toBe("text");
   });
 
   test("resolves config dotfiles by name in any directory", () => {
+    expect(languageForPath(".env")).toBe("dotenv");
+    expect(languageForPath(".ENV")).toBe("dotenv");
+    expect(languageForPath("packages/tui/.env")).toBe("dotenv");
     expect(languageForPath(".npmrc")).toBe("ini");
     expect(languageForPath("packages/tui/.npmrc")).toBe("ini");
     expect(languageForPath(".prettierrc")).toBe("jsonc");
@@ -201,7 +206,10 @@ describe("languageForPath", () => {
     expect(languageForPath(".prettierrc.js")).toBe("javascript");
   });
 
-  test("resolves dotfiles by exact name, not by an rc suffix", () => {
+  test("resolves bare dotfiles only by exact name", () => {
+    expect(languageForPath(".env.local")).toBe("text");
+    expect(languageForPath(".ts")).toBe("text");
+    expect(languageForPath(".json")).toBe("text");
     expect(languageForPath(".nvmrc")).toBe("text");
   });
 });

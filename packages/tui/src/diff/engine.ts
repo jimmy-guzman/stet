@@ -1,7 +1,6 @@
 import {
   areLanguagesAttached,
   areThemesAttached,
-  getFiletypeFromFileName,
   getSharedHighlighter,
   parsePatchFiles,
   registerCustomTheme,
@@ -11,6 +10,7 @@ import {
 import type { DiffsHighlighter, RenderDiffOptions } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
 
+import { fileSupportForPath } from "@/file-support/registry";
 import { activeThemeName, appearance } from "@/theme/active";
 import { syntaxThemeForName, themeForName } from "@/theme/registry";
 import { shikiTheme, STET_SHIKI_THEME_NAME } from "@/theme/shiki";
@@ -222,39 +222,11 @@ function attach(lang: string) {
 }
 
 /**
- * Config dotfiles, whose whole name is the stem: the library keys its table on extensions, so these
- * fall through to plain text without an exact-name match. `jsonc` over `json` because it tokenizes
- * plain JSON identically and colors comments. Exact names, not a `*rc` rule (`.zshrc` is neither).
- */
-const BY_NAME = new Map([
-  [".npmrc", "ini"],
-  [".prettierrc", "jsonc"],
-]);
-
-// Resolve against the basename, not the full repo-relative path: the library's
-// Extensionless filename keys (`Dockerfile`, `Makefile`, ...) match by exact
-// String equality, so a `docker/Dockerfile` would otherwise miss and fall back to
-// Plain text. `.gradle` is the Groovy build DSL, which @pierre/diffs doesn't map;
-// `.gradle.kts` already resolves to kts via its extension, so only bare `.gradle`
-// Needs the override. `.rb.tmpl` is the Homebrew formula template: Ruby behind a
-// `.tmpl` wrapper the library reads as plain text, so peel it to the underlying Ruby.
-/**
  * The Shiki language a file highlights as, shared by the diff and any surface that renders code
  * from that file (search results), so their colors agree.
  */
-export function languageForPath(name: string) {
-  const base = name.slice(name.lastIndexOf("/") + 1);
-  const named = BY_NAME.get(base);
-  if (named !== undefined) {
-    return named;
-  }
-  if (base.endsWith(".gradle")) {
-    return "groovy";
-  }
-  if (base.endsWith(".rb.tmpl")) {
-    return "ruby";
-  }
-  return getFiletypeFromFileName(base);
+export function languageForPath(path: string) {
+  return fileSupportForPath(path).syntax;
 }
 
 async function ensureLanguages(meta: { name: string; prevName?: string }) {

@@ -1,170 +1,176 @@
-/**
- * The repo-gate grammar shared by the server registry and user config: a `when` says in which repos
- * a server runs, as data. One condition or an any-of list of them; a condition is a path that
- * exists at the repo root, a structured key present in a TOML/JSON(C) manifest, or a declared
- * Python dependency. Gates are data (not predicates) so the built-in table is written in exactly
- * the language a user's config writes, and there is deliberately no code escape hatch: a gate a
- * condition can't express gets a new condition here, which the config then gets for free.
- */
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, resolve } from "node:path";
+
+import { Cache, Effect, Option } from "effect";
 
 type WhenCondition =
   | string
   | { readonly file: string; readonly key: readonly string[] }
-  // The literal matches what `parseWhen` enforces: pyproject is the one manifest whose dependencies
-  // Are requirement strings needing name parsing, so a gate pointing `dependency` anywhere else is
-  // A type error, not a silently-false condition.
-  | { readonly file: "pyproject.toml"; readonly dependency: string };
+  | { readonly dependency: string; readonly file: "pyproject.toml" };
 
 export type When = WhenCondition | readonly WhenCondition[];
-
-/**
- * Parsed manifests for one evaluation pass, keyed by repo-relative path. Gates are re-evaluated on
- * every refresh tick, and several conditions may read the same manifest (ty's gate reads pyproject
- * twice), so a pass shares one read and parse per file.
- */
-export type ManifestCache = Map<string, Record<string, unknown> | undefined>;
-
-// Array.isArray narrows a readonly-array union to `any[]` and leaves the false branch untouched,
-// So the guard is spelled out once here instead of a cast at the use site.
-function isConditionList(when: When): when is readonly WhenCondition[] {
-  return Array.isArray(when);
-}
-
-export function evaluateWhen(when: When, repoRoot: string, manifests: ManifestCache): boolean {
-  const conditions = isConditionList(when) ? when : [when];
-  return conditions.some((condition) => evaluateCondition(condition, repoRoot, manifests));
-}
-
-function evaluateCondition(
-  condition: WhenCondition,
-  repoRoot: string,
-  manifests: ManifestCache,
-): boolean {
-  if (typeof condition === "string") {
-    return existsSync(join(repoRoot, condition));
-  }
-  const manifest = readManifest(condition.file, repoRoot, manifests);
-  if (manifest === undefined) {
-    return false;
-  }
-  if ("key" in condition) {
-    return (
-      condition.key.reduce<unknown>(
-        (value, segment) => (isRecord(value) ? value[segment] : undefined),
-        manifest,
-      ) !== undefined
-    );
-  }
-  return declaredDependencies(manifest).includes(normalizeDistributionName(condition.dependency));
-}
-
-// A missing or malformed manifest reads as "condition not met", never a throw: gates are evaluated
-// On refresh ticks, and a repo mid-edit must degrade to the ungated default, not crash a run.
-function readManifest(file: string, repoRoot: string, manifests: ManifestCache) {
-  if (manifests.has(file)) {
-    return manifests.get(file);
-  }
-  const manifest = parseManifest(join(repoRoot, file));
-  manifests.set(file, manifest);
-  return manifest;
-}
-
-function parseManifest(path: string): Record<string, unknown> | undefined {
-  if (!existsSync(path)) {
-    return undefined;
-  }
-  try {
-    const text = readFileSync(path, "utf8");
-    const parsed = path.endsWith(".toml") ? Bun.TOML.parse(text) : Bun.JSONC.parse(text);
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
+type ManifestCache = Cache.Cache<string, Option.Option<Record<string, unknown>>>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Every dependency a pyproject can declare: the PEP 508 requirement lists (runtime, extras,
- * dependency groups, uv's own), which need name parsing, plus Poetry's tables (runtime, its legacy
- * dev list, its groups), whose keys are the names. pyproject is the one manifest that needs this;
- * npm and Cargo declare theirs as keys, which the `key` condition already reaches.
- */
+function conditionList(when: When): readonly WhenCondition[] {
+  return isConditionList(when) ? when : [when];
+}
+
+function isConditionList(when: When): when is readonly WhenCondition[] {
+  return Array.isArray(when);
+}
+
+function resolveWhenPath(repoRoot: string, file: string) {
+  if (isAbsolute(file)) {
+    return undefined;
+  }
+  return resolve(repoRoot, file);
+}
+
+function parseManifest(path: string) {
+  return Effect.tryPromise(() => Bun.file(path).text()).pipe(
+    Effect.flatMap((text) =>
+      Effect.try(() => {
+        const parsed = path.endsWith(".toml") ? Bun.TOML.parse(text) : Bun.JSONC.parse(text);
+        return isRecord(parsed) ? Option.some(parsed) : Option.none();
+      }),
+    ),
+    Effect.catchTag("UnknownError", () => Effect.succeed(Option.none())),
+  );
+}
+
+export const makeManifestCache = Effect.fn("When.makeManifestCache")(function* makeCache(
+  repoRoot: string,
+) {
+  return yield* Cache.make({
+    capacity: Number.POSITIVE_INFINITY,
+    lookup: (file: string) => {
+      const path = resolveWhenPath(repoRoot, file);
+      return path === undefined ? Effect.succeed(Option.none()) : parseManifest(path);
+    },
+  });
+});
+
+function normalizeDistributionName(name: string) {
+  return name.toLowerCase().replaceAll(/[-_.]+/g, "-");
+}
+
+function requirementNames(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .filter((entry): entry is string => typeof entry === "string")
+        .flatMap((entry) => {
+          const name = /^[A-Za-z0-9._-]+/.exec(entry.trim())?.[0];
+          return name === undefined ? [] : [normalizeDistributionName(name)];
+        })
+    : [];
+}
+
+function recordKeys(value: unknown) {
+  return isRecord(value) ? Object.keys(value).map(normalizeDistributionName) : [];
+}
+
 function declaredDependencies(pyproject: Record<string, unknown>) {
   const project = isRecord(pyproject.project) ? pyproject.project : {};
   const tool = isRecord(pyproject.tool) ? pyproject.tool : {};
   const uv = isRecord(tool.uv) ? tool.uv : {};
   const poetry = isRecord(tool.poetry) ? tool.poetry : {};
-  const groups = [pyproject["dependency-groups"], project["optional-dependencies"]]
+  const poetryGroups = isRecord(poetry.group)
+    ? Object.values(poetry.group).flatMap((group) =>
+        isRecord(group) ? recordKeys(group.dependencies) : [],
+      )
+    : [];
+  const requirementGroups = [pyproject["dependency-groups"], project["optional-dependencies"]]
     .filter(isRecord)
-    .flatMap((record) => Object.values(record));
-  const poetryTables = [
-    poetry.dependencies,
-    poetry["dev-dependencies"],
-    ...(isRecord(poetry.group)
-      ? Object.values(poetry.group)
-          .filter(isRecord)
-          .map((group) => group.dependencies)
-      : []),
-  ];
-  return [
-    ...[project.dependencies, uv["dev-dependencies"], ...groups].flatMap(requirementNames),
-    ...poetryTables.filter(isRecord).flatMap(Object.keys).map(normalizeDistributionName),
-  ];
+    .flatMap((group) => Object.values(group).flatMap(requirementNames));
+  return new Set([
+    ...requirementNames(project.dependencies),
+    ...requirementNames(uv["dev-dependencies"]),
+    ...requirementGroups,
+    ...recordKeys(poetry.dependencies),
+    ...recordKeys(poetry["dev-dependencies"]),
+    ...poetryGroups,
+  ]);
 }
 
-/** The distribution names in a PEP 508 requirement list, normalized per PEP 503. */
-function requirementNames(list: unknown) {
-  if (!Array.isArray(list)) {
-    return [];
+function evaluateCondition(condition: WhenCondition, repoRoot: string, manifests: ManifestCache) {
+  if (typeof condition === "string") {
+    const path = resolveWhenPath(repoRoot, condition);
+    if (path === undefined) {
+      return Effect.succeed(false);
+    }
+    return Effect.tryPromise(() => Bun.file(path).exists()).pipe(
+      Effect.catchTag("UnknownError", () => Effect.succeed(false)),
+    );
   }
-  return (
-    list
-      // A `[dependency-groups]` entry can be an `{ include-group = "..." }` table instead of a
-      // Requirement string; it names no distribution.
-      .filter((entry): entry is string => typeof entry === "string")
-      .flatMap((entry) => {
-        const name = /^[A-Za-z0-9._-]+/.exec(entry.trim())?.[0];
-        return name === undefined ? [] : [normalizeDistributionName(name)];
-      })
+  return Cache.get(manifests, condition.file).pipe(
+    Effect.map((manifestOption) => {
+      if (Option.isNone(manifestOption)) {
+        return false;
+      }
+      const manifest = manifestOption.value;
+      if ("key" in condition) {
+        return (
+          condition.key.reduce<unknown>(
+            (value, segment) => (isRecord(value) ? value[segment] : undefined),
+            manifest,
+          ) !== undefined
+        );
+      }
+      return declaredDependencies(manifest).has(normalizeDistributionName(condition.dependency));
+    }),
   );
 }
 
-/** PEP 503: lowercase, runs of `-`/`_`/`.` collapse to `-`, so `Ty` and `t_y` match `ty`. */
-function normalizeDistributionName(name: string) {
-  return name.toLowerCase().replaceAll(/[-_.]+/g, "-");
-}
+/** Evaluate one declarative repo gate. Conditions in an array are any-of alternatives. */
+export const evaluateWhen = Effect.fn("When.evaluateWhen")(function* evaluate(
+  when: When,
+  repoRoot: string,
+  manifests?: ManifestCache,
+) {
+  const cache = manifests ?? (yield* makeManifestCache(repoRoot));
+  const results = yield* Effect.all(
+    conditionList(when).map((condition) => evaluateCondition(condition, repoRoot, cache)),
+    { concurrency: "unbounded" },
+  );
+  return results.some(Boolean);
+});
 
-/**
- * Validate a raw config `when` into the grammar, or report why not. Mirrors the resolver style: the
- * caller surfaces `issues` as notices and skips the entry, so a bad gate never sinks the rest of
- * the config.
- */
-export function parseWhen(value: unknown): { when?: When; issues: string[] } {
+/** Validate config data into the relative-path gate grammar. */
+export function parseWhen(value: unknown): { issues: string[]; when?: When } {
   const raw = Array.isArray(value) ? value : [value];
   if (raw.length === 0) {
     return { issues: ["when must not be empty"] };
   }
   const issues: string[] = [];
   const conditions = raw.flatMap((entry): WhenCondition[] => {
-    if (typeof entry === "string" && entry !== "") {
+    if (typeof entry === "string") {
+      if (entry.includes("\0")) {
+        issues.push("a when path must not contain a null byte");
+        return [];
+      }
+      if (entry === "" || isAbsolute(entry)) {
+        issues.push("a when path must be a non-empty relative path");
+        return [];
+      }
       return [entry];
     }
     if (!isRecord(entry)) {
       issues.push("a when condition must be a path or an object with file + key/dependency");
       return [];
     }
-    for (const field of Object.keys(entry)) {
-      if (field !== "file" && field !== "key" && field !== "dependency") {
-        issues.push(`unknown when field "${field}"`);
-      }
+    const unknown = Object.keys(entry).filter(
+      (field) => field !== "file" && field !== "key" && field !== "dependency",
+    );
+    issues.push(...unknown.map((field) => `unknown when field "${field}"`));
+    if (typeof entry.file === "string" && entry.file.includes("\0")) {
+      issues.push("a when file must not contain a null byte");
+      return [];
     }
-    if (typeof entry.file !== "string" || entry.file === "") {
-      issues.push("a when condition needs a file");
+    if (typeof entry.file !== "string" || entry.file === "" || isAbsolute(entry.file)) {
+      issues.push("a when file must be a non-empty relative path");
       return [];
     }
     if ("key" in entry === "dependency" in entry) {
@@ -172,14 +178,12 @@ export function parseWhen(value: unknown): { when?: When; issues: string[] } {
       return [];
     }
     if ("dependency" in entry) {
-      if (typeof entry.dependency !== "string" || entry.dependency === "") {
-        issues.push("a when dependency must be a package name");
-        return [];
-      }
-      // The one manifest whose dependencies are requirement strings; npm/Cargo deps are keys, so
-      // The `key` condition covers them.
       if (entry.file !== "pyproject.toml") {
         issues.push('a when dependency is only supported in "pyproject.toml"');
+        return [];
+      }
+      if (typeof entry.dependency !== "string" || entry.dependency === "") {
+        issues.push("a when dependency must be a package name");
         return [];
       }
       return [{ dependency: entry.dependency, file: entry.file }];
@@ -189,14 +193,13 @@ export function parseWhen(value: unknown): { when?: When; issues: string[] } {
           (segment): segment is string => typeof segment === "string" && segment !== "",
         )
       : [];
-    if (key.length === 0 || !Array.isArray(entry.key) || key.length !== entry.key.length) {
+    if (!Array.isArray(entry.key) || key.length === 0 || key.length !== entry.key.length) {
       issues.push("a when key must be a non-empty array of segments");
       return [];
     }
     return [{ file: entry.file, key }];
   });
-  if (issues.length > 0 || conditions.length === 0) {
-    return { issues: issues.length > 0 ? issues : ["when must not be empty"] };
-  }
-  return { issues: [], when: conditions };
+  return issues.length > 0 || conditions.length === 0
+    ? { issues: issues.length > 0 ? issues : ["when must not be empty"] }
+    : { issues: [], when: conditions };
 }

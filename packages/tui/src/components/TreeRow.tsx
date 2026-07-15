@@ -7,7 +7,7 @@ import { levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 import { kindLetter } from "@/ui-helpers";
-import { folderIcon } from "@/utils/file-icon";
+import { folderIconModel } from "@/utils/file-icon";
 import { truncate, truncateName } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
@@ -74,6 +74,7 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
   };
 
   const isExpanded = () => state.expandedDirectories().has(props.node.id);
+  const icon = () => folderIconModel(isExpanded());
   // The directory dot tracks its most recently changed descendant; the dot itself
   // Decides freshness from the timestamp, so an aged-out value simply yields no dot.
   const recencyAt = () =>
@@ -119,8 +120,14 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
         <box flexDirection="row" flexShrink={0}>
           <text fg={nameFg()}>{indent()}</text>
           <box width={2} overflow="hidden">
-            <text fg={nameFg()}>
-              {state.iconsEnabled() ? folderIcon(isExpanded()) : isExpanded() ? "▾" : "▸"}
+            <text
+              fg={
+                state.iconsEnabled()
+                  ? (theme.colors.icon[icon().name] ?? theme.colors.text.muted)
+                  : nameFg()
+              }
+            >
+              {state.iconsEnabled() ? icon().glyph : isExpanded() ? "▾" : "▸"}
             </text>
           </box>
         </box>
@@ -251,7 +258,7 @@ function FileRow(props: {
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>
           <text fg={theme.colors.text.muted}>{indent()}</text>
-          <FileIcon name={props.node.name} symlink={props.node.symlink} />
+          <FileIcon path={props.node.path} symlink={props.node.symlink} />
         </box>
         <text fg={nameFg()}>{truncate(props.node.name, maxNameLen())}</text>
         <RecencyDot at={state.recencyByPath().get(props.node.path)} marginLeft={1} />

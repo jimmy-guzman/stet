@@ -378,7 +378,7 @@ export function SearchPane() {
                           >
                             {`${header().collapsed ? "▸" : "▾"} `}
                           </text>
-                          <FileIcon name={header().path.split("/").at(-1) ?? header().path} />
+                          <FileIcon path={header().path} />
                           <text
                             fg={
                               row().index === state.searchIndex()

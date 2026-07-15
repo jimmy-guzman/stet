@@ -46,6 +46,8 @@ export const ThemeSchema = Schema.Struct({
     removedSign: Hex,
   }),
   find: Schema.Struct({ matchBg: Hex }),
+  /** User-extensible icon colors; missing names fall back to `text.muted` at render sites. */
+  icon: Schema.Record(Schema.String, Hex),
   kind: Schema.Struct(kindTokens),
   // The viewer's per-line provenance rail: a five-tier scrutiny timeline as one neutral
   // Brightness ramp, brightest at `uncommitted` fading to the faint neutral at `initial`,

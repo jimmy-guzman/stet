@@ -2753,9 +2753,16 @@ function createState() {
       return;
     }
     const { line, path } = caret;
+    const requestRoot = repoRoot();
+    // No server advertises `implementation` for this file's language (ty answers every other intel
+    // Pull but not this one), so a pull would return `[]` and its "no implementations" notice would
+    // Read as a false claim. Say what is actually true instead, without issuing a request.
+    if (serversProviding(path, "implementation", requestRoot).length === 0) {
+      notify("no implementation support for this file type");
+      return;
+    }
     const controller = new AbortController();
     intelController = controller;
-    const requestRoot = repoRoot();
     await resolveAndJump(
       controller,
       requestRoot,
@@ -3060,7 +3067,7 @@ function createState() {
     symbolsFile = selectedFile();
     // No server advertises `documentSymbol` for this language, so a pull would return `[]` and read
     // As "no symbols" (a false claim). Short-circuit to a distinct state without issuing a request.
-    if (serversProviding(path, "documentSymbol").length === 0) {
+    if (serversProviding(path, "documentSymbol", symbolsRoot).length === 0) {
       symbolsController = undefined;
       batch(() => {
         setSymbolsResults([]);

@@ -5,7 +5,6 @@
  * reference drops, so a worktree switch transparently swaps to a fresh server for the new root.
  */
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Context, Data, Effect, Layer, RcMap } from "effect";
@@ -18,6 +17,8 @@ import { cachedBinaryPath, Provisioner } from "./provision";
 import type { ProvisionChannel, ProvisionSpec } from "./provision";
 import { LspRequestError } from "./transport";
 import type { LspConnection } from "./transport";
+import { evaluateWhen, parseWhen } from "./when";
+import type { ManifestCache, When } from "./when";
 
 export class ServerUnavailable extends Data.TaggedError("ServerUnavailable")<{
   readonly language: string;
@@ -80,12 +81,16 @@ interface ServerSpec {
    */
   readonly handshake?: (repoRoot: string) => HandshakeConfig;
   /**
-   * When set, the server runs only in repos this predicate accepts. oxlint/typescript run in every
-   * JS/TS repo, but a competing linter like Biome should activate only where the repo opted into it
-   * (a `biome.json`), the way an editor's Biome extension does, so it neither downloads into repos
-   * that don't use it nor duplicates oxlint's findings.
+   * When set, the server runs only in repos the gate accepts. oxlint/typescript run in every JS/TS
+   * repo, but a competing linter like Biome should activate only where the repo opted into it (a
+   * `biome.json`), the way an editor's Biome extension does, so it neither runs nor downloads in
+   * repos that don't use it (where it does run, it overlaps oxlint and the per-file merge unions
+   * both, like any shared file type). Data, not a predicate, like `initializationOptions`: the
+   * registry writes the same `when` grammar the config does, so a user's gate and a built-in's are
+   * one mechanism, and there is deliberately no code escape hatch (a gate the grammar can't express
+   * gets a new condition in `when.ts`, which config then gets for free).
    */
-  readonly detect?: (repoRoot: string) => boolean;
+  readonly when?: When;
 }
 
 // Adding a language is one `languages` entry (its file types and server order) plus a `registry`
@@ -93,8 +98,10 @@ interface ServerSpec {
 // Language changes here, update docs/content/docs/reference/languages.mdx to match (hand-written
 // By choice; the table is small and slow-moving). A language lists
 // Every server that analyzes it (typescript type-checks the JS/TS family, oxlint lints the same
-// Files) and the per-file results merge. A server with a `detect` gate runs only where its
-// Predicate accepts the repo (Biome needs a biome config).
+// Files) and the per-file results merge. A server with a `when` gate runs only in repos it accepts
+// (Biome needs a biome config); a language with competing servers lists them in a `firstOf` group,
+// Candidates in preference order, and the first whose gate accepts the repo runs (python: ty where
+// The repo opted in, else basedpyright, exactly one).
 //
 // `provision.packages` pin exact versions, never a bare name that resolves `@latest`: the tier-3
 // Download is otherwise nondeterministic (whatever the registry serves that day) and would pull a
@@ -108,7 +115,9 @@ export const registry: Record<string, ServerSpec> = {
   // Extension; the npm package ships `basedpyright-langserver`. It type-checks Python and answers
   // The code-intel pulls, the typescript-language-server analog. Zero-config: it reads
   // Pyrightconfig/pyproject on its own and pulls `python.*` settings the transport's null default
-  // Answers, so it needs no handshake extras.
+  // Answers, so it needs no handshake extras. It is Python's default checker, not its only one:
+  // Deliberately ungated, it is the fallback candidate in python's `firstOf` group, running exactly
+  // Where ty's gate does not claim the repo.
   "basedpyright": {
     args: ["--stdio"],
     binary: "basedpyright-langserver",
@@ -127,12 +136,11 @@ export const registry: Record<string, ServerSpec> = {
   "biome": {
     args: ["lsp-proxy"],
     binary: "biome",
-    // Read off disk; `detect` guarantees a biome config exists, so Biome resolves it on its own and
-    // The transport's null default answers its `workspace/configuration` pull. No handshake needed.
-    detect: (repoRoot) =>
-      existsSync(join(repoRoot, "biome.json")) || existsSync(join(repoRoot, "biome.jsonc")),
     provides: [],
     provision: { kind: "npm", packages: ["@biomejs/biome@2.5.2"] },
+    // The gate guarantees a biome config exists, so Biome resolves it on its own and the
+    // Transport's null default answers its `workspace/configuration` pull. No handshake needed.
+    when: ["biome.json", "biome.jsonc"],
   },
   "json": {
     // Always-on (no `detect`) so JSON gets schema validation in every repo. It overlaps Biome's
@@ -244,6 +252,59 @@ export const registry: Record<string, ServerSpec> = {
       tag: "2026-07-06",
     },
   },
+  // Astral's Python type checker, run over its LSP (`ty server`). It is the basedpyright alternative,
+  // Not an addition: python's `firstOf` group prefers it, so where its gate accepts the repo it runs
+  // And basedpyright does not, and the panel shows what the project's own `ty check` shows. Same
+  // Cargo-dist release shape as ruff, so it comes through the same sha256-pinned `tar.gz` binary
+  // Channel. Its `initialize` result advertises every intel provider stet pulls except
+  // `implementation`, hence its absence below; a ty repo reports that key as unsupported rather than
+  // Keeping a second type checker alive to answer it.
+  "ty": {
+    args: ["server"],
+    binary: "ty",
+    provides: ["definition", "references", "hover", "documentSymbol", "callHierarchy"],
+    provision: {
+      archive: "tar.gz",
+      assets: [
+        {
+          arch: "arm64",
+          asset: "ty-aarch64-apple-darwin.tar.gz",
+          os: "darwin",
+          sha256: "eab18cbeec298d9b59a374d3b49b5e17827118119a0a43d47f25eb847c93b390",
+        },
+        {
+          arch: "x64",
+          asset: "ty-x86_64-apple-darwin.tar.gz",
+          os: "darwin",
+          sha256: "6bb09b2941ada692fdaf295883904a59a652bb49e068fb95e04523039e412065",
+        },
+        {
+          arch: "arm64",
+          asset: "ty-aarch64-unknown-linux-gnu.tar.gz",
+          os: "linux",
+          sha256: "62dcb82bfc10bc538eb7cd45dfa9a6f9d9f6eec9f05480bda63b26decbd948fd",
+        },
+        {
+          arch: "x64",
+          asset: "ty-x86_64-unknown-linux-gnu.tar.gz",
+          os: "linux",
+          sha256: "1e756543bc02420dbd63189ace4316fa7f3dbf7800b066d3b9db477b215894e0",
+        },
+      ],
+      kind: "binary",
+      repo: "astral-sh/ty",
+      tag: "0.0.58",
+    },
+    // A dedicated ty config is the clearest opt-in, but ty is routinely used with no config at all
+    // (`uv add --dev ty`, then `uv run ty check` in CI), so a declared dependency counts too.
+    // Without that, the repos this gate exists for would keep seeing basedpyright's findings.
+    when: [
+      "ty.toml",
+      ".ty.toml",
+      { file: "pyproject.toml", key: ["tool", "ty"] },
+      { dependency: "ty", file: "pyproject.toml" },
+    ],
+  },
   "typescript": {
     args: ["--stdio"],
     binary: "typescript-language-server",
@@ -331,12 +392,33 @@ export function handshakeConfigFor(
  * key: `tsx` opens as `typescriptreact`), so a routable file type and its `languageId` cannot drift
  * apart. `servers` names `registry` keys, primary server first, then linters.
  */
+/**
+ * One server in a language's list, in the grammar the config and the built-in table share. A bare
+ * string is the server governed by its own registry `when` (stet's guess, so a built-in list stays
+ * repo-gated); `{ server }` is unconditional (a config user named it, so it runs: `detect`-style
+ * guessing must never overrule a stated choice); `{ server, when }` is governed by that gate (the
+ * way back for a global config over heterogeneous repos); `{ firstOf }` is candidates in preference
+ * order, the first whose gate accepts the repo running. The group is how competing servers stay
+ * mutually exclusive without negation: python prefers ty (gated) and falls back to basedpyright
+ * (ungated), and a third checker later is one insert with its own gate, touching neither.
+ *
+ * A gate rides on the entry, never on a per-language copy of the server's spec: the cache dir
+ * (`cachedBinaryPath`) and the server pool both key by server name, so a copy would mean a second
+ * download and a second process against one repo (one Biome for `.ts`, another for `.css`). The
+ * same constraint is why `{ server }` takes no options: one pooled process per server and repo
+ * cannot hold two languages' options.
+ */
+type ServerEntry =
+  | string
+  | { readonly server: string; readonly when?: When }
+  | { readonly firstOf: readonly (string | { readonly server: string; readonly when?: When })[] };
+
 interface Language {
   /** Extension (no dot) -> LSP `languageId`. */
   readonly extensions: Record<string, string>;
   /** Exact basename -> LSP `languageId`; wins over the extension match. */
   readonly filenames?: Record<string, string>;
-  readonly servers: readonly string[];
+  readonly servers: readonly ServerEntry[];
 }
 
 // No built-in declares `filenames` yet; it routes extensionless types (Dockerfile, Makefile) the
@@ -346,9 +428,13 @@ const builtinLanguages: Record<string, Language> = {
   css: { extensions: { css: "css" }, servers: ["biome"] },
   graphql: { extensions: { graphql: "graphql" }, servers: ["biome"] },
   json: { extensions: { json: "json", jsonc: "jsonc" }, servers: ["json", "biome"] },
-  // The basedpyright server type-checks and answers intel; ruff lints (always-on, the default
-  // Python linter, not a competitor to one, so no `detect` gate). `.pyi` stubs open as python too.
-  python: { extensions: { py: "python", pyi: "python" }, servers: ["basedpyright", "ruff"] },
+  // The repo's type checker type-checks and answers intel, exactly one of the two candidates: ty
+  // Where its gate accepts the repo, else basedpyright, the ungated fallback. ruff lints (always-on,
+  // The default Python linter, not a competitor to one). `.pyi` stubs open as python too.
+  python: {
+    extensions: { py: "python", pyi: "python" },
+    servers: [{ firstOf: ["ty", "basedpyright"] }, "ruff"],
+  },
   rust: { extensions: { rs: "rust" }, servers: ["rust-analyzer"] },
   typescript: {
     extensions: {
@@ -461,52 +547,123 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
     return next(2);
   };
 
-  const inlineServerFields = new Set(["command", "initializationOptions", "settings"]);
+  const serverFields = new Set([
+    "command",
+    "firstOf",
+    "initializationOptions",
+    "server",
+    "settings",
+    "when",
+  ]);
+
+  const parsedWhen = (name: string, value: unknown) => {
+    const { issues: whenIssues, when } = parseWhen(value);
+    for (const issue of whenIssues) {
+      issues.push(`language "${name}": ${issue}`);
+    }
+    return when;
+  };
+
+  // One config entry -> one resolved ServerEntry, or undefined with its problem reported. A bare
+  // Name resolves to the unconditional `{ server }` form: the user named it, so it runs, and stet's
+  // Registry gate (a guess at intent) must not overrule the statement. Inside a `firstOf` group the
+  // Bare name stays the string form instead (registry-gated), because the group's whole meaning is
+  // "pick by condition"; an unconditional candidate ends the list as the fallback.
+  const serverEntry = (name: string, entry: unknown, inGroup: boolean): ServerEntry | undefined => {
+    if (typeof entry === "string") {
+      if (registry[entry] === undefined) {
+        issues.push(`language "${name}": unknown server "${entry}"`);
+        return undefined;
+      }
+      return inGroup ? entry : { server: entry };
+    }
+    if (!isObject(entry)) {
+      issues.push(
+        `language "${name}": a server must be a built-in name, { server }, { command }, or { firstOf }`,
+      );
+      return undefined;
+    }
+    for (const field of Object.keys(entry)) {
+      if (!serverFields.has(field)) {
+        issues.push(`language "${name}": unknown server field "${field}"`);
+      }
+    }
+    if (entry.firstOf !== undefined) {
+      if (inGroup) {
+        issues.push(`language "${name}": firstOf groups don't nest`);
+        return undefined;
+      }
+      if (Object.keys(entry).length !== 1 || !Array.isArray(entry.firstOf)) {
+        issues.push(`language "${name}": firstOf must be the only field, holding an array`);
+        return undefined;
+      }
+      const candidates = entry.firstOf
+        .map((candidate) => serverEntry(name, candidate, true))
+        .filter(
+          (candidate): candidate is string | { server: string; when?: When } =>
+            candidate !== undefined && (typeof candidate === "string" || "server" in candidate),
+        );
+      if (candidates.length === 0) {
+        issues.push(`language "${name}": firstOf resolved no candidates`);
+        return undefined;
+      }
+      return { firstOf: candidates };
+    }
+    if ((entry.server === undefined) === (entry.command === undefined)) {
+      issues.push(`language "${name}": a server needs exactly one of "server" or "command"`);
+      return undefined;
+    }
+    const when = entry.when === undefined ? undefined : parsedWhen(name, entry.when);
+    if (entry.when !== undefined && when === undefined) {
+      return undefined;
+    }
+    // A built-in, named to attach a gate to it. Options are deliberately not accepted: they would
+    // Need a spec of this server's own, but the pool keys per server and repo, so two languages
+    // Could never disagree about one server's options. Only the gate is per-entry.
+    if (entry.server !== undefined) {
+      if (typeof entry.server !== "string" || registry[entry.server] === undefined) {
+        issues.push(`language "${name}": unknown server ${JSON.stringify(entry.server)}`);
+        return undefined;
+      }
+      if (entry.initializationOptions !== undefined || entry.settings !== undefined) {
+        issues.push(`language "${name}": a built-in server takes only "when"`);
+        return undefined;
+      }
+      return { server: entry.server, ...(when === undefined ? {} : { when }) };
+    }
+    const command = Array.isArray(entry.command)
+      ? entry.command.filter((part): part is string => typeof part === "string" && part !== "")
+      : [];
+    const [binary, ...args] = command;
+    if (
+      binary === undefined ||
+      !Array.isArray(entry.command) ||
+      command.length !== entry.command.length
+    ) {
+      issues.push(`language "${name}": an inline server's command must be non-empty strings`);
+      return undefined;
+    }
+    const key = uniqueServerKey(`${name}/${binary.slice(binary.lastIndexOf("/") + 1)}`);
+    resolvedServers[key] = {
+      args,
+      binary,
+      provides: [...intelCapabilities],
+      ...(entry.initializationOptions === undefined
+        ? {}
+        : { initializationOptions: entry.initializationOptions }),
+      ...(entry.settings === undefined ? {} : { settings: entry.settings }),
+    };
+    return { server: key, ...(when === undefined ? {} : { when }) };
+  };
+
   const serverList = (name: string, value: unknown) => {
     if (!Array.isArray(value)) {
       issues.push(`language "${name}": servers must be an array`);
       return undefined;
     }
-    const keys: string[] = [];
-    for (const entry of value) {
-      if (typeof entry === "string") {
-        if (registry[entry] === undefined) {
-          issues.push(`language "${name}": unknown server "${entry}"`);
-          continue;
-        }
-        keys.push(entry);
-        continue;
-      }
-      if (!isObject(entry) || !Array.isArray(entry.command)) {
-        issues.push(`language "${name}": a server must be a built-in name or { command: [...] }`);
-        continue;
-      }
-      for (const field of Object.keys(entry)) {
-        if (!inlineServerFields.has(field)) {
-          issues.push(`language "${name}": unknown server field "${field}"`);
-        }
-      }
-      const command = entry.command.filter(
-        (part): part is string => typeof part === "string" && part !== "",
-      );
-      const [binary, ...args] = command;
-      if (binary === undefined || command.length !== entry.command.length) {
-        issues.push(`language "${name}": an inline server's command must be non-empty strings`);
-        continue;
-      }
-      const key = uniqueServerKey(`${name}/${binary.slice(binary.lastIndexOf("/") + 1)}`);
-      resolvedServers[key] = {
-        args,
-        binary,
-        provides: [...intelCapabilities],
-        ...(entry.initializationOptions === undefined
-          ? {}
-          : { initializationOptions: entry.initializationOptions }),
-        ...(entry.settings === undefined ? {} : { settings: entry.settings }),
-      };
-      keys.push(key);
-    }
-    return keys;
+    return value
+      .map((entry) => serverEntry(name, entry, false))
+      .filter((entry): entry is ServerEntry => entry !== undefined);
   };
 
   // Pass 1: validate each entry into a proposal, no cross-entry checks yet. Only entries that
@@ -517,7 +674,7 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
     readonly override: boolean;
     readonly extensions: Record<string, string>;
     readonly filenames?: Record<string, string>;
-    readonly servers: readonly string[];
+    readonly servers: readonly ServerEntry[];
   }
   const proposals: Proposal[] = [];
   const languageFields = new Set(["extensions", "filenames", "servers"]);
@@ -554,6 +711,8 @@ export function resolveLanguages(raw: Record<string, unknown>): ResolvedLanguage
       issues.push(`language "${name}": declares no file types`);
       continue;
     }
+    // An omitted list inherits the built-in (strings, so registry gates keep applying); a declared
+    // One resolves to entries whose bare names became unconditional `{ server }` forms.
     const servers =
       entry.servers === undefined
         ? builtin === undefined
@@ -657,34 +816,121 @@ function fileType(path: string) {
   return undefined;
 }
 
-/** The owning language's servers for this file's type, in declared order, unknown keys dropped. */
+// The candidates a group or list entry names, groups flattened, gates ignored.
+function entryServers(entry: ServerEntry): string[] {
+  if (typeof entry === "string") {
+    return [entry];
+  }
+  if ("firstOf" in entry) {
+    return entry.firstOf.flatMap(entryServers);
+  }
+  return [entry.server];
+}
+
+/**
+ * The owning language's servers for this file's type, in declared order (groups flattened, gates
+ * ignored), unknown keys dropped.
+ */
 export function serversForPath(path: string): string[] {
   const type = fileType(path);
   return type === undefined
     ? []
-    : type.language.servers.filter((server) => registry[server] !== undefined);
+    : type.language.servers
+        .flatMap(entryServers)
+        .filter((server) => registry[server] !== undefined);
+}
+
+export interface ServerGates {
+  /** Whether each distinct `when` (keyed by its canonical JSON) accepts this repo. */
+  readonly accepted: ReadonlyMap<string, boolean>;
+}
+
+const whenKey = (when: When) => JSON.stringify(when);
+
+/**
+ * Every registered gate resolved for one repo: the registry `when`s plus every per-entry `when` a
+ * config language declared. Evaluate once per run and reuse across files: gates stat the filesystem
+ * and parse manifests, so re-checking per file per snapshot emission would re-read the same files
+ * repeatedly for an invariant result. One `ManifestCache` spans the pass, so ty's two pyproject
+ * conditions cost one read.
+ */
+export function activeServerGates(repoRoot: string): ServerGates {
+  const accepted = new Map<string, boolean>();
+  const manifests: ManifestCache = new Map();
+  const evaluate = (when: When | undefined) => {
+    if (when === undefined) {
+      return;
+    }
+    const key = whenKey(when);
+    if (!accepted.has(key)) {
+      accepted.set(key, evaluateWhen(when, repoRoot, manifests));
+    }
+  };
+  for (const spec of Object.values(registry)) {
+    evaluate(spec.when);
+  }
+  for (const language of languages.values()) {
+    for (const entry of language.servers) {
+      if (typeof entry === "string") {
+        continue;
+      }
+      for (const candidate of "firstOf" in entry ? entry.firstOf : [entry]) {
+        if (typeof candidate !== "string") {
+          evaluate(candidate.when);
+        }
+      }
+    }
+  }
+  return { accepted };
 }
 
 /**
- * The registered servers whose repo gate (if any) accepts `repoRoot`. Evaluate once per run and
- * reuse across files: a gate may stat the filesystem (Biome's `detect`), so re-checking it per file
- * per snapshot emission would re-stat the same config repeatedly for an invariant result.
+ * The servers this repo actually runs for the file, given the gates resolved once
+ * (`activeServerGates`). The one place a gate is applied, so diagnostics and intel can never
+ * disagree about which servers a repo opted into. A string entry answers to its registry `when`
+ * (stet's guess); a `{ server }` entry answers to its own `when` or runs unconditionally (the
+ * user's statement, which the guess must not overrule); a `firstOf` group runs its first accepted
+ * candidate only, which is what keeps competing servers mutually exclusive.
  */
-export function activeLanguages(repoRoot: string): Set<string> {
-  return new Set(
-    Object.keys(registry).filter((server) => registry[server]?.detect?.(repoRoot) ?? true),
-  );
+export function activeServers(path: string, gates: ServerGates): string[] {
+  const type = fileType(path);
+  if (type === undefined) {
+    return [];
+  }
+  const passes = (when: When | undefined) =>
+    when === undefined ? true : (gates.accepted.get(whenKey(when)) ?? false);
+  const candidateActive = (candidate: string | { server: string; when?: When }) => {
+    const server = typeof candidate === "string" ? candidate : candidate.server;
+    if (registry[server] === undefined) {
+      return false;
+    }
+    return passes(typeof candidate === "string" ? registry[server]?.when : candidate.when);
+  };
+  const active = type.language.servers.flatMap((entry) => {
+    if (typeof entry !== "string" && "firstOf" in entry) {
+      const winner = entry.firstOf.find(candidateActive);
+      return winner === undefined ? [] : entryServers(winner);
+    }
+    return candidateActive(entry) ? entryServers(entry) : [];
+  });
+  return [...new Set(active)];
 }
 
-/** The file's language servers whose repo gate (if any) accepts `repoRoot`. */
+/** The file's servers this repo runs, gates evaluated for `repoRoot`. */
 export function activeServersForPath(path: string, repoRoot: string): string[] {
-  const active = activeLanguages(repoRoot);
-  return serversForPath(path).filter((server) => active.has(server));
+  return activeServers(path, activeServerGates(repoRoot));
 }
 
-/** Servers for this path that statically declare they can answer `capability`, in declared order. */
-export function serversProviding(path: string, capability: Capability): string[] {
-  return serversForPath(path).filter((server) => registry[server]?.provides.includes(capability));
+/**
+ * The file's active servers that statically declare they can answer `capability`, in declared
+ * order. Gated on the repo the same way diagnostics are: a server the repo turned off (a Python
+ * repo's unused type checker) must not be selected for intel either, or intel would acquire, and
+ * provision, a server the repo never opted into.
+ */
+export function serversProviding(path: string, capability: Capability, repoRoot: string): string[] {
+  return activeServersForPath(path, repoRoot).filter((server) =>
+    registry[server]?.provides.includes(capability),
+  );
 }
 
 const intelCapabilities = new Set<Capability>([

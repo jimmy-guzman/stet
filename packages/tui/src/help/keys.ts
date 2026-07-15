@@ -57,6 +57,7 @@ export const KEY_HELP: { entries: [combo: string, action: string][]; heading: st
       ["w", "switch to another git worktree"],
       ["c", "toggle changes-only filter for the tree"],
       ["r", "re-run checks"],
+      ["R", "restart language servers"],
     ],
     heading: "workspace",
   },

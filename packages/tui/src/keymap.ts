@@ -22,11 +22,14 @@ interface HostEffects {
   openInEditor: (path: string, line: number | undefined, mode: "terminal" | "ide") => Promise<void>;
 }
 
-// One handler routes every key through the modal-precedence chain
-// (help > worktree > palette > global > pane-specific). The order of the early
-// Returns is load-bearing: an open overlay must swallow keys before any later
-// Branch can act on them. Reads use the live signal values (not a render
-// Snapshot); writes are wrapped in one `batch` so a keypress is one update.
+/**
+ * One handler routes every key through the modal-precedence chain (help > worktree > palette >
+ * global > pane-specific). The order of the early returns is load-bearing: an open overlay must
+ * swallow keys before any later branch can act on them. Reads use the live signal values (not a
+ * render snapshot); writes are wrapped in one `batch` so a keypress is one update.
+ *
+ * @returns A handler that processes key events and updates application state.
+ */
 export function createKeyHandler(host: HostEffects) {
   const cycleFind = (direction: number) => {
     const matches = state.findMatches();
@@ -681,8 +684,14 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "r") {
+      if (key.name === "r" && !key.shift) {
         void state.runChecks(state.gitModel());
+        return;
+      }
+
+      // `r` re-reads what the servers already think; `R` throws the servers away and asks again.
+      if (key.name === "R" || (key.name === "r" && key.shift)) {
+        void state.restartLanguageServers();
         return;
       }
 

@@ -1,12 +1,22 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { Effect, Exit, Queue } from "effect";
+import { Effect, Exit, Option, Queue, Stream } from "effect";
 import type { Cause } from "effect";
 
-import { isJsonRpcNotification, isJsonRpcRequest } from "@/diagnostics/jsonrpc";
+import { isJsonRpcNotification, isJsonRpcRequest, isJsonRpcResponse } from "@/diagnostics/jsonrpc";
 import type { JsonRpcMessage } from "@/diagnostics/jsonrpc";
 import { makeTransport } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
+
+// A real directory: forwarding a watched change types it by reading the disk, since `fs.watch` calls
+// Both an appearance and a vanishing a "rename" and only presence tells them apart.
+const REPO = mkdtempSync(join(tmpdir(), "stet-transport-"));
+
+afterAll(() => rmSync(REPO, { force: true, recursive: true }));
 
 interface Peer {
   connection: LspConnection;
@@ -33,6 +43,7 @@ function withPeer<A, E>(
             inbound,
             send: (message) => Queue.offer(sent, message).pipe(Effect.asVoid),
           },
+          REPO,
           undefined,
           onRefreshRequest,
         );
@@ -193,6 +204,7 @@ test("answers a server-to-client request with the supplied handler's result", as
         // Oxlint answers `workspace/configuration` with its options, or it never publishes.
         yield* makeTransport(
           { inbound, send: (message) => Queue.offer(sent, message).pipe(Effect.asVoid) },
+          REPO,
           (method) =>
             Effect.succeed(method === "workspace/configuration" ? [{ run: "onType" }] : null),
         );
@@ -436,4 +448,230 @@ test("a reopened document's version never regresses", async () => {
     { method: "textDocument/didClose" },
     { method: "textDocument/didOpen", params: { textDocument: { version: 3 } } },
   ]);
+});
+
+// The router drains inbound in order, so once its answer to this request is out, every notification
+// Replied before it has already been dispatched. `Queue.takeAll` blocks on an empty queue, so a test
+// Asserting that nothing was sent needs this barrier rather than a bare drain.
+const BARRIER_ID = 999;
+
+function drainToBarrier(peer: Peer, collected: JsonRpcMessage[]): Effect.Effect<JsonRpcMessage[]> {
+  return Queue.take(peer.sent).pipe(
+    Effect.flatMap((message) =>
+      isJsonRpcResponse(message) && message.id === BARRIER_ID
+        ? Effect.succeed(collected)
+        : drainToBarrier(peer, [...collected, message]),
+    ),
+    Effect.orDie,
+  );
+}
+
+function notificationsSent(peer: Peer) {
+  return peer.reply({ id: BARRIER_ID, jsonrpc: "2.0", method: "window/showMessageRequest" }).pipe(
+    Effect.andThen(drainToBarrier(peer, [])),
+    Effect.map((messages) => messages.filter(isJsonRpcNotification)),
+  );
+}
+
+// The registration basedpyright sends once the client advertises `dynamicRegistration`: a catch-all
+// Over the workspace, plus one `RelativePattern` per Python search path (a venv outside the repo).
+/** Git's view of the path, the tiebreak that separates an atomic save from a genuine appearance. */
+const NOT_TRACKED = () => false;
+
+const watchRegistration = (searchPath?: string) => ({
+  id: 1,
+  jsonrpc: "2.0" as const,
+  method: "client/registerCapability",
+  params: {
+    registrations: [
+      {
+        id: "watch",
+        method: "workspace/didChangeWatchedFiles",
+        registerOptions: {
+          watchers: [
+            { globPattern: "**" },
+            ...(searchPath === undefined
+              ? []
+              : [{ globPattern: { baseUri: pathToFileURL(searchPath).href, pattern: "**" } }]),
+          ],
+        },
+      },
+    ],
+  },
+});
+
+const publish = (uri: string, diagnostics: unknown[]) => ({
+  jsonrpc: "2.0" as const,
+  method: "textDocument/publishDiagnostics",
+  params: { diagnostics, uri },
+});
+
+test("a registered server is told about a package installed into the venv", async () => {
+  const installed = join(".venv", "lib", "site-packages", "fastapi", "__init__.py");
+  mkdirSync(join(REPO, ".venv", "lib", "site-packages", "fastapi"), { recursive: true });
+  writeFileSync(join(REPO, installed), "x\n");
+
+  const [answer, notifications] = await withPeer((peer) =>
+    Effect.gen(function* run() {
+      yield* peer.reply(watchRegistration());
+      const response = yield* Queue.take(peer.sent);
+      yield* peer.connection.watchedFilesChanged(
+        REPO,
+        [
+          { path: installed, renamed: true },
+          { path: join("..", "outside", "the", "repo.py"), renamed: true },
+        ],
+        NOT_TRACKED,
+      );
+      return [response, yield* notificationsSent(peer)] as const;
+    }),
+  );
+
+  // Answered immediately, so a server that blocks on its registration never stalls.
+  expect(answer).toMatchObject({ id: 1, result: null });
+  expect(notifications).toEqual([
+    {
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      // The package that just landed is a Create, which is the only thing that makes pyright rescan
+      // Its search paths; the path outside the worktree matched no glob, so it was not forwarded.
+      params: { changes: [{ type: 1, uri: pathToFileURL(join(REPO, installed)).href }] },
+    },
+  ]);
+});
+
+test("a server that registered nothing is never sent watched-file changes", async () => {
+  // Rust-analyzer, pinned to `files.watcher: server`, registers no globs and keeps watching itself.
+  // It must also cost nothing: with no registrations the batch returns before a path is even typed,
+  // Which is what keeps an install's tens of thousands of writes off the render thread.
+  const notifications = await withPeer((peer) =>
+    peer.connection
+      .watchedFilesChanged(REPO, [{ path: join("src", "main.rs"), renamed: true }], NOT_TRACKED)
+      .pipe(Effect.andThen(notificationsSent(peer))),
+  );
+
+  expect(notifications).toEqual([]);
+});
+
+test("unregistering drops the globs, so nothing is forwarded after it", async () => {
+  const notifications = await withPeer((peer) =>
+    Effect.gen(function* run() {
+      yield* peer.reply(watchRegistration());
+      yield* Queue.take(peer.sent);
+      yield* peer.reply({
+        id: 2,
+        jsonrpc: "2.0",
+        method: "client/unregisterCapability",
+        params: { unregisterations: [{ id: "watch", method: "workspace/didChangeWatchedFiles" }] },
+      });
+      yield* Queue.take(peer.sent);
+      yield* peer.connection.watchedFilesChanged(
+        REPO,
+        [{ path: "a.py", renamed: true }],
+        NOT_TRACKED,
+      );
+      return yield* notificationsSent(peer);
+    }),
+  );
+
+  expect(notifications).toEqual([]);
+});
+
+test("out-of-worktree search paths surface as bases to watch", async () => {
+  const venv = join(sep, "home", "me", ".virtualenvs", "app");
+  const bases = await withPeer((peer) =>
+    peer
+      .reply(watchRegistration(venv))
+      .pipe(Effect.andThen(Stream.runHead(peer.connection.watchedBases))),
+  );
+
+  // The `**` workspace glob rides the worktree watcher; only the external venv needs its own watch.
+  expect(bases).toEqual(Option.some([venv]));
+});
+
+test("a publish answering what the run just sent does not nudge a re-check", async () => {
+  let rechecks = 0;
+  await withPeer(
+    (peer) =>
+      Effect.gen(function* run() {
+        // A run re-sends a document: `clearPublished` opens the awaited window on it.
+        yield* peer.connection.clearPublished(["file:///a.py"]);
+        // Pyright answers with an empty publish, then refines it once analysis finishes. Both answer
+        // What this run sent, and the run is already waiting on them.
+        yield* peer.reply(publish("file:///a.py", []));
+        yield* peer.reply(publish("file:///a.py", [{ message: "unresolved import" }]));
+        yield* notificationsSent(peer);
+      }),
+    Effect.sync(() => {
+      rechecks += 1;
+    }),
+  );
+
+  expect(rechecks).toBe(0);
+});
+
+test("a server correcting itself out of band nudges exactly one re-check", async () => {
+  let rechecks = 0;
+  await withPeer(
+    (peer) =>
+      Effect.gen(function* run() {
+        yield* peer.connection.clearPublished(["file:///a.py"]);
+        yield* peer.reply(publish("file:///a.py", [{ message: "unresolved import" }]));
+        yield* notificationsSent(peer);
+        // The run has read the bucket and finished; the awaited window closes.
+        yield* peer.connection.published;
+        yield* peer.connection.endPublishWait;
+
+        // `uv add fastapi` lands. Pyright reloads its library and re-analyzes on its own: nothing is
+        // Waiting for this, so without the nudge it sits unread and the panel stays red forever.
+        yield* peer.reply(publish("file:///a.py", []));
+        // A republish of the same items is not news, so it must not nudge again.
+        yield* peer.reply(publish("file:///a.py", []));
+        yield* notificationsSent(peer);
+      }),
+    Effect.sync(() => {
+      rechecks += 1;
+    }),
+  );
+
+  expect(rechecks).toBe(1);
+});
+
+test("a publish no run is waiting for is news, clean or not", async () => {
+  let rechecks = 0;
+  await withPeer(
+    (peer) =>
+      Effect.gen(function* run() {
+        // No `clearPublished`, so no awaited window: this is a server reporting on a file stet never
+        // Opened (a cross-file report). Findings there are news, and nothing else would render them.
+        yield* peer.reply(publish("file:///never-opened.py", [{ message: "unresolved import" }]));
+        yield* notificationsSent(peer);
+      }),
+    Effect.sync(() => {
+      rechecks += 1;
+    }),
+  );
+  expect(rechecks).toBe(1);
+
+  let late = 0;
+  await withPeer(
+    (peer) =>
+      Effect.gen(function* run() {
+        // A run re-sent this document, then capped out its settle without an answer, so the file is
+        // Sitting at `pending`.
+        yield* peer.connection.clearPublished(["file:///slow.py"]);
+        yield* peer.connection.published;
+        yield* peer.connection.endPublishWait;
+
+        // The server finally answers, and the answer is that the file is clean. That is the result
+        // The run never got: no entry is not the same as an empty entry, and treating it as one
+        // Stranded the file at `pending` until the next git activity.
+        yield* peer.reply(publish("file:///slow.py", []));
+        yield* notificationsSent(peer);
+      }),
+    Effect.sync(() => {
+      late += 1;
+    }),
+  );
+  expect(late).toBe(1);
 });

@@ -37,7 +37,7 @@ import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { LspProcess } from "./diagnostics/lsp-process";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import { intelLanguage, serversProviding } from "./diagnostics/servers";
+import { intelLanguage, LanguageServers, serversProviding } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -392,6 +392,11 @@ function isSubsequence(query: string, target: string) {
   return i === query.length;
 }
 
+/**
+ * Creates the reactive state and actions for the git diff viewer.
+ *
+ * @returns The application state accessors, derived values, and actions
+ */
 function createState() {
   // Every signal below is created through `tracked`, which records how to restore that signal's
   // Initial value. `resetState` replays the lot, so the reset can never drift from the signals it
@@ -659,6 +664,8 @@ function createState() {
   >(undefined);
   const [activityLog, setActivityLog] = tracked<ActivityLog>(emptyActivityLog);
   const [checksRunning, setChecksRunning] = tracked(false);
+  // Held for the duration of `R`, so the intel warm-hold cannot re-pin a server mid-teardown.
+  const [restartingServers, setRestartingServers] = tracked(false);
   // Languages whose server is downloading right now, sourced live from the provisioner (not the
   // Check run), so the status bar shows it promptly and drops it the moment the download resolves.
   const [provisioningLanguages, setProvisioningLanguages] = tracked<ReadonlySet<string>>(new Set());
@@ -2477,8 +2484,82 @@ function createState() {
     } finally {
       if (checksController === controller) {
         setChecksRunning(false);
+        if (recheckPending) {
+          recheckPending = false;
+          void runChecks(gitModel());
+        }
       }
     }
+  }
+
+  // A server with news no run is waiting for (its own post-install re-analysis, or an explicit
+  // `workspace/diagnostic/refresh`). It must not abort the run in flight: that run's own sends are
+  // What provoked most of these, and restarting it each time would starve it. Defer instead, which
+  // Terminates by construction: the follow-up run finds no changed text, so it sends the server
+  // Nothing, so it provokes no further publishes and no further nudge.
+  let recheckPending = false;
+  onReset(() => {
+    recheckPending = false;
+  });
+  function requestRecheck() {
+    if (checksRunning()) {
+      recheckPending = true;
+      return;
+    }
+    void runChecks(gitModel());
+  }
+
+  /**
+   * `R`: bring the repo's language servers back up from scratch. The escape hatch for a server that
+   * cannot be told about a change (a linter that reads its config once at startup) or has wedged;
+   * every editor ships one.
+   *
+   * Every holder of the pooled server has to let go before the pool can kill it, because
+   * `RcMap.invalidate` skips an entry anyone still references. There are three: the run in flight,
+   * the document keepers, and the intel warm-hold, which pins its server for the whole session.
+   * Miss the warm-hold and `R` leaves the wedged child running and merely spawns a second one
+   * beside it.
+   *
+   * `restartingServers` doubles as the re-entry guard, flipped before the first await so a second
+   * `R` mid-teardown drops instead of re-running the whole sequence.
+   */
+  async function restartLanguageServers() {
+    const model = gitModel();
+    if (model.repoRoot === "" || restartingServers()) {
+      return;
+    }
+    setRestartingServers(true);
+    notify("restarting language servers");
+
+    // The run in flight holds handles to the children about to be killed; left alone, its requests
+    // Come back as "connection closed" and flash a red `failed` badge over every file it was checking.
+    //
+    // Drop the deferred re-check *before* aborting, or the abort itself resurrects it: the run's exit
+    // Path fires a pending re-check, and that fresh run re-acquires the very pool entries the restart
+    // Is about to evict. `RcMap.invalidate` skips a still-referenced entry, so the wedged child would
+    // Survive with a replacement beside it, which is the same hole the warm-hold teardown below
+    // Closes. Nothing is lost: this restart ends with a run of its own.
+    recheckPending = false;
+    checksController?.abort();
+
+    // Drop the warm-hold and wait for its scope to actually close. Aborting the controller directly
+    // Rather than relying on the effect's cleanup keeps this deterministic, independent of when Solid
+    // Flushes; the signal is what stops it re-acquiring until the pool has been evicted.
+    const closing = warmHoldClosed;
+    warmHoldController?.abort();
+    await closing;
+
+    await runtime
+      .runPromise(
+        Diagnostics.use((diagnostics) => diagnostics.resetServers(model.repoRoot)).pipe(
+          Effect.andThen(LanguageServers.use((servers) => servers.restart(model.repoRoot))),
+        ),
+      )
+      .catch(() => {});
+
+    // Servers are gone; let the warm-hold re-establish itself on a fresh one.
+    setRestartingServers(false);
+    void runChecks(model);
   }
 
   // A download starting/finishing drives the live "installing…" status: add on start, drop on
@@ -2510,8 +2591,10 @@ function createState() {
       ),
     ),
   );
-  // A server nudging `workspace/diagnostic/refresh` (rust-analyzer after a cargo-check cycle)
-  // Re-runs checks, exactly like a finished download; a nudge from another repo's pooled server
+  // A server with news no run is waiting for: an explicit `workspace/diagnostic/refresh` nudge
+  // (rust-analyzer after a cargo-check cycle), or a server that re-published on its own once it
+  // Changed its mind (pyright re-analyzing after a dependency install invalidated its imports).
+  // Both re-run checks, exactly like a finished download. A nudge from another repo's pooled server
   // (a just-switched-away worktree) is ignored rather than churning the current one.
   runtime.runFork(
     LspProcess.use((lsp) =>
@@ -2519,7 +2602,7 @@ function createState() {
         Effect.flatMap((refreshedRoot) =>
           Effect.sync(() => {
             if (refreshedRoot === gitModel().repoRoot) {
-              void runChecks(gitModel());
+              requestRecheck();
             }
           }),
         ),
@@ -2580,13 +2663,21 @@ function createState() {
       ? { path, root }
       : undefined;
   });
+  // The warm-hold's fiber, so a restart can release the pool reference it pins and then wait for the
+  // Scope to actually close. `RcMap.invalidate` skips a still-referenced entry, so a server the user
+  // Asked to restart would otherwise never be killed.
+  let warmHoldController: AbortController | undefined;
+  let warmHoldClosed: Promise<unknown> = Promise.resolve();
   createEffect(() => {
     const seed = warmSeed();
-    if (seed === undefined) {
+    // `restartingServers` keeps the hold down for the whole teardown: re-acquiring before the pool is
+    // Evicted would just re-pin the server being replaced.
+    if (seed === undefined || restartingServers()) {
       return;
     }
     const controller = new AbortController();
-    runtime
+    warmHoldController = controller;
+    warmHoldClosed = runtime
       .runPromise(Effect.scoped(Intel.use((intel) => intel.warmHold(seed.root, seed.path))), {
         signal: controller.signal,
       })
@@ -3928,11 +4019,46 @@ function createState() {
             // Server reads, so drop the repo's cached intel. Gate on tracked-ness: the watcher also
             // Sees gitignored churn (`node_modules/`, `dist/`) an agent generates, which must not
             // Wipe the warm cache, and a git-internal or nameless batch carries no path at all.
-            Stream.tap((paths) =>
-              paths.some((path) => repoFilePaths().has(path) || gitModel().changedByPath.has(path))
+            Stream.tap((changes) =>
+              changes.some(
+                (change) =>
+                  repoFilePaths().has(change.path) || gitModel().changedByPath.has(change.path),
+              )
                 ? Intel.use((intel) => intel.invalidate(root, [])).pipe(Effect.ignore)
                 : Effect.void,
             ),
+            // Tell the language servers about the same batch, the *whole* batch: this is the one
+            // Place the gitignored paths above are deliberately excluded from are exactly what is
+            // Wanted. A package landing in `.venv/` or `node_modules/` is invisible to git and so to
+            // Every other consumer here, but it is precisely what invalidates a server's resolution
+            // Cache, and basedpyright has no filesystem watcher of its own to notice it. No cap and
+            // No ignore list: any cap drops a signal some server needed (pyright's `**` source
+            // Watcher dirty-marks per file), and unlike Neovim we derive no watchers from the globs,
+            // So a burst costs a glob match rather than an inotify handle.
+            //
+            // The batch goes down **raw**, and nothing here touches a path. Typing a change is a
+            // Synchronous `existsSync` (`fs.watch` calls both an appearance and a vanishing a
+            // "rename", so only the disk can tell them apart), and an install hands us tens of
+            // Thousands of paths at once: typing them here, before the globs have said whether any
+            // Server even wants them, measured 207ms of frozen render loop per `bun install` in a
+            // Repo where *no* server consumes this channel. So each server matches first and types
+            // Only what it claimed. `isTracked` is the one thing the servers cannot know and must be
+            // Told: git's view of the tree, which is what separates an atomic save (a rename over a
+            // Path git already knows, as vim and most formatters do) from a genuine appearance.
+            Stream.tap((changes) => {
+              if (changes.length === 0) {
+                return Effect.void;
+              }
+              const trackedPaths = repoFilePaths();
+              const { changedByPath } = gitModel();
+              return LanguageServers.use((servers) =>
+                servers.notifyWatchedFiles(
+                  root,
+                  changes,
+                  (path) => trackedPaths.has(path) || changedByPath.has(path),
+                ),
+              ).pipe(Effect.ignore);
+            }),
             Stream.map(() => undefined),
           );
           const safetyTicks = Stream.fromEffect(
@@ -4243,6 +4369,7 @@ function createState() {
     resetSidebarWidth,
     resetState,
     resolveViewerDecoration,
+    restartLanguageServers,
     revealLineForJump,
     runChecks,
     scope,

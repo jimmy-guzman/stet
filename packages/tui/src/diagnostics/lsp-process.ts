@@ -117,8 +117,12 @@ export class LspProcess extends Context.Service<
       onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
     ) => Effect.Effect<LspConnection, LspSpawnError, Scope.Scope>;
     /**
-     * Repo roots whose server asked for `workspace/diagnostic/refresh`; drains to re-run checks,
-     * the way the provisioner's `completions` drives a re-check after a download.
+     * Repo roots whose server has news a run is not already waiting for; drains to re-run checks,
+     * the way the provisioner's `completions` drives a re-check after a download. Two triggers: an
+     * explicit `workspace/diagnostic/refresh` request (rust-analyzer after a cargo check), and a
+     * server correcting its own published diagnostics outside a run's awaited window (pyright
+     * re-analyzing once a dependency install lands). Without the second, that correction would sit
+     * unread in the transport's bucket, since nothing else re-renders it.
      */
     readonly refreshes: Queue.Dequeue<string>;
   }
@@ -134,7 +138,7 @@ export const LspProcessLive = Layer.effect(
         acquireChild(command, cwd).pipe(
           Effect.flatMap(createByteChannel),
           Effect.flatMap((channel) =>
-            makeTransport(channel, onRequest, Queue.offer(refreshes, cwd).pipe(Effect.asVoid)),
+            makeTransport(channel, cwd, onRequest, Queue.offer(refreshes, cwd).pipe(Effect.asVoid)),
           ),
         ),
     };

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 
 import { LanguageServers, ServerUnavailable } from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
@@ -31,6 +31,7 @@ function handle(
     closeDocument: (uri) =>
       Effect.sync(() => void log.push({ method: "textDocument/didClose", params: { uri } })),
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: (method, params) => Effect.sync(() => void log.push({ method, params })),
     openDocument: (textDocument) =>
       Effect.sync(
@@ -45,6 +46,8 @@ function handle(
       log.push({ method, params });
       return respond(method, params);
     },
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded,
   };
   return { capabilities: new Set(capabilities), connection };
@@ -58,6 +61,8 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         ? Effect.fail(new ServerUnavailable({ language, message: "not found" }))
         : Effect.succeed(found);
     },
+    notifyWatchedFiles: () => Effect.void,
+    restart: () => Effect.void,
   });
 }
 
@@ -381,6 +386,8 @@ test("definition never acquires a server whose static hint can't answer it", asy
           ? Effect.succeed(ts)
           : Effect.fail(new ServerUnavailable({ language, message: "not found" }));
       },
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
     });
 
     await runDefinition(dir, "src/a.ts", { character: 0, line: 0 }, servers);
@@ -812,6 +819,8 @@ test("warmHold pre-loads the project then closes the doc, holding the server unt
           }),
           () => Effect.sync(() => void (released += 1)),
         ),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
     });
 
     await Effect.runPromise(

@@ -4,11 +4,25 @@
  * requests get a minimal reply so the server never blocks, notifications are logged. Decoupled from
  * the process so it can be driven by a fake in-process peer in tests.
  */
-import { Data, Deferred, Effect, Queue } from "effect";
+import { Data, Deferred, Effect, Queue, Stream } from "effect";
 import type { Cause } from "effect";
 
 import { isJsonRpcNotification, isJsonRpcRequest, isJsonRpcResponse } from "./jsonrpc";
 import type { JsonRpcMessage } from "./jsonrpc";
+import {
+  outOfTreeBases,
+  parseWatcherRegistrations,
+  parseWatcherUnregistrations,
+  watchedFileChanges,
+} from "./watched-files";
+import type { WatchedPathChange, WatcherRegistration } from "./watched-files";
+
+/**
+ * Paths per synchronous slice while typing a watcher batch. Each path costs a stat (~6us measured),
+ * so this bounds one uninterrupted pass to well under a 16ms frame; the fiber yields between
+ * slices.
+ */
+const MATERIALIZE_CHUNK = 256;
 
 export class LspRequestError extends Data.TaggedError("LspRequestError")<{
   readonly method: string;
@@ -62,8 +76,40 @@ export interface LspConnection {
   readonly closeDocument: (uri: string) => Effect.Effect<void>;
   /** Latest server-pushed `publishDiagnostics` items, keyed by document URI. */
   readonly published: Effect.Effect<ReadonlyMap<string, unknown[]>>;
-  /** Drop stored diagnostics for the given URIs before reopening them, so a re-pull starts clean. */
+  /**
+   * Drop stored diagnostics for the given URIs before reopening them, so a re-pull starts clean,
+   * and open the **awaited window** on them: a publish that lands for an awaited URI is the server
+   * answering what the run just sent, so it must not nudge a re-check (the run is already waiting
+   * on it). `endPublishWait` closes the window once the run has read the bucket.
+   */
   readonly clearPublished: (uris: readonly string[]) => Effect.Effect<void>;
+  /**
+   * Closes the awaited window `clearPublished` opened, at the point a run has finished reading the
+   * bucket. From here any publish that changes a document's items is the server correcting itself
+   * out of band (pyright re-analyzing after an async library reload once a dependency install
+   * landed), which no run is waiting for and nothing else would re-render, so it nudges a
+   * re-check.
+   */
+  readonly endPublishWait: Effect.Effect<void>;
+  /**
+   * Forward on-disk changes the server asked to hear about (`workspace/didChangeWatchedFiles`),
+   * filtered against its own registered globs. Takes the raw batch, **untyped**, and matches before
+   * it types: a server that registered nothing returns in O(1) without touching a path, so a
+   * self-watching server (rust-analyzer, pinned to `files.watcher: server`) costs nothing at all.
+   * `root` is what the paths are relative to (the worktree, or an out-of-tree registered base).
+   */
+  readonly watchedFilesChanged: (
+    root: string,
+    changes: readonly WatchedPathChange[],
+    isTracked: (path: string) => boolean,
+  ) => Effect.Effect<void>;
+  /**
+   * The out-of-worktree directories this server asked to watch, re-emitted whenever its
+   * registrations change. A stream rather than a getter because registrations arrive
+   * asynchronously, after the handshake. stet's worktree watcher cannot see these (pyright names a
+   * conda/pyenv venv living outside the repo), so each base needs a watch of its own.
+   */
+  readonly watchedBases: Stream.Stream<readonly string[]>;
   /** True once the server's stdout closed — the child died; the pool should rebuild it. */
   readonly closed: Effect.Effect<boolean>;
   /**
@@ -117,10 +163,20 @@ function parseDiagnosticReport(value: unknown): ParsedReport | undefined {
   return undefined;
 }
 
+/**
+ * Creates an LSP connection over the supplied message transport.
+ *
+ * @param channel - The inbound and outbound JSON-RPC message transport
+ * @param repoRoot - The repository root used to resolve watched-file registrations
+ * @param onRequest - Handles server-to-client requests that are not handled internally
+ * @param onRecheck - Runs when the server requests refreshed diagnostics
+ * @returns The LSP connection API
+ */
 export function makeTransport(
   channel: LspTransportChannel,
+  repoRoot: string,
   onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
-  onRefreshRequest?: Effect.Effect<void>,
+  onRecheck?: Effect.Effect<void>,
 ) {
   return Effect.gen(function* makeTransportScope() {
     // Default answer for a server-to-client request: a null result, so a server that asks for
@@ -129,6 +185,24 @@ export function makeTransport(
     const pending = new Map<number, Pending>();
     const published = new Map<string, unknown[]>();
     const openCounts = new Map<string, number>();
+    // The globs this server registered, by registration id, and the URIs a run is currently awaiting
+    // A publish for (see `clearPublished`/`endPublishWait`).
+    const registrations = new Map<string, WatcherRegistration>();
+    const awaiting = new Set<string>();
+    const baseUpdates = yield* Queue.unbounded<readonly string[]>();
+    // Announce only a base list that actually moved. The consumer re-keys its watchers with
+    // `switchMap`, so a redundant emission tears every `fs.watch` handle down and rebuilds it,
+    // Losing whatever lands in the gap. A server that re-registers on a config change (pyright does)
+    // Would otherwise churn its watchers for nothing.
+    let announced: readonly string[] = [];
+    const announceBases = Effect.suspend(() => {
+      const next = outOfTreeBases([...registrations.values()], repoRoot);
+      if (next.length === announced.length && next.every((base, i) => base === announced[i])) {
+        return Effect.void;
+      }
+      announced = next;
+      return Queue.offer(baseUpdates, next).pipe(Effect.asVoid);
+    });
     let nextId = 0;
     let closed = false;
     // Resolved on the first project-load `$/progress` "end" (or on close); `whenProjectLoaded`
@@ -167,7 +241,29 @@ export function makeTransport(
         if (message.method === "workspace/diagnostic/refresh") {
           return channel
             .send({ id, jsonrpc: "2.0", result: null })
-            .pipe(Effect.andThen(onRefreshRequest ?? Effect.void));
+            .pipe(Effect.andThen(onRecheck ?? Effect.void));
+        }
+        // The server declaring which on-disk paths it needs to hear about. Honoring this is the
+        // Whole point: basedpyright does no filesystem watching of its own, so these globs are the
+        // Only thing that lets it learn a dependency was installed. Answer immediately either way,
+        // Then re-announce the bases so the pool can watch any that fall outside the worktree.
+        if (message.method === "client/registerCapability") {
+          const added = parseWatcherRegistrations(message.params, repoRoot);
+          for (const registration of added) {
+            registrations.set(registration.id, registration);
+          }
+          return channel
+            .send({ id, jsonrpc: "2.0", result: null })
+            .pipe(Effect.andThen(added.length === 0 ? Effect.void : announceBases));
+        }
+        if (message.method === "client/unregisterCapability") {
+          const removed = parseWatcherUnregistrations(message.params);
+          for (const registrationId of removed) {
+            registrations.delete(registrationId);
+          }
+          return channel
+            .send({ id, jsonrpc: "2.0", result: null })
+            .pipe(Effect.andThen(removed.length === 0 ? Effect.void : announceBases));
         }
         // Answer other server-to-client requests so the server does not stall waiting on us; the
         // Handler (or the null default) decides the result.
@@ -178,10 +274,24 @@ export function makeTransport(
       if (isJsonRpcNotification(message)) {
         if (message.method === "textDocument/publishDiagnostics" && isObject(message.params)) {
           const { diagnostics, uri } = message.params;
-          if (typeof uri === "string" && Array.isArray(diagnostics)) {
-            published.set(uri, diagnostics);
+          if (typeof uri !== "string" || !Array.isArray(diagnostics)) {
+            return Effect.void;
           }
-          return Effect.void;
+          const previous = published.get(uri);
+          published.set(uri, diagnostics);
+          // "No entry" is not the same as "an empty entry". A run that capped out its settle cleared
+          // The bucket and never got an answer, leaving the file `pending`; the server's late reply
+          // Is that answer, and it is news even when it is clean. Treating an absent entry as an
+          // Empty one swallowed exactly that, stranding the file pending until the next git activity.
+          const unchanged = previous !== undefined && Bun.deepEquals(previous, diagnostics);
+          // Inside the awaited window this publish is the answer to what the run just sent, and that
+          // Run will read it, so it is not news. Outside it, a server that changed its mind on its
+          // Own is the only thing that produces this, and no run is waiting for it: without the
+          // Nudge, pyright's post-install re-analysis lands in the bucket and is never rendered.
+          if (awaiting.has(uri) || unchanged) {
+            return Effect.void;
+          }
+          return onRecheck ?? Effect.void;
         }
         // A workDoneProgress "end" marks the project load complete; before it, intel replies are
         // Resolved from the local import binding rather than cross-file (the F12-stops-at-import bug).
@@ -323,15 +433,56 @@ export function makeTransport(
         Effect.sync(() => {
           for (const uri of uris) {
             published.delete(uri);
+            awaiting.add(uri);
           }
         }),
       closeDocument,
       closed: Effect.sync(() => closed),
+      endPublishWait: Effect.sync(() => awaiting.clear()),
       notify,
       openDocument,
       published: Effect.sync(() => published),
       pullDiagnostics,
       request,
+      watchedBases: Stream.fromQueue(baseUpdates),
+      watchedFilesChanged: (
+        root: string,
+        changes: readonly WatchedPathChange[],
+        isTracked: (path: string) => boolean,
+      ) =>
+        Effect.suspend(() => {
+          // The early-out, before a single path is touched. A server that registered nothing is sent
+          // Nothing, and after rust-analyzer's `files.watcher: server` pin that is every built-in but
+          // Basedpyright, so in a JS/TS or Rust repo this whole channel costs one map lookup per
+          // Batch. It has to come first: an install's batch is tens of thousands of paths and typing
+          // Even one of them is a stat (see `watchedFileChanges`).
+          if (registrations.size === 0 || changes.length === 0) {
+            return Effect.void;
+          }
+          const registered = [...registrations.values()];
+          // Slice the batch and yield between slices. pyright registers `**`, so in a Python repo
+          // Every path an install writes really is claimed and really must be stat'd; doing that in
+          // One synchronous pass is a multi-hundred-millisecond hole in the render loop. Chunking
+          // Keeps each pass well under a frame and hands the loop back in between, so the batch costs
+          // Latency instead of dropped frames, and no event is dropped to buy that.
+          return Effect.forEach(
+            Array.from({ length: Math.ceil(changes.length / MATERIALIZE_CHUNK) }, (_, index) =>
+              changes.slice(index * MATERIALIZE_CHUNK, (index + 1) * MATERIALIZE_CHUNK),
+            ),
+            (slice) =>
+              Effect.sync(() => watchedFileChanges(registered, root, slice, isTracked)).pipe(
+                Effect.tap(() => Effect.yieldNow),
+              ),
+            { concurrency: 1 },
+          ).pipe(
+            Effect.flatMap((slices) => {
+              const events = slices.flat();
+              return events.length === 0
+                ? Effect.void
+                : notify("workspace/didChangeWatchedFiles", { changes: events });
+            }),
+          );
+        }),
       whenProjectLoaded: Effect.suspend(() =>
         loaded ? Effect.void : Deferred.await(projectLoaded),
       ),

@@ -38,6 +38,13 @@ export class Diagnostics extends Context.Service<
       files: ChangedFile[],
       prior?: ReadonlyMap<string, CheckerFileState>,
     ) => Stream.Stream<CheckerUpdate>;
+    /**
+     * Drop this repo's document keepers, so the next run reopens everything on whatever server it
+     * then finds. Paired with `LanguageServers.restart` behind `R`, and it must run first: the
+     * keepers hold the pool references, and a pool eviction while they still hold them would leave
+     * the old children alive.
+     */
+    readonly resetServers: (repoRoot: string) => Effect.Effect<void>;
   }
 >()("stet/Diagnostics") {}
 
@@ -205,7 +212,29 @@ function syncDocuments(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
   });
 }
 
+/**
+ * Closes the awaited window on every run exit, interrupts included: once this run has read (or
+ * abandoned) the bucket, any further publish is the server correcting itself and must nudge a
+ * re-check. Leaving a URI awaited past the run would swallow exactly the correction this whole
+ * channel exists to deliver.
+ *
+ * @param repoRoot - The repository root containing the files
+ * @param files - The files to collect diagnostics for
+ * @returns The collected diagnostics and per-file resolution outcomes
+ */
 function collectDiagnostics(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
+  return collectOnce(keeper, repoRoot, files).pipe(
+    Effect.ensuring(keeper.handle.connection.endPublishWait),
+  );
+}
+
+/**
+ * Collects diagnostics for the specified files using the server's supported diagnostic mechanism.
+ *
+ * @param repoRoot - The repository root containing the files
+ * @returns Collected diagnostics and per-file resolution, pending, and failure states
+ */
+function collectOnce(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
   return Effect.gen(function* collect() {
     const { dirty, held, pending } = yield* syncDocuments(keeper, repoRoot, files);
     const { handle } = keeper;
@@ -364,6 +393,15 @@ export const DiagnosticsLive = Layer.effect(
       }).pipe(Semaphore.withPermit(keeperLock(key)));
     };
 
+    const resetServers = (repoRoot: string) =>
+      Effect.suspend(() =>
+        Effect.forEach(
+          [...keepers.entries()].filter(([, keeper]) => keeper.repoRoot === repoRoot),
+          ([key, keeper]) => closeKeeper(key, keeper),
+          { discard: true },
+        ),
+      );
+
     // Every run reconciles the resident keepers: one for a different repo (a worktree switch) or
     // For a language whose changed set dropped to zero is released, so its documents close and its
     // Server idles out of the pool instead of holding files no run tracks anymore.
@@ -499,9 +537,15 @@ export const DiagnosticsLive = Layer.effect(
       return state;
     }
 
-    // A file resolves to every server that handles its extension (typescript and oxlint both claim
-    // The JS/TS family), so it runs through each concurrently and emits a fresh merged snapshot as
-    // Each server finishes, rather than waiting for the slowest before showing anything.
+    /**
+     * A file resolves to every server that handles its extension (typescript and oxlint both claim
+     * the JS/TS family), so it runs through each concurrently and emits a fresh merged snapshot as
+     * each server finishes, rather than waiting for the slowest before showing anything.
+     *
+     * @param files - Files to analyze; deleted files are excluded.
+     * @param prior - Previous file states used while diagnostics are still pending.
+     * @returns A stream of diagnostic checker updates.
+     */
     function run(
       repoRoot: string,
       files: ChangedFile[],
@@ -565,6 +609,6 @@ export const DiagnosticsLive = Layer.effect(
       );
     }
 
-    return { run };
+    return { resetServers, run };
   }),
 );

@@ -15,11 +15,17 @@ import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./help
 // Line's provenance detail. Drives the real keymap so the whole path is exercised.
 describe("provenance rail", () => {
   test("`a` toggles the rail: uncommitted and earlier bands, status detail, and off again", async () => {
+    // Exported, so the real oxlint on PATH finds nothing to report. A finding on the caret line
+    // Outranks the blame detail in the status bar by design, so an unused `const c` would contend
+    // For the very slot this test asserts on.
     const repoRoot = createFixtureRepo("stet-provenance-", {
-      "src/a.ts": "const a = 1\nconst b = 2\n",
+      "src/a.ts": "export const a = 1\nexport const b = 2\n",
     });
     // Append an uncommitted line so the file mixes committed context and a working-tree line.
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 1\nconst b = 2\nconst c = 3\n");
+    writeFileSync(
+      join(repoRoot, "src", "a.ts"),
+      "export const a = 1\nexport const b = 2\nexport const c = 3\n",
+    );
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });

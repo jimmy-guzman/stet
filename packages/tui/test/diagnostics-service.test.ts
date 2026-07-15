@@ -41,6 +41,7 @@ function pushingHandle(items: unknown[]): ServerHandle {
       }),
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: () => Effect.void,
     openDocument: (textDocument) => Effect.sync(() => void published.set(textDocument.uri, items)),
     published: Effect.sync(() => published),
@@ -49,6 +50,8 @@ function pushingHandle(items: unknown[]): ServerHandle {
         new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
       ),
     request: () => Effect.succeed(null),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set(), connection };
@@ -62,6 +65,7 @@ function deadHandle(): ServerHandle {
     clearPublished: () => Effect.void,
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => true),
+    endPublishWait: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
@@ -70,6 +74,8 @@ function deadHandle(): ServerHandle {
         new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
       ),
     request: () => Effect.succeed(null),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set(), connection };
@@ -111,6 +117,8 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         ? Effect.fail(new ServerUnavailable({ language, message: "not found" }))
         : Effect.succeed(handle);
     },
+    notifyWatchedFiles: () => Effect.void,
+    restart: () => Effect.void,
   });
 }
 
@@ -159,6 +167,7 @@ test("an interrupted run leaves the document open and the next run reconciles it
         }),
       closeDocument: (uri) => Effect.sync(() => void closes.push(uri)),
       closed: Effect.sync(() => false),
+      endPublishWait: Effect.void,
       notify: () => Effect.void,
       openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
       published: Effect.sync(() => published),
@@ -167,6 +176,8 @@ test("an interrupted run leaves the document open and the next run reconciles it
           new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
         ),
       request: () => Effect.succeed(null),
+      watchedBases: Stream.empty,
+      watchedFilesChanged: () => Effect.void,
       whenProjectLoaded: Effect.void,
     };
     const handle: ServerHandle = { capabilities: new Set(), connection };
@@ -271,6 +282,8 @@ test("holds a file's prior badge while a slower server is still running", async 
           ? Effect.succeed(handle).pipe(Effect.delay("30 millis"))
           : Effect.succeed(handle);
       },
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
     });
     const prior = new Map<string, CheckerFileState>([
       ["src/a.ts", { count: 1, diagnostics: [], status: "findings" }],
@@ -364,6 +377,8 @@ test("leaves files pending with a message while the server is downloading", asyn
   await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
     const installing = Layer.succeed(LanguageServers)({
       acquire: () => Effect.fail(new ServerInstalling({ language: "typescript" })),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
     });
     const state = await runDiagnostics(dir, [changed("src/a.ts")], installing);
     const fileState = state.get("src/a.ts");
@@ -382,6 +397,8 @@ test("degrades to unavailable when the server cannot be acquired", async () => {
             message: "not found",
           }),
         ),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
     });
     const state = await runDiagnostics(dir, [changed("src/a.ts")], failing);
     expect(state.get("src/a.ts")?.status).toBe("unavailable");
@@ -407,6 +424,7 @@ function pullingHandle(options: {
       }),
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: () => Effect.void,
     openDocument: (textDocument) =>
       Effect.sync(() => {
@@ -425,6 +443,8 @@ function pullingHandle(options: {
             new LspRequestError({ message: options.rejects, method: "textDocument/diagnostic" }),
           ),
     request: () => Effect.succeed(null),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set<Capability>(["pullDiagnostics"]), connection };
@@ -495,6 +515,7 @@ test("a related report's findings survive the named file's own pull failing", as
       clearPublished: () => Effect.void,
       closeDocument: () => Effect.void,
       closed: Effect.sync(() => false),
+      endPublishWait: Effect.void,
       notify: () => Effect.void,
       openDocument: () => Effect.void,
       published: Effect.sync(() => new Map<string, unknown[]>()),
@@ -505,6 +526,8 @@ test("a related report's findings survive the named file's own pull failing", as
               new LspRequestError({ message: "boom", method: "textDocument/diagnostic" }),
             ),
       request: () => Effect.succeed(null),
+      watchedBases: Stream.empty,
+      watchedFilesChanged: () => Effect.void,
       whenProjectLoaded: Effect.void,
     };
     const handle: ServerHandle = {
@@ -540,11 +563,14 @@ function keeperProbe() {
       }),
     closeDocument: (uri) => Effect.sync(() => void closes.push(uri)),
     closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
     notify: () => Effect.void,
     openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
     published: Effect.sync(() => published),
     pullDiagnostics: () => Effect.succeed({ items: [], related: new Map<string, unknown[]>() }),
     request: () => Effect.succeed(null),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
   const handle: ServerHandle = {
@@ -699,6 +725,8 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
             ? Effect.fail(new ServerUnavailable({ language: "yaml", message: "gone" }))
             : Effect.succeed(handle);
         }),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
     });
 
     const files = [changed("config.yaml")];
@@ -758,6 +786,8 @@ test("concurrent runs share one keeper instead of racing two into existence", as
         Effect.sync(() => {
           acquires += 1;
         }).pipe(Effect.andThen(Effect.sleep("50 millis")), Effect.as(probe.handle)),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
     });
 
     const files = [changed("config.yaml")];
@@ -778,5 +808,56 @@ test("concurrent runs share one keeper instead of racing two into existence", as
 
     expect(captured.acquires).toBe(1);
     expect(captured.opens).toEqual([pathToFileURL(join(dir, "config.yaml")).href]);
+  });
+});
+
+test("resetServers drops the keepers, so the next run reopens every document", async () => {
+  await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
+    const opens: string[] = [];
+    const published = new Map<string, unknown[]>();
+    const connection: LspConnection = {
+      changeDocument: () => Effect.void,
+      clearPublished: () => Effect.void,
+      closeDocument: () => Effect.void,
+      closed: Effect.sync(() => false),
+      endPublishWait: Effect.void,
+      notify: () => Effect.void,
+      openDocument: (textDocument) =>
+        Effect.sync(() => {
+          opens.push(textDocument.uri);
+          published.set(textDocument.uri, []);
+        }),
+      published: Effect.sync(() => published),
+      pullDiagnostics: () =>
+        Effect.fail(
+          new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+        ),
+      request: () => Effect.succeed(null),
+      watchedBases: Stream.empty,
+      watchedFilesChanged: () => Effect.void,
+      whenProjectLoaded: Effect.void,
+    };
+    const servers = fakeServers({ typescript: { capabilities: new Set(), connection } });
+
+    await Effect.runPromise(
+      Diagnostics.pipe(
+        Effect.flatMap((diagnostics) =>
+          Effect.gen(function* restart() {
+            const files = [changed("src/a.ts")];
+            yield* Stream.runDrain(diagnostics.run(dir, files));
+            // The keeper holds the document open, so an unchanged re-run re-sends nothing.
+            yield* Stream.runDrain(diagnostics.run(dir, files));
+            expect(opens).toHaveLength(1);
+
+            // `R`: drop the keepers. The next run has no memory of what was open, so it reopens.
+            yield* diagnostics.resetServers(dir);
+            yield* Stream.runDrain(diagnostics.run(dir, files));
+          }),
+        ),
+        Effect.provide(DiagnosticsLive.pipe(Layer.provide(servers))),
+      ),
+    );
+
+    expect(opens).toHaveLength(2);
   });
 });

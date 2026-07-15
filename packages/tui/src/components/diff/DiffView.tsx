@@ -751,8 +751,13 @@ export function DiffView() {
         onMouseDown={(event: MouseEvent) => {
           event.stopPropagation();
           const pointer = localPointer(event);
-          const rowIndex = rowIndexForPointer(pointer.y);
-          const row = rowIndex === undefined ? undefined : rows()[rowIndex];
+          const currentScroll = untrack(scrollTop);
+          const rowIndex = rowIndexForPointer(pointer.y, currentScroll);
+          if (rowIndex === undefined) {
+            state.setFocusedPane("diff");
+            return;
+          }
+          const row = rows()[rowIndex];
           if (row === undefined) {
             state.setFocusedPane("diff");
             return;
@@ -776,7 +781,15 @@ export function DiffView() {
             state.setFocusedPane("diff");
             state.setCursorRow(row.navIndex);
             const content = row.spans.map((part) => part.text).join("");
-            const column = pointer.x - gutterWidth() + (wrap() ? 0 : scrollX());
+            const rowTop = rowEnds()[rowIndex - 1] ?? 0;
+            const offset = wrap()
+              ? measurer.offsetForVisualRow(
+                  content,
+                  contentWidth(),
+                  currentScroll + pointer.y - rowTop,
+                )
+              : scrollX();
+            const column = pointer.x - gutterWidth() + offset;
             if (column >= 0) {
               const index = columnToIndex(content, column);
               state.setCursorColumn(wordAt(content, index)?.start ?? index);

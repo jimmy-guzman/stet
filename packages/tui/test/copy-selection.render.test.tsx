@@ -174,7 +174,7 @@ describe("line selection copy", () => {
       await mouse.moveTo(contentX, viewerBottom);
       await settleUntil("held bottom edge advances without more pointer motion", () => {
         const range = state.selectionRange();
-        return state.viewerScrollTop() >= 2 && range !== undefined && range[1] > 8;
+        return state.viewerScrollTop() >= 4 && range !== undefined && range[1] > 8;
       });
 
       // One cell inside the viewport cancels the timer while the drag stays held.
@@ -185,18 +185,16 @@ describe("line selection copy", () => {
       await renderOnce();
       expect(state.viewerScrollTop()).toBe(stoppedInside);
 
-      // Reversing to the top edge scrolls back to the first row and clamps there.
+      // Reversing to the top edge restarts the timer. Release while it is still
+      // Moving and before it reaches the boundary, then prove no later tick lands.
       await mouse.moveTo(contentX, viewerTop);
       await settleUntil(
-        "held top edge reaches the file boundary",
-        () => state.viewerScrollTop() === 0,
+        "held top edge restarts auto-scroll",
+        () => state.viewerScrollTop() < stoppedInside && state.viewerScrollTop() > 0,
       );
-      await Bun.sleep(130);
-      await renderOnce();
-      expect(state.viewerScrollTop()).toBe(0);
-
       await mouse.release(contentX, viewerTop);
       const releasedAt = state.viewerScrollTop();
+      expect(releasedAt).toBeGreaterThan(0);
       await Bun.sleep(130);
       await renderOnce();
       expect(state.viewerScrollTop()).toBe(releasedAt);

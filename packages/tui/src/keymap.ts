@@ -525,10 +525,15 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (state.sidebarOpen() && (key.name === "]" || key.name === "[" || key.name === "\\")) {
-        if (key.name === "]") {
-          state.nudgeSidebarWidth(2);
-        } else if (key.name === "[") {
+      // `]` (grow) also re-opens a collapsed sidebar, the inverse of `[` collapsing
+      // It past the minimum; `[`/`\` only adjust an already-open sidebar.
+      if (key.name === "]") {
+        state.nudgeSidebarWidth(2);
+        return;
+      }
+
+      if (state.sidebarOpen() && (key.name === "[" || key.name === "\\")) {
+        if (key.name === "[") {
           state.nudgeSidebarWidth(-2);
         } else {
           state.resetSidebarWidth();

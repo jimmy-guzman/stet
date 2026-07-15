@@ -65,7 +65,7 @@ export const KEY_HELP: { entries: [combo: string, action: string][]; heading: st
     entries: [
       ["p", "toggle the problems panel"],
       ["ctrl-b", "toggle the file tree sidebar"],
-      ["[ / ] / \\", "shrink (collapses past min) / grow / reset sidebar"],
+      ["[ / ] / \\", "shrink (collapses past min) / grow (reopens) / reset sidebar"],
     ],
     heading: "layout",
   },

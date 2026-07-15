@@ -2752,6 +2752,28 @@ function createState() {
     return { line, path };
   }
 
+  interface CaretIntelRequest {
+    readonly file: ReturnType<typeof selectedFile>;
+    readonly path: string;
+    readonly position: { readonly character: number; readonly line: number };
+  }
+
+  function caretIntelRequestIsCurrent(
+    controller: AbortController,
+    requestRoot: string,
+    request: CaretIntelRequest,
+  ) {
+    return (
+      intelController === controller &&
+      !controller.signal.aborted &&
+      repoRoot() === requestRoot &&
+      selectedPath() === request.path &&
+      selectedFile() === request.file &&
+      cursorLineNumber() === request.position.line + 1 &&
+      cursorColumn() === request.position.character
+    );
+  }
+
   // The jump-or-list pull shared by go-to-definition and find-implementations: both resolve the
   // Caret to locations, then a single in-repo target jumps while several open the references
   // Overlay to pick from. They differ only in the LSP method, the in-flight status, the overlay
@@ -2761,6 +2783,7 @@ function createState() {
   async function resolveAndJump(
     controller: AbortController,
     requestRoot: string,
+    request: CaretIntelRequest,
     statusText: string,
     label: "definitions" | "implementations",
     notices: { none: string; outside: string },
@@ -2769,9 +2792,7 @@ function createState() {
     setIntelStatus(statusText);
     try {
       const locations = await runtime.runPromise(pull(), { signal: controller.signal });
-      // A worktree switch mid-request leaves these paths resolving against the old repo, so a jump
-      // Would land on a stale or missing file; drop the result unless the root still matches.
-      if (controller.signal.aborted || repoRoot() !== requestRoot) {
+      if (!caretIntelRequestIsCurrent(controller, requestRoot, request)) {
         return;
       }
       if (locations.length === 0) {
@@ -2792,7 +2813,7 @@ function createState() {
       // Pick, not a jump: read each target's source line and hand the set to the references overlay.
       if (inRepo.length > 1) {
         const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-        if (intelController !== controller || repoRoot() !== requestRoot) {
+        if (!caretIntelRequestIsCurrent(controller, requestRoot, request)) {
           return;
         }
         openReferences(label, attachReferencePreviews(inRepo, linesByPath));
@@ -2827,16 +2848,19 @@ function createState() {
     const controller = new AbortController();
     intelController = controller;
     const requestRoot = repoRoot();
+    const request = {
+      file: selectedFile(),
+      path,
+      position: { character: cursorColumn(), line: line - 1 },
+    };
     await resolveAndJump(
       controller,
       requestRoot,
+      request,
       "resolving definition…",
       "definitions",
       { none: "no definition", outside: "definition outside repo" },
-      () =>
-        Intel.use((intel) =>
-          intel.definition(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
-        ),
+      () => Intel.use((intel) => intel.definition(requestRoot, request.path, request.position)),
     );
   }
 
@@ -2850,18 +2874,17 @@ function createState() {
     const controller = new AbortController();
     intelController = controller;
     const requestRoot = repoRoot();
-    const requestFile = selectedFile();
-    const position = { character: cursorColumn(), line: line - 1 };
-    const providers = await serversProviding(path, "implementation", requestRoot);
-    if (
-      intelController !== controller ||
-      controller.signal.aborted ||
-      repoRoot() !== requestRoot ||
-      selectedPath() !== path ||
-      selectedFile() !== requestFile ||
-      cursorLineNumber() !== line ||
-      cursorColumn() !== position.character
-    ) {
+    const request = {
+      file: selectedFile(),
+      path,
+      position: { character: cursorColumn(), line: line - 1 },
+    };
+    const providers = await runtime
+      .runPromise(serversProviding(request.path, "implementation", requestRoot), {
+        signal: controller.signal,
+      })
+      .catch(() => undefined);
+    if (providers === undefined || !caretIntelRequestIsCurrent(controller, requestRoot, request)) {
       return;
     }
     if (providers.length === 0) {
@@ -2871,10 +2894,11 @@ function createState() {
     await resolveAndJump(
       controller,
       requestRoot,
+      request,
       "resolving implementations…",
       "implementations",
       { none: "no implementations", outside: "implementations outside repo" },
-      () => Intel.use((intel) => intel.implementation(requestRoot, path, position)),
+      () => Intel.use((intel) => intel.implementation(requestRoot, request.path, request.position)),
     );
   }
 
@@ -3195,8 +3219,13 @@ function createState() {
     // A server matches the file but its repo gate turned every documentSymbol provider off, so a pull
     // Would return `[]` and read as "no symbols" (a false claim). Confirm the gated-off case here and
     // Short-circuit to the unsupported state without issuing a request.
-    const providers = await serversProviding(path, "documentSymbol", requestRoot);
+    const providers = await runtime
+      .runPromise(serversProviding(path, "documentSymbol", requestRoot), {
+        signal: controller.signal,
+      })
+      .catch(() => undefined);
     if (
+      providers === undefined ||
       symbolsController !== controller ||
       controller.signal.aborted ||
       repoRoot() !== requestRoot ||
@@ -3222,7 +3251,8 @@ function createState() {
       if (
         symbolsController !== controller ||
         repoRoot() !== requestRoot ||
-        selectedPath() !== path
+        selectedPath() !== path ||
+        selectedFile() !== requestFile
       ) {
         return;
       }

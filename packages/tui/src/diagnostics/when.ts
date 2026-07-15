@@ -1,12 +1,14 @@
 import { isAbsolute, resolve } from "node:path";
 
+import { Cache, Effect, Option } from "effect";
+
 type WhenCondition =
   | string
   | { readonly file: string; readonly key: readonly string[] }
   | { readonly dependency: string; readonly file: "pyproject.toml" };
 
 export type When = WhenCondition | readonly WhenCondition[];
-export type ManifestCache = Map<string, Promise<Record<string, unknown> | undefined>>;
+type ManifestCache = Cache.Cache<string, Option.Option<Record<string, unknown>>>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -27,26 +29,29 @@ function resolveWhenPath(repoRoot: string, file: string) {
   return resolve(repoRoot, file);
 }
 
-async function parseManifest(path: string) {
-  try {
-    const text = await Bun.file(path).text();
-    const parsed = path.endsWith(".toml") ? Bun.TOML.parse(text) : Bun.JSONC.parse(text);
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
+function parseManifest(path: string) {
+  return Effect.tryPromise(() => Bun.file(path).text()).pipe(
+    Effect.flatMap((text) =>
+      Effect.try(() => {
+        const parsed = path.endsWith(".toml") ? Bun.TOML.parse(text) : Bun.JSONC.parse(text);
+        return isRecord(parsed) ? Option.some(parsed) : Option.none();
+      }),
+    ),
+    Effect.catchTag("UnknownError", () => Effect.succeed(Option.none())),
+  );
 }
 
-function readManifest(file: string, repoRoot: string, manifests: ManifestCache) {
-  const existing = manifests.get(file);
-  if (existing !== undefined) {
-    return existing;
-  }
-  const path = resolveWhenPath(repoRoot, file);
-  const manifest = path === undefined ? Promise.resolve(undefined) : parseManifest(path);
-  manifests.set(file, manifest);
-  return manifest;
-}
+export const makeManifestCache = Effect.fn("When.makeManifestCache")(function* makeCache(
+  repoRoot: string,
+) {
+  return yield* Cache.make({
+    capacity: Number.POSITIVE_INFINITY,
+    lookup: (file: string) => {
+      const path = resolveWhenPath(repoRoot, file);
+      return path === undefined ? Effect.succeed(Option.none()) : parseManifest(path);
+    },
+  });
+});
 
 function normalizeDistributionName(name: string) {
   return name.toLowerCase().replaceAll(/[-_.]+/g, "-");
@@ -90,48 +95,48 @@ function declaredDependencies(pyproject: Record<string, unknown>) {
   ]);
 }
 
-async function evaluateCondition(
-  condition: WhenCondition,
-  repoRoot: string,
-  manifests: ManifestCache,
-) {
+function evaluateCondition(condition: WhenCondition, repoRoot: string, manifests: ManifestCache) {
   if (typeof condition === "string") {
     const path = resolveWhenPath(repoRoot, condition);
     if (path === undefined) {
-      return false;
+      return Effect.succeed(false);
     }
-    try {
-      return await Bun.file(path).exists();
-    } catch {
-      return false;
-    }
-  }
-  const manifest = await readManifest(condition.file, repoRoot, manifests);
-  if (manifest === undefined) {
-    return false;
-  }
-  if ("key" in condition) {
-    return (
-      condition.key.reduce<unknown>(
-        (value, segment) => (isRecord(value) ? value[segment] : undefined),
-        manifest,
-      ) !== undefined
+    return Effect.tryPromise(() => Bun.file(path).exists()).pipe(
+      Effect.catchTag("UnknownError", () => Effect.succeed(false)),
     );
   }
-  return declaredDependencies(manifest).has(normalizeDistributionName(condition.dependency));
+  return Cache.get(manifests, condition.file).pipe(
+    Effect.map((manifestOption) => {
+      if (Option.isNone(manifestOption)) {
+        return false;
+      }
+      const manifest = manifestOption.value;
+      if ("key" in condition) {
+        return (
+          condition.key.reduce<unknown>(
+            (value, segment) => (isRecord(value) ? value[segment] : undefined),
+            manifest,
+          ) !== undefined
+        );
+      }
+      return declaredDependencies(manifest).has(normalizeDistributionName(condition.dependency));
+    }),
+  );
 }
 
 /** Evaluate one declarative repo gate. Conditions in an array are any-of alternatives. */
-export async function evaluateWhen(
+export const evaluateWhen = Effect.fn("When.evaluateWhen")(function* evaluate(
   when: When,
   repoRoot: string,
-  manifests: ManifestCache = new Map(),
+  manifests?: ManifestCache,
 ) {
-  const results = await Promise.all(
-    conditionList(when).map((condition) => evaluateCondition(condition, repoRoot, manifests)),
+  const cache = manifests ?? (yield* makeManifestCache(repoRoot));
+  const results = yield* Effect.all(
+    conditionList(when).map((condition) => evaluateCondition(condition, repoRoot, cache)),
+    { concurrency: "unbounded" },
   );
   return results.some(Boolean);
-}
+});
 
 /** Validate config data into the relative-path gate grammar. */
 export function parseWhen(value: unknown): { issues: string[]; when?: When } {

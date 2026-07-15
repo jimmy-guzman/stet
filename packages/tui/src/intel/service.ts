@@ -149,9 +149,7 @@ export const IntelLive = Layer.effect(
     // Stays the gate. Acquire failures (unavailable/installing/spawn) skip that server too.
     function firstCapableServer(repoRoot: string, path: string, capability: Capability) {
       return Effect.gen(function* select() {
-        const candidates = yield* Effect.promise(() =>
-          serversProviding(path, capability, repoRoot),
-        );
+        const candidates = yield* serversProviding(path, capability, repoRoot);
         for (const language of candidates) {
           const handle = yield* servers
             .acquire(language, repoRoot)

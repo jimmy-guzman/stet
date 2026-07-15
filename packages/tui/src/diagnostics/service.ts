@@ -612,9 +612,7 @@ export const DiagnosticsLive = Layer.effect(
           Stream.flatMap(() => merged),
         );
       };
-      return Stream.unwrap(
-        Effect.promise(() => activeServerGates(repoRoot)).pipe(Effect.map(runWithGates)),
-      );
+      return Stream.unwrap(activeServerGates(repoRoot).pipe(Effect.map(runWithGates)));
     }
 
     return { resetServers, run };

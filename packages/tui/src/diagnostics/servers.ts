@@ -21,8 +21,8 @@ import type { ProvisionChannel, ProvisionSpec } from "./provision";
 import { LspRequestError } from "./transport";
 import type { LspConnection } from "./transport";
 import type { WatchedPathChange } from "./watched-files";
-import { evaluateWhen, parseWhen } from "./when";
-import type { ManifestCache, When } from "./when";
+import { evaluateWhen, makeManifestCache, parseWhen } from "./when";
+import type { When } from "./when";
 
 export class ServerUnavailable extends Data.TaggedError("ServerUnavailable")<{
   readonly language: string;
@@ -534,7 +534,9 @@ function entryCandidates(entry: ServerEntry): readonly ServerCandidate[] {
 }
 
 /** Evaluate every distinct server gate once for one repository snapshot. */
-export async function activeServerGates(repoRoot: string): Promise<ServerGates> {
+export const activeServerGates = Effect.fn("LanguageServers.activeServerGates")(function* gates(
+  repoRoot: string,
+) {
   const whens = [
     ...Object.values(registry).flatMap((spec) => (spec.when === undefined ? [] : [spec.when])),
     ...[...registeredLanguageProfiles()].flatMap((profile) =>
@@ -546,16 +548,19 @@ export async function activeServerGates(repoRoot: string): Promise<ServerGates> 
     ),
   ];
   const distinct = new Map(whens.map((when) => [whenKey(when), when]));
-  const manifests: ManifestCache = new Map();
+  const manifests = yield* makeManifestCache(repoRoot);
   const accepted = new Map(
-    await Promise.all(
-      [...distinct].map(
-        async ([key, when]) => [key, await evaluateWhen(when, repoRoot, manifests)] as const,
+    yield* Effect.all(
+      [...distinct].map(([key, when]) =>
+        evaluateWhen(when, repoRoot, manifests).pipe(
+          Effect.map((passes) => [key, passes] satisfies readonly [string, boolean]),
+        ),
       ),
+      { concurrency: "unbounded" },
     ),
   );
   return { accepted };
-}
+});
 
 /** Apply server defaults, entry overrides, and first-of groups to one file. */
 export function activeServers(path: string, gates: ServerGates): string[] {
@@ -579,14 +584,20 @@ export function activeServers(path: string, gates: ServerGates): string[] {
   return [...new Set(selected)];
 }
 
-export async function activeServersForPath(path: string, repoRoot: string) {
-  return activeServers(path, await activeServerGates(repoRoot));
-}
+export const activeServersForPath = Effect.fn("LanguageServers.activeServersForPath")(
+  function* serversForActivePath(path: string, repoRoot: string) {
+    return activeServers(path, yield* activeServerGates(repoRoot));
+  },
+);
 
-export async function serversProviding(path: string, capability: Capability, repoRoot: string) {
-  const servers = await activeServersForPath(path, repoRoot);
+export const serversProviding = Effect.fn("LanguageServers.serversProviding")(function* providing(
+  path: string,
+  capability: Capability,
+  repoRoot: string,
+) {
+  const servers = yield* activeServersForPath(path, repoRoot);
   return servers.filter((server) => registry[server]?.provides.includes(capability));
-}
+});
 
 const intelCapabilities = new Set<Capability>([
   "definition",

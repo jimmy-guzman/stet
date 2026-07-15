@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Effect } from "effect";
+
 import { activeServersForPath, resolveServers } from "@/diagnostics/servers";
 import { resolveFileSupportConfig } from "@/file-support/config";
 import {
@@ -159,10 +161,12 @@ test("language entries distinguish default gates, unconditional servers, and fir
     },
     async (issues) => {
       expect(issues).toEqual([]);
-      expect(await activeServersForPath("a.fallback", repo)).toEqual(["typescript"]);
-      expect(await activeServersForPath("a.forced", repo)).toEqual(["biome"]);
+      expect(await Effect.runPromise(activeServersForPath("a.fallback", repo))).toEqual([
+        "typescript",
+      ]);
+      expect(await Effect.runPromise(activeServersForPath("a.forced", repo))).toEqual(["biome"]);
       writeFileSync(join(repo, "biome.json"), "{}");
-      expect(await activeServersForPath("a.fallback", repo)).toEqual(["biome"]);
+      expect(await Effect.runPromise(activeServersForPath("a.fallback", repo))).toEqual(["biome"]);
     },
   );
   rmSync(repo, { force: true, recursive: true });

@@ -47,14 +47,26 @@ test("plain Python repos select basedpyright while retaining ty as a possible se
   try {
     expect(serversForPath("src/main.py")).toEqual(["ty", "basedpyright", "ruff"]);
     expect(serversForPath("stubs/typed.pyi")).toEqual(["ty", "basedpyright", "ruff"]);
-    expect(await activeServersForPath("src/main.py", repo)).toEqual(["basedpyright", "ruff"]);
-    expect(await activeServersForPath("stubs/typed.pyi", repo)).toEqual(["basedpyright", "ruff"]);
+    expect(await Effect.runPromise(activeServersForPath("src/main.py", repo))).toEqual([
+      "basedpyright",
+      "ruff",
+    ]);
+    expect(await Effect.runPromise(activeServersForPath("stubs/typed.pyi", repo))).toEqual([
+      "basedpyright",
+      "ruff",
+    ]);
     expect(lspLanguageId("src/main.py")).toBe("python");
     expect(lspLanguageId("stubs/typed.pyi")).toBe("python");
     // Code-intel is basedpyright's; ruff lints only, so it never surfaces for a pull or warm.
-    expect(await serversProviding("src/main.py", "hover", repo)).toEqual(["basedpyright"]);
-    expect(await serversProviding("src/main.py", "references", repo)).toEqual(["basedpyright"]);
-    expect(await serversProviding("src/main.py", "implementation", repo)).toEqual(["basedpyright"]);
+    expect(await Effect.runPromise(serversProviding("src/main.py", "hover", repo))).toEqual([
+      "basedpyright",
+    ]);
+    expect(await Effect.runPromise(serversProviding("src/main.py", "references", repo))).toEqual([
+      "basedpyright",
+    ]);
+    expect(
+      await Effect.runPromise(serversProviding("src/main.py", "implementation", repo)),
+    ).toEqual(["basedpyright"]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -75,9 +87,16 @@ test("every built-in ty signal selects ty instead of basedpyright", async () => 
   try {
     await Promise.all(
       repositories.map(async (repo) => {
-        expect(await activeServersForPath("src/main.py", repo)).toEqual(["ty", "ruff"]);
-        expect(await serversProviding("src/main.py", "hover", repo)).toEqual(["ty"]);
-        expect(await serversProviding("src/main.py", "implementation", repo)).toEqual([]);
+        expect(await Effect.runPromise(activeServersForPath("src/main.py", repo))).toEqual([
+          "ty",
+          "ruff",
+        ]);
+        expect(await Effect.runPromise(serversProviding("src/main.py", "hover", repo))).toEqual([
+          "ty",
+        ]);
+        expect(
+          await Effect.runPromise(serversProviding("src/main.py", "implementation", repo)),
+        ).toEqual([]);
       }),
     );
   } finally {
@@ -96,15 +115,20 @@ test("activeServersForPath gates biome on a repo's biome config", async () => {
 
   try {
     // A biome.json (or biome.jsonc) opts the repo in; biome then handles the JS/TS family and css.
-    expect(await activeServersForPath("src/a.ts", withConfig)).toEqual([
+    expect(await Effect.runPromise(activeServersForPath("src/a.ts", withConfig))).toEqual([
       "typescript",
       "oxlint",
       "biome",
     ]);
-    expect(await activeServersForPath("src/a.css", withJsonc)).toEqual(["biome"]);
+    expect(await Effect.runPromise(activeServersForPath("src/a.css", withJsonc))).toEqual([
+      "biome",
+    ]);
     // Without a biome config, biome stays off: oxlint/typescript still run, css has no server.
-    expect(await activeServersForPath("src/a.ts", without)).toEqual(["typescript", "oxlint"]);
-    expect(await activeServersForPath("src/a.css", without)).toEqual([]);
+    expect(await Effect.runPromise(activeServersForPath("src/a.ts", without))).toEqual([
+      "typescript",
+      "oxlint",
+    ]);
+    expect(await Effect.runPromise(activeServersForPath("src/a.css", without))).toEqual([]);
   } finally {
     rmSync(withConfig, { force: true, recursive: true });
     rmSync(withJsonc, { force: true, recursive: true });
@@ -117,14 +141,20 @@ test("only the intel-capable server answers a code-intel pull for a file", async
   try {
     // TypeScript is the only registered server that provides code-intel, so a JS/TS-family file
     // Resolves to it regardless of the other extension-matching servers (oxlint, biome).
-    expect(await serversProviding("src/a.ts", "hover", repo)).toEqual(["typescript"]);
-    expect(await serversProviding("src/a.tsx", "hover", repo)).toEqual(["typescript"]);
-    expect(await serversProviding("src/a.mjs", "hover", repo)).toEqual(["typescript"]);
+    expect(await Effect.runPromise(serversProviding("src/a.ts", "hover", repo))).toEqual([
+      "typescript",
+    ]);
+    expect(await Effect.runPromise(serversProviding("src/a.tsx", "hover", repo))).toEqual([
+      "typescript",
+    ]);
+    expect(await Effect.runPromise(serversProviding("src/a.mjs", "hover", repo))).toEqual([
+      "typescript",
+    ]);
     // CSS/JSON/YAML only match intel-less servers, and an extensionless file matches none: no warm.
-    expect(await serversProviding("src/a.css", "hover", repo)).toEqual([]);
-    expect(await serversProviding("package.json", "hover", repo)).toEqual([]);
-    expect(await serversProviding("config.yaml", "hover", repo)).toEqual([]);
-    expect(await serversProviding("Makefile", "hover", repo)).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("src/a.css", "hover", repo))).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("package.json", "hover", repo))).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("config.yaml", "hover", repo))).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("Makefile", "hover", repo))).toEqual([]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -144,13 +174,21 @@ test("serversProviding keeps only servers whose static hint can answer the inten
   try {
     // Only typescript declares definition/references; oxlint pushes diagnostics and declares neither,
     // So intel never acquires it for a code-intel pull.
-    expect(await serversProviding("src/a.ts", "definition", repo)).toEqual(["typescript"]);
-    expect(await serversProviding("src/a.tsx", "references", repo)).toEqual(["typescript"]);
-    expect(await serversProviding("src/a.ts", "implementation", repo)).toEqual(["typescript"]);
+    expect(await Effect.runPromise(serversProviding("src/a.ts", "definition", repo))).toEqual([
+      "typescript",
+    ]);
+    expect(await Effect.runPromise(serversProviding("src/a.tsx", "references", repo))).toEqual([
+      "typescript",
+    ]);
+    expect(await Effect.runPromise(serversProviding("src/a.ts", "implementation", repo))).toEqual([
+      "typescript",
+    ]);
     // Json and yaml only push diagnostics (validation-only), so they never surface for a code-intel pull.
-    expect(await serversProviding("package.json", "definition", repo)).toEqual([]);
-    expect(await serversProviding("config.yaml", "hover", repo)).toEqual([]);
-    expect(await serversProviding("README.md", "definition", repo)).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("package.json", "definition", repo))).toEqual(
+      [],
+    );
+    expect(await Effect.runPromise(serversProviding("config.yaml", "hover", repo))).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("README.md", "definition", repo))).toEqual([]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

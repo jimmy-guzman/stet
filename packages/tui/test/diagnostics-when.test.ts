@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Effect } from "effect";
+
 import { evaluateWhen, parseWhen } from "@/diagnostics/when";
 
 test("when paths resolve from the repo root, including parent markers", async () => {
@@ -12,11 +14,15 @@ test("when paths resolve from the repo root, including parent markers", async ()
   writeFileSync(join(repo, "config", "tool.json"), "{}");
   writeFileSync(join(root, "workspace.json"), '{"tool":{"shared":true}}');
   try {
-    expect(await evaluateWhen(["missing.json", "config/tool.json"], repo)).toBe(true);
-    expect(await evaluateWhen("../workspace.json", repo)).toBe(true);
-    expect(await evaluateWhen({ file: "../workspace.json", key: ["tool", "shared"] }, repo)).toBe(
+    expect(await Effect.runPromise(evaluateWhen(["missing.json", "config/tool.json"], repo))).toBe(
       true,
     );
+    expect(await Effect.runPromise(evaluateWhen("../workspace.json", repo))).toBe(true);
+    expect(
+      await Effect.runPromise(
+        evaluateWhen({ file: "../workspace.json", key: ["tool", "shared"] }, repo),
+      ),
+    ).toBe(true);
     expect(parseWhen("../workspace.json")).toEqual({
       issues: [],
       when: ["../workspace.json"],
@@ -52,17 +58,33 @@ test("when reads manifest keys and Python dependency declarations", async () => 
     ].join("\n"),
   );
   try {
-    expect(await evaluateWhen({ file: "pyproject.toml", key: ["tool", "ty"] }, repo)).toBe(true);
-    expect(await evaluateWhen({ dependency: "django", file: "pyproject.toml" }, repo)).toBe(true);
-    expect(await evaluateWhen({ dependency: "PyTest", file: "pyproject.toml" }, repo)).toBe(true);
-    expect(await evaluateWhen({ dependency: "ruff", file: "pyproject.toml" }, repo)).toBe(true);
-    expect(await evaluateWhen({ dependency: "ty", file: "pyproject.toml" }, repo)).toBe(true);
-    expect(await evaluateWhen({ dependency: "mypy", file: "pyproject.toml" }, repo)).toBe(true);
-    expect(await evaluateWhen({ dependency: "basedpyright", file: "pyproject.toml" }, repo)).toBe(
-      true,
-    );
     expect(
-      await evaluateWhen({ dependency: "typing-extensions", file: "pyproject.toml" }, repo),
+      await Effect.runPromise(evaluateWhen({ file: "pyproject.toml", key: ["tool", "ty"] }, repo)),
+    ).toBe(true);
+    expect(
+      await Effect.runPromise(evaluateWhen({ dependency: "django", file: "pyproject.toml" }, repo)),
+    ).toBe(true);
+    expect(
+      await Effect.runPromise(evaluateWhen({ dependency: "PyTest", file: "pyproject.toml" }, repo)),
+    ).toBe(true);
+    expect(
+      await Effect.runPromise(evaluateWhen({ dependency: "ruff", file: "pyproject.toml" }, repo)),
+    ).toBe(true);
+    expect(
+      await Effect.runPromise(evaluateWhen({ dependency: "ty", file: "pyproject.toml" }, repo)),
+    ).toBe(true);
+    expect(
+      await Effect.runPromise(evaluateWhen({ dependency: "mypy", file: "pyproject.toml" }, repo)),
+    ).toBe(true);
+    expect(
+      await Effect.runPromise(
+        evaluateWhen({ dependency: "basedpyright", file: "pyproject.toml" }, repo),
+      ),
+    ).toBe(true);
+    expect(
+      await Effect.runPromise(
+        evaluateWhen({ dependency: "typing-extensions", file: "pyproject.toml" }, repo),
+      ),
     ).toBe(false);
   } finally {
     rmSync(repo, { force: true, recursive: true });
@@ -73,9 +95,15 @@ test("a missing or malformed manifest rejects its conditions without throwing", 
   const repo = mkdtempSync(join(tmpdir(), "stet-when-"));
   writeFileSync(join(repo, "pyproject.toml"), "[project\nname = ");
   try {
-    expect(await evaluateWhen({ file: "pyproject.toml", key: ["tool", "ty"] }, repo)).toBe(false);
-    expect(await evaluateWhen({ dependency: "ty", file: "pyproject.toml" }, repo)).toBe(false);
-    expect(await evaluateWhen({ file: "missing.json", key: ["tool"] }, repo)).toBe(false);
+    expect(
+      await Effect.runPromise(evaluateWhen({ file: "pyproject.toml", key: ["tool", "ty"] }, repo)),
+    ).toBe(false);
+    expect(
+      await Effect.runPromise(evaluateWhen({ dependency: "ty", file: "pyproject.toml" }, repo)),
+    ).toBe(false);
+    expect(
+      await Effect.runPromise(evaluateWhen({ file: "missing.json", key: ["tool"] }, repo)),
+    ).toBe(false);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -84,8 +112,10 @@ test("a missing or malformed manifest rejects its conditions without throwing", 
 test("invalid filesystem paths reject their conditions without throwing", async () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-when-"));
   try {
-    expect(await evaluateWhen("bad\0path", repo)).toBe(false);
-    expect(await evaluateWhen({ file: "bad\0path", key: ["tool", "ty"] }, repo)).toBe(false);
+    expect(await Effect.runPromise(evaluateWhen("bad\0path", repo))).toBe(false);
+    expect(
+      await Effect.runPromise(evaluateWhen({ file: "bad\0path", key: ["tool", "ty"] }, repo)),
+    ).toBe(false);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

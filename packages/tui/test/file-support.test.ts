@@ -90,12 +90,12 @@ test("disabling a named icon falls back to the generic icon model", async () => 
   });
 });
 
-test("matching is case-sensitive by default and may opt out", async () => {
+test("matching is case-insensitive by default and may opt into case sensitivity", async () => {
   await withFileSupport(
     {
       files: {
-        insensitive: { caseSensitive: false, extensions: ["low"], syntax: "json" },
-        sensitive: { extensions: ["UP"], syntax: "yaml" },
+        insensitive: { extensions: ["low"], syntax: "json" },
+        sensitive: { caseSensitive: true, extensions: ["UP"], syntax: "yaml" },
       },
     },
     (issues) => {
@@ -103,8 +103,23 @@ test("matching is case-sensitive by default and may opt out", async () => {
       expect(fileSupportForPath("a.UP").syntax).toBe("yaml");
       expect(fileSupportForPath("a.up").syntax).not.toBe("yaml");
       expect(fileSupportForPath("a.LOW").syntax).toBe("json");
+      expect(fileSupportForPath("a.low").syntax).toBe("json");
     },
   );
+});
+
+test("built-in extension and glob matching ignores case across facets", async () => {
+  await withFileSupport({}, (issues) => {
+    expect(issues).toEqual([]);
+    // An uppercase extension (a Windows-authored or unconventionally cased file) resolves the same as
+    // Lowercase: the icon and the LSP language profile agree, instead of the icon matching while the
+    // Profile misses and silently drops diagnostics and code intelligence.
+    const tsx = fileSupportForPath("src/Component.TSX");
+    expect(tsx.icon).toBe("react");
+    expect(tsx.language?.languageId).toBe("typescriptreact");
+    // A glob built-in is case-insensitive too: `*.gradle` still resolves groovy syntax.
+    expect(fileSupportForPath("build.GRADLE").syntax).toBe("groovy");
+  });
 });
 
 test("invalid overrides retain built-ins while an invalid reference drops only its facet", async () => {

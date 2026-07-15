@@ -133,7 +133,7 @@ provisioning definition.
 
 A file association accepts `filenames`, `globs`, `extensions`, and `dotfiles`. Extensions are bare
 suffixes without a leading dot. A glob containing `/` matches the full repo-relative POSIX path; any
-other glob matches only the basename. Matching is case-sensitive unless `caseSensitive` is `false`.
+other glob matches only the basename. Matching is case-insensitive unless `caseSensitive` is `true`.
 
 Each association may set `syntax`, `icon`, and `language`. Built-in and user associations
 participate in the same cascade, and each facet resolves independently by specificity: exact
@@ -171,7 +171,9 @@ A server accepts `command`, `when`, `initializationOptions`, `settings`, and `ca
 `{repoRoot}` and `{repoUri}` placeholders in initialization and settings string values are replaced
 per repository. Capability hints may contain `definition`, `references`, `hover`, `documentSymbol`,
 `callHierarchy`, `implementation`, and `pullDiagnostics`; the server's initialize reply remains the
-authoritative check.
+authoritative check. Omitting `capabilities` defaults it to the full code-intel set. The hint only
+routes code intelligence; it never gates diagnostics, which run for any server its language profile
+selects, and the server's initialize reply decides whether it answers pull diagnostics or only pushes.
 
 `when` is declarative data, never a shell command. It accepts a repo-relative path, a manifest key,
 or a Python dependency declaration. Relative paths may include parent-directory segments; absolute

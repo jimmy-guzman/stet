@@ -7,6 +7,8 @@ describe("fileIcon", () => {
     expect(fileIcon("main.ts")).toBe("\u{e8ca}");
     expect(fileIcon("App.tsx")).toBe("\u{e7ba}");
     expect(fileIcon("readme.css")).toBe("\u{e749}");
+    expect(fileIcon("notes.md")).toBe("\u{eb1d}");
+    expect(fileIcon("guide.mdx")).toBe("\u{eb1d}");
   });
 
   test("treats .mts and .cts as TypeScript", () => {

@@ -37,7 +37,12 @@ import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { LspProcess } from "./diagnostics/lsp-process";
 import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import { hasIntelServer, LanguageServers, serversProviding } from "./diagnostics/servers";
+import {
+  hasCapabilityServer,
+  hasIntelServer,
+  LanguageServers,
+  serversProviding,
+} from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -3162,6 +3167,20 @@ function createState() {
     symbolsPath = path;
     symbolsRoot = repoRoot();
     symbolsFile = selectedFile();
+    // No possible server provides `documentSymbol` for this file type, whatever the repo gates decide,
+    // So open straight to the unsupported state rather than flashing `loading` through an async gate
+    // Pull that can only confirm what the sync registry already settles (mirrors `hasIntelServer`).
+    if (!hasCapabilityServer(path, "documentSymbol")) {
+      symbolsController = undefined;
+      batch(() => {
+        setSymbolsResults([]);
+        setSymbolsIndex(0);
+        setSymbolsScrollTop(0);
+        setSymbolsStatus("unsupported");
+        setSymbolsOpen(true);
+      });
+      return;
+    }
     const requestRoot = symbolsRoot;
     const requestFile = symbolsFile;
     const controller = new AbortController();
@@ -3173,8 +3192,9 @@ function createState() {
       setSymbolsStatus("loading");
       setSymbolsOpen(true);
     });
-    // No server advertises `documentSymbol` for this language, so a pull would return `[]` and read
-    // As "no symbols" (a false claim). Short-circuit to a distinct state without issuing a request.
+    // A server matches the file but its repo gate turned every documentSymbol provider off, so a pull
+    // Would return `[]` and read as "no symbols" (a false claim). Confirm the gated-off case here and
+    // Short-circuit to the unsupported state without issuing a request.
     const providers = await serversProviding(path, "documentSymbol", requestRoot);
     if (
       symbolsController !== controller ||

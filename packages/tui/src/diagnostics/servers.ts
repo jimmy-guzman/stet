@@ -605,15 +605,13 @@ export function hasIntelServer(path: string) {
 }
 
 /**
- * The first active server for this file that statically declares any code-intel capability, or
- * undefined when none does. Drives the warm-hold: it decides whether (and which server) to keep
- * warm for the viewed file's repo so the first intel pull finds an already-loaded project rather
- * than paying a cold spawn plus project load.
+ * Whether any possible server for this path statically declares `capability`, before repository
+ * gates. A sync over-approximation (gates ignored) that lets a caller skip the async gate pull for
+ * a file type no server could ever answer, the same shortcut `hasIntelServer` gives the warm-hold.
  */
-export async function intelLanguage(path: string, repoRoot: string) {
-  const servers = await activeServersForPath(path, repoRoot);
-  return servers.find((server) =>
-    (registry[server]?.provides ?? []).some((capability) => intelCapabilities.has(capability)),
+export function hasCapabilityServer(path: string, capability: Capability) {
+  return serversForPath(path).some((server) =>
+    (registry[server]?.provides ?? []).includes(capability),
   );
 }
 

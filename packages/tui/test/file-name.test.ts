@@ -7,7 +7,6 @@ describe("fileNameParts", () => {
     expect(fileNameParts("src/v1.2/main.ts")).toEqual({
       basename: "main.ts",
       extension: "ts",
-      stem: "main",
     });
   });
 
@@ -15,7 +14,6 @@ describe("fileNameParts", () => {
     expect(fileNameParts("config/.npmrc")).toEqual({
       basename: ".npmrc",
       extension: undefined,
-      stem: ".npmrc",
     });
   });
 
@@ -23,12 +21,10 @@ describe("fileNameParts", () => {
     expect(fileNameParts(".prettierrc.json")).toEqual({
       basename: ".prettierrc.json",
       extension: "json",
-      stem: ".prettierrc",
     });
     expect(fileNameParts("name.")).toEqual({
       basename: "name.",
       extension: "",
-      stem: "name",
     });
   });
 
@@ -36,7 +32,6 @@ describe("fileNameParts", () => {
     expect(fileNameParts(String.raw`Dir\Literal.TS`)).toEqual({
       basename: String.raw`Dir\Literal.TS`,
       extension: "TS",
-      stem: String.raw`Dir\Literal`,
     });
   });
 });

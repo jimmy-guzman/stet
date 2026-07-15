@@ -24,7 +24,7 @@ const { files, icons, languages } = freshRegistry();
 function compileAssociations() {
   return [...files.values()].map((association, order): CompiledAssociation => {
     const normalize = (value: string) =>
-      association.caseSensitive === false ? value.toLowerCase() : value;
+      association.caseSensitive === true ? value : value.toLowerCase();
     return {
       association,
       globs: (association.globs ?? []).map((pattern) => ({
@@ -45,7 +45,7 @@ function matchRank(path: string, compiled: CompiledAssociation) {
   const { association } = compiled;
   const parts = fileNameParts(path);
   const normalize = (value: string) =>
-    association.caseSensitive === false ? value.toLowerCase() : value;
+    association.caseSensitive === true ? value : value.toLowerCase();
   const basename = normalize(parts.basename);
   const extension = parts.extension === undefined ? undefined : normalize(parts.extension);
   if ((association.filenames ?? []).some((filename) => normalize(filename) === basename)) {

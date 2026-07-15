@@ -11,7 +11,6 @@ import { Provisioner } from "@/diagnostics/provision";
 import {
   activeServersForPath,
   handshakeConfigFor,
-  intelLanguage,
   LanguageServers,
   LanguageServersLive,
   lspLanguageId,
@@ -56,7 +55,6 @@ test("plain Python repos select basedpyright while retaining ty as a possible se
     expect(await serversProviding("src/main.py", "hover", repo)).toEqual(["basedpyright"]);
     expect(await serversProviding("src/main.py", "references", repo)).toEqual(["basedpyright"]);
     expect(await serversProviding("src/main.py", "implementation", repo)).toEqual(["basedpyright"]);
-    expect(await intelLanguage("src/main.py", repo)).toBe("basedpyright");
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -80,7 +78,6 @@ test("every built-in ty signal selects ty instead of basedpyright", async () => 
         expect(await activeServersForPath("src/main.py", repo)).toEqual(["ty", "ruff"]);
         expect(await serversProviding("src/main.py", "hover", repo)).toEqual(["ty"]);
         expect(await serversProviding("src/main.py", "implementation", repo)).toEqual([]);
-        expect(await intelLanguage("src/main.py", repo)).toBe("ty");
       }),
     );
   } finally {
@@ -115,19 +112,19 @@ test("activeServersForPath gates biome on a repo's biome config", async () => {
   }
 });
 
-test("intelLanguage picks the one server that answers code-intel for a file", async () => {
+test("only the intel-capable server answers a code-intel pull for a file", async () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-intel-"));
   try {
     // TypeScript is the only registered server that provides code-intel, so a JS/TS-family file
     // Resolves to it regardless of the other extension-matching servers (oxlint, biome).
-    expect(await intelLanguage("src/a.ts", repo)).toBe("typescript");
-    expect(await intelLanguage("src/a.tsx", repo)).toBe("typescript");
-    expect(await intelLanguage("src/a.mjs", repo)).toBe("typescript");
+    expect(await serversProviding("src/a.ts", "hover", repo)).toEqual(["typescript"]);
+    expect(await serversProviding("src/a.tsx", "hover", repo)).toEqual(["typescript"]);
+    expect(await serversProviding("src/a.mjs", "hover", repo)).toEqual(["typescript"]);
     // CSS/JSON/YAML only match intel-less servers, and an extensionless file matches none: no warm.
-    expect(await intelLanguage("src/a.css", repo)).toBeUndefined();
-    expect(await intelLanguage("package.json", repo)).toBeUndefined();
-    expect(await intelLanguage("config.yaml", repo)).toBeUndefined();
-    expect(await intelLanguage("Makefile", repo)).toBeUndefined();
+    expect(await serversProviding("src/a.css", "hover", repo)).toEqual([]);
+    expect(await serversProviding("package.json", "hover", repo)).toEqual([]);
+    expect(await serversProviding("config.yaml", "hover", repo)).toEqual([]);
+    expect(await serversProviding("Makefile", "hover", repo)).toEqual([]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

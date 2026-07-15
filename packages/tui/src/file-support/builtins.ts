@@ -11,7 +11,7 @@ export const builtinIcons = new Map<string, string>([
   ["react", "\u{e7ba}"],
   ["javascript", "\u{e781}"],
   ["json", "\u{eb0f}"],
-  ["markdown", "\u{e73e}"],
+  ["markdown", "\u{eb1d}"],
   ["css", "\u{e749}"],
   ["csv", "\u{e64a}"],
   ["spreadsheet", "\u{e6a6}"],
@@ -80,7 +80,7 @@ const iconExtensions = (
   name: string,
   icon: string,
   extensions: readonly string[],
-): readonly [string, FileAssociation] => [name, { caseSensitive: false, extensions, icon }];
+): readonly [string, FileAssociation] => [name, { extensions, icon }];
 
 /** Built-in file associations. Later entries win ties at the same match specificity. */
 export const builtinFiles = new Map<string, FileAssociation>([
@@ -96,11 +96,11 @@ export const builtinFiles = new Map<string, FileAssociation>([
   ["language-typescriptreact", { extensions: ["tsx"], language: "typescriptreact" }],
   ["language-yaml", { extensions: ["yaml", "yml"], language: "yaml" }],
 
-  ["syntax-env", { caseSensitive: false, filenames: [".env"], syntax: "dotenv" }],
+  ["syntax-env", { filenames: [".env"], syntax: "dotenv" }],
   ["syntax-npmrc", { filenames: [".npmrc"], syntax: "ini" }],
   ["syntax-prettierrc", { filenames: [".prettierrc"], syntax: "jsonc" }],
   ["syntax-gradle", { globs: ["*.gradle"], syntax: "groovy" }],
-  ["syntax-ruby-template", { caseSensitive: false, globs: ["*.rb.tmpl"], syntax: "ruby" }],
+  ["syntax-ruby-template", { globs: ["*.rb.tmpl"], syntax: "ruby" }],
 
   iconExtensions("icon-typescript", "typescript", ["ts", "mts", "cts"]),
   iconExtensions("icon-react", "react", ["tsx", "jsx"]),
@@ -135,26 +135,19 @@ export const builtinFiles = new Map<string, FileAssociation>([
   iconExtensions("icon-scala", "scala", ["scala", "sc"]),
   iconExtensions("icon-gradle", "gradle", ["gradle"]),
 
-  ["icon-node-filename", { caseSensitive: false, filenames: ["package.json"], icon: "node" }],
-  [
-    "icon-tsconfig-filename",
-    { caseSensitive: false, filenames: ["tsconfig.json"], icon: "tsconfig" },
-  ],
-  [
-    "icon-bun-filenames",
-    { caseSensitive: false, filenames: ["bun.lock", "bunfig.toml"], icon: "bun" },
-  ],
-  ["icon-dockerfile", { caseSensitive: false, filenames: ["dockerfile"], icon: "docker" }],
-  ["icon-makefile", { caseSensitive: false, filenames: ["makefile"], icon: "make" }],
-  ["icon-gitignore", { caseSensitive: false, filenames: [".gitignore"], icon: "git" }],
-  ["icon-env", { caseSensitive: false, filenames: [".env"], icon: "config" }],
-  ["icon-readme", { caseSensitive: false, filenames: ["readme.md", "readme"], icon: "readme" }],
-  ["icon-codeowners", { caseSensitive: false, filenames: ["codeowners"], icon: "codeowners" }],
-  ["icon-procfile", { caseSensitive: false, filenames: ["procfile"], icon: "heroku" }],
+  ["icon-node-filename", { filenames: ["package.json"], icon: "node" }],
+  ["icon-tsconfig-filename", { filenames: ["tsconfig.json"], icon: "tsconfig" }],
+  ["icon-bun-filenames", { filenames: ["bun.lock", "bunfig.toml"], icon: "bun" }],
+  ["icon-dockerfile", { filenames: ["dockerfile"], icon: "docker" }],
+  ["icon-makefile", { filenames: ["makefile"], icon: "make" }],
+  ["icon-gitignore", { filenames: [".gitignore"], icon: "git" }],
+  ["icon-env", { filenames: [".env"], icon: "config" }],
+  ["icon-readme", { filenames: ["readme.md", "readme"], icon: "readme" }],
+  ["icon-codeowners", { filenames: ["codeowners"], icon: "codeowners" }],
+  ["icon-procfile", { filenames: ["procfile"], icon: "heroku" }],
   [
     "icon-gradle-filenames",
     {
-      caseSensitive: false,
       filenames: [
         "build.gradle",
         "settings.gradle",
@@ -168,11 +161,10 @@ export const builtinFiles = new Map<string, FileAssociation>([
       icon: "gradle",
     },
   ],
-  ["icon-maven-filename", { caseSensitive: false, filenames: ["pom.xml"], icon: "maven" }],
+  ["icon-maven-filename", { filenames: ["pom.xml"], icon: "maven" }],
   [
     "icon-license",
     {
-      caseSensitive: false,
       filenames: [
         "copying",
         "unlicense",
@@ -192,18 +184,14 @@ export const builtinFiles = new Map<string, FileAssociation>([
       icon: "license",
     },
   ],
-  ["icon-ruby-template", { caseSensitive: false, globs: ["*.rb.tmpl"], icon: "ruby" }],
+  ["icon-ruby-template", { globs: ["*.rb.tmpl"], icon: "ruby" }],
   [
     "icon-test",
     {
-      caseSensitive: false,
       globs: ["*.test.*", "*.spec.*", "*_test.*", "*_spec.*", "*.cy.*", "test_*.*"],
       icon: "test",
     },
   ],
-  [
-    "icon-storybook",
-    { caseSensitive: false, globs: ["*.stories.*", "*.story.*"], icon: "storybook" },
-  ],
+  ["icon-storybook", { globs: ["*.stories.*", "*.story.*"], icon: "storybook" }],
   ["icon-dotfiles", { dotfiles: true, icon: "config" }],
 ]);

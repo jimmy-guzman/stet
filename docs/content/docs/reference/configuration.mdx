@@ -128,9 +128,20 @@ profile, a file association, and an icon:
 }
 ```
 
-A configured command resolves from the repo's `node_modules/.bin`, then `PATH`. User commands are
-never auto-provisioned. Overriding a built-in server's `command` also drops its trusted built-in
-provisioning definition.
+A configured command resolves from the repo's `node_modules/.bin`, then `PATH`. Set `discovery` to
+`"python"` to check the active `$VIRTUAL_ENV/bin` and the repo's `.venv/bin` before those defaults:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "servers": {
+    "pylsp": { "command": ["pylsp"], "discovery": "python" },
+  },
+}
+```
+
+User commands are never auto-provisioned. Overriding a built-in server's `command` also drops its
+trusted built-in provisioning definition, while its discovery strategy stays inherited unless you
+set `discovery` to `false`.
 
 ### Match files
 
@@ -170,7 +181,8 @@ language match it starts no server.
 
 ### Configure servers and selection
 
-A server accepts `command`, `when`, `initializationOptions`, `settings`, and `capabilities`.
+A server accepts `command`, `discovery`, `when`, `initializationOptions`, `settings`, and
+`capabilities`.
 `{repoRoot}` and `{repoUri}` placeholders in initialization and settings string values are replaced
 per repository. Capability hints may contain `definition`, `references`, `hover`, `documentSymbol`,
 `callHierarchy`, `implementation`, and `pullDiagnostics`; the server's initialize reply remains the
@@ -216,12 +228,12 @@ Python uses the same grammar: `[{ "firstOf": ["ty", "basedpyright"] }, "ruff"]` 
 the repository opted into it and falls back to basedpyright. Reuse that list to keep detection, or
 write `{ "server": "ty" }` or `{ "server": "basedpyright" }` to force one checker.
 
-Set `when` to `false` on a server override to remove its built-in default condition. Set an entire
-server, language, icon, or file association to `false` to disable it.
+Set `discovery` or `when` to `false` on a server override to remove that built-in default. Set an
+entire server, language, icon, or file association to `false` to disable it.
 
 stet reads commands only from your global config. It never reads a server command from the
 repository being inspected, although a configured executable may resolve from that repository's
-`node_modules/.bin`.
+`.venv/bin` or `node_modules/.bin`.
 
 <Callout>
   An entry that does not validate is reported in a notice; the rest of the config still applies.

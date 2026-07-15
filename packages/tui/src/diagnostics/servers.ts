@@ -14,6 +14,7 @@ import type { ServerCandidate, ServerEntry } from "@/file-support/model";
 import { fileSupportForPath, registeredLanguageProfiles } from "@/file-support/registry";
 
 import { resolveBinary } from "./checker";
+import type { BinaryDiscovery } from "./checker";
 import { LspProcess } from "./lsp-process";
 import type { LspSpawnError } from "./lsp-process";
 import { cachedBinaryPath, Provisioner } from "./provision";
@@ -59,6 +60,8 @@ export type Capability =
 export interface ServerSpec {
   readonly binary: string;
   readonly args: readonly string[];
+  /** Optional repository-environment strategy used before the standard local/PATH lookup. */
+  readonly discovery?: BinaryDiscovery;
   /**
    * The intents this server can answer, declared statically so intel skips a non-provider without
    * acquiring it. A pre-acquire filter only; the handshake-advertised set on `ServerHandle` stays
@@ -109,6 +112,7 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "basedpyright": {
     args: ["--stdio"],
     binary: "basedpyright-langserver",
+    discovery: "python",
     // Verified against its `initialize` result: it advertises every intel provider stet uses,
     // Implementation included.
     provides: [
@@ -158,6 +162,7 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "ruff": {
     args: ["server"],
     binary: "ruff",
+    discovery: "python",
     provides: [],
     provision: {
       archive: "tar.gz",
@@ -250,6 +255,7 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "ty": {
     args: ["server"],
     binary: "ty",
+    discovery: "python",
     provides: ["definition", "references", "hover", "documentSymbol", "callHierarchy"],
     provision: {
       archive: "tar.gz",
@@ -417,7 +423,14 @@ function isCapability(value: unknown): value is Capability {
 export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
   const issues: string[] = [];
   const servers: Record<string, ServerSpec> = { ...builtinRegistry };
-  const fields = new Set(["capabilities", "command", "initializationOptions", "settings", "when"]);
+  const fields = new Set([
+    "capabilities",
+    "command",
+    "discovery",
+    "initializationOptions",
+    "settings",
+    "when",
+  ]);
 
   for (const [name, entry] of Object.entries(raw)) {
     if (entry === false) {
@@ -454,6 +467,12 @@ export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
       issues.push(`server "${name}": command must not be empty`);
       continue;
     }
+    const rawDiscovery = entry.discovery;
+    if (rawDiscovery !== undefined && rawDiscovery !== false && rawDiscovery !== "python") {
+      issues.push(`server "${name}": discovery must be "python" or false`);
+      continue;
+    }
+    const discovery = rawDiscovery === false ? undefined : (rawDiscovery ?? base?.discovery);
     const capabilities = entry.capabilities;
     const provides =
       capabilities === undefined
@@ -482,6 +501,7 @@ export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
     const next: ServerSpec = {
       args: command === undefined ? (base?.args ?? []) : args,
       binary: command === undefined ? (base?.binary ?? "") : (binary ?? ""),
+      ...(discovery === undefined ? {} : { discovery }),
       provides,
       ...(command === undefined && base?.provision !== undefined
         ? { provision: base.provision }
@@ -672,7 +692,7 @@ export function resolveServerCommand(language: string, repoRoot: string): string
   if (spec === undefined) {
     return undefined;
   }
-  const repoOrPath = resolveBinary(repoRoot, spec.binary);
+  const repoOrPath = resolveBinary(repoRoot, spec.binary, spec.discovery);
   if (repoOrPath !== undefined) {
     return [repoOrPath, ...spec.args];
   }

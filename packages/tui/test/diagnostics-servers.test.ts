@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -234,6 +234,33 @@ test("serversProviding keeps only servers whose static hint can answer the inten
 
 test("resolveServerCommand returns undefined for a language with no registered server", () => {
   expect(resolveServerCommand("ruby", "/repo")).toBeUndefined();
+});
+
+test("built-in Python servers resolve from the repository virtualenv", () => {
+  const repo = mkdtempSync(join(tmpdir(), "stet-python-binaries-"));
+  const bin = join(repo, ".venv", "bin");
+  const previousVirtualEnv = process.env.VIRTUAL_ENV;
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, "basedpyright-langserver"), "");
+  writeFileSync(join(bin, "ruff"), "");
+  writeFileSync(join(bin, "ty"), "");
+  delete process.env.VIRTUAL_ENV;
+
+  try {
+    expect(resolveServerCommand("basedpyright", repo)).toEqual([
+      join(bin, "basedpyright-langserver"),
+      "--stdio",
+    ]);
+    expect(resolveServerCommand("ruff", repo)).toEqual([join(bin, "ruff"), "server"]);
+    expect(resolveServerCommand("ty", repo)).toEqual([join(bin, "ty"), "server"]);
+  } finally {
+    if (previousVirtualEnv === undefined) {
+      delete process.env.VIRTUAL_ENV;
+    } else {
+      process.env.VIRTUAL_ENV = previousVirtualEnv;
+    }
+    rmSync(repo, { force: true, recursive: true });
+  }
 });
 
 test("handshake parses advertised providers into the capability set", async () => {
@@ -506,6 +533,33 @@ test("resolveServers adds a named user server with optimistic capability hints",
   expect(servers.elixir?.provision).toBeUndefined();
 });
 
+test("a user server can opt into Python virtualenv discovery", () => {
+  const snapshot = snapshotServers();
+  const repo = mkdtempSync(join(tmpdir(), "stet-user-python-server-"));
+  const binary = join(repo, ".venv", "bin", "pylsp");
+  const previousVirtualEnv = process.env.VIRTUAL_ENV;
+  mkdirSync(join(repo, ".venv", "bin"), { recursive: true });
+  writeFileSync(binary, "");
+  delete process.env.VIRTUAL_ENV;
+
+  try {
+    const resolved = resolveServers({
+      pylsp: { command: ["pylsp", "--stdio"], discovery: "python" },
+    });
+    expect(resolved.issues).toEqual([]);
+    registerServers(resolved.servers);
+    expect(resolveServerCommand("pylsp", repo)).toEqual([binary, "--stdio"]);
+  } finally {
+    restoreServers(snapshot);
+    if (previousVirtualEnv === undefined) {
+      delete process.env.VIRTUAL_ENV;
+    } else {
+      process.env.VIRTUAL_ENV = previousVirtualEnv;
+    }
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
 test("a command override drops trusted provisioning while other fields inherit", () => {
   const { issues, servers } = resolveServers({
     typescript: { command: ["/bin/ls", "--stdio"] },
@@ -516,6 +570,17 @@ test("a command override drops trusted provisioning while other fields inherit",
   expect(servers.typescript?.args).toEqual(["--stdio"]);
   expect(servers.typescript?.provides).toContain("hover");
   expect(servers.typescript?.provision).toBeUndefined();
+});
+
+test("a command override inherits Python discovery unless explicitly cleared", () => {
+  const inherited = resolveServers({ ty: { command: ["custom-ty", "server"] } });
+  const cleared = resolveServers({ ty: { discovery: false } });
+
+  expect(inherited.issues).toEqual([]);
+  expect(inherited.servers.ty?.discovery).toBe("python");
+  expect(inherited.servers.ty?.provision).toBeUndefined();
+  expect(cleared.issues).toEqual([]);
+  expect(cleared.servers.ty?.discovery).toBeUndefined();
 });
 
 test("when false removes a built-in gate and false disables a server", () => {
@@ -530,15 +595,18 @@ test("an invalid override reports an issue and retains its built-in", () => {
   const { issues, servers } = resolveServers({
     biome: { command: [] },
     custom: { comand: ["custom-lsp"] },
+    ty: { discovery: "ruby" },
   });
 
   expect(issues).toEqual([
     'server "biome": command must not be empty',
     'server "custom": unknown field "comand"',
+    'server "ty": discovery must be "python" or false',
   ]);
   expect(servers.biome?.binary).toBe("biome");
   expect(servers.biome?.provision).toBeDefined();
   expect(servers.custom).toBeUndefined();
+  expect(servers.ty?.discovery).toBe("python");
 });
 
 test("registered user server commands resolve as-is", () => {

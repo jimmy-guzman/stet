@@ -295,11 +295,13 @@ const screens = [
   },
   {
     /**
-     * Open a real source diff, jump the caret onto a JSDoc'd exported function with `/`, hop to its
-     * name, and press `K`. The hover card shows the syntax-highlighted signature above the plain
-     * doc text, anchored at the caret over the diff. The long final sleep waits out tsserver's
-     * project load before it answers the first hover (same order as the problems shot). `Type "K"`
-     * sends the shift+K the keymap matches.
+     * Open a real source file, switch to full-file view (`v`) so the target is navigable even when
+     * it is unchanged in the diff window (`highlightSnippet` is elided in diff mode once it leaves
+     * the changed set, which lands the caret on the wrong symbol), jump the caret onto the JSDoc'd
+     * exported function with `/`, hop to its name, and press `K`. The hover card shows the
+     * syntax-highlighted signature above the plain doc text, anchored at the caret. The long final
+     * sleep waits out tsserver's project load before it answers the first hover (same order as the
+     * problems shot). `Type "K"` sends the shift+K the keymap matches.
      */
     name: "hover",
     steps: [
@@ -308,6 +310,8 @@ const screens = [
       "Sleep 500ms",
       "Enter",
       "Sleep 1500ms",
+      'Type "v"',
+      "Sleep 600ms",
       'Type "/"',
       "Sleep 300ms",
       'Type "function highlightSnippet"',
@@ -354,7 +358,9 @@ const screens = [
   },
   {
     /**
-     * Open the file that defines a widely-called function, jump the caret to its line with `/`,
+     * Open the file that defines a widely-called function, switch to full-file view (`v`) so the
+     * target is navigable even when it is unchanged in the diff window (`highlightSnippet` is
+     * elided in diff mode once it leaves the changed set), jump the caret to its line with `/`,
      * then hop three words (`lll` is word-forward: export → async → function → highlightSnippet)
      * onto the name, since prepareCallHierarchy needs the identifier itself. Press Shift+H: the
      * overlay lists the callers grouped by file with the `⇥ direction` hint in the footer. The long
@@ -368,6 +374,8 @@ const screens = [
       "Sleep 500ms",
       "Enter",
       "Sleep 1500ms",
+      'Type "v"',
+      "Sleep 600ms",
       'Type "/"',
       "Sleep 300ms",
       'Type "function highlightSnippet"',

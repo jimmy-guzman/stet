@@ -528,13 +528,17 @@ export interface ServerGates {
 }
 
 const whenKey = (when: When) => JSON.stringify(when);
+const serverGateCache = new Map<
+  string,
+  { readonly gates: ServerGates; readonly generation: number }
+>();
+const serverGateGenerations = new Map<string, number>();
 
 function entryCandidates(entry: ServerEntry): readonly ServerCandidate[] {
   return typeof entry !== "string" && "firstOf" in entry ? entry.firstOf : [entry];
 }
 
-/** Evaluate every distinct server gate once for one repository snapshot. */
-export const activeServerGates = Effect.fn("LanguageServers.activeServerGates")(function* gates(
+const evaluateServerGates = Effect.fn("LanguageServers.evaluateServerGates")(function* gates(
   repoRoot: string,
 ) {
   const whens = [
@@ -561,6 +565,33 @@ export const activeServerGates = Effect.fn("LanguageServers.activeServerGates")(
   );
   return { accepted };
 });
+
+function invalidateServerGates(repoRoot: string) {
+  return Effect.sync(() => {
+    serverGateGenerations.set(repoRoot, (serverGateGenerations.get(repoRoot) ?? 0) + 1);
+    serverGateCache.delete(repoRoot);
+  });
+}
+
+/** Memoize one completed gate snapshot per repository until its watcher reports a change. */
+export const activeServerGates = Effect.fn("LanguageServers.activeServerGates")(
+  function* activeGates(repoRoot: string) {
+    const generation = serverGateGenerations.get(repoRoot) ?? 0;
+    serverGateGenerations.set(repoRoot, generation);
+    const cached = serverGateCache.get(repoRoot);
+    if (cached?.generation === generation) {
+      return cached.gates;
+    }
+
+    const gates = yield* evaluateServerGates(repoRoot);
+    yield* Effect.sync(() => {
+      if ((serverGateGenerations.get(repoRoot) ?? 0) === generation) {
+        serverGateCache.set(repoRoot, { gates, generation });
+      }
+    });
+    return gates;
+  },
+);
 
 /** Apply server defaults, entry overrides, and first-of groups to one file. */
 export function activeServers(path: string, gates: ServerGates): string[] {
@@ -1013,13 +1044,17 @@ export const LanguageServersLive = Layer.effect(
       changes: readonly WatchedPathChange[],
       isTracked: (path: string) => boolean,
     ) =>
-      Effect.suspend(() =>
-        Effect.forEach(
-          keysFor(repoRoot),
-          (key) =>
-            live.get(key)?.connection.watchedFilesChanged(repoRoot, changes, isTracked) ??
-            Effect.void,
-          { discard: true },
+      invalidateServerGates(repoRoot).pipe(
+        Effect.andThen(
+          Effect.suspend(() =>
+            Effect.forEach(
+              keysFor(repoRoot),
+              (key) =>
+                live.get(key)?.connection.watchedFilesChanged(repoRoot, changes, isTracked) ??
+                Effect.void,
+              { discard: true },
+            ),
+          ),
         ),
       );
 
@@ -1033,7 +1068,11 @@ export const LanguageServersLive = Layer.effect(
         for (const key of keys) {
           live.delete(key);
         }
-        return Effect.forEach(keys, (key) => RcMap.invalidate(pool, key), { discard: true });
+        return invalidateServerGates(repoRoot).pipe(
+          Effect.andThen(
+            Effect.forEach(keys, (key) => RcMap.invalidate(pool, key), { discard: true }),
+          ),
+        );
       });
 
     // Connect through the warm pool; if the pooled server died (its stdout closed), evict it and

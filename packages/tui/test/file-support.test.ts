@@ -148,26 +148,33 @@ test("invalid overrides retain built-ins while an invalid reference drops only i
 
 test("language entries distinguish default gates, unconditional servers, and firstOf", async () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-first-of-"));
-  await withFileSupport(
-    {
-      files: {
-        fallback: { extensions: ["fallback"], language: "fallback" },
-        forced: { extensions: ["forced"], language: "forced" },
+  const biomeRepo = mkdtempSync(join(tmpdir(), "stet-first-of-"));
+  writeFileSync(join(biomeRepo, "biome.json"), "{}");
+  try {
+    await withFileSupport(
+      {
+        files: {
+          fallback: { extensions: ["fallback"], language: "fallback" },
+          forced: { extensions: ["forced"], language: "forced" },
+        },
+        languages: {
+          fallback: { languageId: "fallback", servers: [{ firstOf: ["biome", "typescript"] }] },
+          forced: { languageId: "forced", servers: [{ server: "biome" }] },
+        },
       },
-      languages: {
-        fallback: { languageId: "fallback", servers: [{ firstOf: ["biome", "typescript"] }] },
-        forced: { languageId: "forced", servers: [{ server: "biome" }] },
+      async (issues) => {
+        expect(issues).toEqual([]);
+        expect(await Effect.runPromise(activeServersForPath("a.fallback", repo))).toEqual([
+          "typescript",
+        ]);
+        expect(await Effect.runPromise(activeServersForPath("a.forced", repo))).toEqual(["biome"]);
+        expect(await Effect.runPromise(activeServersForPath("a.fallback", biomeRepo))).toEqual([
+          "biome",
+        ]);
       },
-    },
-    async (issues) => {
-      expect(issues).toEqual([]);
-      expect(await Effect.runPromise(activeServersForPath("a.fallback", repo))).toEqual([
-        "typescript",
-      ]);
-      expect(await Effect.runPromise(activeServersForPath("a.forced", repo))).toEqual(["biome"]);
-      writeFileSync(join(repo, "biome.json"), "{}");
-      expect(await Effect.runPromise(activeServersForPath("a.fallback", repo))).toEqual(["biome"]);
-    },
-  );
-  rmSync(repo, { force: true, recursive: true });
+    );
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+    rmSync(biomeRepo, { force: true, recursive: true });
+  }
 });

@@ -136,6 +136,44 @@ test("activeServersForPath gates biome on a repo's biome config", async () => {
   }
 });
 
+test("watched changes refresh the shared server gates for a repository", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "stet-biome-watch-"));
+  const refreshes = await Effect.runPromise(Queue.unbounded<string>());
+  const starts = await Effect.runPromise(Queue.unbounded<string>());
+  const completions = await Effect.runPromise(Queue.unbounded<string>());
+  const layer = LanguageServersLive.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(LspProcess)({
+          refreshes,
+          start: () => Effect.die("unused"),
+        }),
+        Layer.succeed(Provisioner)({
+          completions,
+          ensure: () => Effect.die("unused"),
+          starts,
+        }),
+      ),
+    ),
+  );
+
+  try {
+    expect(await Effect.runPromise(activeServersForPath("src/a.css", repo))).toEqual([]);
+    writeFileSync(join(repo, "biome.json"), "{}");
+    expect(await Effect.runPromise(activeServersForPath("src/a.css", repo))).toEqual([]);
+
+    await Effect.runPromise(
+      LanguageServers.use((servers) =>
+        servers.notifyWatchedFiles(repo, [{ path: "biome.json", renamed: true }], () => false),
+      ).pipe(Effect.provide(layer)),
+    );
+
+    expect(await Effect.runPromise(activeServersForPath("src/a.css", repo))).toEqual(["biome"]);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
 test("only the intel-capable server answers a code-intel pull for a file", async () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-intel-"));
   try {

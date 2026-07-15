@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.7.4...stet-v0.8.0) (2026-07-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** 💥 Replace combined language entries with separate files, icons, languages, and servers registries.
+
+### Features
+
+* **config:** ✨ make file support user configurable ([#299](https://github.com/jimmy-guzman/stet/issues/299)) ([a07f63b](https://github.com/jimmy-guzman/stet/commit/a07f63be0ebcc5913a3164fe6a4fc4b89f26c42b))
+* **diagnostics:** ✨ per-repo server gates via when & firstOf, adding ty ([#282](https://github.com/jimmy-guzman/stet/issues/282)) ([8e88a20](https://github.com/jimmy-guzman/stet/commit/8e88a2038ba1b5021cc2337dde7bdd5f71f2c3fb)), closes [#278](https://github.com/jimmy-guzman/stet/issues/278)
+* **diff:** ✨ highlight `.npmrc` and `.prettierrc` ([#294](https://github.com/jimmy-guzman/stet/issues/294)) ([2d7340d](https://github.com/jimmy-guzman/stet/commit/2d7340d23f258635d3197d052424a767dadff59b))
+* **editor:** ✨ open the IDE rooted at the repo for `o` ([#298](https://github.com/jimmy-guzman/stet/issues/298)) ([a63d647](https://github.com/jimmy-guzman/stet/commit/a63d647de3503d5e2914d133c3d6c0cffe043e08)), closes [#119](https://github.com/jimmy-guzman/stet/issues/119)
+
+
+### Bug Fixes
+
+* **diagnostics:** ✨ tell language servers when files change ([#281](https://github.com/jimmy-guzman/stet/issues/281)) ([a70caa8](https://github.com/jimmy-guzman/stet/commit/a70caa80f46d1e573d673eb5af7719d9610ebe18))
+
 ## [0.7.4](https://github.com/jimmy-guzman/stet/compare/stet-v0.7.3...stet-v0.7.4) (2026-07-14)
 
 

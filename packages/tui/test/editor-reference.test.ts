@@ -23,7 +23,7 @@ describe("openExternalCommand", () => {
 
 describe("buildEditorCommand", () => {
   test("substitutes {file} and {line} in a vim-style template", () => {
-    expect(buildEditorCommand("vim +{line} {file}", "/repo/src/foo.ts", 42)).toEqual([
+    expect(buildEditorCommand("vim +{line} {file}", "/repo/src/foo.ts", 42, "/repo")).toEqual([
       "vim",
       "+42",
       "/repo/src/foo.ts",
@@ -31,43 +31,81 @@ describe("buildEditorCommand", () => {
   });
 
   test("substitutes {file}:{line} in a colon-separated template", () => {
-    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", 10)).toEqual([
+    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", 10, "/repo")).toEqual([
       "hx",
       "/repo/src/foo.ts:10",
     ]);
   });
 
   test("substitutes VSCode --goto style", () => {
-    expect(buildEditorCommand("code --goto {file}:{line}", "/repo/src/foo.ts", 5)).toEqual([
+    expect(buildEditorCommand("code --goto {file}:{line}", "/repo/src/foo.ts", 5, "/repo")).toEqual(
+      ["code", "--goto", "/repo/src/foo.ts:5"],
+    );
+  });
+
+  test("substitutes {repo} with the repo root for a workspace open", () => {
+    expect(
+      buildEditorCommand("code {repo} --goto {file}:{line}", "/repo/src/foo.ts", 42, "/repo"),
+    ).toEqual(["code", "/repo", "--goto", "/repo/src/foo.ts:42"]);
+  });
+
+  test("keeps {repo} and the file when no line is provided", () => {
+    expect(
+      buildEditorCommand(
+        "code {repo} --goto {file}:{line}",
+        "/repo/src/foo.ts",
+        undefined,
+        "/repo",
+      ),
+    ).toEqual(["code", "/repo", "--goto", "/repo/src/foo.ts"]);
+  });
+
+  test("substitutes a JetBrains --line template", () => {
+    expect(
+      buildEditorCommand("idea {repo} --line {line} {file}", "/repo/src/foo.ts", 42, "/repo"),
+    ).toEqual(["idea", "/repo", "--line", "42", "/repo/src/foo.ts"]);
+  });
+
+  test("drops --line and its value together when no line is provided", () => {
+    expect(
+      buildEditorCommand(
+        "idea {repo} --line {line} {file}",
+        "/repo/src/foo.ts",
+        undefined,
+        "/repo",
+      ),
+    ).toEqual(["idea", "/repo", "/repo/src/foo.ts"]);
+  });
+
+  test("does not re-substitute a placeholder that appears inside a value", () => {
+    expect(buildEditorCommand("code {file}", "/repo/a{line}b.ts", 5, "/repo")).toEqual([
       "code",
-      "--goto",
-      "/repo/src/foo.ts:5",
+      "/repo/a{line}b.ts",
     ]);
   });
 
   test("drops args that contain {line} when no line is provided", () => {
-    expect(buildEditorCommand("vim +{line} {file}", "/repo/src/foo.ts", undefined)).toEqual([
-      "vim",
-      "/repo/src/foo.ts",
-    ]);
+    expect(
+      buildEditorCommand("vim +{line} {file}", "/repo/src/foo.ts", undefined, "/repo"),
+    ).toEqual(["vim", "/repo/src/foo.ts"]);
   });
 
   test("keeps {file} in combined {file}:{line} token when no line is provided", () => {
-    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", undefined)).toEqual([
+    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", undefined, "/repo")).toEqual([
       "hx",
       "/repo/src/foo.ts",
     ]);
   });
 
   test("handles a template with no {line} placeholder when line is undefined", () => {
-    expect(buildEditorCommand("cat {file}", "/repo/src/foo.ts", undefined)).toEqual([
+    expect(buildEditorCommand("cat {file}", "/repo/src/foo.ts", undefined, "/repo")).toEqual([
       "cat",
       "/repo/src/foo.ts",
     ]);
   });
 
   test("handles a template with no {line} placeholder when line is provided", () => {
-    expect(buildEditorCommand("cat {file}", "/repo/src/foo.ts", 99)).toEqual([
+    expect(buildEditorCommand("cat {file}", "/repo/src/foo.ts", 99, "/repo")).toEqual([
       "cat",
       "/repo/src/foo.ts",
     ]);
@@ -85,7 +123,7 @@ describe("resolveEditorTemplate", () => {
 
   test("expands a bare known editor name to its full template", () => {
     expect(resolveEditorTemplate("nvim")).toBe("nvim +{line} {file}");
-    expect(resolveEditorTemplate("code")).toBe("code --goto {file}:{line}");
+    expect(resolveEditorTemplate("code")).toBe("code {repo} --goto {file}:{line}");
     expect(resolveEditorTemplate("hx")).toBe("hx {file}:{line}");
   });
 
@@ -174,8 +212,10 @@ describe("resolveIdeTemplate", () => {
   });
 
   test("expands a bare known IDE name to its full template", () => {
-    expect(resolveIdeTemplate("code")).toBe("code --goto {file}:{line}");
-    expect(resolveIdeTemplate("zed")).toBe("zed {file}:{line}");
+    expect(resolveIdeTemplate("code")).toBe("code {repo} --goto {file}:{line}");
+    expect(resolveIdeTemplate("cursor")).toBe("cursor {repo} --goto {file}:{line}");
+    expect(resolveIdeTemplate("zed")).toBe("zed {repo} {file}:{line}");
+    expect(resolveIdeTemplate("idea")).toBe("idea {repo} --line {line} {file}");
     expect(resolveIdeTemplate("subl")).toBe("subl {file}:{line}");
   });
 

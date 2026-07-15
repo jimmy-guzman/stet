@@ -1,12 +1,18 @@
 import { basename } from "node:path";
 
-// Templates for editors whose line-number argument format is known.
-// Keys are the basename of the editor binary.
+/**
+ * Templates for editors whose line-number argument format is known, keyed by the editor binary
+ * basename. GUI IDEs carry `{repo}` (the repo root) so the o key opens the file as a workspace
+ * rather than a bare single-file window; terminal editors have no workspace and carry only
+ * `{file}`/`{line}`.
+ */
 const KNOWN_EDITOR_TEMPLATES: Record<string, string> = {
-  code: "code --goto {file}:{line}",
+  code: "code {repo} --goto {file}:{line}",
+  cursor: "cursor {repo} --goto {file}:{line}",
   emacs: "emacs +{line} {file}",
   helix: "helix {file}:{line}",
   hx: "hx {file}:{line}",
+  idea: "idea {repo} --line {line} {file}",
   kak: "kak +{line} {file}",
   micro: "micro {file}:{line}",
   nano: "nano +{line} {file}",
@@ -14,7 +20,7 @@ const KNOWN_EDITOR_TEMPLATES: Record<string, string> = {
   subl: "subl {file}:{line}",
   vi: "vi +{line} {file}",
   vim: "vim +{line} {file}",
-  zed: "zed {file}:{line}",
+  zed: "zed {repo} {file}:{line}",
 };
 
 /**
@@ -111,30 +117,44 @@ export function openExternalCommand(path: string, platform: string = process.pla
 }
 
 /**
- * Expands a template string into an argv array ready to pass to `Bun.spawn`.
+ * Expands a template string into an argv array ready to pass to `Bun.spawn`. `{file}` becomes the
+ * absolute file path, `{repo}` the repo root, and `{line}` the line number, substituted in a single
+ * pass so a value that itself contains a placeholder (a path with `{line}` in it) is never
+ * re-substituted.
  *
- * - `{file}` is replaced with the absolute file path.
- * - `{line}` is replaced with the line number.
- * - When `line` is undefined and a token contains `{line}` but also `{file}` (e.g. `{file}:{line}`),
- *   the `{line}` portion is stripped so the file path is still passed. Tokens that contain only
- *   `{line}` (e.g. `+{line}`) are dropped entirely.
+ * When `line` is undefined the line argument disappears in whatever surface form it took: a
+ * combined token like `{file}:{line}` keeps the file (the `:{line}` is stripped), a lone `{line}`
+ * token (e.g. `+{line}`) is dropped, and a bare option flag whose only value is that lone token
+ * (JetBrains' `--line {line}`) is dropped along with it.
  */
 export function buildEditorCommand(
   template: string,
   file: string,
   line: number | undefined,
+  repo: string,
 ): string[] {
-  return template
-    .split(/\s+/)
-    .filter((arg) => arg !== "")
-    .flatMap((arg) => {
-      if (arg.includes("{line}") && line === undefined) {
-        if (!arg.includes("{file}")) {
-          return [];
-        }
-        const stripped = arg.replace(/:\{line\}|\{line\}/g, "").replace(/\{file\}/g, file);
-        return stripped !== "" ? [stripped] : [];
+  const tokens = template.split(/\s+/).filter((token) => token !== "");
+  const noLine = line === undefined;
+  const isLoneLine = (token: string | undefined) =>
+    token !== undefined && token.includes("{line}") && !token.includes("{file}");
+  return tokens
+    .filter((token, index) => {
+      if (!noLine) {
+        return true;
       }
-      return [arg.replace(/\{file\}/g, file).replace(/\{line\}/g, String(line ?? ""))];
-    });
+      if (isLoneLine(token)) {
+        return false;
+      }
+      return !(
+        token.startsWith("-") &&
+        !/\{(?:file|line|repo)\}/.test(token) &&
+        isLoneLine(tokens[index + 1])
+      );
+    })
+    .map((token) =>
+      (noLine ? token.replace(/:\{line\}|\{line\}/g, "") : token).replace(
+        /\{(?<key>file|line|repo)\}/g,
+        (_, key) => (key === "file" ? file : key === "repo" ? repo : String(line)),
+      ),
+    );
 }

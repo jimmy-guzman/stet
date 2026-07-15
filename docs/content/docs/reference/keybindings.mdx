@@ -42,7 +42,7 @@ list inside the app.
 | `< / >`       | back / forward through viewer history                                   |
 | `y`           | copy path (tree), path:line:col (viewer), or the selected search result |
 | `Y`           | copy the entire contents of the viewed file                             |
-| `Shift+↑ / ↓` | extend a line selection (drag or shift-click also select)               |
+| `Shift+↑ / ↓` | extend a line selection (drag also selects)                             |
 | `C`           | copy the selected lines (or the caret line)                             |
 
 ## Tabs
@@ -95,3 +95,8 @@ hovering a theme in the switcher previews it live. Clicking a pane focuses it,
 and the wheel scrolls whichever pane the pointer is over. Right-click a tree row
 or a viewer symbol for a context menu of the actions that apply there, the same
 menu `Shift+F10` opens on the focused pane.
+
+Drag across diff lines to select a range. Holding the pointer at the top or
+bottom edge scrolls the viewer and continues the selection. Shift-click extends
+the range when the terminal forwards `Shift+mouse`; some terminals reserve that
+gesture for native text selection, so drag or `Shift+↑` / `Shift+↓` is portable.

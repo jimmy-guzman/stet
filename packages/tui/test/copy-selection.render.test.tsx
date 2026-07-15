@@ -22,6 +22,19 @@ function snippetRepo(prefix: string) {
   return repoRoot;
 }
 
+function longSnippetRepo(prefix: string) {
+  const repoRoot = createFixtureRepo(prefix, {
+    "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+    "src/snippet.ts": "// base\n",
+  });
+  const additions = Array.from(
+    { length: 40 },
+    (_, index) => `// line-${String(index + 1).padStart(2, "0")}`,
+  );
+  writeFileSync(join(repoRoot, "src", "snippet.ts"), ["// base", ...additions, ""].join("\n"));
+  return repoRoot;
+}
+
 describe("line selection copy", () => {
   test("Shift+arrow builds a selection, C copies its lines, a plain move clears it", async () => {
     const repoRoot = snippetRepo("stet-copy-sel-");
@@ -80,7 +93,7 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-copy-sel-mouse-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
       height: 30,
       width: 110,
     });
@@ -103,7 +116,14 @@ describe("line selection copy", () => {
       await settleUntil("caret on the first line", () => state.cursorIndex() === 0);
       expect(state.selectionRange()).toBeUndefined();
 
-      // Shift-click the last line: the band spans both, regardless of the click x.
+      // Start the range from the keyboard, then shift-click the last line. A
+      // Forwarded modifier must preserve the existing anchor rather than seeding a
+      // New one from the second line.
+      mockInput.pressArrow("down", { shift: true });
+      await settleUntil("keyboard selection reaches the second line", () => {
+        const range = state.selectionRange();
+        return range !== undefined && range[0] === 0 && range[1] === 1;
+      });
       await mouse.click(contentX, gammaRow, 0, { modifiers: { shift: true } });
       await settleUntil("selection spans the clicked range", () => {
         const range = state.selectionRange();
@@ -121,6 +141,65 @@ describe("line selection copy", () => {
         const range = state.selectionRange();
         return range !== undefined && range[0] === 0 && range[1] === 2;
       });
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("a held edge auto-scrolls the drag selection and stops on move or release", async () => {
+    const repoRoot = longSnippetRepo("stet-copy-sel-edge-");
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 18,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    const mouse = createMockMouse(renderer);
+
+    try {
+      const frame = await settleUntil(
+        "long diff shown",
+        (current) => current.includes("base") && current.includes("line-01"),
+      );
+      const frameRows = frame.split("\n");
+      const baseRow = frameRows.findIndex((row) => row.includes("base"));
+      expect(baseRow).toBeGreaterThan(0);
+      const viewerTop = baseRow;
+      const viewerBottom = viewerTop + state.viewerHeight() - 1;
+      const contentX = state.sidebarWidth() + 8;
+
+      await mouse.pressDown(contentX, baseRow);
+      await mouse.moveTo(contentX, viewerBottom);
+      await settleUntil("held bottom edge advances without more pointer motion", () => {
+        const range = state.selectionRange();
+        return state.viewerScrollTop() >= 2 && range !== undefined && range[1] > 8;
+      });
+
+      // One cell inside the viewport cancels the timer while the drag stays held.
+      await mouse.moveTo(contentX, viewerBottom - 1);
+      await Bun.sleep(20);
+      const stoppedInside = state.viewerScrollTop();
+      await Bun.sleep(130);
+      await renderOnce();
+      expect(state.viewerScrollTop()).toBe(stoppedInside);
+
+      // Reversing to the top edge scrolls back to the first row and clamps there.
+      await mouse.moveTo(contentX, viewerTop);
+      await settleUntil(
+        "held top edge reaches the file boundary",
+        () => state.viewerScrollTop() === 0,
+      );
+      await Bun.sleep(130);
+      await renderOnce();
+      expect(state.viewerScrollTop()).toBe(0);
+
+      await mouse.release(contentX, viewerTop);
+      const releasedAt = state.viewerScrollTop();
+      await Bun.sleep(130);
+      await renderOnce();
+      expect(state.viewerScrollTop()).toBe(releasedAt);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

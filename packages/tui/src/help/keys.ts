@@ -37,7 +37,7 @@ export const KEY_HELP: { entries: [combo: string, action: string][]; heading: st
       ["< / >", "back / forward through viewer history"],
       ["y", "copy path (tree), path:line:col (viewer), or the selected search result"],
       ["Y", "copy the entire contents of the viewed file"],
-      ["Shift+↑ / ↓", "extend a line selection (drag or shift-click also select)"],
+      ["Shift+↑ / ↓", "extend a line selection (drag also selects)"],
       ["C", "copy the selected lines (or the caret line)"],
     ],
     heading: "viewer",

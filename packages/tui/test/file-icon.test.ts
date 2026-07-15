@@ -55,7 +55,7 @@ describe("fileIcon", () => {
   });
 
   test("marks an extensionless README with the book glyph", () => {
-    expect(fileIcon("README")).toBe("\u{f02d}");
+    expect(fileIcon("README")).toBe("\u{eaa4}");
     expect(fileIcon("README")).toBe(fileIcon("readme.md"));
     // Only the exact name is a readme, so an extension still wins on any other readme.* file.
     expect(fileIcon("readme.css")).toBe("\u{e749}");

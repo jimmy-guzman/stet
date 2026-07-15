@@ -45,7 +45,7 @@ export const builtinIcons = new Map<string, string>([
   ["make", "\u{e673}"],
   ["license", "\u{e60a}"],
   ["git", "\u{e702}"],
-  ["readme", "\u{f02d}"],
+  ["readme", "\u{eaa4}"],
   ["codeowners", "\u{f510}"],
   ["heroku", "\u{e607}"],
   ["maven", "\u{e674}"],

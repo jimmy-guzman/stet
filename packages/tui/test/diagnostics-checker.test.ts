@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   allFindings,
@@ -8,6 +11,7 @@ import {
   findingsLineMap,
   initialCheckerState,
   markPending,
+  resolveBinary,
   stateForResolvedChecker,
 } from "@/diagnostics/checker";
 import type { CheckerState, Diagnostic } from "@/diagnostics/checker";
@@ -40,6 +44,64 @@ function stateWith(diagnostics: Diagnostic[]): CheckerState {
     diagnostics: stateForResolvedChecker("diagnostics", [file], diagnostics, "/repo"),
   };
 }
+
+describe("resolveBinary", () => {
+  test("Python discovery follows the active environment, repo virtualenv, then node_modules", () => {
+    const root = mkdtempSync(join(tmpdir(), "stet-binary-"));
+    const repo = join(root, "repo");
+    const activeBinary = join(root, "active", "bin", "probe");
+    const repoBinary = join(repo, ".venv", "bin", "probe");
+    const nodeBinary = join(repo, "node_modules", ".bin", "probe");
+    const previousVirtualEnv = process.env.VIRTUAL_ENV;
+    mkdirSync(join(root, "active", "bin"), { recursive: true });
+    mkdirSync(join(repo, ".venv", "bin"), { recursive: true });
+    mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(activeBinary, "");
+    writeFileSync(repoBinary, "");
+    writeFileSync(nodeBinary, "");
+    process.env.VIRTUAL_ENV = join(root, "active");
+
+    try {
+      expect(resolveBinary(repo, "probe", "python")).toBe(activeBinary);
+      rmSync(activeBinary);
+      expect(resolveBinary(repo, "probe", "python")).toBe(repoBinary);
+      rmSync(repoBinary);
+      expect(resolveBinary(repo, "probe", "python")).toBe(nodeBinary);
+    } finally {
+      if (previousVirtualEnv === undefined) {
+        delete process.env.VIRTUAL_ENV;
+      } else {
+        process.env.VIRTUAL_ENV = previousVirtualEnv;
+      }
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  test("default discovery ignores Python environments", () => {
+    const root = mkdtempSync(join(tmpdir(), "stet-binary-"));
+    const repo = join(root, "repo");
+    const nodeBinary = join(repo, "node_modules", ".bin", "probe");
+    const previousVirtualEnv = process.env.VIRTUAL_ENV;
+    mkdirSync(join(root, "active", "bin"), { recursive: true });
+    mkdirSync(join(repo, ".venv", "bin"), { recursive: true });
+    mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(root, "active", "bin", "probe"), "");
+    writeFileSync(join(repo, ".venv", "bin", "probe"), "");
+    writeFileSync(nodeBinary, "");
+    process.env.VIRTUAL_ENV = join(root, "active");
+
+    try {
+      expect(resolveBinary(repo, "probe")).toBe(nodeBinary);
+    } finally {
+      if (previousVirtualEnv === undefined) {
+        delete process.env.VIRTUAL_ENV;
+      } else {
+        process.env.VIRTUAL_ENV = previousVirtualEnv;
+      }
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+});
 
 describe("initialCheckerState", () => {
   test("starts every changed file as pending", () => {

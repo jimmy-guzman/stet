@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 import type { ChangedFile } from "@/git/model";
 import { relativize } from "@/utils/path";
@@ -218,15 +219,23 @@ function initialFileState(files: ChangedFile[]) {
   );
 }
 
+export type BinaryDiscovery = "python";
+
 /**
- * Resolves a server binary without a package-manager wrapper: prefer the repo-local
- * `node_modules/.bin` path, else the bare name if on PATH. Avoids coupling the target repo to bunx
- * and any registry re-resolution.
+ * Resolves a server binary without a package-manager wrapper. Python discovery follows the active
+ * interpreter environment, then the repository's conventional virtualenv; every strategy retains
+ * the existing repo-local `node_modules/.bin` and PATH fallbacks.
  */
-export function resolveBinary(dir: string, binary: string) {
-  const local = `${dir}/node_modules/.bin/${binary}`;
-  if (existsSync(local)) {
-    return local;
-  }
-  return Bun.which(binary) ?? undefined;
+export function resolveBinary(dir: string, binary: string, discovery?: BinaryDiscovery) {
+  const virtualEnv = process.env.VIRTUAL_ENV;
+  const directories =
+    discovery === "python"
+      ? [
+          ...(virtualEnv === undefined || virtualEnv === "" ? [] : [join(virtualEnv, "bin")]),
+          join(dir, ".venv", "bin"),
+          join(dir, "node_modules", ".bin"),
+        ]
+      : [join(dir, "node_modules", ".bin")];
+  const local = directories.map((directory) => join(directory, binary)).find(existsSync);
+  return local ?? Bun.which(binary) ?? undefined;
 }

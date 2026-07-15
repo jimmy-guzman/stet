@@ -137,8 +137,10 @@ See [code intelligence](/docs/guides/code-intelligence) for the keys and flows.
 
 ## How servers are found
 
-A server resolves from the repo's own `node_modules/.bin`, then your `PATH`,
-then an existing pinned copy in stet's LSP cache. That cache is
+Most servers resolve from the repo's own `node_modules/.bin`, then your `PATH`,
+then an existing pinned copy in stet's LSP cache. Python servers first check the
+active `$VIRTUAL_ENV/bin`, then the repo's `.venv/bin`, before using those same
+`node_modules/.bin`, `PATH`, and cache fallbacks. That cache is
 `$XDG_CACHE_HOME/stet/lsp` when `XDG_CACHE_HOME` is set, and
 `~/.cache/stet/lsp` otherwise. If none has the server, stet downloads it into
 that cache: packages distributed through `npm` (this path needs `npm` on your

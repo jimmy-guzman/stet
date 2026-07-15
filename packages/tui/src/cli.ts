@@ -212,10 +212,13 @@ Options:
   --ide <template>
       Command template for a GUI / IDE (o key). Spawns the process and
       returns immediately; the renderer stays live in its pane.
+      Use {file} for the path, {line} for the line, and {repo} for the
+      repo root so the IDE opens the file as a workspace (a bare
+      code / cursor / zed / idea already does).
       Examples:
-        --ide "code --goto {file}:{line}"
-        --ide "zed {file}:{line}"
-        --ide "subl {file}:{line}"
+        --ide "code {repo} --goto {file}:{line}"
+        --ide "zed {repo} {file}:{line}"
+        --ide "idea {repo} --line {line} {file}"
       Falls back to STET_IDE, then $VISUAL when it differs from $EDITOR.
       If nothing is configured, o does nothing.
 

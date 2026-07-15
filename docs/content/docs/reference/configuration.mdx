@@ -30,21 +30,24 @@ JSONC, so comments and trailing commas are allowed.
 Use `editor` and `ide` to set persistent command templates for the `e` key
 (terminal editor) and the `o` key (GUI / IDE). Both use `{file}` and `{line}` as
 placeholders; `{line}` is omitted automatically when no cursor line is
-available.
+available. The `ide` template also takes `{repo}` (the repo root), which passes
+the folder to the IDE so it opens the file as a workspace instead of a bare
+single-file window.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
   "editor": "nvim +{line} {file}",
-  "ide": "code --goto {file}:{line}",
+  "ide": "code {repo} --goto {file}:{line}",
 }
 ```
 
 Without a config value, each key falls back to `STET_EDITOR` / `STET_IDE`, then
 `$EDITOR` / `$VISUAL`, then `vim` (editor only); `o` does nothing if nothing is
 configured. A bare editor name with no `{file}` is expanded to a known template
-(`nvim` becomes `nvim +{line} {file}`, `code` becomes `code --goto
-{file}:{line}`, and so on). Templates are split on whitespace, so an editor
-binary path with spaces is not supported.
+(`nvim` becomes `nvim +{line} {file}`, `code` becomes `code {repo} --goto
+{file}:{line}`, and so on), so the known GUI IDEs (`code`, `cursor`, `zed`,
+`idea`) open a workspace out of the box. Templates are split on whitespace, so an
+editor binary path with spaces is not supported.
 
 The `O` key opens the current file in your OS default app (`open` on macOS,
 `xdg-open` on Linux). It uses the system handler, so it needs no template or

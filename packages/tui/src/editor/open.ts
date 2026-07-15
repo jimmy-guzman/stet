@@ -33,7 +33,7 @@ export async function openInEditor(
     return;
   }
   const cwd = state.gitModel().repoRoot;
-  const argv = buildEditorCommand(template, join(cwd, filePath), line);
+  const argv = buildEditorCommand(template, join(cwd, filePath), line, cwd);
   if (argv.length === 0) {
     return;
   }

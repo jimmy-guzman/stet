@@ -89,8 +89,8 @@ stet --staged   # start in the staged scope
 stet --unstaged # start in the unstaged scope
 stet --no-icons # plain tree without Nerd Font file-type icons
 stet --wrap     # wrap long lines in the viewer instead of scrolling them horizontally
-stet --editor "nvim +{line} {file}"       # terminal editor for the e key
-stet --ide    "code --goto {file}:{line}" # GUI/IDE for the o key
+stet --editor "nvim +{line} {file}"              # terminal editor for the e key
+stet --ide    "code {repo} --goto {file}:{line}" # GUI/IDE for the o key
 ```
 
 The repository tree opens beside the file viewer. Changed files open as diffs.

@@ -17,7 +17,7 @@ describe("help overlay", () => {
       // Tall enough to fit the whole grouped keybindings list (its section headers
       // And spacers included), so the last-row assertions below verify it sizes to
       // Show every shortcut (no clip) when there's room.
-      height: 70,
+      height: 71,
       width: 120,
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
@@ -45,6 +45,9 @@ describe("help overlay", () => {
       expect(help).toContain("fold / unfold the region at the caret");
       expect(help).toContain("toggle long-line wrap in the viewer");
       expect(help).toContain("toggle the file tree sidebar");
+      // `]` re-opens a collapsed sidebar; the resize row documents it (and, being the
+      // Row that now wraps, its text appearing proves the height fits the wrapped list).
+      expect(help).toContain("grow (reopens)");
       expect(help).toContain("open in terminal editor");
       expect(help).toContain("open in GUI / IDE");
       // The list sizes to fit (wrapped descriptions included), so even the last

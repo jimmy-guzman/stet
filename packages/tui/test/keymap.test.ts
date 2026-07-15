@@ -118,6 +118,16 @@ describe("createKeyHandler", () => {
     expect(state.selectedPath()).toBe("b.ts");
   });
 
+  test("] re-opens a collapsed sidebar", () => {
+    state.nudgeSidebarWidth(-100); // Shrink past the minimum -> collapsed
+    expect(state.sidebarOpen()).toBe(false);
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ name: "]" }));
+
+    expect(state.sidebarOpen()).toBe(true);
+  });
+
   test("ctrl-t pins; a later navigation opens a fresh preview; { } cycle; ctrl-w closes", () => {
     state.selectFile("a.ts");
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });

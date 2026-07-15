@@ -1635,6 +1635,14 @@ function createState() {
   // Relative to what's on screen, not a stale override. Shrinking past the
   // Minimum collapses the sidebar rather than clamping, like an IDE pane.
   const nudgeSidebarWidth = (delta: number) => {
+    if (!sidebarOpen()) {
+      // A grow (`]`) re-opens a collapsed sidebar to its remembered width, the
+      // Inverse of the shrink past the minimum that collapsed it; a shrink is a no-op.
+      if (delta > 0) {
+        setSidebarOpen(true);
+      }
+      return;
+    }
     const next = (sidebarWidthOverride() ?? sidebarWidth()) + delta;
     if (next < SIDEBAR_MIN_WIDTH) {
       collapseSidebar();

@@ -102,3 +102,21 @@ test("a closed sidebar has zero width regardless of override", () => {
   state.setSidebarOpen(false);
   expect(state.sidebarWidth()).toBe(0);
 });
+
+test("growing re-opens a collapsed sidebar to its remembered width", () => {
+  state.setTerminalWidth(80);
+  state.nudgeSidebarWidth(16); // 34 -> 50, stored
+  state.nudgeSidebarWidth(-100); // Collapses, override intact
+  expect(state.sidebarOpen()).toBe(false);
+
+  state.nudgeSidebarWidth(2); // `]` re-opens
+  expect(state.sidebarOpen()).toBe(true);
+  expect(state.sidebarWidth()).toBe(50);
+});
+
+test("shrinking a collapsed sidebar stays closed", () => {
+  state.setTerminalWidth(80);
+  state.nudgeSidebarWidth(-100); // Collapses
+  state.nudgeSidebarWidth(-2); // `[` is a no-op while closed
+  expect(state.sidebarOpen()).toBe(false);
+});

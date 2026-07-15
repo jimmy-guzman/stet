@@ -11,6 +11,10 @@ import type {
 } from "./model";
 import { defaultFileSupportRegistry } from "./registry";
 
+type MutableFileAssociation = {
+  -readonly [Key in keyof FileAssociation]: FileAssociation[Key];
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -246,7 +250,7 @@ function resolveFiles(
       continue;
     }
     const base = files.get(name);
-    const candidate: FileAssociation = { ...base };
+    const candidate: MutableFileAssociation = { ...base };
     let valid = true;
     for (const field of ["extensions", "filenames", "globs"] as const) {
       if (entry[field] !== undefined) {
@@ -284,19 +288,19 @@ function resolveFiles(
     }
     if (typeof candidate.icon === "string" && !icons.has(candidate.icon)) {
       issues.push(`file "${name}": unknown icon "${candidate.icon}"; dropping the icon facet`);
-      delete (candidate as { icon?: string | false }).icon;
+      delete candidate.icon;
     }
     if (typeof candidate.language === "string" && !languages.has(candidate.language)) {
       issues.push(
         `file "${name}": unknown language "${candidate.language}"; dropping the language facet`,
       );
-      delete (candidate as { language?: string | false }).language;
+      delete candidate.language;
     }
     if (typeof candidate.syntax === "string" && !syntaxIds.has(candidate.syntax)) {
       issues.push(
         `file "${name}": unknown syntax "${candidate.syntax}"; dropping the syntax facet`,
       );
-      delete (candidate as { syntax?: string | false }).syntax;
+      delete candidate.syntax;
     }
     const selectors =
       (candidate.extensions?.length ?? 0) +

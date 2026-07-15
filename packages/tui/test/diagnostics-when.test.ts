@@ -5,16 +5,28 @@ import { join } from "node:path";
 
 import { evaluateWhen, parseWhen } from "@/diagnostics/when";
 
-test("when paths are repo-bound and arrays are alternatives", async () => {
-  const repo = mkdtempSync(join(tmpdir(), "stet-when-"));
-  mkdirSync(join(repo, "config"));
+test("when paths resolve from the repo root, including parent markers", async () => {
+  const root = mkdtempSync(join(tmpdir(), "stet-when-"));
+  const repo = join(root, "repo");
+  mkdirSync(join(repo, "config"), { recursive: true });
   writeFileSync(join(repo, "config", "tool.json"), "{}");
+  writeFileSync(join(root, "workspace.json"), '{"tool":{"shared":true}}');
   try {
     expect(await evaluateWhen(["missing.json", "config/tool.json"], repo)).toBe(true);
-    expect(parseWhen("../outside").when).toBeUndefined();
+    expect(await evaluateWhen("../workspace.json", repo)).toBe(true);
+    expect(await evaluateWhen({ file: "../workspace.json", key: ["tool", "shared"] }, repo)).toBe(
+      true,
+    );
+    expect(parseWhen("../workspace.json")).toEqual({
+      issues: [],
+      when: ["../workspace.json"],
+    });
+    expect(parseWhen({ file: "../workspace.json", key: ["tool", "shared"] }).issues).toEqual([]);
+    expect(parseWhen(join(root, "workspace.json")).when).toBeUndefined();
+    expect(parseWhen({ file: join(root, "workspace.json"), key: ["tool"] }).when).toBeUndefined();
     expect(parseWhen([]).when).toBeUndefined();
   } finally {
-    rmSync(repo, { force: true, recursive: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 

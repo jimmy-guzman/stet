@@ -11,9 +11,15 @@ interface CompiledAssociation {
   readonly order: number;
 }
 
-const files = new Map(builtinFiles);
-const icons = new Map(builtinIcons);
-const languages = new Map(builtinLanguages);
+function freshRegistry() {
+  return {
+    files: new Map(builtinFiles),
+    icons: new Map(builtinIcons),
+    languages: new Map(builtinLanguages),
+  };
+}
+
+const { files, icons, languages } = freshRegistry();
 
 function compileAssociations() {
   return [...files.values()].map((association, order): CompiledAssociation => {
@@ -141,11 +147,7 @@ export function registerFileSupport(registry: FileSupportRegistry) {
 }
 
 export function defaultFileSupportRegistry(): FileSupportRegistry {
-  return {
-    files: new Map(builtinFiles),
-    icons: new Map(builtinIcons),
-    languages: new Map(builtinLanguages),
-  };
+  return freshRegistry();
 }
 
 export function snapshotFileSupport() {

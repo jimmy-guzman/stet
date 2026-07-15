@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 
 type WhenCondition =
   | string
@@ -20,15 +20,11 @@ function isConditionList(when: When): when is readonly WhenCondition[] {
   return Array.isArray(when);
 }
 
-function pathInsideRepo(repoRoot: string, file: string) {
+function resolveWhenPath(repoRoot: string, file: string) {
   if (isAbsolute(file)) {
     return undefined;
   }
-  const path = resolve(repoRoot, file);
-  const fromRoot = relative(repoRoot, path);
-  return fromRoot === "" || (!fromRoot.startsWith(`..${sep}`) && fromRoot !== "..")
-    ? path
-    : undefined;
+  return resolve(repoRoot, file);
 }
 
 async function parseManifest(path: string) {
@@ -46,7 +42,7 @@ function readManifest(file: string, repoRoot: string, manifests: ManifestCache) 
   if (existing !== undefined) {
     return existing;
   }
-  const path = pathInsideRepo(repoRoot, file);
+  const path = resolveWhenPath(repoRoot, file);
   const manifest = path === undefined ? Promise.resolve(undefined) : parseManifest(path);
   manifests.set(file, manifest);
   return manifest;
@@ -100,7 +96,7 @@ async function evaluateCondition(
   manifests: ManifestCache,
 ) {
   if (typeof condition === "string") {
-    const path = pathInsideRepo(repoRoot, condition);
+    const path = resolveWhenPath(repoRoot, condition);
     if (path === undefined) {
       return false;
     }
@@ -137,7 +133,7 @@ export async function evaluateWhen(
   return results.some(Boolean);
 }
 
-/** Validate config data into the gate grammar without allowing filesystem escape paths. */
+/** Validate config data into the relative-path gate grammar. */
 export function parseWhen(value: unknown): { issues: string[]; when?: When } {
   const raw = Array.isArray(value) ? value : [value];
   if (raw.length === 0) {
@@ -150,8 +146,8 @@ export function parseWhen(value: unknown): { issues: string[]; when?: When } {
         issues.push("a when path must not contain a null byte");
         return [];
       }
-      if (entry === "" || isAbsolute(entry) || entry.split("/").includes("..")) {
-        issues.push("a when path must stay inside the repository");
+      if (entry === "" || isAbsolute(entry)) {
+        issues.push("a when path must be a non-empty relative path");
         return [];
       }
       return [entry];
@@ -168,13 +164,8 @@ export function parseWhen(value: unknown): { issues: string[]; when?: When } {
       issues.push("a when file must not contain a null byte");
       return [];
     }
-    if (
-      typeof entry.file !== "string" ||
-      entry.file === "" ||
-      isAbsolute(entry.file) ||
-      entry.file.split("/").includes("..")
-    ) {
-      issues.push("a when file must stay inside the repository");
+    if (typeof entry.file !== "string" || entry.file === "" || isAbsolute(entry.file)) {
+      issues.push("a when file must be a non-empty relative path");
       return [];
     }
     if ("key" in entry === "dependency" in entry) {

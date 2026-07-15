@@ -46,8 +46,7 @@ export const ThemeSchema = Schema.Struct({
     removedSign: Hex,
   }),
   find: Schema.Struct({ matchBg: Hex }),
-  // Icon keys are user-extensible, so this is a dynamic catalog rather than a closed token struct.
-  // Missing entries intentionally fall back to `text.muted` at the render site.
+  /** User-extensible icon colors; missing names fall back to `text.muted` at render sites. */
   icon: Schema.Record(Schema.String, Hex),
   kind: Schema.Struct(kindTokens),
   // The viewer's per-line provenance rail: a five-tier scrutiny timeline as one neutral

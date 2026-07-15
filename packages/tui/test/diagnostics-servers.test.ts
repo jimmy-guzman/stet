@@ -144,16 +144,19 @@ test("lspLanguageId maps non-JS/TS file types to their LSP language ids", () => 
 
 test("serversProviding keeps only servers whose static hint can answer the intent", async () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-capabilities-"));
-  // Only typescript declares definition/references; oxlint pushes diagnostics and declares neither,
-  // So intel never acquires it for a code-intel pull.
-  expect(await serversProviding("src/a.ts", "definition", repo)).toEqual(["typescript"]);
-  expect(await serversProviding("src/a.tsx", "references", repo)).toEqual(["typescript"]);
-  expect(await serversProviding("src/a.ts", "implementation", repo)).toEqual(["typescript"]);
-  // Json and yaml only push diagnostics (validation-only), so they never surface for a code-intel pull.
-  expect(await serversProviding("package.json", "definition", repo)).toEqual([]);
-  expect(await serversProviding("config.yaml", "hover", repo)).toEqual([]);
-  expect(await serversProviding("README.md", "definition", repo)).toEqual([]);
-  rmSync(repo, { force: true, recursive: true });
+  try {
+    // Only typescript declares definition/references; oxlint pushes diagnostics and declares neither,
+    // So intel never acquires it for a code-intel pull.
+    expect(await serversProviding("src/a.ts", "definition", repo)).toEqual(["typescript"]);
+    expect(await serversProviding("src/a.tsx", "references", repo)).toEqual(["typescript"]);
+    expect(await serversProviding("src/a.ts", "implementation", repo)).toEqual(["typescript"]);
+    // Json and yaml only push diagnostics (validation-only), so they never surface for a code-intel pull.
+    expect(await serversProviding("package.json", "definition", repo)).toEqual([]);
+    expect(await serversProviding("config.yaml", "hover", repo)).toEqual([]);
+    expect(await serversProviding("README.md", "definition", repo)).toEqual([]);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
 });
 
 test("resolveServerCommand returns undefined for a language with no registered server", () => {

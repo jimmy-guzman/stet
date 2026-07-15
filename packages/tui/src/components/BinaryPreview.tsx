@@ -7,14 +7,6 @@ import { formatBytes } from "@/utils/format-bytes";
 
 import { FileIcon } from "./FileIcon";
 
-// The viewer surface for a binary file, which stet cannot render as pixels (OpenTUI has no SIXEL/
-// Kitty graphics path, anomalyco/opentui#92). Instead of a blank pane it shows the metadata an IDE
-// Surfaces for an image: type, dimensions, and size, in file-content mode from the single viewed
-// Side and in diff mode as an old -> new delta. Centered like the empty "nothing to inspect" state,
-// Theme tokens only, and reserving the full viewer height so opening a binary never shifts layout.
-// The heading reuses the fixed-width file icon shared by list surfaces. Dimensions use `x` and the
-// Delta `->`, both width-1 ASCII, since math glyph widths vary between terminal fonts.
-
 const dimensions = (image: ImageMeta | undefined) =>
   image !== undefined && image.width > 0 && image.height > 0
     ? `${image.width}x${image.height}`
@@ -28,6 +20,10 @@ const summary = (side: SideMeta) =>
 const typeLabel = (side: SideMeta | undefined) =>
   side?.image !== undefined ? `${side.image.format} image` : "Binary file";
 
+/**
+ * Shows metadata instead of a blank pane because OpenTUI has no SIXEL or Kitty graphics path.
+ * Reserves the viewer height and uses width-stable ASCII for dimensions and deltas.
+ */
 export function BinaryPreview(props: {
   path: string;
   height: number;

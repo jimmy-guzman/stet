@@ -96,11 +96,11 @@ export const builtinFiles = new Map<string, FileAssociation>([
   ["language-typescriptreact", { extensions: ["tsx"], language: "typescriptreact" }],
   ["language-yaml", { extensions: ["yaml", "yml"], language: "yaml" }],
 
-  ["syntax-env", { filenames: [".env"], syntax: "dotenv" }],
+  ["syntax-env", { caseSensitive: false, filenames: [".env"], syntax: "dotenv" }],
   ["syntax-npmrc", { filenames: [".npmrc"], syntax: "ini" }],
   ["syntax-prettierrc", { filenames: [".prettierrc"], syntax: "jsonc" }],
   ["syntax-gradle", { globs: ["*.gradle"], syntax: "groovy" }],
-  ["syntax-ruby-template", { globs: ["*.rb.tmpl"], syntax: "ruby" }],
+  ["syntax-ruby-template", { caseSensitive: false, globs: ["*.rb.tmpl"], syntax: "ruby" }],
 
   iconExtensions("icon-typescript", "typescript", ["ts", "mts", "cts"]),
   iconExtensions("icon-react", "react", ["tsx", "jsx"]),

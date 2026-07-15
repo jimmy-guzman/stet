@@ -122,15 +122,12 @@ profile, a file association, and an icon:
   "files": {
     "lua": { "extensions": ["lua"], "syntax": "lua", "icon": "lua", "language": "lua" },
   },
-  "themes": {
-    "my-dark": { "base": "dark", "icon": { "lua": "#71c1f7" } },
-  },
 }
 ```
 
-A configured command resolves from the repo's `node_modules/.bin`, then `PATH`, or runs an absolute
-path as-is. User commands are never auto-provisioned. Overriding a built-in server's `command` also
-drops its trusted built-in provisioning definition.
+A configured command resolves from the repo's `node_modules/.bin`, then `PATH`. User commands are
+never auto-provisioned. Overriding a built-in server's `command` also drops its trusted built-in
+provisioning definition.
 
 ### Match files
 
@@ -177,7 +174,8 @@ per repository. Capability hints may contain `definition`, `references`, `hover`
 authoritative check.
 
 `when` is declarative data, never a shell command. It accepts a repo-relative path, a manifest key,
-or a Python dependency declaration. An array means any condition may match:
+or a Python dependency declaration. Relative paths may include parent-directory segments; absolute
+paths are rejected. An array means any condition may match:
 
 ```jsonc
 "when": [

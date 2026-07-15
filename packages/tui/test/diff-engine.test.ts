@@ -186,12 +186,14 @@ describe("languageForPath", () => {
 
   test("peels a .rb.tmpl template to Ruby, leaving other .tmpl files as text", () => {
     expect(languageForPath("script/stet.rb.tmpl")).toBe("ruby");
+    expect(languageForPath("script/STET.RB.TMPL")).toBe("ruby");
     expect(languageForPath("a/b/Formula.rb")).toBe("ruby");
     expect(languageForPath("config.yaml.tmpl")).toBe("text");
   });
 
   test("resolves config dotfiles by name in any directory", () => {
     expect(languageForPath(".env")).toBe("dotenv");
+    expect(languageForPath(".ENV")).toBe("dotenv");
     expect(languageForPath("packages/tui/.env")).toBe("dotenv");
     expect(languageForPath(".npmrc")).toBe("ini");
     expect(languageForPath("packages/tui/.npmrc")).toBe("ini");

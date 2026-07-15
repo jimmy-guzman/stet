@@ -48,7 +48,7 @@ export const darkTheme: Theme = {
     shell: "#a6da95",
     spreadsheet: "#a6da95",
     storybook: "#f5bde6",
-    test: "#5ab66b",
+    test: "#6f9e7a",
     toml: "#ee99a0",
     tsconfig: "#8aadf4",
     typescript: "#8aadf4",

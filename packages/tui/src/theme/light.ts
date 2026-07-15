@@ -48,7 +48,7 @@ export const lightTheme: Theme = {
     shell: "#287c42",
     spreadsheet: "#287c42",
     storybook: "#ab3276",
-    test: "#257c3a",
+    test: "#4b7757",
     toml: "#c83b49",
     tsconfig: "#1e66f5",
     typescript: "#1e66f5",

@@ -34,6 +34,8 @@ export interface CommandMenuInput {
   selectedPath: string | undefined;
   /** Whether the caret sits on a symbol (`caretWord`), gating the intel actions. */
   hasSymbol: boolean;
+  /** The config's intel switch; off omits every intel action (omitted, not disabled). */
+  intelEnabled: boolean;
   /** The caret line (`newLine ?? oldLine`) for copy-reference and editor open. */
   caretLine: number | undefined;
   /** The caret's 1-based column, or undefined at line level (`caretColumn`). */
@@ -55,19 +57,22 @@ function viewerItems(input: CommandMenuInput): CommandMenuItem[] {
   }
   // Line-level (a gutter caret) has no column, so copy-reference degrades to path:line.
   const column = input.caretLine === undefined ? undefined : input.caretColumn;
-  const intel: CommandMenuItem[] = input.hasSymbol
-    ? [
-        { action: { kind: "goToDefinition" }, label: "Go to definition" },
-        { action: { kind: "findReferences" }, label: "Find references" },
-        { action: { kind: "findImplementations" }, label: "Find implementations" },
-        { action: { kind: "callHierarchy" }, label: "Call hierarchy" },
-        { action: { kind: "showHover" }, label: "Quick info" },
-      ]
-    : [];
+  const intel: CommandMenuItem[] =
+    input.hasSymbol && input.intelEnabled
+      ? [
+          { action: { kind: "goToDefinition" }, label: "Go to definition" },
+          { action: { kind: "findReferences" }, label: "Find references" },
+          { action: { kind: "findImplementations" }, label: "Find implementations" },
+          { action: { kind: "callHierarchy" }, label: "Call hierarchy" },
+          { action: { kind: "showHover" }, label: "Quick info" },
+        ]
+      : [];
   return [
     ...intel,
-    // Always available: the outline addresses the whole file, so it needs no caret symbol.
-    { action: { kind: "findSymbols" }, label: "Find symbols" },
+    // Needs no caret symbol (the outline addresses the whole file), only the intel switch.
+    ...(input.intelEnabled
+      ? [{ action: { kind: "findSymbols" }, label: "Find symbols" } as const]
+      : []),
     {
       action: { column, kind: "copyReference", line: input.caretLine, path },
       label: "Copy reference",

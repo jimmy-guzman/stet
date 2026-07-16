@@ -690,6 +690,10 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "r" && !key.shift) {
+        if (!state.diagnosticsEnabled()) {
+          state.notify("diagnostics disabled");
+          return;
+        }
         void state.runChecks(state.gitModel());
         return;
       }

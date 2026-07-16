@@ -33,7 +33,8 @@
           "Context.Service",
           "Schema.Struct",
           "Schema.Union",
-          "Schema.Record"
+          "Schema.Record",
+          "Schema.Literals"
         ]
       }
     ],

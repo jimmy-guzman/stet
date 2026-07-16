@@ -472,6 +472,12 @@ function createState() {
   );
   const [commandMenuGuard, setCommandMenuGuard] = tracked<CommandMenuGuard | undefined>(undefined);
   const [iconsEnabled, setIconsEnabled] = tracked(true);
+  // Feature switches, seeded from config. Diagnostics off silences the run loop
+  // (no servers spawn for checks); intel off silences the caret pulls. They are
+  // Independent switches over the same server pool: intel-only spawns servers on
+  // Demand, diagnostics-only never answers a caret.
+  const [diagnosticsEnabled, setDiagnosticsEnabled] = tracked(true);
+  const [intelEnabled, setIntelEnabled] = tracked(true);
   // The per-line provenance rail (blame reframed): off by default, toggled by `a`. The three
   // Timeline anchors: `sessionCommits` = SHAs in `sessionBase..HEAD` (since launch),
   // `branchCommits` = SHAs in `branchBase..HEAD` (this branch, a superset of the session set),
@@ -1707,6 +1713,7 @@ function createState() {
         caretLine: cursorLineNumber(),
         context: "viewer",
         hasSymbol: caretWord() !== undefined,
+        intelEnabled: intelEnabled(),
         selectedPath: selectedPath(),
         treeNode: undefined,
         truncated: truncated(),
@@ -1718,6 +1725,7 @@ function createState() {
       caretLine: undefined,
       context: "tree",
       hasSymbol: false,
+      intelEnabled: intelEnabled(),
       selectedPath: selectedPath(),
       treeNode: node === undefined ? undefined : { id: node.id, kind: node.type, path: node.path },
       truncated: false,
@@ -2459,6 +2467,9 @@ function createState() {
   let checksController: AbortController | undefined;
   onReset(() => checksController?.abort());
   async function runChecks(model: GitModel) {
+    if (!diagnosticsEnabled()) {
+      return;
+    }
     checksController?.abort();
     const controller = new AbortController();
     checksController = controller;
@@ -2845,6 +2856,10 @@ function createState() {
   }
 
   async function goToDefinition() {
+    if (!intelEnabled()) {
+      notify("intel disabled");
+      return;
+    }
     // A fresh invocation supersedes any in-flight lookup, even when the guard below no-ops, so a
     // Stale result can't land a jump after the user has moved on.
     intelController?.abort();
@@ -2873,6 +2888,10 @@ function createState() {
   }
 
   async function findImplementations() {
+    if (!intelEnabled()) {
+      notify("intel disabled");
+      return;
+    }
     intelController?.abort();
     const caret = caretTarget();
     if (caret === undefined) {
@@ -3039,6 +3058,10 @@ function createState() {
   // Results overlay at once in a loading state, then resolves it in place to the list, an
   // Empty screen, or an error; read-only, degrades to a notice, never throws.
   async function findReferences() {
+    if (!intelEnabled()) {
+      notify("intel disabled");
+      return;
+    }
     intelController?.abort();
     const caret = caretTarget();
     if (caret === undefined) {
@@ -3108,6 +3131,10 @@ function createState() {
   // Call hierarchy (Shift+H) for the symbol under the caret, opening on incoming calls (who calls
   // This); `Tab` flips to outgoing. Read-only two-step LSP pull, degrades to a notice, never throws.
   function callHierarchy() {
+    if (!intelEnabled()) {
+      notify("intel disabled");
+      return;
+    }
     intelController?.abort();
     const caret = caretTarget();
     if (caret === undefined) {
@@ -3189,6 +3216,10 @@ function createState() {
   // The query. Opens at once in a loading state, then resolves to the list, an empty screen, or
   // An error; read-only, degrades in place, never throws.
   async function findSymbols() {
+    if (!intelEnabled()) {
+      notify("intel disabled");
+      return;
+    }
     symbolsController?.abort();
     const path = selectedPath();
     if (path === undefined) {
@@ -3353,6 +3384,10 @@ function createState() {
   // Read-only pull and guards as `goToDefinition`, but the reply is text into the
   // Decoration seam instead of a jump; degrades to an empty/error card, never throws.
   async function showHover() {
+    if (!intelEnabled()) {
+      notify("intel disabled");
+      return;
+    }
     hoverController?.abort();
     const caret = caretTarget();
     if (caret === undefined) {
@@ -3957,7 +3992,8 @@ function createState() {
         setProblemIndex(0);
         // Worktree A's diagnostics are meaningless in B; without this, markPending and
         // The cross-file carry-forward would accumulate every visited worktree's findings.
-        setCheckerState(initialCheckerState(fresh.changed));
+        // Disabled diagnostics seed empty, or the pending placeholders never resolve.
+        setCheckerState(initialCheckerState(diagnosticsEnabled() ? fresh.changed : []));
         setActivityLog(emptyActivityLog);
         setFocusedPane("tree");
         report(reason ?? `switched to ${worktreeLabel(worktree)}`);
@@ -4295,13 +4331,16 @@ function createState() {
     if (entries.length > 0) {
       batch(() => {
         setLastChange(Date.now());
-        setCheckerState((current) =>
-          markPending(
-            current,
-            model.changed,
-            entries.map((entry) => entry.path),
-          ),
-        );
+        // Disabled diagnostics never resolve a pending placeholder, so don't plant one.
+        if (diagnosticsEnabled()) {
+          setCheckerState((current) =>
+            markPending(
+              current,
+              model.changed,
+              entries.map((entry) => entry.path),
+            ),
+          );
+        }
         setActivityLog((current) => recordActivity(current, entries, Date.now()));
       });
     }
@@ -4353,6 +4392,7 @@ function createState() {
     cursorLineContent,
     cursorLineNumber,
     cycleTab,
+    diagnosticsEnabled,
     diffView,
     directoryRecencyByPath,
     directorySummariesByPath,
@@ -4385,6 +4425,7 @@ function createState() {
     helpDialogOpen,
     iconsEnabled,
     ideTemplate,
+    intelEnabled,
     jumpTarget,
     jumpToReference,
     jumpToSearchItem,
@@ -4468,6 +4509,7 @@ function createState() {
     selectionRange,
     selectionText,
     setActivityLog,
+    setBlameEnabled,
     setCaretLineLevel,
     setChangesOnly,
     setCheckerState,
@@ -4478,6 +4520,7 @@ function createState() {
     setCursorColumn,
     setCursorIndex,
     setCursorRow,
+    setDiagnosticsEnabled,
     setEditorTemplate,
     setExpandedDirectories,
     setFileComboboxIndex,
@@ -4495,6 +4538,7 @@ function createState() {
     setHelpDialogOpen,
     setIconsEnabled,
     setIdeTemplate,
+    setIntelEnabled,
     setJumpTarget,
     setLastChange,
     setMainWorktreePath,
@@ -4514,16 +4558,20 @@ function createState() {
     setScopeMenuIndex,
     setScopeMenuOpen,
     setScopeMenuView,
+    setSearchCaseSensitive,
     setSearchFocus,
     setSearchGlob,
     setSearchIndex,
     setSearchQuery,
+    setSearchRegex,
+    setSearchScope,
     setSearchScrollTop,
     setSearchSelection,
     setSelectionAnchor,
     setSessionBase,
     setSidebarOpen,
     setSidebarScrollTop,
+    setSidebarWidthOverride,
     setSymbolsIndex,
     setSymbolsScrollTop,
     setTerminalHeight,

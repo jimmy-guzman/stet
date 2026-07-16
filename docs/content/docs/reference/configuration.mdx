@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Configure themes, editors, file associations, icons, and language servers.
+description: Configure features, themes, editors, file associations, icons, and language servers.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -21,9 +21,49 @@ stet reads its config once at startup from:
 JSONC, so comments and trailing commas are allowed.
 
 <Callout>
-  A malformed or invalid config never blocks startup: stet falls back to defaults and shows a
-  notice.
+  A malformed or invalid config never blocks startup: a bad value costs only its own section, the
+  rest still applies, and the issue shows as a notice. Unknown keys are reported too, so a typo'd
+  key never fails silently.
 </Callout>
+
+## Features
+
+Config is shaped by feature: each section owns its settings, including its off switch. Everything
+here is optional and shown with its default:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "icons": { "enabled": true }, // Nerd Font file-type icons
+  "viewer": { "wrap": false }, // wrap long lines instead of scrolling
+  "sidebar": { "open": true, "changesOnly": false }, // "width" defaults to responsive
+  "provenance": { "enabled": false }, // the per-line provenance rail
+  "diagnostics": { "enabled": true, "download": true }, // LSP diagnostics
+  "intel": { "enabled": true }, // definitions, references, hover, symbols
+  "update": { "check": true }, // background release check at launch
+  "search": { "regex": false, "caseSensitive": false, "scope": "changed" },
+}
+```
+
+| Key                    | Default     | Effect                                                                                                     |
+| ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                       |
+| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`x` toggles per session, `--wrap` forces on for a run)                      |
+| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                           |
+| `sidebar.width`        | responsive  | fixed sidebar width in cells, clamped to the terminal (`[` / `]` adjust, `\` resets)                       |
+| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                            |
+| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                           |
+| `diagnostics.enabled`  | `true`      | `false` runs no language servers for checks; the problems panel reads `diagnostics disabled`               |
+| `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run) |
+| `intel.enabled`        | `true`      | `false` turns the caret code-intel pulls (definition, references, hover, symbols, hierarchy) into a notice |
+| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                               |
+| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                     |
+| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                    |
+| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                          |
+
+A CLI flag wins over its config key for the run it was passed on. `diagnostics.enabled` and
+`intel.enabled` are independent switches over the same language-server pool: turning diagnostics
+off with intel on still starts a server when a caret pull needs one, and the reverse never
+answers a caret.
 
 ## Editor and IDE
 
@@ -92,10 +132,10 @@ made permanent.
 File support is four named registries layered over stet's built-ins:
 
 - `files` matches paths and selects syntax, icon, and language facets.
-- `icons` maps icon names to Nerd Font glyphs.
+- `icons.glyphs` maps icon names to Nerd Font glyphs.
 - `languages` maps profile names to an LSP `languageId` and ordered server entries.
-- `servers` maps server names to commands, repository conditions, initialization and settings data,
-  and static capability hints.
+- `diagnostics.servers` maps server names to commands, repository conditions, initialization and
+  settings data, and static capability hints.
 
 Each registry has its own entry shape, but they share the same named layering behavior. An object
 with an existing name inherits fields it does not set, a new name adds an entry, and `false` removes
@@ -110,17 +150,19 @@ profile, a file association, and an icon:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
-  "servers": {
-    "lua": {
-      "command": ["lua-language-server"],
-      "capabilities": ["definition", "references", "hover", "documentSymbol"],
+  "diagnostics": {
+    "servers": {
+      "lua": {
+        "command": ["lua-language-server"],
+        "capabilities": ["definition", "references", "hover", "documentSymbol"],
+      },
     },
   },
   "languages": {
     "lua": { "languageId": "lua", "servers": ["lua"] },
   },
   "icons": {
-    "lua": "\ue620",
+    "glyphs": { "lua": "\ue620" },
   },
   "files": {
     "lua": { "extensions": ["lua"], "syntax": "lua", "icon": "lua", "language": "lua" },
@@ -133,8 +175,10 @@ A configured command resolves from the repo's `node_modules/.bin`, then `PATH`. 
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
-  "servers": {
-    "pylsp": { "command": ["pylsp"], "discovery": "python" },
+  "diagnostics": {
+    "servers": {
+      "pylsp": { "command": ["pylsp"], "discovery": "python" },
+    },
   },
 }
 ```
@@ -210,10 +254,12 @@ primary server without duplicating file associations:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
-  "servers": {
-    "deno": {
-      "command": ["deno", "lsp"],
-      "when": ["deno.json", "deno.jsonc"],
+  "diagnostics": {
+    "servers": {
+      "deno": {
+        "command": ["deno", "lsp"],
+        "when": ["deno.json", "deno.jsonc"],
+      },
     },
   },
   "languages": {

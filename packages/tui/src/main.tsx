@@ -46,11 +46,6 @@ try {
     process.exit(0);
   }
 
-  // The provisioner reads this env var; set it before any check runs the runtime.
-  if (!options.lspDownload) {
-    process.env.STET_NO_LSP_DOWNLOAD = "1";
-  }
-
   // The startup model carries only the changed set (repoFiles fill in on the
   // Slow poll once mounted), the same shape the running app uses.
   const startup = Effect.gen(function* startupModel() {
@@ -89,6 +84,12 @@ try {
   );
   await configRuntime.dispose();
 
+  // The provisioner reads this env var; set it before any check runs the runtime.
+  // The flag wins over config, and both only ever turn downloads off.
+  if (!options.lspDownload || config.diagnostics?.download === false) {
+    process.env.STET_NO_LSP_DOWNLOAD = "1";
+  }
+
   // Register the configured themes and seed the theme selection *before* the
   // Renderer enters the alt-screen, so a config-validation throw still lands on
   // The normal terminal rather than a torn-down one. These need neither the
@@ -100,10 +101,10 @@ try {
   // Resolve servers first because language profiles validate their named references. Everything
   // Registers before the runtime builds, so diff, icons, diagnostics, and intel share one startup
   // Snapshot for the full session.
-  const { issues: serverIssues, servers } = resolveServers(config.servers ?? {});
+  const { issues: serverIssues, servers } = resolveServers(config.diagnostics?.servers ?? {});
   registerServers(servers);
   const { issues: fileSupportIssues, registry: fileSupport } = resolveFileSupportConfig(
-    config,
+    { files: config.files, icons: config.icons?.glyphs, languages: config.languages },
     new Set(Object.keys(servers)),
   );
   registerFileSupport(fileSupport);
@@ -154,14 +155,31 @@ try {
     themeIssues.push(`theme "${activeName}" not found; using the ${appearance} default`);
   }
 
-  // The CLI-derived state needs no git, so seed it before the first paint.
+  // The CLI- and config-derived state needs no git, so seed it before the first
+  // Paint. A CLI flag wins over its config key for the run it was passed on (the
+  // Off-flags only ever turn a feature off, so flag-or-config composes with ||).
   batch(() => {
     state.setScope(options.scope);
     state.setCliBaseRef(options.scope.ref);
-    state.setIconsEnabled(options.icons);
-    state.setOverflow(options.overflow);
+    state.setIconsEnabled(options.icons && (config.icons?.enabled ?? true));
+    state.setOverflow(
+      options.overflow === "wrap" || config.viewer?.wrap === true ? "wrap" : "scroll",
+    );
     state.setEditorTemplate(resolveEditorTemplate(options.editor ?? config.editor));
     state.setIdeTemplate(resolveIdeTemplate(options.ide ?? config.ide));
+    state.setSidebarWidthOverride(config.sidebar?.width ?? null);
+    state.setChangesOnly(config.sidebar?.changesOnly ?? false);
+    if (config.sidebar?.open === false) {
+      // Mirror collapseSidebar: focus must leave the hidden tree so keys land.
+      state.setSidebarOpen(false);
+      state.setFocusedPane("diff");
+    }
+    state.setBlameEnabled(config.provenance?.enabled ?? false);
+    state.setDiagnosticsEnabled(config.diagnostics?.enabled ?? true);
+    state.setIntelEnabled(config.intel?.enabled ?? true);
+    state.setSearchRegex(config.search?.regex ?? false);
+    state.setSearchCaseSensitive(config.search?.caseSensitive ?? false);
+    state.setSearchScope(config.search?.scope ?? "changed");
     // Seed the real terminal size before the first paint. Without this, the shell
     // Paints once at the default 24 rows (paneHeight 20) before App's terminal
     // Dimensions effect supplies the true size, so a tree that fits the real pane
@@ -180,7 +198,9 @@ try {
 
   // Check for a newer release in the background, independent of the git load, so it neither gates
   // Nor is gated by it. A hit surfaces on the way out via the quit notice.
-  void state.checkForUpdate(packageJson.version);
+  if (config.update?.check !== false) {
+    void state.checkForUpdate(packageJson.version);
+  }
 
   runtime
     .runPromise(startup)
@@ -204,7 +224,10 @@ try {
           initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`,
         );
         state.setExpandedDirectories(initialExpanded);
-        state.setCheckerState(initialCheckerState(model.changed));
+        // Disabled diagnostics seed empty, or the pending placeholders never resolve.
+        state.setCheckerState(
+          initialCheckerState(config.diagnostics?.enabled === false ? [] : model.changed),
+        );
       });
       void state.runChecks(model);
 

@@ -166,11 +166,11 @@ describe("fileIcon", () => {
     expect(fileIcon(".ts")).toBe(fileIcon(".npmrc"));
     expect(fileIcon(".ts")).not.toBe(fileIcon("main.ts"));
     // A recognized suffix still wins over the dotfile fallback.
-    expect(fileIcon(".prettierrc.json")).toBe("\u{eb0f}");
+    expect(fileIcon(".prettierrc.json")).toBe("\u{f0626}");
   });
 
   test("matches dotfiles by full name", () => {
-    expect(fileIcon(".gitignore")).toBe("\u{e702}");
+    expect(fileIcon(".gitignore")).toBe("\u{f02a2}");
     expect(fileIcon("nested/.gitignore")).toBe(fileIcon(".gitignore"));
   });
 

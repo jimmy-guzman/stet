@@ -21,9 +21,10 @@ stet reads its config once at startup from:
 JSONC, so comments and trailing commas are allowed.
 
 <Callout>
-  A malformed or invalid config never blocks startup: a bad value costs only its own section, the
-  rest still applies, and the issue shows as a notice. Unknown keys are reported too, so a typo'd
-  key never fails silently.
+  Config problems never block startup. An invalid value drops only its own section, the rest of the
+  config still applies, and the issue shows as a notice; unknown keys are reported too, so a typo'd
+  key never fails silently. A document that is not valid JSONC cannot be read at all, so stet runs
+  on the built-in defaults and reports the parse error the same way.
 </Callout>
 
 ## Features

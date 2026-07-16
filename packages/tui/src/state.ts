@@ -2692,9 +2692,11 @@ function createState() {
   let warmHoldClosed: Promise<unknown> = Promise.resolve();
   createEffect(() => {
     const seed = warmSeed();
+    // The hold exists only to keep intel answers warm, so a disabled intel never pins a server;
+    // Reading the signal here also releases the hold (via onCleanup) if it ever flips.
     // `restartingServers` keeps the hold down for the whole teardown: re-acquiring before the pool is
     // Evicted would just re-pin the server being replaced.
-    if (seed === undefined || restartingServers()) {
+    if (!intelEnabled() || seed === undefined || restartingServers()) {
       return;
     }
     const controller = new AbortController();

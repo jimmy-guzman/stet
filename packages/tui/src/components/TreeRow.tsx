@@ -143,7 +143,7 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
       <box flexDirection="row">
         {summary()?.failed ? (
           <text wrapMode="none" height={1} fg={theme.colors.severity.error}>
-            fail{" "}
+            {`${levelGlyph("error")} fail `}
           </text>
         ) : null}
         {(summary()?.errors ?? 0) > 0 ? (
@@ -300,7 +300,7 @@ function FileRow(props: {
       <box flexDirection="row">
         {summary().failed ? (
           <text wrapMode="none" height={1} fg={theme.colors.severity.error}>
-            fail{" "}
+            {`${levelGlyph("error")} fail `}
           </text>
         ) : null}
         {summary().errors > 0 ? (

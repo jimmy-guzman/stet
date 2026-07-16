@@ -109,6 +109,60 @@ describe("word caret", () => {
     }
   }, 20_000);
 
+  test("clicking a wrapped continuation row selects its source word", async () => {
+    const before = Array.from({ length: 18 }, (_, index) => `before${index}`).join(" ");
+    const words = Array.from({ length: 18 }, (_, index) =>
+      index === 12 ? "targetword" : `word${index}`,
+    );
+    const content = words.join(" ");
+    const repoRoot = createFixtureRepo("stet-caret-wrap-click-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": `${before}\n`,
+    });
+    writeFileSync(join(repoRoot, "src", "a.ts"), `${content}\n`);
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 30,
+      width: 80,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    const mouse = createMockMouse(renderer);
+
+    try {
+      await settleUntil("changed file shown", (frame) => frame.includes("word0"));
+      mockInput.pressKey("v");
+      await settleUntil(
+        "full file shown",
+        () => state.diffView()?.showFileContent === true && state.cursorLineContent() === content,
+      );
+      mockInput.pressKey("x");
+      const wrapped = await settleUntil(
+        "target word wrapped onto a continuation row",
+        (frame) => state.overflow() === "wrap" && frame.includes("targetword"),
+      );
+      const wrappedRows = wrapped.split("\n");
+      const firstRow = wrappedRows.findIndex((row) => row.includes("word0"));
+      const targetRow = wrappedRows.findIndex((row) => row.includes("targetword"));
+      const targetColumn = wrappedRows[targetRow]?.indexOf("targetword") ?? -1;
+      expect(firstRow).toBeGreaterThan(-1);
+      expect(targetRow).toBeGreaterThan(-1);
+      expect(targetRow).toBeGreaterThan(firstRow);
+      expect(targetColumn).toBeGreaterThan(-1);
+
+      await mouse.click(targetColumn + 1, targetRow);
+      await settleUntil(
+        "wrapped target word selected",
+        () => state.cursorColumn() === content.indexOf("targetword"),
+      );
+      expect(state.cursorColumn()).toBe(content.indexOf("targetword"));
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
   test("back restores the caret column captured on leave", async () => {
     const repoRoot = createFixtureRepo("stet-caret-nav-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,

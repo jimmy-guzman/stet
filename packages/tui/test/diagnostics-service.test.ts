@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Layer, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 
 import type { CheckerFileState } from "@/diagnostics/checker";
 import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
@@ -147,11 +147,12 @@ const aLintWarning = {
 
 test("an interrupted run leaves the document open and the next run reconciles it", async () => {
   await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
+    const opened = await Effect.runPromise(Deferred.make<void>());
     const opens: string[] = [];
     const changes: string[] = [];
     const closes: string[] = [];
     // Publishes only on didChange, never on didOpen: run 1's settle keeps looping until we
-    // Interrupt it, while run 2 (after an edit) completes from the change-triggered publish.
+    // Interrupt it after didOpen, while run 2 completes from the change-triggered publish.
     const published = new Map<string, unknown[]>();
     const connection: LspConnection = {
       changeDocument: (uri) =>
@@ -169,7 +170,11 @@ test("an interrupted run leaves the document open and the next run reconciles it
       closed: Effect.sync(() => false),
       endPublishWait: Effect.void,
       notify: () => Effect.void,
-      openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
+      openDocument: (textDocument) =>
+        Effect.sync(() => void opens.push(textDocument.uri)).pipe(
+          Effect.andThen(Deferred.succeed(opened, undefined)),
+          Effect.asVoid,
+        ),
       published: Effect.sync(() => published),
       pullDiagnostics: () =>
         Effect.fail(
@@ -185,22 +190,19 @@ test("an interrupted run leaves the document open and the next run reconciles it
     const state = await Effect.runPromise(
       Diagnostics.pipe(
         Effect.flatMap((diagnostics) =>
-          Stream.runDrain(diagnostics.run(dir, [changed("src/a.ts")])).pipe(
-            // Run 1's settle loop runs ~10s; interrupt long before, with the document open.
-            Effect.timeout("100 millis"),
-            Effect.catchTag("TimeoutError", () => Effect.void),
-            Effect.andThen(
-              Effect.sync(() => writeFileSync(join(dir, "src/a.ts"), "const a = 2\n")),
-            ),
-            Effect.andThen(
-              Stream.runCollect(diagnostics.run(dir, [changed("src/a.ts")])).pipe(
-                Effect.map((updates) => ({
-                  closesBeforeTeardown: [...closes],
-                  state: [...updates].at(-1)?.state,
-                })),
-              ),
-            ),
-          ),
+          Effect.gen(function* interruptAndReconcile() {
+            const firstRun = yield* Effect.forkChild(
+              Stream.runDrain(diagnostics.run(dir, [changed("src/a.ts")])),
+            );
+            yield* Deferred.await(opened);
+            yield* Fiber.interrupt(firstRun);
+            yield* Effect.sync(() => writeFileSync(join(dir, "src/a.ts"), "const a = 2\n"));
+            const updates = yield* Stream.runCollect(diagnostics.run(dir, [changed("src/a.ts")]));
+            return {
+              closesBeforeTeardown: [...closes],
+              state: [...updates].at(-1)?.state,
+            };
+          }),
         ),
         Effect.provide(DiagnosticsLive.pipe(Layer.provide(fakeServers({ typescript: handle })))),
       ),

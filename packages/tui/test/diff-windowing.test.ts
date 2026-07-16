@@ -1,6 +1,33 @@
 import { describe, expect, test } from "bun:test";
 
-import { visibleWindow, visibleWindowVariable } from "@/diff/windowing";
+import {
+  cumulativeRowEnds,
+  rowIndexAtOffset,
+  visibleWindow,
+  visibleWindowVariable,
+} from "@/diff/windowing";
+
+describe("row offsets", () => {
+  test("maps terminal cells through variable-height rows", () => {
+    const ends = cumulativeRowEnds([1, 3, 1]);
+
+    expect(ends).toEqual([1, 4, 5]);
+    expect(rowIndexAtOffset(ends, 0)).toBe(0);
+    expect(rowIndexAtOffset(ends, 1)).toBe(1);
+    expect(rowIndexAtOffset(ends, 3)).toBe(1);
+    expect(rowIndexAtOffset(ends, 4)).toBe(2);
+  });
+
+  test("skips zero-height rows and rejects cells outside the content", () => {
+    const ends = cumulativeRowEnds([1, 0, 2]);
+
+    expect(ends).toEqual([1, 1, 3]);
+    expect(rowIndexAtOffset(ends, 1)).toBe(2);
+    expect(rowIndexAtOffset(ends, -1)).toBeUndefined();
+    expect(rowIndexAtOffset(ends, 3)).toBeUndefined();
+    expect(rowIndexAtOffset([], 0)).toBeUndefined();
+  });
+});
 
 describe("visibleWindow (fixed height)", () => {
   test("mounts only the visible slice with exact spacers", () => {

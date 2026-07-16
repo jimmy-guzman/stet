@@ -24,5 +24,12 @@ export function createLineMeasurer(widthMethod: WidthMethod) {
       const result = view.measureForDimensions(Math.max(1, width), LARGE_HEIGHT);
       return Math.max(1, result?.lineCount ?? 1);
     },
+    offsetForVisualRow(text: string, width: number, visualRow: number) {
+      const wrapWidth = Math.max(1, width);
+      buffer.setText(text);
+      view.setWrapWidth(wrapWidth);
+      view.measureForDimensions(wrapWidth, LARGE_HEIGHT);
+      return view.lineInfo.lineStartCols[Math.max(0, Math.floor(visualRow))] ?? 0;
+    },
   };
 }

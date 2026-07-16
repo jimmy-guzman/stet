@@ -18,6 +18,36 @@ export interface VisibleWindow {
 
 const EMPTY: VisibleWindow = { bottomSpacer: 0, end: 0, start: 0, topSpacer: 0 };
 
+/** Cumulative terminal-row end offset for each source row. */
+export function cumulativeRowEnds(heights: readonly number[]) {
+  let total = 0;
+  return heights.map((height) => {
+    total += Math.max(0, height);
+    return total;
+  });
+}
+
+/** Row containing a zero-based terminal-cell offset, or undefined outside the content. */
+export function rowIndexAtOffset(ends: readonly number[], offset: number) {
+  const total = ends.at(-1) ?? 0;
+  if (!Number.isFinite(offset) || offset < 0 || offset >= total) {
+    return undefined;
+  }
+
+  const cell = Math.floor(offset);
+  let low = 0;
+  let high = ends.length - 1;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if ((ends[middle] ?? 0) > cell) {
+      high = middle;
+    } else {
+      low = middle + 1;
+    }
+  }
+  return low;
+}
+
 /** Fast path: every row is one terminal row tall (unified, no wrap). */
 export function visibleWindow(
   rowCount: number,

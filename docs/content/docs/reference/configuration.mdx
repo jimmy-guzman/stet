@@ -123,7 +123,7 @@ icon with no color entry falls back to `text.muted`.
 ```
 
 The built-in themes are `dark`, `light`, and a monochrome pair, `mono-dark` and
-`mono-light`, where every token is a pure grey. When `NO_COLOR` is set
+`mono-light`, where every token is a pure grey. When `NO_COLOR` is non-empty
 ([no-color.org](https://no-color.org)), stet ignores the configured `theme` and
 starts on the monochrome pair; change indicators keep working without hue (the
 diff's change bar renders `+`/`-` under any all-grey theme), and an explicit
@@ -295,10 +295,10 @@ repository being inspected, although a configured executable may resolve from th
 
 ## Environment variables
 
-| Variable               | Effect                                                                                  |
-| ---------------------- | --------------------------------------------------------------------------------------- |
-| `STET_EDITOR`          | fallback command template for the `e` key                                               |
-| `STET_IDE`             | fallback command template for the `o` key                                               |
-| `STET_NO_LSP_DOWNLOAD` | do not auto-download a missing language server (same as `--no-lsp-download`)            |
-| `NO_COLOR`             | start on the monochrome `mono-dark` / `mono-light` themes instead of the configured one |
-| `XDG_CONFIG_HOME`      | base directory for the config file                                                      |
+| Variable               | Effect                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `STET_EDITOR`          | fallback command template for the `e` key                                                                         |
+| `STET_IDE`             | fallback command template for the `o` key                                                                         |
+| `STET_NO_LSP_DOWNLOAD` | do not auto-download a missing language server (same as `--no-lsp-download`)                                      |
+| `NO_COLOR`             | any non-empty value starts stet on the monochrome `mono-dark` / `mono-light` themes instead of the configured one |
+| `XDG_CONFIG_HOME`      | base directory for the config file                                                                                |

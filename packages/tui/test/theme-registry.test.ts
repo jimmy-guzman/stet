@@ -145,6 +145,16 @@ describe("monochrome themes", () => {
     expect(isMonochromeTheme(lightTheme)).toBe(false);
   });
 
+  test("a user-defined all-grey theme classifies as monochrome; one nested hue breaks it", () => {
+    expect(isMonochromeTheme({ ...monoDarkTheme, icon: { lua: "#808080" } })).toBe(true);
+    expect(
+      isMonochromeTheme({
+        ...monoDarkTheme,
+        syntax: { ...monoDarkTheme.syntax, keyword: "#ff8800" },
+      }),
+    ).toBe(false);
+  });
+
   test("mono themes color no icon, so every glyph falls back to muted", () => {
     expect(Object.keys(monoDarkTheme.icon)).toEqual([]);
     expect(Object.keys(monoLightTheme.icon)).toEqual([]);

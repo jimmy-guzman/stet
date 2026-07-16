@@ -162,8 +162,9 @@ use or provisioning. User-defined servers are never provisioned. The cache is
 `~/.cache/stet/lsp` otherwise. If a provisionable built-in remains missing,
 stet downloads it into that cache: packages distributed through `npm` (this
 path needs `npm` on your `PATH`), or a SHA-256-verified GitHub release binary
-for the servers it doesn't (`rust-analyzer`, `ruff`, `ty`). Pass
-`--no-lsp-download` (or set `STET_NO_LSP_DOWNLOAD`) to turn downloads off.
+for the servers it doesn't (`rust-analyzer`, `ruff`, `ty`). Set
+`"diagnostics": { "download": false }` in your config to turn downloads off, or
+pass `--no-lsp-download` (or set `STET_NO_LSP_DOWNLOAD`) for one run.
 
 `gopls` is the exception among built-ins: it ships no prebuilt binaries and stet
 never builds from source, so stet never downloads it. Install it yourself
@@ -207,8 +208,10 @@ LSP profile and several profiles can reuse one server:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
-  "servers": {
-    "lua": { "command": ["lua-language-server"] },
+  "diagnostics": {
+    "servers": {
+      "lua": { "command": ["lua-language-server"] },
+    },
   },
   "languages": {
     "lua": { "languageId": "lua", "servers": ["lua"] },

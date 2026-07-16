@@ -8,6 +8,7 @@ const viewer = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => 
   caretLine: 12,
   context: "viewer",
   hasSymbol: true,
+  intelEnabled: true,
   selectedPath: "src/foo.ts",
   treeNode: undefined,
   truncated: false,
@@ -19,6 +20,7 @@ const tree = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => ({
   caretLine: undefined,
   context: "tree",
   hasSymbol: false,
+  intelEnabled: true,
   selectedPath: undefined,
   treeNode: { id: "file:src/foo.ts", kind: "file", path: "src/foo.ts" },
   truncated: false,
@@ -47,6 +49,16 @@ describe("buildCommandMenuItems", () => {
   test("viewer without a symbol omits the caret-intel actions but keeps find-symbols and the rest", () => {
     expect(labels(viewer({ caretColumn: undefined, hasSymbol: false }))).toEqual([
       "Find symbols",
+      "Copy reference",
+      "Copy file contents",
+      "Open in editor",
+      "Open in IDE",
+      "Open externally",
+    ]);
+  });
+
+  test("viewer with intel disabled omits every intel action, find-symbols included", () => {
+    expect(labels(viewer({ intelEnabled: false }))).toEqual([
       "Copy reference",
       "Copy file contents",
       "Open in editor",

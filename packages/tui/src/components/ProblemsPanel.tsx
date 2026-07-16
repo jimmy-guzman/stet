@@ -109,7 +109,9 @@ export function ProblemsPanel() {
             when={state.allProblemItems().length > 0}
             fallback={
               <box id="problem-empty" paddingLeft={1}>
-                <text fg={theme.colors.text.muted}>no problems</text>
+                <text fg={theme.colors.text.muted}>
+                  {state.diagnosticsEnabled() ? "no problems" : "diagnostics disabled"}
+                </text>
               </box>
             }
           >

@@ -118,9 +118,13 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
     >
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>
-          <text fg={nameFg()}>{indent()}</text>
+          <text wrapMode="none" height={1} fg={nameFg()}>
+            {indent()}
+          </text>
           <box width={2} overflow="hidden">
             <text
+              wrapMode="none"
+              height={1}
               fg={
                 state.iconsEnabled()
                   ? (theme.colors.icon[icon().name] ?? theme.colors.text.muted)
@@ -131,25 +135,43 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
             </text>
           </box>
         </box>
-        <text fg={nameFg()}>{truncateName(props.node.name, maxNameLen())}</text>
+        <text wrapMode="none" height={1} fg={nameFg()}>
+          {truncateName(props.node.name, maxNameLen())}
+        </text>
         <RecencyDot at={recencyAt()} marginLeft={1} />
       </box>
       <box flexDirection="row">
-        {summary()?.failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
+        {summary()?.failed ? (
+          <text wrapMode="none" height={1} fg={theme.colors.severity.error}>
+            ⊗{" "}
+          </text>
+        ) : null}
         {(summary()?.errors ?? 0) > 0 ? (
           <text
+            wrapMode="none"
+            height={1}
             fg={theme.colors.severity.error}
           >{`${levelGlyph("error")}${summary()?.errors} `}</text>
         ) : null}
         {summary() !== null && summary()?.errors === 0 && (summary()?.warnings ?? 0) > 0 ? (
           <text
+            wrapMode="none"
+            height={1}
             fg={theme.colors.severity.warning}
           >{`${levelGlyph("warning")}${summary()?.warnings} `}</text>
         ) : null}
         {summary()?.errors === 0 && summary()?.warnings === 0 && (summary()?.info ?? 0) > 0 ? (
-          <text fg={theme.colors.severity.info}>{`${levelGlyph("info")}${summary()?.info} `}</text>
+          <text
+            wrapMode="none"
+            height={1}
+            fg={theme.colors.severity.info}
+          >{`${levelGlyph("info")}${summary()?.info} `}</text>
         ) : null}
-        {summary()?.pending ? <text fg={theme.colors.text.muted}>… </text> : null}
+        {summary()?.pending ? (
+          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+            …{" "}
+          </text>
+        ) : null}
         {summary() !== null &&
         props.node.changedCount > 0 &&
         !summary()?.failed &&
@@ -158,17 +180,25 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
         summary()?.errors === 0 &&
         summary()?.warnings === 0 &&
         (summary()?.info ?? 0) === 0 ? (
-          <text fg={theme.colors.success}>{`${levelGlyph("success")} `}</text>
+          <text
+            wrapMode="none"
+            height={1}
+            fg={theme.colors.success}
+          >{`${levelGlyph("success")} `}</text>
         ) : null}
         {summary()?.unavailable &&
         !summary()?.failed &&
         !summary()?.pending &&
         (summary()?.errors ?? 0) === 0 &&
         (summary()?.warnings ?? 0) === 0 ? (
-          <text fg={theme.colors.text.muted}>○ </text>
+          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+            ○{" "}
+          </text>
         ) : null}
         {props.node.changedCount > 0 ? (
           <text
+            wrapMode="none"
+            height={1}
             fg={
               props.node.stage !== undefined
                 ? theme.colors.stage[props.node.stage]
@@ -257,29 +287,47 @@ function FileRow(props: {
     >
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>
-          <text fg={theme.colors.text.muted}>{indent()}</text>
+          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+            {indent()}
+          </text>
           <FileIcon path={props.node.path} symlink={props.node.symlink} />
         </box>
-        <text fg={nameFg()}>{truncate(props.node.name, maxNameLen())}</text>
+        <text wrapMode="none" height={1} fg={nameFg()}>
+          {truncate(props.node.name, maxNameLen())}
+        </text>
         <RecencyDot at={state.recencyByPath().get(props.node.path)} marginLeft={1} />
       </box>
       <box flexDirection="row">
-        {summary().failed ? <text fg={theme.colors.severity.error}>fail </text> : null}
+        {summary().failed ? (
+          <text wrapMode="none" height={1} fg={theme.colors.severity.error}>
+            ⊗{" "}
+          </text>
+        ) : null}
         {summary().errors > 0 ? (
           <text
+            wrapMode="none"
+            height={1}
             fg={theme.colors.severity.error}
           >{`${levelGlyph("error")}${summary().errors} `}</text>
         ) : null}
         {summary().errors === 0 && summary().warnings > 0 ? (
           <text
+            wrapMode="none"
+            height={1}
             fg={theme.colors.severity.warning}
           >{`${levelGlyph("warning")}${summary().warnings} `}</text>
         ) : null}
         {summary().errors === 0 && summary().warnings === 0 && summary().info > 0 ? (
-          <text fg={theme.colors.severity.info}>{`${levelGlyph("info")}${summary().info} `}</text>
+          <text
+            wrapMode="none"
+            height={1}
+            fg={theme.colors.severity.info}
+          >{`${levelGlyph("info")}${summary().info} `}</text>
         ) : null}
         {(changed()?.warnings.length ?? 0) > 0 ? (
-          <text fg={theme.colors.severity.warning}>! </text>
+          <text wrapMode="none" height={1} fg={theme.colors.severity.warning}>
+            !{" "}
+          </text>
         ) : null}
         {changed() !== undefined &&
         !pending() &&
@@ -288,7 +336,11 @@ function FileRow(props: {
         summary().errors === 0 &&
         summary().warnings === 0 &&
         summary().info === 0 ? (
-          <text fg={theme.colors.success}>{`${levelGlyph("success")} `}</text>
+          <text
+            wrapMode="none"
+            height={1}
+            fg={theme.colors.success}
+          >{`${levelGlyph("success")} `}</text>
         ) : null}
         {changed() !== undefined &&
         !pending() &&
@@ -296,16 +348,30 @@ function FileRow(props: {
         summary().unavailable &&
         summary().errors === 0 &&
         summary().warnings === 0 ? (
-          <text fg={theme.colors.text.muted}>○ </text>
+          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+            ○{" "}
+          </text>
         ) : null}
         <Show when={changed()}>
           {(file) => (
-            <text fg={theme.colors.text.muted}>{`+${file().additions} -${file().deletions} `}</text>
+            <text
+              wrapMode="none"
+              height={1}
+              fg={theme.colors.text.muted}
+            >{`+${file().additions} -${file().deletions} `}</text>
           )}
         </Show>
-        {pending() ? <text fg={theme.colors.text.muted}>… </text> : null}
+        {pending() ? (
+          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+            …{" "}
+          </text>
+        ) : null}
         <Show when={changed()}>
-          {(file) => <text fg={theme.colors.stage[file().stage]}>{kindLetter(file().kind)}</text>}
+          {(file) => (
+            <text wrapMode="none" height={1} fg={theme.colors.stage[file().stage]}>
+              {kindLetter(file().kind)}
+            </text>
+          )}
         </Show>
       </box>
     </box>

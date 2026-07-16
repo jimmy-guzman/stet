@@ -96,7 +96,15 @@ try {
   // Renderer nor the detected appearance; appearance is applied just below.
   const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
   registerThemes(themes);
-  setSelection(config.theme);
+  // NO_COLOR (read via Bun.enableANSIColors, the gate log/terminal.ts already
+  // Uses, so FORCE_COLOR still wins) replaces the configured selection with the
+  // Built-in monochrome pair. A later explicit pick in the theme switcher still
+  // Applies: no-color.org asks that color stop being the default, not that the
+  // User be locked out of requesting it.
+  const themeSelection = Bun.enableANSIColors
+    ? config.theme
+    : { dark: "mono-dark", light: "mono-light" };
+  setSelection(themeSelection);
 
   // Resolve servers first because language profiles validate their named references. Everything
   // Registers before the runtime builds, so diff, icons, diagnostics, and intel share one startup
@@ -150,7 +158,7 @@ try {
   // Appearance together feed the active theme before the first runtime use warms
   // The highlighter; the renderer's theme_mode event updates appearance live.
   setAppearance(appearance);
-  const activeName = selectThemeName(config.theme, appearance);
+  const activeName = selectThemeName(themeSelection, appearance);
   if (!hasTheme(activeName)) {
     themeIssues.push(`theme "${activeName}" not found; using the ${appearance} default`);
   }

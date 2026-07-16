@@ -23,6 +23,7 @@ import {
 import { wordAt } from "@/diff/words";
 import { levelGlyph } from "@/log/levels";
 import { state } from "@/state";
+import { activeThemeMonochrome } from "@/theme/active";
 import { useTheme } from "@/theme/context";
 import { caretCell } from "@/viewer/anchor";
 
@@ -484,10 +485,11 @@ export function DiffView() {
   // Take the diff state (add green / remove red / context neutral), a dedicated glyph cell
   // Takes the diagnostic severity. The bar is a single ¼-block glyph, add vs remove told
   // Apart by color alone (a deliberate call: equal footprint over a NO_COLOR distinction,
-  // Which the +/- column used to carry). It is a Block Element (reliably one cell wide),
-  // Never Box-Drawing, whose rarer glyphs fall back to a mis-metriced font and misalign the
-  // Gutter. The severity glyph only ever lands on an added or context row since a removed
-  // Line has no new-line number to map findings by.
+  // Which the +/- column used to carry), except under a monochrome theme, where color
+  // Cannot carry it and the same cell renders `+`/`-` instead. It is a Block Element
+  // (reliably one cell wide), never Box-Drawing, whose rarer glyphs fall back to a
+  // Mis-metriced font and misalign the gutter. The severity glyph only ever lands on an
+  // Added or context row since a removed line has no new-line number to map findings by.
   const findingsFor = (row: DiffLineRow) =>
     row.newLine === undefined ? undefined : state.lineMap().get(row.newLine);
 
@@ -498,7 +500,8 @@ export function DiffView() {
         ? theme.colors.diff.removedSign
         : theme.colors.diff.lineNumberFg;
 
-  const changeBar = (row: DiffLineRow) => (row.type === "context" ? " " : "▎");
+  const changeBar = (row: DiffLineRow) =>
+    row.type === "context" ? " " : activeThemeMonochrome() ? (row.type === "add" ? "+" : "-") : "▎";
   const changeBarColor = (row: DiffLineRow) =>
     row.type === "add"
       ? theme.colors.diff.addedSign

@@ -58,6 +58,9 @@ const typescriptServers = ["typescript", "oxlint", "biome"] as const;
 /** LSP profiles are separate from file matching so several associations can reuse one route. */
 export const builtinLanguages = new Map<string, LanguageProfile>([
   ["css", { languageId: "css", servers: ["biome"] }],
+  ["go", { languageId: "go", servers: ["gopls"] }],
+  ["go.mod", { languageId: "go.mod", servers: ["gopls"] }],
+  ["go.work", { languageId: "go.work", servers: ["gopls"] }],
   ["graphql", { languageId: "graphql", servers: ["biome"] }],
   ["json", { languageId: "json", servers: ["json", "biome"] }],
   ["jsonc", { languageId: "jsonc", servers: ["json", "biome"] }],
@@ -85,6 +88,9 @@ const iconExtensions = (
 /** Built-in file associations. Later entries win ties at the same match specificity. */
 export const builtinFiles = new Map<string, FileAssociation>([
   ["language-css", { extensions: ["css"], language: "css" }],
+  ["language-go", { extensions: ["go"], language: "go" }],
+  ["language-go-mod", { filenames: ["go.mod"], language: "go.mod" }],
+  ["language-go-work", { filenames: ["go.work"], language: "go.work" }],
   ["language-graphql", { extensions: ["graphql"], language: "graphql" }],
   ["language-json", { extensions: ["json"], language: "json" }],
   ["language-jsonc", { extensions: ["jsonc"], language: "jsonc" }],
@@ -135,6 +141,7 @@ export const builtinFiles = new Map<string, FileAssociation>([
   iconExtensions("icon-scala", "scala", ["scala", "sc"]),
   iconExtensions("icon-gradle", "gradle", ["gradle"]),
 
+  ["icon-go-filenames", { filenames: ["go.mod", "go.sum", "go.work"], icon: "go" }],
   ["icon-node-filename", { filenames: ["package.json"], icon: "node" }],
   ["icon-tsconfig-filename", { filenames: ["tsconfig.json"], icon: "tsconfig" }],
   ["icon-bun-filenames", { filenames: ["bun.lock", "bunfig.toml"], icon: "bun" }],

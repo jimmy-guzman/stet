@@ -16,6 +16,7 @@ through [your config](/docs/reference/configuration#file-support).
 | TypeScript & JavaScript | yes          | indent     | types + lint  | yes               |
 | Rust                    | yes          | indent     | types + cargo | yes               |
 | Python                  | yes          | indent     | types + lint  | yes               |
+| Go                      | yes          | indent     | types + vet   | yes               |
 | JSON & JSONC            | yes          | indent     | schema + lint |                   |
 | YAML                    | yes          | indent     | schema        |                   |
 | CSS                     | yes          | indent     | lint          |                   |
@@ -111,6 +112,18 @@ are none.
 Servers download automatically the first time a Python file needs them,
 basedpyright from npm, ty and ruff as sha256-verified GitHub release binaries.
 
+### Go
+
+`.go` files get [gopls](https://pkg.go.dev/golang.org/x/tools/gopls), Go's
+official language server: type and build errors plus the `go vet` analyzers it
+runs by default (label `compiler`, and the analyzer's name for a vet finding).
+`go.mod` and `go.work` get their module diagnostics through the same server.
+
+gopls ships no prebuilt binaries and stet never builds it, so unlike the other
+built-in servers stet never downloads it. Install it yourself with
+`go install golang.org/x/tools/gopls@latest`; stet finds it on your `PATH`.
+Without it, Go files show as unavailable rather than falsely clean.
+
 ### JSON & JSONC
 
 `vscode-json-language-server` validates against schemas (`package.json`,
@@ -131,9 +144,10 @@ show as unavailable rather than falsely clean.
 
 Go to definition, find references, implementations, call hierarchy, hover,
 and the symbol outline work for the TypeScript & JavaScript family, for Rust,
-and for Python, through the same servers that produce their diagnostics (a ty
-repo has everything but go to implementation, which ty does not yet answer).
-See [code intelligence](/docs/guides/code-intelligence) for the keys and flows.
+for Python, and for Go, through the same servers that produce their diagnostics
+(a ty repo has everything but go to implementation, which ty does not yet
+answer). See [code intelligence](/docs/guides/code-intelligence) for the keys
+and flows.
 
 ## How servers are found
 
@@ -150,6 +164,11 @@ stet downloads it into that cache: packages distributed through `npm` (this
 path needs `npm` on your `PATH`), or a SHA-256-verified GitHub release binary
 for the servers it doesn't (`rust-analyzer`, `ruff`, `ty`). Pass
 `--no-lsp-download` (or set `STET_NO_LSP_DOWNLOAD`) to turn downloads off.
+
+`gopls` is the exception among built-ins: it ships no prebuilt binaries and stet
+never builds from source, so stet never downloads it. Install it yourself
+(`go install golang.org/x/tools/gopls@latest`) and stet finds it on your `PATH`;
+without it, Go files show as unavailable rather than falsely clean.
 
 <Callout>
   A download that cannot complete (offline, air-gapped, locked-down CI) times out, and its files

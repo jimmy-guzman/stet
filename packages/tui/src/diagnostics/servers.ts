@@ -132,6 +132,22 @@ const builtinRegistry: Record<string, ServerSpec> = {
     provision: { kind: "npm", packages: ["@biomejs/biome@2.5.2"] },
     when: ["biome.json", "biome.jsonc"],
   },
+  // Go's official language server (bare `gopls` serves LSP over stdio). It answers every intel pull
+  // And pushes its type/vet diagnostics. Discovery-only: gopls ships no prebuilt release binaries and
+  // Stet never builds from source, so it has no `provision` channel and is used only when found
+  // Repo-local or on PATH (`go install golang.org/x/tools/gopls@latest`), never downloaded.
+  "gopls": {
+    args: [],
+    binary: "gopls",
+    provides: [
+      "definition",
+      "references",
+      "hover",
+      "documentSymbol",
+      "callHierarchy",
+      "implementation",
+    ],
+  },
   "json": {
     // Always-on (no `when`) so JSON gets schema validation in every repo. It overlaps Biome's
     // Json coverage where a biome config exists, but the two are complementary: Biome lints, this

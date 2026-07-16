@@ -236,6 +236,49 @@ test("resolveServerCommand returns undefined for a language with no registered s
   expect(resolveServerCommand("ruby", "/repo")).toBeUndefined();
 });
 
+test("Go source and module files route to gopls", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "stet-go-"));
+  try {
+    expect(serversForPath("main.go")).toEqual(["gopls"]);
+    expect(serversForPath("go.mod")).toEqual(["gopls"]);
+    expect(serversForPath("go.work")).toEqual(["gopls"]);
+    // Always-on (no gate), so gopls stays selected in any repo.
+    expect(await Effect.runPromise(activeServersForPath("main.go", repo))).toEqual(["gopls"]);
+    // Each Go file type opens under its own LSP languageId; one pooled gopls serves all three.
+    expect(lspLanguageId("main.go")).toBe("go");
+    expect(lspLanguageId("go.mod")).toBe("go.mod");
+    expect(lspLanguageId("go.work")).toBe("go.work");
+    // Every code-intel pull stet makes resolves to gopls, implementation included.
+    expect(await Effect.runPromise(serversProviding("main.go", "hover", repo))).toEqual(["gopls"]);
+    expect(await Effect.runPromise(serversProviding("main.go", "definition", repo))).toEqual([
+      "gopls",
+    ]);
+    expect(await Effect.runPromise(serversProviding("main.go", "implementation", repo))).toEqual([
+      "gopls",
+    ]);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("gopls is discovery-only and resolves from a repo-local binary", () => {
+  // No provisioning channel: gopls ships no prebuilt binaries, so stet never downloads it.
+  expect(registry.gopls?.provision).toBeUndefined();
+
+  const repo = mkdtempSync(join(tmpdir(), "stet-go-bin-"));
+  const bin = join(repo, "node_modules", ".bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, "gopls"), "");
+
+  try {
+    // A repo-local binary wins over PATH, so the resolution is deterministic even where gopls is
+    // Installed globally; `args` is empty (bare `gopls` serves).
+    expect(resolveServerCommand("gopls", repo)).toEqual([join(bin, "gopls")]);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
 test("built-in Python servers resolve from the repository virtualenv", () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-python-binaries-"));
   const bin = join(repo, ".venv", "bin");

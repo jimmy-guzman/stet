@@ -142,9 +142,13 @@ describe("word caret", () => {
         "target word wrapped onto a continuation row",
         (frame) => state.overflow() === "wrap" && frame.includes("targetword"),
       );
-      const targetRow = wrapped.split("\n").findIndex((row) => row.includes("targetword"));
-      const targetColumn = wrapped.split("\n")[targetRow]?.indexOf("targetword") ?? -1;
+      const wrappedRows = wrapped.split("\n");
+      const firstRow = wrappedRows.findIndex((row) => row.includes("word0"));
+      const targetRow = wrappedRows.findIndex((row) => row.includes("targetword"));
+      const targetColumn = wrappedRows[targetRow]?.indexOf("targetword") ?? -1;
+      expect(firstRow).toBeGreaterThan(-1);
       expect(targetRow).toBeGreaterThan(-1);
+      expect(targetRow).toBeGreaterThan(firstRow);
       expect(targetColumn).toBeGreaterThan(-1);
 
       await mouse.click(targetColumn + 1, targetRow);

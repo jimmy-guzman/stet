@@ -4,6 +4,7 @@ import { selectThemeName, themeForName } from "./registry";
 import type { ThemeSelection } from "./registry";
 import { resolveTheme } from "./resolve";
 import type { ResolvedTheme } from "./resolve";
+import { isMonochromeTheme } from "./tokens";
 
 // The reactive theme state, the single seam the UI (useTheme) and the diff engine
 // Read. `appearance` follows the terminal: detected once at startup, then updated
@@ -18,8 +19,29 @@ const root = createRoot(() => {
   const activeTheme = createMemo<ResolvedTheme>(() =>
     resolveTheme(themeForName(activeThemeName())),
   );
-  return { activeTheme, activeThemeName, appearance, selection, setAppearance, setSelection };
+  // Whether the active theme is hue-free, for the renders that swap a color-only
+  // Signal for a glyph one (the viewer's change bar). A memo over the name, so a
+  // Theme-switcher preview flips it live.
+  const activeThemeMonochrome = createMemo(() =>
+    isMonochromeTheme(themeForName(activeThemeName())),
+  );
+  return {
+    activeTheme,
+    activeThemeMonochrome,
+    activeThemeName,
+    appearance,
+    selection,
+    setAppearance,
+    setSelection,
+  };
 });
 
-export const { activeTheme, activeThemeName, appearance, selection, setAppearance, setSelection } =
-  root;
+export const {
+  activeTheme,
+  activeThemeMonochrome,
+  activeThemeName,
+  appearance,
+  selection,
+  setAppearance,
+  setSelection,
+} = root;

@@ -4,6 +4,7 @@ import { bundledThemesInfo } from "shiki/themes";
 import { darkTheme } from "./dark";
 import { lightTheme } from "./light";
 import { mergeDeep } from "./merge";
+import { monoDarkTheme, monoLightTheme } from "./mono";
 import { ThemeSchema } from "./tokens";
 import type { Theme } from "./tokens";
 
@@ -19,8 +20,10 @@ interface RegisteredTheme {
 }
 
 const builtins: Record<string, RegisteredTheme> = {
-  dark: { tokens: darkTheme },
-  light: { tokens: lightTheme },
+  "dark": { tokens: darkTheme },
+  "light": { tokens: lightTheme },
+  "mono-dark": { tokens: monoDarkTheme },
+  "mono-light": { tokens: monoLightTheme },
 };
 
 const registry = new Map<string, RegisteredTheme>(Object.entries(builtins));

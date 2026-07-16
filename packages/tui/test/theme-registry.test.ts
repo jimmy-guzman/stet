@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { builtinIcons } from "@/file-support/builtins";
 import { darkTheme } from "@/theme/dark";
 import { lightTheme } from "@/theme/light";
+import { monoDarkTheme, monoLightTheme } from "@/theme/mono";
 import {
   registerThemes,
   resolveThemes,
@@ -12,6 +13,7 @@ import {
   themeForName,
   themeNames,
 } from "@/theme/registry";
+import { isMonochromeTheme } from "@/theme/tokens";
 
 describe("themeForName", () => {
   test("returns a built-in by name", () => {
@@ -125,6 +127,27 @@ describe("built-in icon colors", () => {
     );
 
     expect(failures).toEqual([]);
+  });
+});
+
+describe("monochrome themes", () => {
+  test("the mono pair is built in", () => {
+    expect(themeForName("mono-dark")).toBe(monoDarkTheme);
+    expect(themeForName("mono-light")).toBe(monoLightTheme);
+    expect(themeNames()).toContain("mono-dark");
+    expect(themeNames()).toContain("mono-light");
+  });
+
+  test("every mono token is a pure grey; the colored built-ins are not", () => {
+    expect(isMonochromeTheme(monoDarkTheme)).toBe(true);
+    expect(isMonochromeTheme(monoLightTheme)).toBe(true);
+    expect(isMonochromeTheme(darkTheme)).toBe(false);
+    expect(isMonochromeTheme(lightTheme)).toBe(false);
+  });
+
+  test("mono themes color no icon, so every glyph falls back to muted", () => {
+    expect(Object.keys(monoDarkTheme.icon)).toEqual([]);
+    expect(Object.keys(monoLightTheme.icon)).toEqual([]);
   });
 });
 

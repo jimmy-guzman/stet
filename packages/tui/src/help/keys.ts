@@ -56,6 +56,7 @@ export const KEY_HELP: { entries: [combo: string, action: string][]; heading: st
       ["t", "theme switcher: filter, live-preview, apply"],
       ["w", "switch to another git worktree"],
       ["c", "toggle changes-only filter for the tree"],
+      ["ctrl-s", "save current settings to config"],
       ["r", "re-run checks"],
       ["R", "restart language servers"],
     ],

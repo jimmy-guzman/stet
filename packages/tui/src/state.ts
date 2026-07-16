@@ -18,6 +18,7 @@ import { formatCopyReference } from "./clipboard/reference";
 import { Clipboard } from "./clipboard/service";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
+import { Config } from "./config/service";
 import {
   PROBLEMS_HEIGHT,
   REFERENCES_MAX_ROWS,
@@ -110,7 +111,7 @@ import type { IntelRequestError } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
-import { activeThemeName, selection, setSelection } from "./theme/active";
+import { activeThemeName, appearance, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
 import { worktreeLabel } from "./ui-helpers";
@@ -3797,6 +3798,43 @@ function createState() {
     setThemeComboboxOpen(false);
   }
 
+  /**
+   * `ctrl-s`: write the current session settings back to the user config, as comment-preserving
+   * edits touching only the keys that diverge from the file (`updateSettingsText` owns the diff and
+   * the theme pair rule). The snapshot reads the live signals, so from inside the theme picker the
+   * previewed selection is what saves; the keymap commits the picker first, so the session and the
+   * file land on the same value.
+   */
+  async function persistSettings() {
+    const snapshot = {
+      appearance: appearance(),
+      changesOnly: changesOnly(),
+      iconsEnabled: iconsEnabled(),
+      provenanceEnabled: blameEnabled(),
+      searchCaseSensitive: searchCaseSensitive(),
+      searchRegex: searchRegex(),
+      searchScope: searchScope(),
+      sidebarOpen: sidebarOpen(),
+      sidebarWidth: sidebarWidthOverride() ?? undefined,
+      theme: selection(),
+      wrap: overflow() === "wrap",
+    };
+    try {
+      const saved = await runtime.runPromise(
+        Config.use((config) => config.persistSettings(snapshot)),
+      );
+      notify(
+        saved.length > 0 ? `saved ${saved.join(", ")} to config` : "settings already saved",
+        saved.length > 0 ? "success" : "info",
+      );
+    } catch (error) {
+      notify(
+        `couldn't save config: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+        "error",
+      );
+    }
+  }
+
   // A monotonic token guards the async last-commit resolution: a newer pick (of
   // Any kind) bumps it, so a late parentRef result can't overwrite the newer scope.
   let scopeSelection = 0;
@@ -4459,6 +4497,7 @@ function createState() {
     pageSearchSelection,
     paneHeight,
     pendingRestore,
+    persistSettings,
     pinActiveTab,
     problemIndex,
     problems,

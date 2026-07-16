@@ -131,7 +131,9 @@ export function ThemeCombobox() {
         </Show>
       </scrollbox>
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.muted}>↑↓/hover preview · ⏎/click apply · esc cancel</text>
+        <text fg={theme.colors.text.muted}>
+          ↑↓/hover preview · ⏎ apply · ctrl-s save · esc cancel
+        </text>
       </box>
     </box>
   );

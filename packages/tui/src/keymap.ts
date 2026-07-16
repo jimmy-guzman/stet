@@ -191,6 +191,11 @@ export function createKeyHandler(host: HostEffects) {
       if (state.themeComboboxOpen()) {
         if (key.name === "escape") {
           state.closeThemePicker(false);
+        } else if (key.ctrl && key.name === "s") {
+          // Commit the previewed theme first so the session and the file land on
+          // The same value, then save every divergent setting with it.
+          state.closeThemePicker(true);
+          void state.persistSettings();
         } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
           state.setThemeComboboxIndex(
             Math.min(
@@ -589,7 +594,8 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "s") {
+      // Guard !ctrl so ctrl-s (save settings, below) is not swallowed here.
+      if (key.name === "s" && !key.ctrl) {
         openScopeMenu();
         return;
       }
@@ -599,6 +605,13 @@ export function createKeyHandler(host: HostEffects) {
         // Event, so without preventDefault the triggering "t" would be typed into it.
         key.preventDefault();
         state.openThemePicker();
+        return;
+      }
+
+      // Save the session's settings to the user config. The search pane's own
+      // Ctrl-s (scope menu) sits earlier in the chain and keeps its meaning there.
+      if (key.ctrl && key.name === "s") {
+        void state.persistSettings();
         return;
       }
 

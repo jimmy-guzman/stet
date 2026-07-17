@@ -155,4 +155,29 @@ describe("problems panel mouse", () => {
       renderer.destroy();
     }
   });
+
+  test("a click on chrome between two clicks on the same problem is not a double click", async () => {
+    const { captureCharFrame, mockMouse, renderer, renderOnce } = await openPanel();
+
+    try {
+      const problemY = problemsRowOf(captureCharFrame(), "beta finding");
+      const headerY = problemsRowOf(captureCharFrame(), "src/a.ts");
+      expect(headerY).toBeGreaterThan(0);
+      expect(headerY).not.toBe(problemY);
+
+      // Problem -> header -> same problem, back to back (so the two problem clicks land
+      // Inside the double-click window). The header click must break the sequence, or
+      // The second problem click reads as a double and jumps the view away.
+      await mockMouse.click(20, problemY);
+      await mockMouse.click(20, headerY);
+      await mockMouse.click(20, problemY);
+      await renderOnce();
+
+      expect(state.focusedPane()).toBe("problems");
+      const selected = state.allProblemItems()[state.problemIndex()];
+      expect(selected?.kind === "problem" && selected.summary).toBe("beta finding");
+    } finally {
+      renderer.destroy();
+    }
+  });
 });

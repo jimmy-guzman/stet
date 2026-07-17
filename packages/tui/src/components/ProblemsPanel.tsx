@@ -81,11 +81,16 @@ export function ProblemsPanel() {
     batch(() => {
       state.setFocusedPane("problems");
       const target = item.kind === "help" ? item.owner : index;
+      // Advance the double-click tracker on every click, before the navigable guard,
+      // So a click on chrome (a header or spacer) between two clicks on the same
+      // Problem registers as a distinct row and breaks the sequence, rather than being
+      // Invisible to the tracker and letting the second problem click read as a double.
+      const isDouble = isDoubleClick(String(target));
       const targeted = state.allProblemItems()[target];
       if (targeted === undefined || !isNavigableProblemItem(targeted)) {
         return;
       }
-      if (targeted.kind === "problem" && isDoubleClick(String(target))) {
+      if (targeted.kind === "problem" && isDouble) {
         const { problem } = targeted;
         state.selectFile(
           problem.path,

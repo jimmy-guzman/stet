@@ -12,7 +12,14 @@ import { loadConfigText } from "./load";
 export interface SettingsSnapshot {
   appearance: "dark" | "light";
   changesOnly: boolean;
+  /**
+   * The literal `--editor` flag from this run, or undefined when none was passed, which leaves the
+   * file's key untouched (never removed): only an explicit flag persists, so an environment-derived
+   * template is never frozen into the file. Same for `ide`.
+   */
+  editor: string | undefined;
   iconsEnabled: boolean;
+  ide: string | undefined;
   provenanceEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegex: boolean;
@@ -141,6 +148,13 @@ export function updateSettingsText(
 
   const edits: SettingEdit[] = [
     ...(themeEquals(snapshot.theme, config.theme) ? [] : [themeEdit(snapshot, config.theme)]),
+    // Unlike the toggles, an absent flag means "nothing to say", never "remove".
+    ...(snapshot.editor !== undefined && snapshot.editor !== config.editor
+      ? [{ label: "editor", path: ["editor"], value: snapshot.editor }]
+      : []),
+    ...(snapshot.ide !== undefined && snapshot.ide !== config.ide
+      ? [{ label: "ide", path: ["ide"], value: snapshot.ide }]
+      : []),
     ...diff("icons", ["icons", "enabled"], snapshot.iconsEnabled, config.icons?.enabled ?? true),
     ...diff("wrap", ["viewer", "wrap"], snapshot.wrap, config.viewer?.wrap ?? false),
     ...diff("sidebar", ["sidebar", "open"], snapshot.sidebarOpen, config.sidebar?.open ?? true),

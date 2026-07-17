@@ -686,6 +686,12 @@ function createState() {
   const [terminalHeight, setTerminalHeight] = tracked(24);
   const [editorTemplate, setEditorTemplate] = tracked<string>("vim +{line} {file}");
   const [ideTemplate, setIdeTemplate] = tracked<string | undefined>(undefined);
+  // The raw --editor/--ide flags from this run's command line, kept apart from the
+  // Resolved templates above: ctrl-s persists only a literal flag, never the
+  // Resolution (which folds in STET_EDITOR/$EDITOR/$VISUAL and the vim fallback,
+  // And would freeze an environment-derived default into the user's file).
+  const [editorFlag, setEditorFlag] = tracked<string | undefined>(undefined);
+  const [ideFlag, setIdeFlag] = tracked<string | undefined>(undefined);
 
   // --- synchronous derived ---
   const selectedFile = createMemo(() => {
@@ -3809,7 +3815,9 @@ function createState() {
     const snapshot = {
       appearance: appearance(),
       changesOnly: changesOnly(),
+      editor: editorFlag(),
       iconsEnabled: iconsEnabled(),
+      ide: ideFlag(),
       provenanceEnabled: blameEnabled(),
       searchCaseSensitive: searchCaseSensitive(),
       searchRegex: searchRegex(),
@@ -4562,6 +4570,7 @@ function createState() {
     setCursorIndex,
     setCursorRow,
     setDiagnosticsEnabled,
+    setEditorFlag,
     setEditorTemplate,
     setExpandedDirectories,
     setFileComboboxIndex,
@@ -4578,6 +4587,7 @@ function createState() {
     setGitModel,
     setHelpDialogOpen,
     setIconsEnabled,
+    setIdeFlag,
     setIdeTemplate,
     setIntelEnabled,
     setJumpTarget,

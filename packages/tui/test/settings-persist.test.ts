@@ -60,6 +60,22 @@ describe("persistSettings", () => {
     });
   });
 
+  test("a literal --ide flag persists; the resolved template never does", async () => {
+    await withConfigDir(async (dir) => {
+      // The resolved template is always set (env fallbacks fill it), the flag
+      // Only when passed; only the flag may reach the file.
+      state.setIdeTemplate("code {repo} --goto {file}:{line}");
+      state.setIdeFlag("zed {repo} {file}:{line}");
+      await state.persistSettings();
+
+      const file = join(dir, "stet", "config.jsonc");
+      expect(Bun.JSONC.parse(readFileSync(file, "utf8"))).toEqual({
+        ide: "zed {repo} {file}:{line}",
+      });
+      expect(state.statusRight()).toBe("saved ide to config");
+    });
+  });
+
   test("a malformed config fails with a notice and an unchanged file", async () => {
     await withConfigDir(async (dir) => {
       const file = join(dir, "stet", "config.jsonc");

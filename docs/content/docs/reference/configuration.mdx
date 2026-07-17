@@ -68,9 +68,11 @@ answers a caret.
 
 You never have to edit the file by hand for these: press `ctrl-s` anywhere to
 save your current session settings (theme, icons, wrap, sidebar, changes-only,
-provenance, search toggles) back to the config. Only keys that differ from the
-file are written, as targeted edits that keep your comments, and the notice
-names what changed. With no config file yet, `ctrl-s` creates one.
+provenance, search toggles, plus any `--editor`/`--ide` passed this run) back
+to the config. Only keys that differ from the file are written, as targeted
+edits that keep your comments, and the notice names what changed; an editor
+resolved from `$EDITOR`-style environment fallbacks is never written, only a
+literal flag. With no config file yet, `ctrl-s` creates one.
 
 ## Editor and IDE
 

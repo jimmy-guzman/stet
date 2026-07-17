@@ -10,7 +10,9 @@ function snapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
   return {
     appearance: "dark",
     changesOnly: false,
+    editor: undefined,
     iconsEnabled: true,
+    ide: undefined,
     provenanceEnabled: false,
     searchCaseSensitive: false,
     searchRegex: false,
@@ -134,6 +136,39 @@ describe("updateSettingsText", () => {
     expect(saved).toEqual(["sidebar"]);
     expect(text).not.toContain("width");
     expect(text).toContain(`"open": true`);
+  });
+
+  test("a literal editor or ide flag persists when it differs from the file", () => {
+    const source = `{ "editor": "vim +{line} {file}" }`;
+
+    const { saved, text } = unwrap(
+      updateSettingsText(
+        source,
+        snapshot({ editor: "nvim +{line} {file}", ide: "zed {repo} {file}:{line}" }),
+      ),
+    );
+
+    expect(saved).toEqual(["editor", "ide"]);
+    expect(text).toContain(`"editor": "nvim +{line} {file}"`);
+    expect(text).toContain(`"ide": "zed {repo} {file}:{line}"`);
+  });
+
+  test("no flag leaves the file's editor and ide keys untouched", () => {
+    const source = `{ "editor": "hx {file}", "ide": "code {repo}" }`;
+
+    const { saved, text } = unwrap(updateSettingsText(source, snapshot({ theme: "dark" })));
+
+    expect(saved).toEqual(["theme"]);
+    expect(text).toContain(`"editor": "hx {file}"`);
+    expect(text).toContain(`"ide": "code {repo}"`);
+  });
+
+  test("a flag matching the file writes nothing", () => {
+    const source = `{ "ide": "code {repo}" }`;
+
+    const { saved } = unwrap(updateSettingsText(source, snapshot({ ide: "code {repo}" })));
+
+    expect(saved).toEqual([]);
   });
 
   test("empty text seeds a fresh object", () => {

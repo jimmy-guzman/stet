@@ -17,7 +17,7 @@ describe("help overlay", () => {
       // Tall enough to fit the whole grouped keybindings list (its section headers
       // And spacers included), so the last-row assertions below verify it sizes to
       // Show every shortcut (no clip) when there's room.
-      height: 71,
+      height: 72,
       width: 120,
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });

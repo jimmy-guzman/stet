@@ -1,6 +1,7 @@
 import { Layer, ManagedRuntime } from "effect";
 
 import { ClipboardLive } from "./clipboard/service";
+import { ConfigLive } from "./config/service";
 import { LspProcessLive } from "./diagnostics/lsp-process";
 import { ProvisionerLive } from "./diagnostics/provision";
 import { LanguageServersLive } from "./diagnostics/servers";
@@ -26,6 +27,9 @@ const AppLayer = Layer.mergeAll(
   EditorLive,
   FileLive,
   ClipboardLive,
+  // The `ctrl-s` settings write; startup still loads config on its own
+  // Short-lived runtime in main.tsx, before this one first runs.
+  ConfigLive,
   WatcherLive,
 ).pipe(
   Layer.provideMerge(LanguageServersLive),

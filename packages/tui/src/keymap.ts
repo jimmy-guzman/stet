@@ -191,6 +191,11 @@ export function createKeyHandler(host: HostEffects) {
       if (state.themeComboboxOpen()) {
         if (key.name === "escape") {
           state.closeThemePicker(false);
+        } else if (key.ctrl && key.name === "s") {
+          // Commit the previewed theme first so the session and the file land on
+          // The same value, then save every divergent setting with it.
+          state.closeThemePicker(true);
+          void state.persistSettings();
         } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
           state.setThemeComboboxIndex(
             Math.min(
@@ -228,7 +233,8 @@ export function createKeyHandler(host: HostEffects) {
         }
         // Toggle chords live on keys the input's readline set does not own
         // (ctrl-a/ctrl-e stay line home/end for editing): ctrl-r regex,
-        // Ctrl-x exact case, ctrl-g changes<->repo, ctrl-s the scope picker.
+        // Ctrl-x exact case, ctrl-g changes<->repo, ctrl-o the scope picker,
+        // Ctrl-s save settings.
         if (key.ctrl && key.name === "r") {
           state.toggleSearchRegex();
           return;
@@ -241,11 +247,19 @@ export function createKeyHandler(host: HostEffects) {
           state.toggleSearchScope();
           return;
         }
-        // The diff scope (which changes "changed" means) is pickable without
+        // The diff scope (which changes what "changed" means) is pickable without
         // Leaving the pane; the ScopeMenu branch earlier in the chain owns the
         // Keys once open, and a pick reruns the search via the git-model dep.
-        if (key.ctrl && key.name === "s") {
+        // Ctrl-o, not ctrl-s: one key means one thing, and ctrl-s saves settings
+        // Everywhere.
+        if (key.ctrl && key.name === "o") {
           openScopeMenu();
+          return;
+        }
+        // This input-owning branch swallows unmatched keys, so the global save
+        // Below is repeated here rather than reached by fallthrough.
+        if (key.ctrl && key.name === "s") {
+          void state.persistSettings();
           return;
         }
         if (state.searchFocus() !== "results") {
@@ -589,7 +603,8 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "s") {
+      // Guard !ctrl so ctrl-s (save settings, below) is not swallowed here.
+      if (key.name === "s" && !key.ctrl) {
         openScopeMenu();
         return;
       }
@@ -599,6 +614,13 @@ export function createKeyHandler(host: HostEffects) {
         // Event, so without preventDefault the triggering "t" would be typed into it.
         key.preventDefault();
         state.openThemePicker();
+        return;
+      }
+
+      // Save the session's settings to the user config. The search pane's own
+      // Ctrl-s (scope menu) sits earlier in the chain and keeps its meaning there.
+      if (key.ctrl && key.name === "s") {
+        void state.persistSettings();
         return;
       }
 

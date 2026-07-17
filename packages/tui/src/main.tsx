@@ -175,6 +175,10 @@ try {
     );
     state.setEditorTemplate(resolveEditorTemplate(options.editor ?? config.editor));
     state.setIdeTemplate(resolveIdeTemplate(options.ide ?? config.ide));
+    // The raw flags, so ctrl-s can persist a literal --editor/--ide (never the
+    // Resolved template, which folds in environment fallbacks).
+    state.setEditorFlag(options.editor);
+    state.setIdeFlag(options.ide);
     state.setSidebarWidthOverride(config.sidebar?.width ?? null);
     state.setChangesOnly(config.sidebar?.changesOnly ?? false);
     if (config.sidebar?.open === false) {

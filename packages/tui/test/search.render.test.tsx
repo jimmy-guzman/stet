@@ -173,8 +173,9 @@ describe("project content search", () => {
       const results = await settleUntil("results", (frame) => frame.includes("1 match in 1 file"));
       expect(results).toContain("needle = 2");
 
-      // Ctrl-s opens the scope picker without leaving the pane; esc returns.
-      mockInput.pressKey("s", { ctrl: true });
+      // Ctrl-o opens the scope picker without leaving the pane; esc returns.
+      // (ctrl-s saves settings everywhere, so the scope chord moved off it.)
+      mockInput.pressKey("o", { ctrl: true });
       await settleUntil("scope picker over pane", (frame) => frame.includes("switch scope"));
       mockInput.pressEscape();
       await settleUntil("picker closed, pane intact", (frame) => !frame.includes("switch scope"));

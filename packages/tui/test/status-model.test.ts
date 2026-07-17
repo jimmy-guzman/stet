@@ -1,211 +1,237 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildStatusBarModel } from "@/status/model";
-import type { StatusBarActivity, StatusBarHint, StatusBarModelInput } from "@/status/model";
+import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "@/status/model";
+import type { StatusBarModelInput } from "@/status/model";
 
 const baseInput = {
   activity: undefined,
+  alert: undefined,
   backgroundProgress: undefined,
   contextualFinding: undefined,
   foregroundProgress: undefined,
-  hint: { category: "guidance", mode: "generic", text: "? keys · q quit" },
+  guidance: "? help · q quit",
   notification: undefined,
-  outcome: undefined,
   provenance: undefined,
   width: 80,
 } satisfies StatusBarModelInput;
 
-describe("status bar model", () => {
-  test("shows guidance by itself in the split layout", () => {
+const activity = { at: 1000, changeKind: "modified", path: "src/state.ts" } as const;
+const provenance = { band: "session", text: "Jimmy · now · fix status" } as const;
+
+describe("status bar guidance", () => {
+  test("an idle bar falls back to guidance", () => {
     expect(buildStatusBarModel(baseInput)).toEqual({
-      content: undefined,
-      hint: baseInput.hint,
-      layout: "split",
-    });
-  });
-
-  test("promotes foreground progress and gives it priority over a notification", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      foregroundProgress: "resolving definition…",
-      notification: { level: "success", text: "copied src/state.ts" },
-    });
-
-    expect(model).toMatchObject({
-      content: {
-        category: "foreground-progress",
-        kind: "message",
-        level: "info",
-        message: "resolving definition…",
-      },
-      layout: "full",
-    });
-  });
-
-  test("promotes action notifications to the full row", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      notification: { level: "success", text: "copied src/state.ts" },
-    });
-
-    expect(model).toMatchObject({
-      content: {
-        category: "notification",
-        kind: "message",
-        level: "success",
-        message: "copied src/state.ts",
-      },
-      layout: "full",
-    });
-  });
-
-  test("promotes the caret finding ahead of provenance", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      contextualFinding: { level: "warning", text: "diagnostics: unused value" },
-      provenance: { band: "session", text: "Jimmy · now · fix status" },
-    });
-
-    expect(model).toMatchObject({
-      content: {
-        category: "contextual-inspection",
-        kind: "message",
-        level: "warning",
-        message: "diagnostics: unused value",
-      },
-      layout: "full",
-    });
-  });
-
-  test("uses provenance as full-row contextual inspection", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      backgroundProgress: "checking…",
-      provenance: { band: "session", text: "Jimmy · now · fix status" },
-    });
-
-    expect(model).toEqual({
-      content: {
-        band: "session",
-        category: "contextual-inspection",
-        kind: "provenance",
-        text: "Jimmy · now · fix status",
-      },
-      layout: "full",
-    });
-  });
-
-  test("promotes persistent warnings and errors ahead of provenance", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      backgroundProgress: "installing typescript server…",
-      outcome: { level: "error", text: "typescript failed" },
-      provenance: { band: "session", text: "Jimmy · now · fix status" },
-    });
-
-    expect(model).toMatchObject({
-      content: {
-        category: "ambient",
-        kind: "ambient",
-        level: "error",
-        message: "typescript failed",
-      },
-      layout: "full",
-    });
-  });
-
-  test("keeps complete background content beside the generic hint when it fits", () => {
-    const activity = {
-      at: 1000,
-      changeKind: "modified",
-      path: "src/state.ts",
-    } satisfies StatusBarActivity;
-    const model = buildStatusBarModel({
-      ...baseInput,
-      activity,
-      backgroundProgress: "checking…",
-      width: 80,
-    });
-
-    expect(model).toEqual({
-      content: {
-        activity,
-        category: "background-progress",
-        kind: "ambient",
-        level: "info",
-        message: "checking…",
-      },
-      hint: baseInput.hint,
-      layout: "split",
-    });
-  });
-
-  test("promotes background content when the complete group does not fit", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      activity: { at: 1000, changeKind: "modified", path: "src/components/StatusBar.tsx" },
-      backgroundProgress: "installing typescript server…",
-      width: 48,
-    });
-
-    expect(model.layout).toBe("full");
-    expect(model.content).toMatchObject({
-      category: "background-progress",
-      kind: "ambient",
-      level: "info",
-      message: "installing typescript server…",
-    });
-  });
-
-  test("protects active-mode guidance and degrades the background content instead", () => {
-    const hint = {
       category: "guidance",
-      mode: "active",
-      text: "type to find · enter confirm · esc cancel",
-    } satisfies StatusBarHint;
-    const model = buildStatusBarModel({
-      ...baseInput,
-      activity: { at: 1000, changeKind: "modified", path: "src/components/StatusBar.tsx" },
-      backgroundProgress: "installing typescript server…",
-      hint,
-      width: 48,
+      kind: "guidance",
+      text: "? help · q quit",
     });
-
-    expect(model).toEqual({ content: undefined, hint, layout: "split" });
   });
 
-  test("uses display-cell width for the fit decision", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      activity: { at: 1000, changeKind: "added", path: "src/🐛🐛🐛🐛.ts" },
-      width: 34,
-    });
-
-    expect(model.layout).toBe("full");
+  test("guidance renders whatever mode text it is handed", () => {
     expect(
-      Bun.stringWidth(
-        model.content?.kind === "ambient" ? (model.content.activity?.path ?? "") : "",
-      ),
-    ).toBeLessThanOrEqual(30);
+      buildStatusBarModel({ ...baseInput, guidance: "enter find · esc cancel" }),
+    ).toMatchObject({ kind: "guidance", text: "enter find · esc cancel" });
   });
 
-  test("drops the activity group before truncating a longer status message", () => {
-    const model = buildStatusBarModel({
-      ...baseInput,
-      activity: { at: 1000, changeKind: "modified", path: "src/state.ts" },
-      backgroundProgress: "installing an unusually long language server name…",
-      width: 28,
-    });
+  test("live content displaces guidance, and clearing it restores guidance", () => {
+    const busy = buildStatusBarModel({ ...baseInput, backgroundProgress: "running diagnostics…" });
+    expect(busy).toMatchObject({ kind: "message", message: "running diagnostics…" });
 
-    expect(model.layout).toBe("full");
-    expect(model.content).toMatchObject({
-      activity: undefined,
-      category: "background-progress",
+    // The model is a pure function of its inputs, so "the run finished" is just the absent input.
+    expect(buildStatusBarModel(baseInput)).toMatchObject({ kind: "guidance" });
+  });
+});
+
+// Each pair proves one step of the ladder; together they fix the total order. Every case pits a
+// Tier against the one directly below it, so a reordering fails exactly one test.
+describe("status bar priority", () => {
+  test("foreground progress outranks a notification", () => {
+    expect(
+      buildStatusBarModel({
+        ...baseInput,
+        foregroundProgress: "switching to feat/status…",
+        notification: { level: "success", text: "copied src/state.ts" },
+      }),
+    ).toMatchObject({
+      category: "foreground-progress",
+      level: "info",
+      message: "switching to feat/status…",
+    });
+  });
+
+  test("a notification outranks the caret finding", () => {
+    expect(
+      buildStatusBarModel({
+        ...baseInput,
+        contextualFinding: { level: "warning", text: "diagnostics: unused value" },
+        notification: { level: "success", text: "copied src/state.ts" },
+      }),
+    ).toMatchObject({ category: "notification", level: "success", message: "copied src/state.ts" });
+  });
+
+  test("the caret finding outranks a persistent alert", () => {
+    expect(
+      buildStatusBarModel({
+        ...baseInput,
+        alert: { level: "error", source: "diagnostics", text: "tsc failed: Cannot find module" },
+        contextualFinding: { level: "warning", text: "diagnostics: unused value" },
+      }),
+    ).toMatchObject({
+      category: "contextual-inspection",
+      level: "warning",
+      message: "diagnostics: unused value",
+    });
+  });
+
+  // The reason the alert tier sits above provenance: a real problem must never be hidden behind
+  // The blame inspector.
+  test("a persistent alert outranks provenance", () => {
+    expect(
+      buildStatusBarModel({
+        ...baseInput,
+        alert: { level: "error", source: "diagnostics", text: "tsc failed: Cannot find module" },
+        provenance,
+      }),
+    ).toMatchObject({
+      category: "persistent-alert",
+      level: "error",
+      message: "tsc failed: Cannot find module",
+    });
+  });
+
+  // The user turned the rail on deliberately; a routine run must not evict what they asked to see.
+  test("provenance outranks background progress", () => {
+    expect(
+      buildStatusBarModel({ ...baseInput, backgroundProgress: "running diagnostics…", provenance }),
+    ).toEqual({
+      band: "session",
+      category: "contextual-inspection",
+      kind: "provenance",
+      text: "Jimmy · now · fix status",
+    });
+  });
+
+  test("background progress outranks recent activity", () => {
+    expect(
+      buildStatusBarModel({ ...baseInput, activity, backgroundProgress: "running diagnostics…" }),
+    ).toMatchObject({ category: "background-progress", message: "running diagnostics…" });
+  });
+
+  test("recent activity outranks guidance", () => {
+    expect(buildStatusBarModel({ ...baseInput, activity })).toEqual({
+      activity,
+      category: "ambient",
       kind: "ambient",
     });
-    if (model.content?.kind === "ambient") {
-      expect(model.content.message.startsWith("installing")).toBe(true);
-      expect(Bun.stringWidth(`ℹ ${model.content.message}`)).toBeLessThanOrEqual(26);
+  });
+});
+
+describe("status bar alerts", () => {
+  const diagnostics = { level: "error", source: "diagnostics", text: "tsc failed" } as const;
+  const worktree = { level: "warning", source: "worktree", text: "missing worktree" } as const;
+
+  // The whole reason alerts carry a source. One untyped channel meant a diagnostics run starting
+  // Up wiped a worktree failure that nothing had resolved, and vice versa.
+  test("clearing one source leaves an unrelated source's alert standing", () => {
+    const raised = raiseAlert(raiseAlert([], worktree), diagnostics);
+
+    expect(clearAlertSource(raised, "diagnostics")).toEqual([worktree]);
+    expect(clearAlertSource(raised, "worktree")).toEqual([diagnostics]);
+  });
+
+  test("clearing a source with no alert is a no-op", () => {
+    expect(clearAlertSource([worktree], "diagnostics")).toEqual([worktree]);
+  });
+
+  test("a source raising again replaces its own alert rather than stacking", () => {
+    const raised = raiseAlert([diagnostics], { ...diagnostics, text: "ruff failed" });
+
+    expect(raised).toEqual([{ ...diagnostics, text: "ruff failed" }]);
+  });
+
+  // One row cannot rank a worktree failure against a diagnostics one, so recency decides: the
+  // Problem the user just provoked is the one they are waiting on.
+  test("the newest alert is the one the bar shows", () => {
+    expect(latestAlert(raiseAlert(raiseAlert([], worktree), diagnostics))).toEqual(diagnostics);
+    expect(latestAlert(raiseAlert(raiseAlert([], diagnostics), worktree))).toEqual(worktree);
+  });
+
+  test("a re-raised source becomes the newest", () => {
+    const raised = raiseAlert(raiseAlert([], diagnostics), worktree);
+
+    expect(latestAlert(raiseAlert(raised, diagnostics))).toEqual(diagnostics);
+  });
+
+  test("no alerts reads as none", () => {
+    expect(latestAlert([])).toBeUndefined();
+  });
+});
+
+describe("status bar fitting", () => {
+  test("a message truncates to the row, leaving room for its severity glyph", () => {
+    const model = buildStatusBarModel({
+      ...baseInput,
+      alert: {
+        level: "error",
+        source: "diagnostics",
+        text: "tsc failed: Cannot find module 'effect' and several other things besides",
+      },
+      width: 30,
+    });
+
+    if (model.kind !== "message") {
+      throw new Error("expected a message");
     }
+    // The glyph, its space, and both paddings all come out of the same 30 cells.
+    expect(Bun.stringWidth(`✖ ${model.message}`)).toBeLessThanOrEqual(28);
+    expect(model.message.startsWith("tsc failed")).toBe(true);
+  });
+
+  test("a long activity path truncates from the front, keeping the filename", () => {
+    const model = buildStatusBarModel({
+      ...baseInput,
+      activity: { ...activity, path: `src/${"components/".repeat(20)}DiffView.tsx` },
+      width: 40,
+    });
+
+    if (model.kind !== "ambient") {
+      throw new Error("expected ambient activity");
+    }
+    expect(model.activity.path).toStartWith("…");
+    expect(model.activity.path).toEndWith("DiffView.tsx");
+    expect(Bun.stringWidth(`● ${model.activity.path}`)).toBeLessThanOrEqual(38);
+  });
+
+  // A path cut down to the ellipsis alone names no file, so it has nothing to say that guidance
+  // Does not say better. Five cells is where the budget collapses that far: two go to the row's
+  // Padding and two to the recency dot, leaving one.
+  test("an activity path with no room left yields the row to guidance", () => {
+    expect(
+      buildStatusBarModel({
+        ...baseInput,
+        activity: { ...activity, path: "src/components/StatusBar.tsx" },
+        width: 5,
+      }),
+    ).toMatchObject({ kind: "guidance" });
+  });
+
+  test("fit is measured in terminal cells, not string length", () => {
+    const model = buildStatusBarModel({
+      ...baseInput,
+      activity: { ...activity, path: "src/🐛🐛🐛🐛🐛🐛.ts" },
+      width: 20,
+    });
+
+    if (model.kind !== "ambient") {
+      throw new Error("expected ambient activity");
+    }
+    // Each bug is two cells wide but one code point; a length-based budget would overflow the row.
+    expect(Bun.stringWidth(`● ${model.activity.path}`)).toBeLessThanOrEqual(18);
+  });
+
+  test("guidance itself truncates rather than overflowing a narrow row", () => {
+    const model = buildStatusBarModel({ ...baseInput, width: 10 });
+
+    expect(Bun.stringWidth(model.kind === "guidance" ? model.text : "")).toBeLessThanOrEqual(8);
   });
 });

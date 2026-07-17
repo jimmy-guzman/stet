@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
+import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
@@ -53,11 +54,17 @@ describe("in-buffer find", () => {
       mockInput.pressKey("n");
       await settleUntil("wrapped to first match", (frame) => frame.includes("1/2"));
 
-      // Esc clears the find: the counter disappears and the default hint returns.
+      // Esc clears the find: the counter disappears and the default hint returns. Guidance is the
+      // Lowest tier, so it can only return once the startup diagnostics run has stopped holding
+      // The row with its progress line.
       mockInput.pressEscape();
       const cleared = await settleUntil(
         "find cleared",
-        (frame) => frame.includes("? keys") && !frame.includes("1/2") && !frame.includes("2/2"),
+        (frame) =>
+          !state.checksRunning() &&
+          frame.includes("? help") &&
+          !frame.includes("1/2") &&
+          !frame.includes("2/2"),
       );
       expect(cleared).not.toContain("1/2");
       // The title row (line indicator) returns once the find clears.

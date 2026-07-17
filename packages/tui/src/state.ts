@@ -116,8 +116,8 @@ import type { IntelRequestError } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
-import { buildStatusBarModel } from "./status/model";
-import type { StatusBarHint } from "./status/model";
+import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "./status/model";
+import type { StatusAlert, StatusAlerts, StatusAlertSource } from "./status/model";
 import { activeThemeName, appearance, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
@@ -663,15 +663,21 @@ function createState() {
   });
   const [jumpTarget, setJumpTarget] = tracked<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = tracked<CheckerState>(initialCheckerState([]));
-  const [status, setStatus] = tracked("");
-  const [statusLevel, setStatusLevel] = tracked<LogLevel>("info");
+  // Unresolved problems, tagged by the source that owns each one's lifecycle. A single untyped
+  // Status channel was why a worktree failure and a diagnostics failure overwrote each other, and
+  // Why either one's retry wiped the other's alert.
+  const [alerts, setAlerts] = tracked<StatusAlerts>([]);
   // A live in-flight indicator for a code-intel pull (F12), distinct from the
   // Auto-clearing `notice` acknowledgment: it is set on the keystroke and cleared
   // When the pull settles, so the status bar shows the action is underway.
   const [intelStatus, setIntelStatus] = tracked<string | undefined>(undefined);
-  const report = (text: string, level: LogLevel = "info") => {
-    setStatus(text);
-    setStatusLevel(level);
+  // The same in-flight shape for a worktree switch, which reloads the whole model.
+  const [switchProgress, setSwitchProgress] = tracked<string | undefined>(undefined);
+  const raise = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
+    setAlerts((current) => raiseAlert(current, { level, source, text }));
+  };
+  const clearAlert = (source: StatusAlertSource) => {
+    setAlerts((current) => clearAlertSource(current, source));
   };
   // An ephemeral acknowledgment of a user action (copied, scope changed, …),
   // Held for a fixed dwell so it outlives the keystroke that triggered it.
@@ -1781,20 +1787,15 @@ function createState() {
             .join(" · ");
     return { band: provenance.band, text };
   });
-  const statusHint = createMemo<StatusBarHint>(() =>
+  // The bar's lowest tier: context-aware only for the temporary find modes, which have controls a
+  // User cannot guess, and otherwise the one hint that reaches everything else. The panes get no
+  // Standing tutorial line, since any live content outranks this and would bury it anyway.
+  const guidance = createMemo(() =>
     findOpen()
-      ? {
-          category: "guidance",
-          mode: "active",
-          text: "type to find · enter confirm · esc cancel",
-        }
+      ? "enter find · esc cancel"
       : findActive()
-        ? {
-            category: "guidance",
-            mode: "active",
-            text: "n/N next/prev · esc clear find",
-          }
-        : { category: "guidance", mode: "generic", text: "? keys · q quit" },
+        ? "n/N next/prev · esc clear"
+        : "? help · q quit",
   );
   const provisioningStatus = createMemo(() => {
     const languages = [...provisioningLanguages()].toSorted();
@@ -1819,7 +1820,8 @@ function createState() {
               changeKind: gitModel().changedByPath.get(recent.path)?.kind,
               path: recent.path,
             },
-      backgroundProgress: provisioning ?? (checksRunning() ? "checking…" : undefined),
+      alert: latestAlert(alerts()),
+      backgroundProgress: provisioning ?? (checksRunning() ? "running diagnostics…" : undefined),
       contextualFinding:
         finding === undefined
           ? undefined
@@ -1827,10 +1829,10 @@ function createState() {
               level: finding.severity satisfies LogLevel,
               text: `${finding.checker}: ${finding.message}`,
             },
-      foregroundProgress: intelStatus(),
-      hint: statusHint(),
+      // A worktree switch repoints the whole app, so it leads an intel pull scoped to one caret.
+      foregroundProgress: switchProgress() ?? intelStatus(),
+      guidance: guidance(),
       notification: notice(),
-      outcome: status() === "" ? undefined : { level: statusLevel(), text: status() },
       provenance: caretProvenanceDetail(),
       width: terminalWidth(),
     });
@@ -2396,6 +2398,9 @@ function createState() {
     checksController?.abort();
     const controller = new AbortController();
     checksController = controller;
+    // The prior failure describes a run that no longer exists, so retire it as this one starts
+    // Rather than leaving it to contradict the progress line beside it.
+    clearAlert("diagnostics");
     // Keep prior diagnostics while re-checking (update in place); only files new to the set get a
     // Pending placeholder. Changed files are already marked pending by the edit-detection effect.
     setCheckerState((current) => markPending(current, model.changed, []));
@@ -2425,7 +2430,13 @@ function createState() {
         ),
         { signal: controller.signal },
       );
-      report(failures[0] ?? "checks passed", failures[0] !== undefined ? "error" : "success");
+      // Only a failure is worth the row. A clean run is already reported by everything it just
+      // Updated (the counts badge, the file badges, the problems panel), and the completion copy
+      // It used to leave behind outlived its usefulness: `checks passed` sat there indefinitely,
+      // Beside a red error count it had never contradicted.
+      if (failures[0] !== undefined) {
+        raise("diagnostics", "error", failures[0]);
+      }
     } catch {
       // Interrupted by a newer run or a worktree switch
     } finally {
@@ -3705,9 +3716,10 @@ function createState() {
         }
         batch(() => {
           setWorktreeComboboxOpen(false);
-          report(
-            `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+          raise(
+            "worktree",
             "error",
+            `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
           );
         });
       });
@@ -3922,18 +3934,26 @@ function createState() {
   // Without a restart. Lives in state, not App, so the keymap, the picker's
   // Mouse click, and App's deleted-worktree recovery all reach the one action
   // Directly. It only writes state and reloads the model (no `renderer`), so it
-  // Belongs here next to `runChecks`; `reason` overrides the status.
+  // Belongs here next to `runChecks`.
+  //
+  // `label` names the target in the progress line, and `successNotice` is for a switch the user
+  // Did not ask for (the deleted-worktree recovery): an unrequested switch has to say so, where a
+  // Requested one is already answered by the header it repointed.
   let switchRequest = 0;
   onReset(() => {
     switchRequest += 1;
   });
-  async function switchWorktree(worktree: Worktree, reason?: string) {
+  async function switchWorktree(
+    worktree: Worktree,
+    options?: { label?: string; successNotice?: { level: LogLevel; text: string } },
+  ) {
     setWorktreeComboboxOpen(false);
     if (worktree.path === gitModel().repoRoot) {
       return;
     }
+    const label = options?.label ?? worktreeLabel(worktree);
     if (!existsSync(worktree.path)) {
-      report(`missing worktree: ${worktree.path}`, "warning");
+      raise("worktree", "warning", `missing worktree: ${worktree.path}`);
       return;
     }
     // The load is async, so a second switch started before the first resolves
@@ -3941,6 +3961,12 @@ function createState() {
     // And bail if a later one superseded it, mirroring the diff/search pipelines'
     // Restart-on-rekey guard, so only the latest request commits or reports.
     const request = ++switchRequest;
+    // This attempt owns the worktree alert from here: a retry clears the failure it is retrying
+    // Before it can contradict the progress line.
+    batch(() => {
+      clearAlert("worktree");
+      setSwitchProgress(`switching to ${label}…`);
+    });
     try {
       // Re-pin session/last-commit to the target worktree's history before loading.
       const { sessionBase: nextSessionBase, scope: nextScope } = await rebaselineScope(
@@ -3987,17 +4013,26 @@ function createState() {
         setCheckerState(initialCheckerState(diagnosticsEnabled() ? fresh.changed : []));
         setActivityLog(emptyActivityLog);
         setFocusedPane("tree");
-        report(reason ?? `switched to ${worktreeLabel(worktree)}`);
+        // The header now names the worktree we landed in, so a success line here would only
+        // Repeat it, and would still be sitting there long after it stopped being news.
+        setSwitchProgress(undefined);
+        if (options?.successNotice !== undefined) {
+          notify(options.successNotice.text, options.successNotice.level);
+        }
       });
       void runChecks(fresh);
     } catch (error) {
       if (request !== switchRequest) {
         return;
       }
-      report(
-        `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
-        "error",
-      );
+      batch(() => {
+        setSwitchProgress(undefined);
+        raise(
+          "worktree",
+          "error",
+          `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+        );
+      });
     }
   }
 
@@ -4586,7 +4621,6 @@ function createState() {
     sidebarOpen,
     sidebarScrollTop,
     sidebarWidth,
-    status,
     statusBarModel,
     switchWorktree,
     symbolsIndex,

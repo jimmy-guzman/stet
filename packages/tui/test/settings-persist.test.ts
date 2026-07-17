@@ -6,6 +6,12 @@ import { join } from "node:path";
 import { state } from "@/state";
 import { setSelection } from "@/theme/active";
 
+// Every save reports through a notice, which the status bar renders as its message.
+function statusMessage() {
+  const model = state.statusBarModel();
+  return model.kind === "message" ? model.message : "";
+}
+
 /**
  * End to end through the runtime and the real Config service: the file the user owns is what
  * changes, so that is what the tests read back.
@@ -40,10 +46,10 @@ describe("persistSettings", () => {
       expect(text).toContain("// my settings");
       expect(text).toContain(`"wrap": true`);
       expect(text).toContain(`"theme": "mono-dark"`);
-      expect(state.statusRight()).toBe("saved theme, wrap to config");
+      expect(statusMessage()).toBe("saved theme, wrap to config");
 
       await state.persistSettings();
-      expect(state.statusRight()).toBe("settings already saved");
+      expect(statusMessage()).toBe("settings already saved");
     });
   });
 
@@ -72,7 +78,7 @@ describe("persistSettings", () => {
       expect(Bun.JSONC.parse(readFileSync(file, "utf8"))).toEqual({
         ide: "zed {repo} {file}:{line}",
       });
-      expect(state.statusRight()).toBe("saved ide to config");
+      expect(statusMessage()).toBe("saved ide to config");
     });
   });
 
@@ -86,8 +92,8 @@ describe("persistSettings", () => {
       await state.persistSettings();
 
       expect(readFileSync(file, "utf8")).toBe(`{ "viewer": `);
-      expect(state.statusRight()).toContain("couldn't save config");
-      expect(state.statusRightLevel()).toBe("error");
+      expect(statusMessage()).toContain("couldn't save config");
+      expect(state.statusBarModel()).toMatchObject({ category: "notification", level: "error" });
     });
   });
 });

@@ -24,7 +24,7 @@ describe("help overlay", () => {
 
     try {
       const initial = await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
-      expect(initial).toContain("? keys · q quit");
+      expect(initial).toContain("? help · q quit");
 
       mockInput.pressKey("?");
       const help = await settleUntil("help overlay", (frame) =>
@@ -70,7 +70,7 @@ describe("help overlay", () => {
         "help closed by escape",
         (frame) => !frame.includes("switch to another git worktree"),
       );
-      expect(closedByEscape).toContain("? keys · q quit");
+      expect(closedByEscape).toContain("? help · q quit");
       expect(closedByEscape).not.toContain("no problems");
 
       // Q must close the overlay, not quit the app
@@ -84,7 +84,7 @@ describe("help overlay", () => {
         (frame) => !frame.includes("switch to another git worktree"),
       );
       expect(closed).toContain("q quit");
-      expect(closed).toContain("? keys · q quit");
+      expect(closed).toContain("? help · q quit");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

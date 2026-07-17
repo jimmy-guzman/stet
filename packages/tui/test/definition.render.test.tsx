@@ -41,12 +41,9 @@ describe("go-to-definition in-flight indicator", () => {
       // Rendered info glyph and the clearing are covered by the settled frame below.
       const pending = state.goToDefinition();
       expect(state.statusBarModel()).toMatchObject({
-        content: {
-          category: "foreground-progress",
-          level: "info",
-          message: "resolving definition…",
-        },
-        layout: "full",
+        category: "foreground-progress",
+        level: "info",
+        message: "resolving definition…",
       });
 
       await pending;

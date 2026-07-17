@@ -33,12 +33,13 @@ describe("status bar changed-file cue", () => {
         recordActivity(emptyActivityLog, [{ kind: "changed", path: "notes.txt" }], Date.now()),
       );
       await settleUntil("recent file on the status line", (frame) =>
-        frame.split("\n").some((row) => row.includes("q quit") && row.includes("notes.txt")),
+        frame.split("\n").some((row) => row.includes("notes.txt") && row.includes("●")),
       );
 
-      const statusLine = captureSpans().lines.find((line) =>
-        line.spans.some((span) => span.text.includes("q quit")),
-      );
+      // The status bar is the app's last row. Anchoring on the row rather than on its text
+      // Matters here: the tree draws the same filename behind the same recency dot, so a
+      // Content-based search finds that row first and reads its neutral name color instead.
+      const statusLine = captureSpans().lines.at(-1);
       const pathSpan = statusLine?.spans.find((span) => span.text.includes("notes.txt"));
       const dot = statusLine?.spans.some((span) => span.text.includes("●"));
 
@@ -74,7 +75,7 @@ describe("status bar changed-file cue", () => {
       const statusLine = frame.split("\n").find((row) => row.includes("copied src/state.ts"));
 
       expect(statusLine).toBeDefined();
-      expect(statusLine).not.toContain("? keys · q quit");
+      expect(statusLine).not.toContain("? help · q quit");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
@@ -122,46 +123,18 @@ describe("status bar changed-file cue", () => {
       const statusLine = frame.split("\n").find((row) => row.includes("diagnostics: unused value"));
 
       expect(statusLine).toBeDefined();
-      expect(statusLine).not.toContain("? keys · q quit");
+      expect(statusLine).not.toContain("? help · q quit");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
-  test("promotes ambient activity when it cannot fit beside the generic hint", async () => {
+  // Guidance is the lowest tier, find modes included: the row goes to whatever is live and comes
+  // Back to the hint once nothing is. Guidance never shares the row, so it is never budgeted
+  // Against a neighbour and the two can never disagree about who shrinks.
+  test("recent activity displaces find guidance, which returns once it ages out", async () => {
     const path = "src/components/StatusBar.tsx";
-    const repoRoot = createFixtureRepo("stet-statusbar-", { [path]: "alpha\n" });
-    writeFileSync(join(repoRoot, path), "alpha\nbravo\n");
-
-    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-    seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 30,
-      width: 48,
-    });
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-
-    try {
-      state.setActivityLog(
-        recordActivity(emptyActivityLog, [{ kind: "changed", path }], Date.now()),
-      );
-      const frame = await settleUntil("activity fills the narrow status line", (current) =>
-        current.includes("StatusBar.tsx"),
-      );
-      const statusLine = frame.split("\n").find((row) => row.includes("StatusBar.tsx"));
-
-      expect(statusLine).toBeDefined();
-      expect(statusLine).toContain("●");
-      expect(statusLine).not.toContain("? keys · q quit");
-    } finally {
-      renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
-  }, 20_000);
-
-  test("keeps active find guidance when ambient activity needs more room", async () => {
-    const path = "src/components/really/deep/StatusBar.tsx";
     const repoRoot = createFixtureRepo("stet-statusbar-", { [path]: "alpha\n" });
     writeFileSync(join(repoRoot, path), "alpha\nbravo\n");
 
@@ -174,23 +147,31 @@ describe("status bar changed-file cue", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
+      state.setFindOpen(true);
+      const guided = await settleUntil("find guidance on the status line", (current) =>
+        current.includes("enter find · esc cancel"),
+      );
+      expect(guided).toContain("enter find · esc cancel");
+
       state.setActivityLog(
         recordActivity(emptyActivityLog, [{ kind: "changed", path }], Date.now()),
       );
-      state.setFindOpen(true);
-      const frame = await settleUntil(
-        "find guidance and activity share the status line",
-        (current) =>
-          current
-            .split("\n")
-            .some((row) => row.includes("type to find") && row.includes("StatusBar.tsx")),
+      const busy = await settleUntil("activity taking the row", (current) =>
+        current.includes("StatusBar.tsx"),
       );
-      const statusLine = frame
-        .split("\n")
-        .find((row) => row.includes("type to find") && row.includes("StatusBar.tsx"));
+      const statusLine = busy.split("\n").find((row) => row.includes("StatusBar.tsx"));
 
-      expect(statusLine).toBeDefined();
       expect(statusLine).toContain("●");
+      expect(statusLine).not.toContain("enter find · esc cancel");
+
+      // Past the 30s recency window the file is no longer live, so the row is guidance's again.
+      state.setActivityLog(
+        recordActivity(emptyActivityLog, [{ kind: "changed", path }], Date.now() - 60_000),
+      );
+      const restored = await settleUntil("guidance restored", (current) =>
+        current.includes("enter find · esc cancel"),
+      );
+      expect(restored).not.toContain("StatusBar.tsx");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

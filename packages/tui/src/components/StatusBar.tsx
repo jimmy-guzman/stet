@@ -1,11 +1,10 @@
-import { Show } from "solid-js";
+import { Match, Switch } from "solid-js";
 
 import { recencyFraction } from "@/git/activity";
 import { levelColor, levelGlyph } from "@/log/levels";
-import type { LogLevel } from "@/log/levels";
 import { state } from "@/state";
-import { STATUS_BAR_GROUP_GAP, STATUS_BAR_PADDING } from "@/status/model";
-import type { StatusBarActivity, StatusBarAmbient } from "@/status/model";
+import { STATUS_BAR_PADDING } from "@/status/model";
+import type { StatusBarActivity, StatusBarModel } from "@/status/model";
 import { useTheme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
@@ -14,29 +13,18 @@ import { RecencyDot } from "./RecencyDot";
 
 export function StatusBar() {
   const theme = useTheme();
-  const content = () => state.statusBarModel().content;
-  const hint = () => {
-    const model = state.statusBarModel();
-    return model.layout === "split" ? model.hint : undefined;
-  };
-  const message = () => {
-    const current = content();
-    return current?.kind === "message" && current.message !== "" ? current : undefined;
-  };
-  const provenance = () => {
-    const current = content();
-    return current?.kind === "provenance" && current.text !== "" ? current : undefined;
-  };
-  const ambient = () => {
-    const current = content();
-    return current?.kind === "ambient" && (current.activity !== undefined || current.message !== "")
-      ? current
-      : undefined;
-  };
-  const messageFg = (level: LogLevel | undefined) =>
-    level === undefined ? theme.colors.text.secondary : levelColor(theme.colors, level);
-  const messageLead = (level: LogLevel | undefined) =>
-    level === undefined ? "" : `${levelGlyph(level)} `;
+  const model = () => state.statusBarModel();
+  // Narrowed per branch so each `Match` gets the member it renders; the model is a closed union,
+  // So a new content kind is a type error here rather than a silently blank row.
+  const asMessage = (current: StatusBarModel) => (current.kind === "message" ? current : undefined);
+  const asProvenance = (current: StatusBarModel) =>
+    current.kind === "provenance" ? current : undefined;
+  const asAmbient = (current: StatusBarModel) => (current.kind === "ambient" ? current : undefined);
+  const asGuidance = (current: StatusBarModel) =>
+    current.kind === "guidance" ? current : undefined;
+  // The changed file carries the tree's cue: its git change kind tints the path, fading toward
+  // Faint across the 30s recency window, so freshness reads as brightness and the row recedes as
+  // It ages rather than announcing an age in words.
   const pathFg = (activity: StatusBarActivity) => {
     const base =
       activity.changeKind === undefined
@@ -45,62 +33,47 @@ export function StatusBar() {
     const fraction = recencyFraction(activity.at, state.now());
     return fraction === undefined ? base : lerpHex(base, theme.colors.text.faint, fraction);
   };
-  const hasBothGroups = (current: StatusBarAmbient) =>
-    current.activity !== undefined && current.message !== "";
 
   return (
     <box
       height={1}
       flexDirection="row"
-      justifyContent="space-between"
       paddingLeft={STATUS_BAR_PADDING}
       paddingRight={STATUS_BAR_PADDING}
       backgroundColor={theme.colors.surface.base}
     >
-      <Show when={hint()}>
-        {(current) => <text fg={theme.colors.text.muted}>{current().text}</text>}
-      </Show>
-      <Show when={provenance()}>
-        {(current) => (
-          <box flexDirection="row">
-            <text fg={theme.colors.provenance[current().band]} marginRight={1}>
-              {provenanceGlyph(current().band)}
+      <Switch>
+        <Match when={asMessage(model())}>
+          {/* Glyph and message share one span (both level-colored), so no empty <text> sits
+              between them to paint a phantom cell. */}
+          {(current) => (
+            <text fg={levelColor(theme.colors, current().level)}>
+              {`${levelGlyph(current().level)} ${current().message}`}
             </text>
-            <text fg={theme.colors.text.secondary}>{current().text}</text>
-          </box>
-        )}
-      </Show>
-      <Show when={message()}>
-        {(current) => (
-          <text fg={messageFg(current().level)}>
-            {`${levelGlyph(current().level)} ${current().message}`}
-          </text>
-        )}
-      </Show>
-      <Show when={ambient()}>
-        {(current) => (
-          <box flexDirection="row">
-            <Show when={current().activity}>
-              {(activity) => (
-                <>
-                  <RecencyDot at={activity().at} marginRight={1} />
-                  <text fg={pathFg(activity())}>{activity().path}</text>
-                </>
-              )}
-            </Show>
-            <Show when={hasBothGroups(current())}>
-              <text>{STATUS_BAR_GROUP_GAP}</text>
-            </Show>
-            <Show when={current().message}>
-              {(text) => (
-                <text fg={messageFg(current().level)}>
-                  {`${messageLead(current().level)}${text()}`}
-                </text>
-              )}
-            </Show>
-          </box>
-        )}
-      </Show>
+          )}
+        </Match>
+        <Match when={asProvenance(model())}>
+          {(current) => (
+            <box flexDirection="row">
+              <text fg={theme.colors.provenance[current().band]} marginRight={1}>
+                {provenanceGlyph(current().band)}
+              </text>
+              <text fg={theme.colors.text.secondary}>{current().text}</text>
+            </box>
+          )}
+        </Match>
+        <Match when={asAmbient(model())}>
+          {(current) => (
+            <box flexDirection="row">
+              <RecencyDot at={current().activity.at} marginRight={1} />
+              <text fg={pathFg(current().activity)}>{current().activity.path}</text>
+            </box>
+          )}
+        </Match>
+        <Match when={asGuidance(model())}>
+          {(current) => <text fg={theme.colors.text.muted}>{current().text}</text>}
+        </Match>
+      </Switch>
     </box>
   );
 }

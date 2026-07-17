@@ -48,7 +48,7 @@ describe("quit confirm", () => {
         "confirm dismissed",
         (frame) => !frame.includes("Quit stet?"),
       );
-      expect(dismissed).toContain("? keys · q quit");
+      expect(dismissed).toContain("? help · q quit");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

@@ -45,8 +45,9 @@ describe("intel off switch", () => {
     await state.goToDefinition();
 
     expect(state.statusBarModel()).toMatchObject({
-      content: { category: "notification", level: "info", message: "intel disabled" },
-      layout: "full",
+      category: "notification",
+      level: "info",
+      message: "intel disabled",
     });
   });
 
@@ -57,8 +58,9 @@ describe("intel off switch", () => {
 
     expect(state.symbolsOpen()).toBe(false);
     expect(state.statusBarModel()).toMatchObject({
-      content: { category: "notification", level: "info", message: "intel disabled" },
-      layout: "full",
+      category: "notification",
+      level: "info",
+      message: "intel disabled",
     });
   });
 });

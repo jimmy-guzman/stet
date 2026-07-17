@@ -1,3 +1,4 @@
+import { provenanceGlyph } from "@/components/provenance";
 import type { ChangeKind } from "@/git/model";
 import type { Provenance } from "@/git/provenance";
 import { levelGlyph } from "@/log/levels";
@@ -5,16 +6,8 @@ import type { LogLevel } from "@/log/levels";
 import { truncate, truncateLeft } from "@/utils/text";
 
 export const STATUS_BAR_PADDING = 1;
-export const STATUS_BAR_GROUP_GAP = "  ";
 
-const SIDE_GAP_CELLS = 2;
 const ACTIVITY_LEAD_CELLS = Bun.stringWidth("● ");
-
-export interface StatusBarHint {
-  category: "guidance";
-  mode: "generic" | "active";
-  text: string;
-}
 
 export interface StatusBarActivity {
   at: number;
@@ -22,8 +15,51 @@ export interface StatusBarActivity {
   path: string;
 }
 
+export type StatusAlertSource = "diagnostics" | "worktree";
+
+/**
+ * An unresolved problem the user has not been told about anywhere else, held until its own source
+ * retires it. Only `warning` and `error` qualify: a routine success is already reported by the
+ * durable UI it changed, and persisting one here outlives its usefulness (the `checks passed` that
+ * sat under a red error count).
+ *
+ * `source` is what keeps two independent alerts from clobbering each other, so a worktree failure
+ * survives a diagnostics run and vice versa.
+ */
+export interface StatusAlert {
+  level: "error" | "warning";
+  source: StatusAlertSource;
+  text: string;
+}
+
+/**
+ * Raised alerts, oldest first. Ordered rather than keyed because the order carries the meaning:
+ * with one row to show and no way to rank a worktree failure against a diagnostics one, the newest
+ * wins, being the problem the user just provoked.
+ */
+export type StatusAlerts = readonly StatusAlert[];
+
+/** Replaces any alert from the same source and moves it to the newest position. */
+export function raiseAlert(alerts: StatusAlerts, alert: StatusAlert): StatusAlerts {
+  return [...alerts.filter((current) => current.source !== alert.source), alert];
+}
+
+/** Retires one source's alert, leaving every other source's untouched. */
+export function clearAlertSource(alerts: StatusAlerts, source: StatusAlertSource): StatusAlerts {
+  return alerts.filter((alert) => alert.source !== source);
+}
+
+export function latestAlert(alerts: StatusAlerts) {
+  return alerts.at(-1);
+}
+
 interface StatusBarMessage {
-  category: "notification" | "foreground-progress" | "contextual-inspection";
+  category:
+    | "notification"
+    | "foreground-progress"
+    | "contextual-inspection"
+    | "persistent-alert"
+    | "background-progress";
   kind: "message";
   level: LogLevel;
   message: string;
@@ -36,206 +72,116 @@ interface StatusBarProvenance {
   text: string;
 }
 
-export interface StatusBarAmbient {
-  activity: StatusBarActivity | undefined;
-  category: "background-progress" | "ambient";
+interface StatusBarAmbient {
+  activity: StatusBarActivity;
+  category: "ambient";
   kind: "ambient";
-  level: LogLevel | undefined;
-  message: string;
 }
 
-type StatusBarContent = StatusBarMessage | StatusBarProvenance | StatusBarAmbient;
+interface StatusBarGuidance {
+  category: "guidance";
+  kind: "guidance";
+  text: string;
+}
 
 export type StatusBarModel =
-  | { content: StatusBarContent; layout: "full" }
-  | { content: StatusBarAmbient | undefined; hint: StatusBarHint; layout: "split" };
+  | StatusBarMessage
+  | StatusBarProvenance
+  | StatusBarAmbient
+  | StatusBarGuidance;
 
 export interface StatusBarModelInput {
   activity: StatusBarActivity | undefined;
+  alert: StatusAlert | undefined;
   backgroundProgress: string | undefined;
   contextualFinding: { level: LogLevel; text: string } | undefined;
   foregroundProgress: string | undefined;
-  hint: StatusBarHint;
+  guidance: string;
   notification: { level: LogLevel; text: string } | undefined;
-  outcome: { level: LogLevel; text: string } | undefined;
   provenance: { band: Provenance; text: string } | undefined;
   width: number;
 }
 
-function innerWidth(width: number) {
-  return Math.max(0, width - STATUS_BAR_PADDING * 2);
-}
-
-function messageLeadWidth(level: LogLevel | undefined) {
-  return level === undefined ? 0 : Bun.stringWidth(`${levelGlyph(level)} `);
-}
-
-function fitMessage(content: StatusBarMessage, width: number) {
-  return {
-    ...content,
-    message: truncate(content.message, Math.max(0, width - messageLeadWidth(content.level))),
-  };
-}
-
-function fitProvenance(content: StatusBarProvenance, width: number) {
-  return {
-    ...content,
-    text: truncate(content.text, Math.max(0, width - ACTIVITY_LEAD_CELLS)),
-  };
-}
-
-function ambientWidth(content: StatusBarAmbient) {
-  const activityWidth =
-    content.activity === undefined
-      ? 0
-      : ACTIVITY_LEAD_CELLS + Bun.stringWidth(content.activity.path);
-  const messageWidth =
-    content.message === "" ? 0 : messageLeadWidth(content.level) + Bun.stringWidth(content.message);
-  const gapWidth =
-    activityWidth > 0 && messageWidth > 0 ? Bun.stringWidth(STATUS_BAR_GROUP_GAP) : 0;
-  return activityWidth + gapWidth + messageWidth;
-}
-
-function fitAmbient(content: StatusBarAmbient, width: number): StatusBarAmbient {
-  if (content.message === "") {
-    const pathBudget = Math.max(0, width - ACTIVITY_LEAD_CELLS);
-    const path =
-      content.activity === undefined ? "" : truncateLeft(content.activity.path, pathBudget);
-    return {
-      ...content,
-      activity:
-        path === "" || path === "…" || content.activity === undefined
-          ? undefined
-          : { ...content.activity, path },
-    };
-  }
-
-  const leadWidth = messageLeadWidth(content.level);
-  const messageOnlyBudget = Math.max(0, width - leadWidth);
-  const fullMessageWidth = Bun.stringWidth(content.message);
-  const activityBudget =
-    width -
-    leadWidth -
-    fullMessageWidth -
-    Bun.stringWidth(STATUS_BAR_GROUP_GAP) -
-    ACTIVITY_LEAD_CELLS;
-  const truncatedActivityPath =
-    content.activity === undefined || activityBudget <= 0
-      ? ""
-      : truncateLeft(content.activity.path, activityBudget);
-  const activityPath = truncatedActivityPath === "…" ? "" : truncatedActivityPath;
-  const activity =
-    activityPath === "" || content.activity === undefined
-      ? undefined
-      : { ...content.activity, path: activityPath };
-  return {
-    ...content,
-    activity,
-    message:
-      activity === undefined ? truncate(content.message, messageOnlyBudget) : content.message,
-  };
-}
-
-function fullMessage(
-  category: StatusBarMessage["category"],
-  level: LogLevel,
-  message: string,
-  width: number,
-): StatusBarModel {
-  return {
-    content: fitMessage({ category, kind: "message", level, message }, innerWidth(width)),
-    layout: "full",
-  };
-}
-
+/**
+ * Pick the one thing the status bar says right now.
+ *
+ * The row is single-tenant by construction: the first tier below with content owns the whole width,
+ * so nothing has to be budgeted against a neighbour and no pair of items can disagree about who
+ * shrinks. Guidance sits at the bottom and always has content, which is what makes the return total
+ * and every tier above it a pure displacement.
+ *
+ * The order encodes what the user is waiting on, most-acute first. Two placements carry the reason
+ * they exist: a persistent alert outranks provenance, so a real problem is never hidden behind the
+ * blame inspector; and provenance outranks background progress, because the user turned the rail on
+ * deliberately and a routine `running diagnostics…` should not evict what they asked to see.
+ *
+ * @param input The live signals, already resolved to plain values by `state.statusBarModel`
+ * @returns The single item to render, fitted to `width` in terminal cells
+ */
 export function buildStatusBarModel(input: StatusBarModelInput): StatusBarModel {
+  const width = Math.max(0, input.width - STATUS_BAR_PADDING * 2);
+
   if (input.foregroundProgress !== undefined) {
-    return fullMessage("foreground-progress", "info", input.foregroundProgress, input.width);
+    return fitMessage("foreground-progress", "info", input.foregroundProgress, width);
   }
-
   if (input.notification !== undefined) {
-    return fullMessage(
-      "notification",
-      input.notification.level,
-      input.notification.text,
-      input.width,
-    );
+    return fitMessage("notification", input.notification.level, input.notification.text, width);
   }
-
   if (input.contextualFinding !== undefined) {
-    return fullMessage(
+    return fitMessage(
       "contextual-inspection",
       input.contextualFinding.level,
       input.contextualFinding.text,
-      input.width,
+      width,
     );
   }
-
-  const severeOutcome =
-    input.outcome?.level === "error" || input.outcome?.level === "warning"
-      ? input.outcome
-      : undefined;
-  const background: Pick<StatusBarAmbient, "category" | "level" | "message"> | undefined =
-    severeOutcome !== undefined
-      ? {
-          category: "ambient",
-          level: severeOutcome.level,
-          message: severeOutcome.text,
-        }
-      : input.backgroundProgress === undefined
-        ? input.outcome === undefined
-          ? undefined
-          : {
-              category: "ambient",
-              level: input.outcome.level,
-              message: input.outcome.text,
-            }
-        : {
-            category: "background-progress",
-            level: "info",
-            message: input.backgroundProgress,
-          };
-  const severe = severeOutcome !== undefined;
-
-  if (input.provenance !== undefined && !severe) {
+  if (input.alert !== undefined) {
+    return fitMessage("persistent-alert", input.alert.level, input.alert.text, width);
+  }
+  if (input.provenance !== undefined) {
     return {
-      content: fitProvenance(
-        {
-          band: input.provenance.band,
-          category: "contextual-inspection",
-          kind: "provenance",
-          text: input.provenance.text,
-        },
-        innerWidth(input.width),
+      band: input.provenance.band,
+      category: "contextual-inspection",
+      kind: "provenance",
+      text: truncate(
+        input.provenance.text,
+        Math.max(0, width - Bun.stringWidth(`${provenanceGlyph(input.provenance.band)} `)),
       ),
-      layout: "full",
     };
   }
-
-  if (background === undefined && input.activity === undefined) {
-    return { content: undefined, hint: input.hint, layout: "split" };
+  if (input.backgroundProgress !== undefined) {
+    return fitMessage("background-progress", "info", input.backgroundProgress, width);
   }
 
-  const ambient: StatusBarAmbient = {
-    activity: input.activity,
-    category: background?.category ?? "ambient",
-    kind: "ambient",
-    level: background?.level,
-    message: background?.message ?? "",
+  const activity = fitActivity(input.activity, width);
+  if (activity !== undefined) {
+    return { activity, category: "ambient", kind: "ambient" };
+  }
+  return { category: "guidance", kind: "guidance", text: truncate(input.guidance, width) };
+}
+
+function fitMessage(
+  category: StatusBarMessage["category"],
+  level: LogLevel,
+  text: string,
+  width: number,
+): StatusBarMessage {
+  return {
+    category,
+    kind: "message",
+    level,
+    message: truncate(text, Math.max(0, width - Bun.stringWidth(`${levelGlyph(level)} `))),
   };
-  const available = innerWidth(input.width);
-  if (severe) {
-    return { content: fitAmbient(ambient, available), layout: "full" };
-  }
+}
 
-  const splitWidth = Math.max(0, available - Bun.stringWidth(input.hint.text) - SIDE_GAP_CELLS);
-  if (input.hint.mode === "generic" && ambientWidth(ambient) > splitWidth) {
-    return { content: fitAmbient(ambient, available), layout: "full" };
+/**
+ * The path truncates from the left so the filename, the part that differs, survives; a path reduced
+ * to the ellipsis alone says nothing a blank row does not, so it yields the row to guidance.
+ */
+function fitActivity(activity: StatusBarActivity | undefined, width: number) {
+  if (activity === undefined) {
+    return undefined;
   }
-
-  const content = fitAmbient(ambient, splitWidth);
-  const hasContent =
-    (content.activity !== undefined && content.activity.path !== "…") ||
-    (content.message !== "" && content.message !== "…");
-  return { content: hasContent ? content : undefined, hint: input.hint, layout: "split" };
+  const path = truncateLeft(activity.path, Math.max(0, width - ACTIVITY_LEAD_CELLS));
+  return path === "" || path === "…" ? undefined : { ...activity, path };
 }

@@ -2,11 +2,12 @@ import type { MouseEvent } from "@opentui/core";
 import { batch, createMemo, Index, Show } from "solid-js";
 
 import { PROBLEMS_HEIGHT } from "@/constants";
-import { problemLocationLabel, sourceLabel } from "@/diagnostics/problems";
+import { isNavigableProblemItem, problemLocationLabel, sourceLabel } from "@/diagnostics/problems";
 import type { ProblemItem } from "@/diagnostics/problems";
 import { levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
+import { createDoubleClickGuard } from "@/utils/double-click";
 import { truncate } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
@@ -67,35 +68,45 @@ export function ProblemsPanel() {
     viewport: () => viewport,
   });
 
-  // Clicking reproduces the keyboard outcome for the row: a problem opens its
-  // Location, a failure line just takes the cursor, decorations do nothing.
-  // StopPropagation keeps outer focus handlers out of it.
+  // A single click selects (a focus-intent click must never navigate the whole view
+  // Away, mirroring the search results and the diff, where a click only moves the
+  // Cursor); a double click opens, like `enter`. One guard for the whole panel, so it
+  // Survives a windowed row remount mid-gesture. A `help` row resolves to the problem
+  // It belongs to, matching the highlight that already covers the pair as one entry;
+  // A header or spacer resolves to nothing and only takes focus. stopPropagation keeps
+  // The frame's focus-only handler from firing on top of this.
+  const isDoubleClick = createDoubleClickGuard();
   const clickRow = (event: MouseEvent, index: number, item: ProblemItem) => {
-    if (item.kind === "failure") {
-      event.stopPropagation();
-      batch(() => {
-        state.setFocusedPane("problems");
-        state.setProblemIndex(index);
-      });
-      return;
-    }
-    if (item.kind === "problem") {
-      event.stopPropagation();
-      batch(() => {
-        state.setProblemIndex(index);
+    event.stopPropagation();
+    batch(() => {
+      state.setFocusedPane("problems");
+      const target = item.kind === "help" ? item.owner : index;
+      const targeted = state.allProblemItems()[target];
+      if (targeted === undefined || !isNavigableProblemItem(targeted)) {
+        return;
+      }
+      if (targeted.kind === "problem" && isDoubleClick(String(target))) {
+        const { problem } = targeted;
         state.selectFile(
-          item.problem.path,
-          item.problem.line === undefined
+          problem.path,
+          problem.line === undefined
             ? undefined
-            : { column: item.problem.column, escalate: true, line: item.problem.line },
+            : { column: problem.column, escalate: true, line: problem.line },
         );
         state.setFocusedPane("diff");
-      });
-    }
+        return;
+      }
+      state.setProblemIndex(target);
+    });
   };
 
   return (
-    <PaneFrame focused={focused()} height={PROBLEMS_HEIGHT} width="100%">
+    <PaneFrame
+      focused={focused()}
+      height={PROBLEMS_HEIGHT}
+      width="100%"
+      onMouseDown={() => state.setFocusedPane("problems")}
+    >
       <box width="100%" height={viewport} flexDirection="row" onMouseScroll={onWheel}>
         <box
           ref={(el) => {

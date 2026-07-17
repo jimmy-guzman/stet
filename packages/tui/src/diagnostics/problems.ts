@@ -1,3 +1,5 @@
+import { formatCopyReference } from "@/clipboard/reference";
+
 import { allFindings, checkerNames, countBySeverity } from "./checker";
 import type { CheckerName, CheckerState, Diagnostic } from "./checker";
 
@@ -72,6 +74,70 @@ const sourceLabels: Record<string, string> = { typescript: "tsc" };
  */
 export function sourceLabel(source: string) {
   return sourceLabels[source] ?? source;
+}
+
+/**
+ * The copy text for one panel row, or `undefined` for a row that carries no content of its own.
+ *
+ * A diagnostic reads `path:line:col: message [source]`, the location through the same
+ * `formatCopyReference` the tree and viewer copy with (so it drops an absent line or column on its
+ * own) and the source tag pinned to the first line, where the panel shows it. The message is kept
+ * **verbatim**, never through `splitDiagnosticMessage`: that joins continuation lines with spaces
+ * and separates the help text for the panel's fixed-height rows, both of which lose information the
+ * clipboard has room for. Copying the message whole is also why a `help` row returns `undefined`:
+ * its text is already inside its owner's message, so emitting it again would duplicate it.
+ *
+ * @param item - The row to format.
+ * @returns The row's copy text, or `undefined` for a decoration (spacer, header, or help sub-line).
+ */
+export function formatProblemEntry(item: ProblemItem) {
+  if (item.kind === "failure") {
+    return item.line;
+  }
+  if (item.kind !== "problem") {
+    return undefined;
+  }
+  const { problem } = item;
+  const reference = formatCopyReference({
+    column: problem.column,
+    line: problem.line,
+    path: problem.path,
+  });
+  const source = sourceLabel(problem.source ?? problem.checker);
+  const [first = "", ...rest] = problem.message.split("\n");
+  return [`${reference}: ${first} [${source}]`, ...rest].join("\n");
+}
+
+/**
+ * The copy text for the whole panel, in panel order. Callers pass the full item list, never the
+ * windowed slice, so an off-screen diagnostic still copies.
+ *
+ * Contiguous `failure` rows join into one block, because a checker's failure output is one message
+ * split across rows only so the panel can window it; a blank line between its lines would break up
+ * a stack trace. Every other entry is its own block, and blocks are separated by a blank line so a
+ * multi-line diagnostic still reads as one unit.
+ *
+ * @param items - The panel's full row list.
+ * @returns The copy text, or `""` when no row carries content.
+ */
+export function formatProblemItems(items: ProblemItem[]) {
+  return items
+    .reduce<string[][]>((blocks, item) => {
+      const text = formatProblemEntry(item);
+      if (text === undefined) {
+        return blocks;
+      }
+      const previous = blocks.at(-1);
+      // A `failure` run is only split across rows for windowing, so re-join it.
+      if (item.kind === "failure" && !item.isFirst && previous !== undefined) {
+        previous.push(text);
+        return blocks;
+      }
+      blocks.push([text]);
+      return blocks;
+    }, [])
+    .map((block) => block.join("\n"))
+    .join("\n\n");
 }
 
 const severityOrder = { error: 0, info: 2, warning: 1 } as const;

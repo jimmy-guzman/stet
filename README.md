@@ -49,8 +49,9 @@ beneath, and it stays.
 - Shows diagnostics in the tree, the viewer, and a problems panel.
 - Navigates code through read-only language-server pulls: go to definition, find
   references, find implementations, call hierarchy, hover, and a symbol outline.
-- Copies a reference and snippet to paste back to the agent: `path` in the tree
-  and `path:line:col` in the viewer.
+- Copies a reference and snippet to paste back to the agent: `path` in the tree,
+  `path:line:col` in the viewer, and a whole diagnostic (or every one) from the
+  problems panel.
 
 The git-backed file tree renders first. Diagnostics come in later as
 decorations, so the basic view stays useful even when checks are still running.

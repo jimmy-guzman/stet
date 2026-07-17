@@ -77,9 +77,12 @@ const KEY_HELP_GROUPS: {
       { actions: ["back", "forward"], description: "back / forward through viewer history" },
       {
         actions: ["copy-reference"],
-        description: "copy path (tree), path:line:col (viewer), or the selected search result",
+        description: "copy path (tree), path:line:col (viewer), or the selected result / problem",
       },
-      { actions: ["copy-file"], description: "copy the entire contents of the viewed file" },
+      {
+        actions: ["copy-file"],
+        description: "copy the file (viewer) or every entry (problems)",
+      },
       {
         actions: ["select-up", "select-down"],
         description: "extend a line selection (drag also selects)",

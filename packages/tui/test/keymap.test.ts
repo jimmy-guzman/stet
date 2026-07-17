@@ -350,6 +350,116 @@ describe("createKeyHandler", () => {
     expect(quitCount).toBe(1);
   });
 
+  // The copy keys are registered `global`, so before they dispatched on the focused
+  // Pane they read the viewer no matter which pane the user was actually in: `y` with
+  // A diagnostic selected copied a diff line instead of the diagnostic.
+  describe("copy keys with the problems panel focused", () => {
+    const focusProblemsWith = (message: string) => {
+      batch(() => {
+        state.seedNav("src/foo.ts");
+        state.setCheckerState({
+          diagnostics: new Map([
+            [
+              "src/a.ts",
+              {
+                count: 1,
+                diagnostics: [
+                  {
+                    checker: "diagnostics",
+                    column: 4,
+                    line: 12,
+                    message,
+                    path: "src/a.ts",
+                    severity: "error",
+                    source: "oxc",
+                  },
+                ],
+                status: "findings",
+              },
+            ],
+          ]),
+        });
+        state.setProblemsOpen(true);
+        state.setFocusedPane("problems");
+        state.setProblemIndex(state.firstNavigableProblemIndex());
+      });
+    };
+
+    // Count which action each key reached, without the clipboard subprocess
+    // (pbcopy/xclip, absent on CI). What each action *copies* is asserted on the pure
+    // Formatter in diagnostics-problems.test.ts.
+    const countCopyDispatches = (press: (handle: (key: KeyEvent) => void) => void) => {
+      const calls: string[] = [];
+      const real = {
+        copyAllProblems: state.copyAllProblems,
+        copyFileContents: state.copyFileContents,
+        copyProblem: state.copyProblem,
+        copySelection: state.copySelection,
+      };
+      state.copyProblem = () => calls.push("copyProblem");
+      state.copyAllProblems = () => calls.push("copyAllProblems");
+      state.copyFileContents = () => calls.push("copyFileContents");
+      state.copySelection = () => calls.push("copySelection");
+      try {
+        press(createKeyHandler({ openInEditor: noop, quit: noop }));
+      } finally {
+        Object.assign(state, real);
+      }
+      return calls;
+    };
+
+    test("y copies the selected problem and never the viewer's reference", () => {
+      focusProblemsWith("bad thing");
+
+      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "y" })))).toEqual([
+        "copyProblem",
+      ]);
+    });
+
+    test("Y copies every problem and never the viewed file's contents", () => {
+      focusProblemsWith("bad thing");
+
+      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "Y", shift: true })))).toEqual(
+        ["copyAllProblems"],
+      );
+    });
+
+    test("C is inert: a line selection is a viewer concept the panel has no analogue for", () => {
+      focusProblemsWith("bad thing");
+
+      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "C", shift: true })))).toEqual(
+        [],
+      );
+    });
+
+    test("an empty panel says so rather than copying", () => {
+      batch(() => {
+        state.setCheckerState({ diagnostics: new Map() });
+        state.setProblemsOpen(true);
+        state.setFocusedPane("problems");
+      });
+      const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+      handle(keyEvent({ name: "y" }));
+      expect(state.statusRightMessage()).toBe("no problems to copy");
+
+      handle(keyEvent({ name: "Y", shift: true }));
+      expect(state.statusRightMessage()).toBe("no problems to copy");
+    });
+
+    test("the viewer keeps its own copy targets once focus leaves the panel", () => {
+      focusProblemsWith("bad thing");
+      state.setFocusedPane("diff");
+
+      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "Y", shift: true })))).toEqual(
+        ["copyFileContents"],
+      );
+      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "C", shift: true })))).toEqual(
+        ["copySelection"],
+      );
+    });
+  });
+
   test("escape only ever closes: problems panel, then search view, never quits", () => {
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
 

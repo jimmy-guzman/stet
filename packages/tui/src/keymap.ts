@@ -6,6 +6,9 @@ import { formatCopyReference } from "./clipboard/reference";
 import { isNavigableProblemItem } from "./diagnostics/problems";
 import { latestActivity } from "./git/activity";
 import { firstFileInNode } from "./git/tree";
+import type { KeyActionId } from "./keys/actions";
+import { matchesKey } from "./keys/combo";
+import { combosFor } from "./keys/registry";
 import { state } from "./state";
 import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
 import { isNavigableSearchItem } from "./viewer/search-items";
@@ -58,7 +61,15 @@ export function createKeyHandler(host: HostEffects) {
   };
 
   return (key: KeyEvent) => {
+    // The rebindable layers (globals and the pane tails) dispatch through the
+    // Keybinding registry; `pressed` is the one seam between a key event and an
+    // Action id. The modal overlay chain above them stays hardcoded: overlay
+    // Keys are a shared convention, not bindings. Exact modifier matching in
+    // MatchesKey replaces the old per-site !shift/!ctrl exclusion guards.
+    const pressed = (id: KeyActionId) => combosFor(id).some((combo) => matchesKey(key, combo));
     batch(() => {
+      // Ctrl-c stays hardcoded ahead of everything: the deliberate, documented
+      // Escape hatch must survive any rebinding.
       if (key.ctrl && key.name === "c") {
         host.quit();
         return;
@@ -462,14 +473,14 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.ctrl && key.name === "p") {
+      if (pressed("go-to-file")) {
         state.openFileCombobox();
         return;
       }
 
       // Opens (or refocuses) the search view; the query and results persist, so
       // Reopening after a jump restores the result set instead of clearing it.
-      if (key.ctrl && key.name === "f") {
+      if (pressed("search")) {
         state.openSearch();
         return;
       }
@@ -477,9 +488,9 @@ export function createKeyHandler(host: HostEffects) {
       // Only while the file view is showing: the find bar's input lives inside
       // The Viewer's file branch, so opening it under the search view would
       // Focus an unmounted input and wedge the keyboard.
-      if (key.name === "/" && state.diffView() !== undefined && state.mainView() === "file") {
+      if (pressed("find") && state.diffView() !== undefined && state.mainView() === "file") {
         // Solid mounts and focuses the find input within this same key event, so
-        // Without preventDefault the triggering "/" would be typed into it.
+        // Without preventDefault a printable triggering key would be typed into it.
         key.preventDefault();
         state.resetFind();
         state.setFindOpen(true);
@@ -487,7 +498,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "q") {
+      if (pressed("quit")) {
         state.setQuitConfirmOpen(true);
         return;
       }
@@ -510,8 +521,8 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "tab") {
-        // From the tree, tab lands on whichever view the main area shows.
+      if (pressed("switch-pane")) {
+        // From the tree, the switch lands on whichever view the main area shows.
         state.setFocusedPane(
           state.focusedPane() === "tree"
             ? state.mainView() === "search"
@@ -522,7 +533,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "p") {
+      if (pressed("problems")) {
         const open = state.problemsOpen();
         state.setFocusedPane(open ? "tree" : "problems");
         state.setProblemsOpen(!open);
@@ -534,120 +545,113 @@ export function createKeyHandler(host: HostEffects) {
 
       // Ctrl-b (not a plain b) so the toggle also works while the search pane's
       // Inputs own the printable keys.
-      if (key.ctrl && key.name === "b") {
+      if (pressed("toggle-sidebar")) {
         state.toggleSidebar();
         return;
       }
 
-      // `]` (grow) also re-opens a collapsed sidebar, the inverse of `[` collapsing
-      // It past the minimum; `[`/`\` only adjust an already-open sidebar.
-      if (key.name === "]") {
+      // Grow also re-opens a collapsed sidebar, the inverse of shrink collapsing
+      // It past the minimum; shrink/reset only adjust an already-open sidebar.
+      if (pressed("grow-sidebar")) {
         state.nudgeSidebarWidth(2);
         return;
       }
 
-      if (state.sidebarOpen() && (key.name === "[" || key.name === "\\")) {
-        if (key.name === "[") {
-          state.nudgeSidebarWidth(-2);
-        } else {
-          state.resetSidebarWidth();
-        }
+      if (pressed("shrink-sidebar") && state.sidebarOpen()) {
+        state.nudgeSidebarWidth(-2);
         return;
       }
 
-      if (key.name === "?") {
+      if (pressed("reset-sidebar") && state.sidebarOpen()) {
+        state.resetSidebarWidth();
+        return;
+      }
+
+      if (pressed("help")) {
         state.setHelpDialogOpen(true);
         return;
       }
 
-      // Tabs. ctrl-t/ctrl-w must precede the plain t (theme) and w (worktree)
-      // Handlers below, which match on name without excluding ctrl. Both gate on
-      // The file view: they mutate a tab strip the search view hides (the pure
-      // Navigations { and } stay live, since cycling reveals the file view).
-      if (key.ctrl && key.name === "t" && state.mainView() === "file") {
+      // Tabs gate on the file view: they mutate a tab strip the search view hides
+      // (the pure navigations prev/next stay live, since cycling reveals the file view).
+      if (pressed("pin-tab") && state.mainView() === "file") {
         state.togglePinActiveTab();
         return;
       }
 
-      if (key.ctrl && key.name === "w" && state.mainView() === "file") {
+      if (pressed("close-tab") && state.mainView() === "file") {
         state.closeActiveTab();
         return;
       }
 
-      if (key.name === "{") {
+      if (pressed("prev-tab")) {
         state.cycleTab(-1);
         return;
       }
 
-      if (key.name === "}") {
+      if (pressed("next-tab")) {
         state.cycleTab(1);
         return;
       }
 
-      if (key.name === "w") {
+      if (pressed("worktrees")) {
         // Solid mounts and focuses the picker's filter input within this same key
-        // Event, so without preventDefault the triggering "w" would be typed into it.
+        // Event, so without preventDefault a printable trigger would be typed into it.
         key.preventDefault();
         state.openWorktreePicker();
         return;
       }
 
-      // Find symbols in the open file, an outline overlay. A bare uppercase S ("Symbols"), not the
-      // IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift across terminals (a bare
-      // 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so the Shift is lost, whereas a
-      // Plain letter always arrives. It sits immediately ahead of the plain-s scope picker so it
-      // Wins Shift+S where a terminal reports it as { name: "s", shift }; a plain s, or a Shift+S
-      // Outside the file view, falls through to the scope picker below. The action guards itself.
-      if ((key.name === "S" || (key.name === "s" && key.shift)) && state.mainView() === "file") {
+      // Find symbols in the open file, an outline overlay. A bare uppercase S ("Symbols") by
+      // Default, not the IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift
+      // Across terminals (a bare 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so
+      // The Shift is lost, whereas a plain letter always arrives. The action guards itself.
+      if (pressed("symbols") && state.mainView() === "file") {
         void state.findSymbols();
         return;
       }
 
-      // Guard !ctrl so ctrl-s (save settings, below) is not swallowed here.
-      if (key.name === "s" && !key.ctrl) {
+      if (pressed("scope")) {
         openScopeMenu();
         return;
       }
 
-      if (key.name === "t") {
+      if (pressed("theme")) {
         // Solid mounts and focuses the picker's filter input within this same key
-        // Event, so without preventDefault the triggering "t" would be typed into it.
+        // Event, so without preventDefault a printable trigger would be typed into it.
         key.preventDefault();
         state.openThemePicker();
         return;
       }
 
-      // Save the session's settings to the user config. The search pane's own
-      // Ctrl-s (scope menu) sits earlier in the chain and keeps its meaning there.
-      if (key.ctrl && key.name === "s") {
+      // Save the session's settings to the user config.
+      if (pressed("save-settings")) {
         void state.persistSettings();
         return;
       }
 
-      // Bare c toggles changes-only; guard !shift so Shift+C (copy selection, handled
-      // Later with the other viewer actions) is not swallowed here.
-      if (key.name === "c" && !key.shift) {
+      if (pressed("changes-only")) {
         const current = state.changesOnly();
         state.setChangesOnly(!current);
         state.notify(current ? "all files" : "changes only");
         return;
       }
 
-      if (key.name === "x" && !key.ctrl && state.mainView() === "file") {
+      if (pressed("toggle-wrap") && state.mainView() === "file") {
         const wrapping = state.overflow() === "wrap";
         state.setOverflow(wrapping ? "scroll" : "wrap");
         state.notify(wrapping ? "wrap off" : "wrap on");
         return;
       }
 
-      if (key.name === "a" && !key.ctrl && state.mainView() === "file") {
+      if (pressed("provenance") && state.mainView() === "file") {
         const on = state.blameEnabled();
         state.toggleBlame();
         state.notify(on ? "provenance off" : "provenance on");
         return;
       }
 
-      if (key.name === ".") {
+      if (pressed("latest-file")) {
         const latest = latestActivity(state.activityLog());
         if (latest !== undefined) {
           state.selectFile(latest.path);
@@ -655,12 +659,12 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "<") {
+      if (pressed("back")) {
         state.goBack();
         return;
       }
 
-      if (key.name === ">") {
+      if (pressed("forward")) {
         state.goForward();
         return;
       }
@@ -668,7 +672,7 @@ export function createKeyHandler(host: HostEffects) {
       // Open the context menu on the focused pane (Shift+F10, the IDE-standard "show
       // Context menu" key). The tree menu works from tree focus; the viewer menu only
       // While the file view is on screen (its intel/copy actions need a caret).
-      if (key.name === "f10" && key.shift) {
+      if (pressed("context-menu")) {
         const pane = state.focusedPane();
         if (pane === "tree") {
           state.openCommandMenu("tree");
@@ -686,7 +690,7 @@ export function createKeyHandler(host: HostEffects) {
       const fileViewShowing = state.mainView() === "file";
 
       if (
-        key.name === "v" &&
+        pressed("toggle-view") &&
         fileViewShowing &&
         state.selectedFile() !== undefined &&
         selectedPath !== undefined
@@ -703,7 +707,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "n") {
+      if (pressed("next-finding")) {
         const next = nextFindingPath(orderedFindingPaths(state.problems()), selectedPath);
         if (next !== undefined) {
           state.selectFile(next);
@@ -711,7 +715,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "r" && !key.shift) {
+      if (pressed("run-checks")) {
         if (!state.diagnosticsEnabled()) {
           state.notify("diagnostics disabled");
           return;
@@ -720,38 +724,34 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // `r` re-reads what the servers already think; `R` throws the servers away and asks again.
-      if (key.name === "R" || (key.name === "r" && key.shift)) {
+      // Run-checks re-reads what the servers already think; this throws the
+      // Servers away and asks again.
+      if (pressed("restart-servers")) {
         void state.restartLanguageServers();
         return;
       }
 
-      if (key.name === "f" && fileViewShowing && selectedPath !== undefined) {
+      if (pressed("load-full") && fileViewShowing && selectedPath !== undefined) {
         state.loadFullContent();
         return;
       }
 
-      if (key.name === "e" && fileViewShowing && selectedPath !== undefined) {
+      if (pressed("open-editor") && fileViewShowing && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "terminal");
         return;
       }
 
-      // Open externally sits beside `o` as its Shift pair (bare uppercase, so the modifier
-      // Survives terminals that drop Shift on control keys). Placed ahead of the plain-`o`
-      // Handler, which is tightened to !shift so the two never both fire. Gated on
-      // FileViewShowing like the sibling e/o/Y/C single-file actions.
-      if (
-        (key.name === "O" || (key.name === "o" && key.shift)) &&
-        fileViewShowing &&
-        selectedPath !== undefined
-      ) {
+      // Open externally defaults to the ide opener's Shift pair (bare uppercase, so the
+      // Modifier survives terminals that drop Shift on control keys). Gated on
+      // FileViewShowing like the sibling single-file actions.
+      if (pressed("open-external") && fileViewShowing && selectedPath !== undefined) {
         state.openExternally(selectedPath);
         return;
       }
 
-      if (key.name === "o" && !key.shift && fileViewShowing && selectedPath !== undefined) {
+      if (pressed("open-ide") && fileViewShowing && selectedPath !== undefined) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "ide");
@@ -760,21 +760,21 @@ export function createKeyHandler(host: HostEffects) {
 
       // Go to definition of the symbol under the caret (IDE-standard F12). The action reads the
       // Caret from state and guards itself, so it's safe to dispatch globally.
-      if (key.name === "f12" && !key.shift && fileViewShowing) {
+      if (pressed("go-to-definition") && fileViewShowing) {
         void state.goToDefinition();
         return;
       }
 
       // Find references to the symbol under the caret (IDE-standard Shift+F12). Opens the
       // Results overlay; the action reads the caret from state and guards itself.
-      if (key.name === "f12" && key.shift && fileViewShowing) {
+      if (pressed("find-references") && fileViewShowing) {
         void state.findReferences();
         return;
       }
 
       // Hover (type + docs) for the symbol under the caret, in a caret-anchored card
       // (Shift+K, the established LSP hover key). The action reads the caret and guards itself.
-      if ((key.name === "K" || (key.name === "k" && key.shift)) && fileViewShowing) {
+      if (pressed("hover") && fileViewShowing) {
         void state.showHover();
         return;
       }
@@ -782,7 +782,7 @@ export function createKeyHandler(host: HostEffects) {
       // Call hierarchy for the symbol under the caret (Shift+H): who calls this / what this calls,
       // In the references overlay with a Tab direction toggle. Bare uppercase like Shift+K, chosen
       // Over Ctrl+F12 since modified F-keys aren't portably delivered. The action guards itself.
-      if ((key.name === "H" || (key.name === "h" && key.shift)) && fileViewShowing) {
+      if (pressed("call-hierarchy") && fileViewShowing) {
         state.callHierarchy();
         return;
       }
@@ -790,24 +790,24 @@ export function createKeyHandler(host: HostEffects) {
       // Find implementations for the symbol under the caret (Shift+I): a concrete symbol jumps to its
       // Single implementation, an interface/abstract member lists every concrete body in the
       // References overlay. Bare uppercase like Shift+K/Shift+H. The action guards itself.
-      if ((key.name === "I" || (key.name === "i" && key.shift)) && fileViewShowing) {
+      if (pressed("implementations") && fileViewShowing) {
         void state.findImplementations();
         return;
       }
 
-      if ((key.name === "Y" || (key.name === "y" && key.shift)) && fileViewShowing) {
+      if (pressed("copy-file") && fileViewShowing) {
         state.copyFileContents();
         return;
       }
 
       // Copy the selected lines' source text, or the caret line when there is no
-      // Selection. Distinct from `y` (a reference) and `Y` (the whole file).
-      if ((key.name === "C" || (key.name === "c" && key.shift)) && fileViewShowing) {
+      // Selection. Distinct from copy-reference and copy-file.
+      if (pressed("copy-selection") && fileViewShowing) {
         state.copySelection();
         return;
       }
 
-      if (key.name === "y" && !key.shift) {
+      if (pressed("copy-reference")) {
         if (state.focusedPane() === "tree") {
           const row = state.treeRows()[state.focusedRowIndex()];
           if (row !== undefined) {
@@ -837,21 +837,21 @@ export function createKeyHandler(host: HostEffects) {
       if (focusedPane === "problems") {
         const items = state.allProblemItems();
         const current = state.problemIndex();
-        if (key.name === "j" || key.name === "down") {
+        if (pressed("problem-down")) {
           const next = items.findIndex(
             (item, index) => index > current && isNavigableProblemItem(item),
           );
           if (next !== -1) {
             state.setProblemIndex(next);
           }
-        } else if (key.name === "k" || key.name === "up") {
+        } else if (pressed("problem-up")) {
           const previous = items.findLastIndex(
             (item, index) => index < current && isNavigableProblemItem(item),
           );
           if (previous !== -1) {
             state.setProblemIndex(previous);
           }
-        } else if (key.name === "return") {
+        } else if (pressed("open-problem")) {
           const item = items[state.problemIndex()];
           if (item?.kind === "problem") {
             const { problem } = item;
@@ -870,43 +870,43 @@ export function createKeyHandler(host: HostEffects) {
       if (focusedPane === "diff") {
         const last = state.navigableLines().length - 1;
         const halfPage = Math.max(1, Math.floor(state.viewerHeight() / 2));
-        // Shift+arrow extends a whole-line selection from the caret; plain arrows
-        // Fall through to the moves below (which clear any selection).
-        if (key.shift && key.name === "down") {
+        // The selection extenders sit ahead of the plain moves (which clear any
+        // Selection); the default Shift+arrows are disjoint from the bare arrows.
+        if (pressed("select-down")) {
           state.extendSelectionTo(Math.max(0, Math.min(state.cursorIndex() + 1, last)));
-        } else if (key.shift && key.name === "up") {
+        } else if (pressed("select-up")) {
           state.extendSelectionTo(Math.max(state.cursorIndex() - 1, 0));
-        } else if (key.name === "j" || key.name === "down") {
+        } else if (pressed("cursor-down")) {
           state.setCursorRow(Math.max(0, Math.min(state.cursorIndex() + 1, last)));
-        } else if (key.name === "k" || key.name === "up") {
+        } else if (pressed("cursor-up")) {
           state.setCursorRow(Math.max(state.cursorIndex() - 1, 0));
-        } else if (key.ctrl && key.name === "d") {
+        } else if (pressed("half-page-down")) {
           state.setCursorRow(Math.max(0, Math.min(state.cursorIndex() + halfPage, last)));
-        } else if (key.ctrl && key.name === "u") {
+        } else if (pressed("half-page-up")) {
           state.setCursorRow(Math.max(state.cursorIndex() - halfPage, 0));
-        } else if (key.name === "g" && !key.shift) {
+        } else if (pressed("first-line")) {
           state.setCursorRow(0);
-        } else if (key.name === "g" || key.name === "G") {
+        } else if (pressed("last-line")) {
           state.setCursorRow(Math.max(0, last));
-        } else if (key.name === "l" || key.name === "right") {
+        } else if (pressed("caret-next")) {
           state.caretNextWord();
-        } else if (key.name === "h" || key.name === "left") {
-          // The caret hops words; `tab` is the way back to the tree (a no-op here
-          // At the first word). h no longer focuses the tree.
+        } else if (pressed("caret-prev")) {
+          // The caret hops words; switch-pane is the way back to the tree (a
+          // No-op here at the first word).
           state.caretPrevWord();
-        } else if (key.name === "z") {
+        } else if (pressed("fold")) {
           // Fold/unfold the region at the caret (an indent block or a git-elided gap).
           state.toggleRegionAtCaret();
         }
         return;
       }
 
-      if (key.name === "j" || key.name === "down") {
+      if (pressed("focus-down")) {
         state.moveFocus(1);
         return;
       }
 
-      if (key.name === "k" || key.name === "up") {
+      if (pressed("focus-up")) {
         state.moveFocus(-1);
         return;
       }
@@ -914,7 +914,7 @@ export function createKeyHandler(host: HostEffects) {
       const treeRows = state.treeRows();
       const focusedRowIndex = state.focusedRowIndex();
 
-      if (key.name === "l" || key.name === "right") {
+      if (pressed("expand")) {
         const row = treeRows[focusedRowIndex];
         if (row?.node.type === "directory") {
           state.setExpandedDirectories(new Set(state.expandedDirectories()).add(row.node.id));
@@ -924,7 +924,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "h" || key.name === "left") {
+      if (pressed("collapse")) {
         const row = treeRows[focusedRowIndex];
         if (row?.node.type === "directory") {
           const next = new Set(state.expandedDirectories());
@@ -934,7 +934,7 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "return") {
+      if (pressed("open")) {
         const row = treeRows[focusedRowIndex];
         if (row !== undefined) {
           const file = firstFileInNode(row.node);

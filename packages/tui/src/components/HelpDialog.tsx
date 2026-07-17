@@ -1,16 +1,17 @@
 import { createMemo, For, Show } from "solid-js";
 
-import { KEY_HELP } from "@/help/keys";
+import { keyHelpGroups } from "@/help/keys";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 
 import packageJson from "../../package.json";
 
-// Fixed width of the combo column box; the action text wraps in whatever remains
+// Minimum width of the combo column box; the action text wraps in whatever remains
 // Of the overlay row after it. A reserved-width box (not string padding) keeps the
-// Action column aligned even on rows whose description wraps to a second line. Must
-// Fit the widest combo (`Shift+F12`) on one line, or the combo itself wraps and
-// The height calc (which counts only description wraps) undercounts and clips a row.
+// Action column aligned even on rows whose description wraps to a second line. The
+// Column widens to the longest rendered combo (a rebind can exceed `Shift+F12`), or
+// The combo itself wraps and the height calc (which counts only description wraps)
+// Undercounts and clips a row.
 const COMBO_WIDTH = 11;
 
 // Word-wrapped line count of `text` at display `width` (matches OpenTUI's word
@@ -38,20 +39,27 @@ function wrappedLineCount(text: string, width: number) {
 
 export function HelpDialog() {
   const theme = useTheme();
+  // The registry is fixed after startup, so the groups resolve once per mount
+  // (the dialog mounts on open, so a session that never rebinds pays nothing).
+  const groups = keyHelpGroups();
+  const comboWidth = Math.max(
+    COMBO_WIDTH,
+    ...groups.flatMap((group) => group.entries.map((entry) => Bun.stringWidth(entry.combo) + 2)),
+  );
   // Size the list by its rendered height (descriptions can wrap to two lines), so
   // The overlay shows every shortcut without scrolling whenever the terminal has
   // The room; sizing by entry count alone clipped wrapped rows off the bottom.
   const listHeight = createMemo(() => {
     // Row interior after the border (2), scrollbar gutter (1), padding (2), and
     // The combo column — slightly conservative so the list never clips a row.
-    const actionWidth = state.overlayWidth() - 5 - COMBO_WIDTH;
-    const rendered = KEY_HELP.reduce(
+    const actionWidth = state.overlayWidth() - 5 - comboWidth;
+    const rendered = groups.reduce(
       (sum, group, index) =>
         // Heading row (1) + a one-line spacer before every group but the first.
         sum +
         (index === 0 ? 1 : 2) +
         group.entries.reduce(
-          (lines, [, action]) => lines + wrappedLineCount(action, actionWidth),
+          (lines, entry) => lines + wrappedLineCount(entry.description, actionWidth),
           0,
         ),
       0,
@@ -93,7 +101,7 @@ export function HelpDialog() {
           },
         }}
       >
-        <For each={KEY_HELP}>
+        <For each={groups}>
           {(group, index) => (
             <box width="100%" flexDirection="column">
               <Show when={index() > 0}>
@@ -108,20 +116,20 @@ export function HelpDialog() {
                 <text fg={theme.colors.text.muted}>{group.heading}</text>
               </box>
               <For each={group.entries}>
-                {([combo, action]) => (
+                {(entry) => (
                   <box
-                    id={`help-dialog-${combo}`}
+                    id={`help-dialog-${entry.combo}`}
                     width="100%"
                     flexDirection="row"
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={theme.colors.surface.panel}
                   >
-                    <box width={COMBO_WIDTH} flexShrink={0}>
-                      <text fg={theme.colors.text.strong}>{combo}</text>
+                    <box width={comboWidth} flexShrink={0}>
+                      <text fg={theme.colors.text.strong}>{entry.combo}</text>
                     </box>
                     <box flexGrow={1}>
-                      <text fg={theme.colors.text.secondary}>{action}</text>
+                      <text fg={theme.colors.text.secondary}>{entry.description}</text>
                     </box>
                   </box>
                 )}

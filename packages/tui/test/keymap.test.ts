@@ -196,15 +196,19 @@ describe("createKeyHandler", () => {
     }
   });
 
-  test("Shift+S falls through to the scope picker outside the file view", () => {
+  test("Shift+S outside the file view is a no-op, never the scope picker", () => {
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
     try {
-      // With the search view up (tree focused), find-symbols is inapplicable, so Shift+S must
-      // Reach the scope picker even on a terminal that reports it as { name: "s", shift: true }.
+      // Combos match modifiers exactly: Shift+S is the symbols binding, gated on
+      // The file view, and it never falls through to the plain-s scope picker
+      // (which the old name-only matching allowed), whichever shape the terminal
+      // Reports it in.
       state.openSearch();
       state.setFocusedPane("tree");
       handle(keyEvent({ name: "s", shift: true }));
-      expect(state.scopeMenuOpen()).toBe(true);
+      expect(state.scopeMenuOpen()).toBe(false);
+      handle(keyEvent({ name: "S" }));
+      expect(state.scopeMenuOpen()).toBe(false);
     } finally {
       state.setScopeMenuOpen(false);
       state.closeSearch();

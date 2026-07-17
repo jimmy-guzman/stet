@@ -66,6 +66,11 @@ A CLI flag wins over its config key for the run it was passed on. `diagnostics.e
 off with intel on still starts a server when a caret pull needs one, and the reverse never
 answers a caret.
 
+Keyboard shortcuts are configurable the same way: a `keybindings` section maps
+action ids to combos (`{ "toggle-sidebar": "ctrl+e" }`), with `false` unbinding
+an action. The ids, the combo grammar, and the fixed exceptions live in the
+[keybindings reference](/docs/reference/keybindings#custom-keybindings).
+
 You never have to edit the file by hand for these: press `ctrl-s` anywhere to
 save your current session settings (theme, icons, wrap, sidebar, changes-only,
 provenance, search toggles, plus any `--editor`/`--ide` passed this run) back

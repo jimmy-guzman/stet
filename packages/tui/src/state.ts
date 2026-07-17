@@ -3687,6 +3687,10 @@ function createState() {
 
   function loadWorktrees(root: string) {
     const epoch = resetEpoch;
+    // Opening the picker is the retry for a prior list failure, so retire that alert before the
+    // Attempt: on success nothing re-raises and the stale error is gone, on failure the catch
+    // Below raises it afresh.
+    clearAlert("worktree");
     runtime
       .runPromise(Git.use((git) => git.worktrees(root)))
       .then((list) => {
@@ -3955,6 +3959,13 @@ function createState() {
     options?: { label?: string; successNotice?: { level: LogLevel; text: string } },
   ) {
     setWorktreeComboboxOpen(false);
+    // Stamp and clear at the very top, before the validations, so every call supersedes: a load is
+    // Async, and a second switch started before the first resolves could otherwise land out of
+    // Order and overwrite the newer worktree. The stamp and the progress clear must lead the
+    // Same-path and missing-path early returns too, or an invalid selection would leave an older
+    // In-flight request as the latest one, and its stale completion could still commit or report.
+    const request = ++switchRequest;
+    setSwitchProgress(undefined);
     if (worktree.path === gitModel().repoRoot) {
       return;
     }
@@ -3963,11 +3974,6 @@ function createState() {
       raise("worktree", "warning", `missing worktree: ${worktree.path}`);
       return;
     }
-    // The load is async, so a second switch started before the first resolves
-    // Could land out of order and overwrite the newer worktree. Stamp each call
-    // And bail if a later one superseded it, mirroring the diff/search pipelines'
-    // Restart-on-rekey guard, so only the latest request commits or reports.
-    const request = ++switchRequest;
     // This attempt owns the worktree alert from here: a retry clears the failure it is retrying
     // Before it can contradict the progress line.
     batch(() => {

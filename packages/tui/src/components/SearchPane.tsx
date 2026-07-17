@@ -437,7 +437,7 @@ export function SearchPane() {
           {truncate(
             state.searchFocus() === "results"
               ? "⏎ open · e editor · y copy · h/l fold · g/G ends · esc"
-              : "⏎ open · ↓ results · ctrl-r regex · ctrl-x case · ctrl-g repo · ctrl-s scope · esc",
+              : "⏎ open · ↓ results · ctrl-r regex · ctrl-x case · ctrl-g repo · ctrl-o scope · esc",
             Math.max(8, innerWidth() - 2),
           )}
         </text>

@@ -6,8 +6,10 @@ import { join } from "node:path";
 import { state } from "@/state";
 import { setSelection } from "@/theme/active";
 
-// End to end through the runtime and the real Config service: the file the user
-// Owns is what changes, so that is what the tests read back.
+/**
+ * End to end through the runtime and the real Config service: the file the user owns is what
+ * changes, so that is what the tests read back.
+ */
 function withConfigDir(run: (dir: string) => Promise<void>) {
   const dir = mkdtempSync(join(tmpdir(), "stet-save-"));
   const previous = process.env.XDG_CONFIG_HOME;

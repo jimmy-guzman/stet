@@ -1,5 +1,5 @@
 import { Result } from "effect";
-import { applyEdits, modify } from "jsonc-parser";
+import { applyEdits, createScanner, modify, SyntaxKind } from "jsonc-parser";
 
 import { loadConfigText } from "./load";
 
@@ -88,6 +88,37 @@ function parses(text: string) {
   }
 }
 
+// Token-based (never a regex over raw text, which could reach a comma inside a
+// String or comment): a comma whose previous non-trivia token opens an object or
+// Array is the structural dangling separator the removal left behind.
+function stripDanglingCommas(text: string) {
+  const trivia = new Set([
+    SyntaxKind.Trivia,
+    SyntaxKind.LineBreakTrivia,
+    SyntaxKind.LineCommentTrivia,
+    SyntaxKind.BlockCommentTrivia,
+  ]);
+  const scanner = createScanner(text, false);
+  const dangling: { length: number; offset: number }[] = [];
+  let previous: SyntaxKind | undefined;
+  for (let kind = scanner.scan(); kind !== SyntaxKind.EOF; kind = scanner.scan()) {
+    if (trivia.has(kind)) {
+      continue;
+    }
+    if (
+      kind === SyntaxKind.CommaToken &&
+      (previous === SyntaxKind.OpenBraceToken || previous === SyntaxKind.OpenBracketToken)
+    ) {
+      dangling.push({ length: scanner.getTokenLength(), offset: scanner.getTokenOffset() });
+    }
+    previous = kind;
+  }
+  return dangling.reduceRight(
+    (current, comma) => current.slice(0, comma.offset) + current.slice(comma.offset + comma.length),
+    text,
+  );
+}
+
 /**
  * Rewrites `text` so the config's settings match the snapshot, as minimal jsonc-parser edits that
  * keep the user's comments and values. Only keys whose effective file value differs from the
@@ -149,7 +180,7 @@ export function updateSettingsText(
   // JSONC trailing comma (`{ , }`, measured against jsonc-parser 3.3.1), so a
   // Result that no longer parses gets that one comma stripped and is checked
   // Again; anything still broken fails without writing.
-  const repaired = parses(updated) ? updated : updated.replace(/(?<open>[{[]\s*),/g, "$<open>");
+  const repaired = parses(updated) ? updated : stripDanglingCommas(updated);
   if (!parses(repaired)) {
     return Result.fail("could not edit config; nothing saved");
   }

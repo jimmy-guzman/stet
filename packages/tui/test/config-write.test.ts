@@ -77,6 +77,19 @@ describe("updateSettingsText", () => {
     expect(() => Bun.JSONC.parse(text)).not.toThrow();
   });
 
+  test("the trailing-comma repair never reaches into a comment", () => {
+    // The comment sits after the property (a preceding comment is consumed by
+    // Jsonc-parser's removal as attached to it) and carries the `{ ,` text the
+    // Old regex repair would have mangled.
+    const source = `{\n  "theme": "light",\n  // layout { , glyphs\n}\n`;
+
+    const { text } = unwrap(updateSettingsText(source, snapshot()));
+
+    expect(text).toContain("// layout { , glyphs");
+    expect(text).not.toContain(`"theme"`);
+    expect(() => Bun.JSONC.parse(text)).not.toThrow();
+  });
+
   test("divergent toggles create their sections; shared labels dedupe", () => {
     const { saved, text } = unwrap(
       updateSettingsText("{}", snapshot({ sidebarOpen: false, sidebarWidth: 44, wrap: true })),

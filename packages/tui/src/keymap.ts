@@ -246,11 +246,19 @@ export function createKeyHandler(host: HostEffects) {
           state.toggleSearchScope();
           return;
         }
-        // The diff scope (which changes "changed" means) is pickable without
+        // The diff scope (which changes what "changed" means) is pickable without
         // Leaving the pane; the ScopeMenu branch earlier in the chain owns the
         // Keys once open, and a pick reruns the search via the git-model dep.
-        if (key.ctrl && key.name === "s") {
+        // Ctrl-o, not ctrl-s: one key means one thing, and ctrl-s saves settings
+        // Everywhere.
+        if (key.ctrl && key.name === "o") {
           openScopeMenu();
+          return;
+        }
+        // This input-owning branch swallows unmatched keys, so the global save
+        // Below is repeated here rather than reached by fallthrough.
+        if (key.ctrl && key.name === "s") {
+          void state.persistSettings();
           return;
         }
         if (state.searchFocus() !== "results") {

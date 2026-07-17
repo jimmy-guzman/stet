@@ -99,11 +99,10 @@ try {
   // Renderer nor the detected appearance; appearance is applied just below.
   const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
   registerThemes(themes);
-  // NO_COLOR (any non-empty value, per no-color.org; FORCE_COLOR still wins when
-  // Present, see theme/mono.ts) replaces the configured selection with the
-  // Built-in monochrome pair. A later explicit pick in the theme switcher still
-  // Applies: no-color.org asks that color stop being the default, not that the
-  // User be locked out of requesting it.
+  // The prefersMonochrome check (see theme/mono.ts) replaces the configured
+  // Selection with the built-in monochrome pair. A later explicit pick in the
+  // Theme switcher still applies: no-color.org asks that color stop being the
+  // Default, not that the user be locked out of requesting it.
   const themeSelection = prefersMonochrome(process.env)
     ? { dark: "mono-dark", light: "mono-light" }
     : config.theme;

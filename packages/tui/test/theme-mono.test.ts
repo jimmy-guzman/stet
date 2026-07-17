@@ -31,6 +31,10 @@ describe("prefersMonochrome", () => {
     expect(prefersMonochrome({ FORCE_COLOR: "" })).toBe(false);
   });
 
+  test("FORCE_COLOR alone (no value) wins over NO_COLOR=1 too", () => {
+    expect(prefersMonochrome({ FORCE_COLOR: "", NO_COLOR: "1" })).toBe(false);
+  });
+
   test("FORCE_COLOR=0 forces monochrome even without NO_COLOR", () => {
     expect(prefersMonochrome({ FORCE_COLOR: "0" })).toBe(true);
   });

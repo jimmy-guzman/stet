@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import type { CheckerState, Diagnostic } from "@/diagnostics/checker";
 import {
   buildProblemItems,
+  formatProblemEntry,
+  formatProblemItems,
   isNavigableProblemItem,
   problemLocationLabel,
   sourceLabel,
@@ -238,5 +240,147 @@ describe("buildProblemItems", () => {
 
   test("no problems yields no rows", () => {
     expect(buildProblemItems({ diagnostics: new Map() })).toEqual([]);
+  });
+});
+
+// Every row's copy text, decorations included, so each case shows what the whole panel
+// Would copy row by row: a `undefined` is a row that carries no content of its own.
+const copyTextPerRow = (state: CheckerState) =>
+  buildProblemItems(state).map((item) => formatProblemEntry(item));
+
+describe("formatProblemEntry", () => {
+  test("a diagnostic reads path:line:col: message [source], under a header that copies nothing", () => {
+    expect(
+      copyTextPerRow(
+        stateWith([
+          diagnostic({ column: 7, line: 12, message: "'x' is never used", source: "oxc" }),
+        ]),
+      ),
+    ).toEqual([undefined, "src/a.ts:12:7: 'x' is never used [oxc]"]);
+  });
+
+  test("the source tag pins to the first line and the rest of the message follows verbatim", () => {
+    expect(
+      copyTextPerRow(
+        stateWith([
+          diagnostic({
+            column: 3,
+            line: 41,
+            message: "Type 'string' is not assignable to type 'number'.\n  Types are incompatible.",
+            source: "typescript",
+          }),
+        ]),
+      ),
+    ).toEqual([
+      undefined,
+      "src/a.ts:41:3: Type 'string' is not assignable to type 'number'. [tsc]\n  Types are incompatible.",
+    ]);
+  });
+
+  test("help text stays in the copied message, and its own row copies nothing", () => {
+    // The panel splits help onto its own row for display; the clipboard keeps the
+    // Message whole, so re-emitting the help row would duplicate it.
+    expect(
+      copyTextPerRow(
+        stateWith([
+          diagnostic({
+            column: 1,
+            line: 2,
+            message: "no lowercase\nhelp: capitalize it",
+            source: "oxc",
+          }),
+        ]),
+      ),
+    ).toEqual([undefined, "src/a.ts:2:1: no lowercase [oxc]\nhelp: capitalize it", undefined]);
+  });
+
+  test("an absent column drops to path:line, an absent line to path alone", () => {
+    expect(
+      copyTextPerRow(stateWith([diagnostic({ line: 9, message: "no column", source: "oxc" })])),
+    ).toEqual([undefined, "src/a.ts:9: no column [oxc]"]);
+    expect(
+      copyTextPerRow(
+        stateWith([diagnostic({ line: undefined, message: "whole file", source: "oxc" })]),
+      ),
+    ).toEqual([undefined, "src/a.ts: whole file [oxc]"]);
+  });
+
+  test("a diagnostic with no source falls back to its checker, as the panel's label does", () => {
+    expect(copyTextPerRow(stateWith([diagnostic({ column: 1, line: 1, message: "hm" })]))).toEqual([
+      undefined,
+      "src/a.ts:1:1: hm [diagnostics]",
+    ]);
+  });
+
+  test("a failure row copies its raw line, under a header that copies nothing", () => {
+    expect(
+      copyTextPerRow({
+        diagnostics: new Map([
+          ["src/a.ts", { count: 0, diagnostics: [], message: "boom\n  at one", status: "failed" }],
+        ]),
+      }),
+    ).toEqual([undefined, "boom", "  at one"]);
+  });
+});
+
+describe("formatProblemItems", () => {
+  test("copies every entry in panel order, blank-line separated, skipping decorations", () => {
+    const items = buildProblemItems(
+      stateWith([
+        diagnostic({ column: 1, line: 2, message: "first", path: "src/a.ts", source: "oxc" }),
+        diagnostic({ column: 4, line: 9, message: "second", path: "src/a.ts", source: "oxc" }),
+        diagnostic({ column: 2, line: 1, message: "third", path: "src/b.ts", source: "oxc" }),
+      ]),
+    );
+
+    expect(formatProblemItems(items)).toBe(
+      [
+        "src/a.ts:2:1: first [oxc]",
+        "",
+        "src/a.ts:9:4: second [oxc]",
+        "",
+        "src/b.ts:1:2: third [oxc]",
+      ].join("\n"),
+    );
+  });
+
+  test("contiguous failure output stays one block, and distinct failures separate", () => {
+    const items = buildProblemItems({
+      diagnostics: new Map([
+        [
+          "src/a.ts",
+          { count: 0, diagnostics: [], message: "boom\n  at one\n  at two", status: "failed" },
+        ],
+        ["src/b.ts", { count: 0, diagnostics: [], message: "other failure", status: "failed" }],
+      ]),
+    });
+
+    // A checker's output is split across rows only so the panel can window it, so a
+    // Blank line between its own lines would break up the trace.
+    expect(formatProblemItems(items)).toBe("boom\n  at one\n  at two\n\nother failure");
+  });
+
+  test("failure output leads the diagnostics it precedes in the panel", () => {
+    const items = buildProblemItems({
+      diagnostics: new Map([
+        ["src/a.ts", { count: 0, diagnostics: [], message: "server crashed", status: "failed" }],
+        [
+          "src/b.ts",
+          {
+            count: 1,
+            diagnostics: [
+              diagnostic({ column: 1, line: 3, message: "bad", path: "src/b.ts", source: "oxc" }),
+            ],
+            status: "findings",
+          },
+        ],
+      ]),
+    });
+
+    expect(formatProblemItems(items)).toBe("server crashed\n\nsrc/b.ts:3:1: bad [oxc]");
+  });
+
+  test("an empty panel copies nothing", () => {
+    expect(formatProblemItems(buildProblemItems({ diagnostics: new Map() }))).toBe("");
   });
 });

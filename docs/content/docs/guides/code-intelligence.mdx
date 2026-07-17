@@ -71,4 +71,10 @@ pinpointed to its `line:col`. Press `p` to open the panel and `enter` to jump
 to a finding. The [languages reference](/docs/reference/languages) lists what
 each language gets and how to add your own.
 
+With the panel focused, `y` copies the selected entry and `Y` copies every one.
+A diagnostic copies as `path:line:col: message [source]`, dropping a line or
+column it does not carry, with the message kept whole, so it pastes straight
+back to the agent; a checker's own failure output copies as its raw lines. A
+click selects an entry and a double-click jumps to it.
+
 ![The problems panel docked below a diff, listing diagnostics with their file locations](/screenshots/problems.png)

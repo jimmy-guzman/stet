@@ -36,7 +36,12 @@ import {
 } from "./diagnostics/checker";
 import type { CheckerState, Diagnostic } from "./diagnostics/checker";
 import { LspProcess } from "./diagnostics/lsp-process";
-import { buildProblemItems, isNavigableProblemItem } from "./diagnostics/problems";
+import {
+  buildProblemItems,
+  formatProblemEntry,
+  formatProblemItems,
+  isNavigableProblemItem,
+} from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import {
   hasCapabilityServer,
@@ -3541,6 +3546,33 @@ function createState() {
     copy(selectionText(), `copied ${count} line${count === 1 ? "" : "s"}`);
   }
 
+  // Copy the problems panel's selected entry, or every entry (`y`/`Y` while the panel
+  // Is focused). Both read `allProblemItems`, the full list the panel windows, so an
+  // Off-screen diagnostic copies too. An empty panel leaves the clipboard untouched
+  // Rather than clearing it with an empty write.
+  function copyProblem() {
+    const item = allProblemItems()[problemIndex()];
+    const text = item === undefined ? undefined : formatProblemEntry(item);
+    if (text === undefined) {
+      notify("no problems to copy");
+      return;
+    }
+    copy(text, "copied 1 problem");
+  }
+
+  function copyAllProblems() {
+    const items = allProblemItems();
+    const text = formatProblemItems(items);
+    if (text === "") {
+      notify("no problems to copy");
+      return;
+    }
+    const count = items.filter(
+      (item) => item.kind === "problem" || (item.kind === "failure" && item.isFirst),
+    ).length;
+    copy(text, `copied ${count} problem${count === 1 ? "" : "s"}`);
+  }
+
   // Opt the current path out of the truncation cap for a full re-read. Reached by
   // The `f` key and the truncation footer's click; the footer clearing and the
   // Content growing are the acknowledgment, so it stays silent.
@@ -4430,7 +4462,9 @@ function createState() {
     commitsNow,
     commitsStatus,
     copy,
+    copyAllProblems,
     copyFileContents,
+    copyProblem,
     copySelection,
     counts,
     countsText,

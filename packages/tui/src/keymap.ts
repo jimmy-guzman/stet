@@ -683,6 +683,7 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       const selectedPath = state.selectedPath();
+      const focusedPane = state.focusedPane();
 
       // File-view keys act only while the file view is on screen: with the
       // Search view up they would mutate or read a viewer the user cannot see
@@ -795,20 +796,39 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (pressed("copy-file") && fileViewShowing) {
-        state.copyFileContents();
-        return;
+      // The copy actions are registered `global` but are really pane-dispatched: each
+      // Reads whichever pane holds focus, the way copy-reference has always chosen
+      // Between the tree and the viewer. They stay one action id per concept (one
+      // Rebind, one help row) rather than a per-pane id, which the conflict detector
+      // Would report against the global binding anyway, since a global action claims
+      // Its combo in every pane scope. The problems arm leads each handler so `y`/`Y`
+      // Never reach past the focused panel to the viewer behind it.
+      if (pressed("copy-file")) {
+        if (focusedPane === "problems") {
+          state.copyAllProblems();
+          return;
+        }
+        if (fileViewShowing) {
+          state.copyFileContents();
+          return;
+        }
       }
 
       // Copy the selected lines' source text, or the caret line when there is no
-      // Selection. Distinct from copy-reference and copy-file.
-      if (pressed("copy-selection") && fileViewShowing) {
+      // Selection. Distinct from copy-reference and copy-file. A line selection is a
+      // Viewer concept the problems panel has no analogue for, so it is inert there
+      // Rather than reaching back to the viewer.
+      if (pressed("copy-selection") && focusedPane !== "problems" && fileViewShowing) {
         state.copySelection();
         return;
       }
 
       if (pressed("copy-reference")) {
-        if (state.focusedPane() === "tree") {
+        if (focusedPane === "problems") {
+          state.copyProblem();
+          return;
+        }
+        if (focusedPane === "tree") {
           const row = state.treeRows()[state.focusedRowIndex()];
           if (row !== undefined) {
             state.copy(formatCopyReference({ path: row.node.path }));
@@ -831,8 +851,6 @@ export function createKeyHandler(host: HostEffects) {
         }
         return;
       }
-
-      const focusedPane = state.focusedPane();
 
       if (focusedPane === "problems") {
         const items = state.allProblemItems();

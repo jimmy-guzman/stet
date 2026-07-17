@@ -22,28 +22,28 @@ list inside the app.
 
 ## Viewer
 
-| Key           | Action                                                                  | Rebind id                        |
-| ------------- | ----------------------------------------------------------------------- | -------------------------------- |
-| `/`           | find in the viewer; n/N cycle matches, esc clears                       | `find`                           |
-| `ctrl-f`      | project search pane; regex/case/scope/glob toggles                      | `search`                         |
-| `v`           | toggle diff ↔ full file view for a changed file                         | `toggle-view`                    |
-| `z`           | fold / unfold the region at the caret                                   | `fold`                           |
-| `x`           | toggle long-line wrap in the viewer                                     | `toggle-wrap`                    |
-| `a`           | toggle the line provenance rail                                         | `provenance`                     |
-| `f`           | load full content when truncated                                        | `load-full`                      |
-| `ctrl-d / u`  | half-page cursor movement in the viewer                                 | `half-page-down`, `half-page-up` |
-| `g / G`       | jump to first / last line                                               | `first-line`, `last-line`        |
-| `F12`         | go to definition of the symbol under the caret                          | `go-to-definition`               |
-| `Shift+F12`   | find references to the symbol under the caret                           | `find-references`                |
-| `Shift+I`     | find implementations of the symbol under the caret                      | `implementations`                |
-| `Shift+H`     | call hierarchy of the symbol (Tab flips direction)                      | `call-hierarchy`                 |
-| `K`           | hover: type and docs for the symbol under the caret                     | `hover`                          |
-| `S`           | find symbols: outline of the open file                                  | `symbols`                        |
-| `< / >`       | back / forward through viewer history                                   | `back`, `forward`                |
-| `y`           | copy path (tree), path:line:col (viewer), or the selected search result | `copy-reference`                 |
-| `Y`           | copy the entire contents of the viewed file                             | `copy-file`                      |
-| `Shift+↑ / ↓` | extend a line selection (drag also selects)                             | `select-up`, `select-down`       |
-| `C`           | copy the selected lines (or the caret line)                             | `copy-selection`                 |
+| Key           | Action                                                                     | Rebind id                        |
+| ------------- | -------------------------------------------------------------------------- | -------------------------------- |
+| `/`           | find in the viewer; n/N cycle matches, esc clears                          | `find`                           |
+| `ctrl-f`      | project search pane; regex/case/scope/glob toggles                         | `search`                         |
+| `v`           | toggle diff ↔ full file view for a changed file                            | `toggle-view`                    |
+| `z`           | fold / unfold the region at the caret                                      | `fold`                           |
+| `x`           | toggle long-line wrap in the viewer                                        | `toggle-wrap`                    |
+| `a`           | toggle the line provenance rail                                            | `provenance`                     |
+| `f`           | load full content when truncated                                           | `load-full`                      |
+| `ctrl-d / u`  | half-page cursor movement in the viewer                                    | `half-page-down`, `half-page-up` |
+| `g / G`       | jump to first / last line                                                  | `first-line`, `last-line`        |
+| `F12`         | go to definition of the symbol under the caret                             | `go-to-definition`               |
+| `Shift+F12`   | find references to the symbol under the caret                              | `find-references`                |
+| `Shift+I`     | find implementations of the symbol under the caret                         | `implementations`                |
+| `Shift+H`     | call hierarchy of the symbol (Tab flips direction)                         | `call-hierarchy`                 |
+| `K`           | hover: type and docs for the symbol under the caret                        | `hover`                          |
+| `S`           | find symbols: outline of the open file                                     | `symbols`                        |
+| `< / >`       | back / forward through viewer history                                      | `back`, `forward`                |
+| `y`           | copy path (tree), path:line:col (viewer), or the selected result / problem | `copy-reference`                 |
+| `Y`           | copy the file (viewer) or every entry (problems)                           | `copy-file`                      |
+| `Shift+↑ / ↓` | extend a line selection (drag also selects)                                | `select-up`, `select-down`       |
+| `C`           | copy the selected lines (or the caret line)                                | `copy-selection`                 |
 
 ## Tabs
 
@@ -117,12 +117,14 @@ confirm, the search pane) and `ctrl+c` are fixed.
 
 The keyboard drives everything, but the mouse works too. Click a file to open
 it, a folder to expand or collapse it, a diff line to move the cursor there, or
-a problem to jump to it. Double-click a file in the tree, or a tab in the strip,
-to pin it as a tab. Clicks also work in the overlays and the search pane, and
-hovering a theme in the switcher previews it live. Clicking a pane focuses it,
-and the wheel scrolls whichever pane the pointer is over. Right-click a tree row
-or a viewer symbol for a context menu of the actions that apply there, the same
-menu `Shift+F10` opens on the focused pane.
+a problem to select it. Double-click a file in the tree, or a tab in the strip,
+to pin it as a tab; double-click a problem to jump to it. Clicks also work in
+the overlays and the search pane, and hovering a theme in the switcher previews
+it live. Clicking a pane focuses it, so clicking the problems panel's chrome
+focuses it without changing the selection, and the wheel scrolls whichever pane
+the pointer is over. Right-click a tree row or a viewer symbol for a context
+menu of the actions that apply there, the same menu `Shift+F10` opens on the
+focused pane.
 
 Drag across diff lines to select a range. Holding the pointer at the top or
 bottom edge scrolls the viewer and continues the selection. Shift-click extends

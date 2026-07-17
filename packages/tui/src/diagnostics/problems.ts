@@ -1,7 +1,7 @@
 import { formatCopyReference } from "@/clipboard/reference";
 
 import { allFindings, checkerNames, countBySeverity } from "./checker";
-import type { CheckerName, CheckerState, Diagnostic } from "./checker";
+import type { CheckerFileState, CheckerName, CheckerState, Diagnostic } from "./checker";
 
 /**
  * One rendered row of the problems panel, each exactly one terminal row (the blank line between
@@ -23,6 +23,45 @@ export type ProblemItem =
     }
   | { kind: "problem"; problem: Diagnostic; summary: string; labelWidth: number }
   | { kind: "help"; owner: number; text: string };
+
+/**
+ * What an empty panel says, which is never just "no problems": that phrase is a claim about the
+ * code, and it is only true once diagnostics actually ran, resolved, and covered everything. Every
+ * other reason the list is empty (switched off, still running, failed, still pending, or nothing
+ * able to answer for these files) is a fact about the run, and saying so is the difference between
+ * a clean bill of health and an empty one.
+ *
+ * Ordered by what supersedes what: a run in flight makes any prior state moot, a failure outranks
+ * the pending files it left behind, and unavailable coverage is only worth reporting once nothing
+ * is outstanding.
+ */
+export function problemsEmptyState(
+  state: CheckerState,
+  { enabled, running }: { enabled: boolean; running: boolean },
+) {
+  if (!enabled) {
+    return "diagnostics disabled";
+  }
+  if (running) {
+    return "running diagnostics…";
+  }
+  const has = (status: CheckerFileState["status"]) =>
+    checkerNames.some((checker) =>
+      [...state[checker].values()].some((fileState) => fileState.status === status),
+    );
+  // A failure with no message lands here: the failure rows it would have filled the panel with
+  // Never materialised, so the panel would otherwise read as clean.
+  if (has("failed")) {
+    return "diagnostics failed";
+  }
+  if (has("pending")) {
+    return "diagnostics pending";
+  }
+  if (has("unavailable")) {
+    return "some diagnostics unavailable";
+  }
+  return "no problems";
+}
 
 /**
  * The rows the panel cursor can land on: located diagnostics and checker-failure lines (so long

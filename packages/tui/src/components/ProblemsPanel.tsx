@@ -125,9 +125,7 @@ export function ProblemsPanel() {
             when={state.allProblemItems().length > 0}
             fallback={
               <box id="problem-empty" paddingLeft={1}>
-                <text fg={theme.colors.text.muted}>
-                  {state.diagnosticsEnabled() ? "no problems" : "diagnostics disabled"}
-                </text>
+                <text fg={theme.colors.text.muted}>{state.problemsEmpty()}</text>
               </box>
             }
           >
@@ -142,7 +140,7 @@ export function ProblemsPanel() {
                 >
                   <Show when={row().item.kind === "failure-header"}>
                     <box width="100%" paddingLeft={1}>
-                      <text fg={theme.colors.severity.error}>checks failed</text>
+                      <text fg={theme.colors.severity.error}>diagnostics failed</text>
                     </box>
                   </Show>
                   <Show when={asFailure(row().item)}>

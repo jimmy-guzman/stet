@@ -41,6 +41,7 @@ import {
   formatProblemEntry,
   formatProblemItems,
   isNavigableProblemItem,
+  problemsEmptyState,
 } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import {
@@ -829,6 +830,12 @@ function createState() {
   // Reuse the `problems` memo's sorted findings so one checker update pays the
   // AllFindings sort once, not once here and once inside buildProblemItems.
   const allProblemItems = createMemo(() => buildProblemItems(checkerState(), problems()));
+  const problemsEmpty = createMemo(() =>
+    problemsEmptyState(checkerState(), {
+      enabled: diagnosticsEnabled(),
+      running: checksRunning(),
+    }),
+  );
   // The first row the problems cursor can land on; headers and help sub-lines are
   // Skipped so opening the panel never parks the cursor on a non-navigable row.
   const firstNavigableProblemIndex = createMemo(() => {
@@ -4489,6 +4496,7 @@ function createState() {
     pinActiveTab,
     problemIndex,
     problems,
+    problemsEmpty,
     problemsOpen,
     problemsScrollTop,
     provenanceForRow,

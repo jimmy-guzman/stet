@@ -1,13 +1,14 @@
 import { resolve } from "node:path";
 
-import { KEY_HELP } from "../src/help/keys";
+import { keyHelpGroups } from "../src/help/keys";
 
 /**
- * Single-sources the docs keybindings from `src/help/keys.ts`. Default: writes the markdown tables
- * into the docs page between the markers. With `--check`: parses the committed page back and exits
- * non-zero if it has drifted from KEY_HELP (wired into `docs:check`). The page's intro and Mouse
- * prose stay hand-written outside the markers. The docs workspace lives at the repo root, so the
- * output path is anchored to this file rather than the cwd.
+ * Single-sources the docs keybindings from `src/help/keys.ts` (rendered with the default combos,
+ * since the docs describe a stock install) plus the rebind ids from `src/keys/actions.ts`. Default:
+ * writes the markdown tables into the docs page between the markers. With `--check`: parses the
+ * committed page back and exits non-zero if it has drifted (wired into `docs:check`). The page's
+ * intro and Mouse prose stay hand-written outside the markers. The docs workspace lives at the repo
+ * root, so the output path is anchored to this file rather than the cwd.
  */
 const MDX_PATH = resolve(
   import.meta.dirname,
@@ -17,25 +18,34 @@ const START_MARKER = "{/* GENERATED-KEYS: edit src/help/keys.ts then run bun run
 const END_MARKER = "{/* /GENERATED-KEYS */}";
 const HEADING = /^##\s+(?<heading>.+?)\s*$/;
 
+const groups = keyHelpGroups();
+
 function renderKeyTables() {
-  return KEY_HELP.map((group) => {
-    const heading = group.heading.charAt(0).toUpperCase() + group.heading.slice(1);
-    const rows = group.entries.map(([combo, action]) => `| \`${combo}\` | ${action} |`).join("\n");
-    return `## ${heading}\n\n| Key | Action |\n| --- | --- |\n${rows}`;
-  }).join("\n\n");
+  return groups
+    .map((group) => {
+      const heading = group.heading.charAt(0).toUpperCase() + group.heading.slice(1);
+      const rows = group.entries
+        .map(
+          (entry) =>
+            `| \`${entry.combo}\` | ${entry.description} | ${entry.ids.map((id) => `\`${id}\``).join(", ")} |`,
+        )
+        .join("\n");
+      return `## ${heading}\n\n| Key | Action | Rebind id |\n| --- | --- | --- |\n${rows}`;
+    })
+    .join("\n\n");
 }
 
-// Parses the rendered tables back into the KEY_HELP shape, so the drift check compares
+// Parses the rendered tables back into the groups shape, so the drift check compares
 // Data rather than exact markdown (immune to oxfmt's table alignment).
 function parseKeyTables(region: string) {
-  const groups: { entries: [string, string][]; heading: string }[] = [];
+  const parsed: { entries: [string, string, string][]; heading: string }[] = [];
   for (const line of region.split("\n")) {
     const heading = HEADING.exec(line);
     if (heading?.groups) {
-      groups.push({ entries: [], heading: heading.groups.heading.toLowerCase() });
+      parsed.push({ entries: [], heading: heading.groups.heading.toLowerCase() });
       continue;
     }
-    const group = groups.at(-1);
+    const group = parsed.at(-1);
     if (!group || !line.trimStart().startsWith("|")) {
       continue;
     }
@@ -43,12 +53,16 @@ function parseKeyTables(region: string) {
       .split("|")
       .slice(1, -1)
       .map((cell) => cell.trim());
-    if (cells.length < 2 || cells[0] === "Key" || /^:?-+:?$/.test(cells[0])) {
+    if (cells.length < 3 || cells[0] === "Key" || /^:?-+:?$/.test(cells[0])) {
       continue;
     }
-    group.entries.push([cells[0].replaceAll("`", "").trim(), cells[1]]);
+    group.entries.push([
+      cells[0].replaceAll("`", "").trim(),
+      cells[1],
+      cells[2].replaceAll("`", "").trim(),
+    ]);
   }
-  return groups;
+  return parsed;
 }
 
 const text = await Bun.file(MDX_PATH).text();
@@ -63,8 +77,10 @@ if (process.argv.includes("--check")) {
   const actual = parseKeyTables(text.slice(afterStartLine, end));
   // ParseKeyTables lowercases headings (renderKeyTables capitalizes them for display), so
   // Normalize the same way here: the check compares data, not the display casing.
-  const expected = KEY_HELP.map((group) => ({
-    entries: group.entries,
+  const expected = groups.map((group) => ({
+    entries: group.entries.map(
+      (entry) => [entry.combo, entry.description, entry.ids.join(", ")] as [string, string, string],
+    ),
     heading: group.heading.toLowerCase(),
   }));
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -75,5 +91,5 @@ if (process.argv.includes("--check")) {
 } else {
   const next = `${text.slice(0, afterStartLine)}\n${renderKeyTables()}\n\n${text.slice(end)}`;
   await Bun.write(MDX_PATH, next);
-  console.log(`gen-docs-keys: wrote ${KEY_HELP.length} key groups to ${MDX_PATH}`);
+  console.log(`gen-docs-keys: wrote ${groups.length} key groups to ${MDX_PATH}`);
 }

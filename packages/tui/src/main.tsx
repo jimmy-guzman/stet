@@ -17,6 +17,8 @@ import { registerFileSupport } from "./file-support/registry";
 import type { GitModel } from "./git/model";
 import { Git } from "./git/service";
 import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
+import { registerKeybindings } from "./keys/registry";
+import { resolveKeybindings } from "./keys/resolve";
 import { logError } from "./log/terminal";
 import { Process } from "./process";
 import { runtime } from "./runtime";
@@ -116,6 +118,10 @@ try {
     new Set(Object.keys(servers)),
   );
   registerFileSupport(fileSupport);
+  const { issues: keybindingIssues, set: keybindings } = resolveKeybindings(
+    config.keybindings ?? {},
+  );
+  registerKeybindings(keybindings);
 
   // Create the renderer up front and detect the terminal's dark/light appearance
   // Before the first runtime use (which warms the diff highlighter), so the whole
@@ -244,7 +250,13 @@ try {
       void state.runChecks(model);
 
       // A bad config never blocks startup; the first issue surfaces as a notice.
-      const issues = [...configIssues, ...themeIssues, ...serverIssues, ...fileSupportIssues];
+      const issues = [
+        ...configIssues,
+        ...themeIssues,
+        ...serverIssues,
+        ...fileSupportIssues,
+        ...keybindingIssues,
+      ];
       if (issues.length > 0) {
         state.notify(issues[0] ?? "config has issues");
       }

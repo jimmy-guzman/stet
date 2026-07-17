@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { helpText, parseArgs, parseCommand, scopeKinds, scopeLabel, scopeMenuLabel } from "@/cli";
-import { KEY_HELP } from "@/help/keys";
+import { keyHelpGroups } from "@/help/keys";
 
 describe("parseArgs", () => {
   test("defaults to uncommitted vs HEAD", () => {
@@ -163,11 +163,11 @@ describe("scopeMenuLabel", () => {
 describe("helpText", () => {
   test("documents every keybinding from the registry", () => {
     const help = helpText();
-    for (const group of KEY_HELP) {
+    for (const group of keyHelpGroups()) {
       expect(help).toContain(`${group.heading}:`);
-      for (const [combo, action] of group.entries) {
-        expect(help).toContain(combo);
-        expect(help).toContain(action);
+      for (const entry of group.entries) {
+        expect(help).toContain(entry.combo);
+        expect(help).toContain(entry.description);
       }
     }
     expect(help).toContain("The view is live");

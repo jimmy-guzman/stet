@@ -1,6 +1,6 @@
 import util from "node:util";
 
-import { KEY_HELP } from "@/help/keys";
+import { keyHelpGroups } from "@/help/keys";
 
 export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit" | "commit";
 
@@ -155,22 +155,26 @@ export function scopeMenuLabel(kind: ScopeKind) {
   return "unstaged";
 }
 
-// Renders the `?` overlay registry (`KEY_HELP`) as the `--help` Keys section, so the
-// Two never drift. Combos align to the widest one by display width (wide glyphs like
-// The arrows count correctly), grouped under each section heading.
+// Renders the `?` overlay registry (`keyHelpGroups`) as the `--help` Keys section,
+// So the two never drift, current rebinds included. Combos align to the widest one
+// By display width (wide glyphs like the arrows count correctly), grouped under
+// Each section heading.
 function keyBindingsHelp() {
+  const groups = keyHelpGroups();
   const width = Math.max(
-    ...KEY_HELP.flatMap((group) => group.entries.map(([combo]) => Bun.stringWidth(combo))),
+    ...groups.flatMap((group) => group.entries.map((entry) => Bun.stringWidth(entry.combo))),
   );
-  return KEY_HELP.map(
-    (group) =>
-      `  ${group.heading}:\n${group.entries
-        .map(
-          ([combo, action]) =>
-            `    ${combo}${" ".repeat(width - Bun.stringWidth(combo) + 2)}${action}`,
-        )
-        .join("\n")}`,
-  ).join("\n\n");
+  return groups
+    .map(
+      (group) =>
+        `  ${group.heading}:\n${group.entries
+          .map(
+            (entry) =>
+              `    ${entry.combo}${" ".repeat(width - Bun.stringWidth(entry.combo) + 2)}${entry.description}`,
+          )
+          .join("\n")}`,
+    )
+    .join("\n\n");
 }
 
 export function helpText() {

@@ -44,7 +44,10 @@ describe("intel off switch", () => {
 
     await state.goToDefinition();
 
-    expect(state.statusRight()).toBe("intel disabled");
+    expect(state.statusBarModel()).toMatchObject({
+      content: { category: "notification", level: "info", message: "intel disabled" },
+      layout: "full",
+    });
   });
 
   test("find symbols notifies instead of opening the overlay", async () => {
@@ -53,6 +56,9 @@ describe("intel off switch", () => {
     await state.findSymbols();
 
     expect(state.symbolsOpen()).toBe(false);
-    expect(state.statusRight()).toBe("intel disabled");
+    expect(state.statusBarModel()).toMatchObject({
+      content: { category: "notification", level: "info", message: "intel disabled" },
+      layout: "full",
+    });
   });
 });

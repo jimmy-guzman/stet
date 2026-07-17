@@ -53,4 +53,147 @@ describe("status bar changed-file cue", () => {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("lets a transient notification take over the full row", async () => {
+    const repoRoot = createFixtureRepo("stet-statusbar-", { "notes.txt": "alpha\n" });
+    writeFileSync(join(repoRoot, "notes.txt"), "alpha\nbravo\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.notify("copied src/state.ts", "success");
+      const frame = await settleUntil("notification fills the status line", (current) =>
+        current.includes("✓ copied src/state.ts"),
+      );
+      const statusLine = frame.split("\n").find((row) => row.includes("copied src/state.ts"));
+
+      expect(statusLine).toBeDefined();
+      expect(statusLine).not.toContain("? keys · q quit");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("lets the caret finding take over the full row", async () => {
+    const repoRoot = createFixtureRepo("stet-statusbar-", { "notes.txt": "alpha\n" });
+    writeFileSync(join(repoRoot, "notes.txt"), "alpha\nbravo\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    state.setDiagnosticsEnabled(false);
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("caret on the changed line", (frame) => /ln 2:1\b/.test(frame));
+      state.setCheckerState({
+        diagnostics: new Map([
+          [
+            "notes.txt",
+            {
+              count: 1,
+              diagnostics: [
+                {
+                  checker: "diagnostics",
+                  line: 2,
+                  message: "unused value",
+                  path: "notes.txt",
+                  severity: "warning",
+                },
+              ],
+              status: "findings",
+            },
+          ],
+        ]),
+      });
+      const frame = await settleUntil("finding fills the status line", (current) =>
+        current.includes("⚠ diagnostics: unused value"),
+      );
+      const statusLine = frame.split("\n").find((row) => row.includes("diagnostics: unused value"));
+
+      expect(statusLine).toBeDefined();
+      expect(statusLine).not.toContain("? keys · q quit");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("promotes ambient activity when it cannot fit beside the generic hint", async () => {
+    const path = "src/components/StatusBar.tsx";
+    const repoRoot = createFixtureRepo("stet-statusbar-", { [path]: "alpha\n" });
+    writeFileSync(join(repoRoot, path), "alpha\nbravo\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 48,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.setActivityLog(
+        recordActivity(emptyActivityLog, [{ kind: "changed", path }], Date.now()),
+      );
+      const frame = await settleUntil("activity fills the narrow status line", (current) =>
+        current.includes("StatusBar.tsx"),
+      );
+      const statusLine = frame.split("\n").find((row) => row.includes("StatusBar.tsx"));
+
+      expect(statusLine).toBeDefined();
+      expect(statusLine).toContain("●");
+      expect(statusLine).not.toContain("? keys · q quit");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("keeps active find guidance when ambient activity needs more room", async () => {
+    const path = "src/components/really/deep/StatusBar.tsx";
+    const repoRoot = createFixtureRepo("stet-statusbar-", { [path]: "alpha\n" });
+    writeFileSync(join(repoRoot, path), "alpha\nbravo\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 80,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.setActivityLog(
+        recordActivity(emptyActivityLog, [{ kind: "changed", path }], Date.now()),
+      );
+      state.setFindOpen(true);
+      const frame = await settleUntil(
+        "find guidance and activity share the status line",
+        (current) =>
+          current
+            .split("\n")
+            .some((row) => row.includes("type to find") && row.includes("StatusBar.tsx")),
+      );
+      const statusLine = frame
+        .split("\n")
+        .find((row) => row.includes("type to find") && row.includes("StatusBar.tsx"));
+
+      expect(statusLine).toBeDefined();
+      expect(statusLine).toContain("●");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

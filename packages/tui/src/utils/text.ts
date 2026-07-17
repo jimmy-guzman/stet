@@ -40,13 +40,28 @@ export function truncate(text: string, max: number) {
 }
 
 export function truncateLeft(text: string, max: number) {
-  if (text.length <= max) {
+  if (Bun.stringWidth(text) <= max) {
     return text;
   }
   if (max <= 1) {
     return max === 1 ? "…" : "";
   }
-  return `…${text.slice(text.length - (max - 1))}`;
+  const segments: string[] = [];
+  for (const { segment } of graphemes.segment(text)) {
+    segments.push(segment);
+  }
+  const budget = max - 1;
+  let width = 0;
+  let kept = "";
+  for (const segment of segments.toReversed()) {
+    const cells = Bun.stringWidth(segment);
+    if (width + cells > budget) {
+      break;
+    }
+    width += cells;
+    kept = `${segment}${kept}`;
+  }
+  return `…${kept}`;
 }
 
 // Truncate `text` to `max` cells while keeping every matched character (offsets

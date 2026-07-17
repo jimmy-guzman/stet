@@ -33,7 +33,7 @@ test("the next test still starts from the defaults", () => {
 test("a dying test leaves a notice timer armed", () => {
   state.notify("stale notice");
 
-  expect(state.statusRightMessage()).toContain("stale notice");
+  expect(state.statusBarModel().content).toMatchObject({ message: "stale notice" });
 });
 
 // This notice is set directly, so it carries no timer of its own to expire it. If it is gone by the
@@ -42,7 +42,7 @@ test("the armed timer never fires into this test's notice", async () => {
   state.setNotice({ level: "info", text: "fresh notice" });
   await Bun.sleep(1700);
 
-  expect(state.statusRightMessage()).toContain("fresh notice");
+  expect(state.statusBarModel().content).toMatchObject({ message: "fresh notice" });
 });
 
 // The picker loads its worktrees, then writes its rows and kicks a summaries refresh, all after an

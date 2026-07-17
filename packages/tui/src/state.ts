@@ -116,6 +116,8 @@ import type { IntelRequestError } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
+import { buildStatusBarModel } from "./status/model";
+import type { StatusBarHint } from "./status/model";
 import { activeThemeName, appearance, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
@@ -125,7 +127,6 @@ import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
 import { relativeTime } from "./utils/relative-time";
-import { truncate, truncateLeft } from "./utils/text";
 import {
   back,
   canBack,
@@ -1780,18 +1781,21 @@ function createState() {
             .join(" · ");
     return { band: provenance.band, text };
   });
-  // The status bar's left key hints, keyed to the active mode. Lives here (not in
-  // The StatusBar component) so the right-status budget below can reserve the exact
-  // Width the hint takes, instead of a hardcoded copy that drifts from the render.
-  const statusHint = createMemo(() =>
+  const statusHint = createMemo<StatusBarHint>(() =>
     findOpen()
-      ? "type to find · enter confirm · esc cancel"
+      ? {
+          category: "guidance",
+          mode: "active",
+          text: "type to find · enter confirm · esc cancel",
+        }
       : findActive()
-        ? "n/N next/prev · esc clear find"
-        : "? keys · q quit",
+        ? {
+            category: "guidance",
+            mode: "active",
+            text: "n/N next/prev · esc clear find",
+          }
+        : { category: "guidance", mode: "generic", text: "? keys · q quit" },
   );
-  // A terse, live "installing…" line while servers download. Terse because the status slot is tight:
-  // It shares the line with the activity path and spends a glyph + space on a leveled message.
   const provisioningStatus = createMemo(() => {
     const languages = [...provisioningLanguages()].toSorted();
     if (languages.length === 0) {
@@ -1801,129 +1805,36 @@ function createState() {
       ? `installing ${languages[0]} server…`
       : `installing ${languages.length} servers…`;
   });
-  const statusRightModel = createMemo(() => {
-    // Reserve the left hint plus the bar's two paddings and a gap between the halves;
-    // What remains is the right status's, less the leading level glyph + space it prepends.
-    const width = Math.max(10, terminalWidth() - statusHint().length - 4);
-    const textWidth = Math.max(1, width - 2);
-    // An in-flight code-intel pull outranks even a held acknowledgment: it is the
-    // Acknowledgment of the very keystroke the user is waiting on, so it stays until
-    // The pull settles (which then clears it, letting any follow-up notice show).
-    // The transient tiers are pure leveled messages with no changed-file lead, so their
-    // Whole text is the message and they carry no path, change kind, or recency; only the
-    // Default activity tier below shows a recent changed file the bar tints and fades.
-    const busy = intelStatus();
-    if (busy !== undefined) {
-      const message = truncate(busy, textWidth);
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: "info" as const,
-        message,
-        provenanceCommit: undefined,
-        recencyAt: undefined,
-        text: message,
-      };
-    }
-    // A held acknowledgment wins over ambient status for its dwell, so the user
-    // Sees their action confirmed even as checks/activity churn underneath.
-    const held = notice();
-    if (held !== undefined) {
-      const message = truncate(held.text, textWidth);
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: held.level,
-        message,
-        provenanceCommit: undefined,
-        recencyAt: undefined,
-        text: message,
-      };
-    }
-    const finding = cursorFindings()?.[0];
-    if (finding !== undefined) {
-      const message = truncate(`${finding.checker}: ${finding.message}`, textWidth);
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: finding.severity satisfies LogLevel,
-        message,
-        provenanceCommit: undefined,
-        recencyAt: undefined,
-        text: message,
-      };
-    }
+  const statusBarModel = createMemo(() => {
     const provisioning = provisioningStatus();
-    const displayStatus = provisioning ?? (checksRunning() ? "checking…" : status());
-    // A glyph belongs only to an actual status message. Activity alone is ambient and idle is
-    // Empty, so neither carries a level: the bar renders the text bare, never a lone glyph.
-    const level =
-      displayStatus === ""
-        ? undefined
-        : provisioning !== undefined || checksRunning()
-          ? "info"
-          : statusLevel();
-    // In provenance mode the caret line's commit fills the whole bar (a blame inspector),
-    // Replacing the ambient recent-file + status lead. The transient tiers above (intel pull,
-    // Held notice, cursor finding) and an error/warning-level ambient status (a failed check)
-    // Preempt it, so a real problem is never hidden behind blame; a plain "checking…"/idle does not.
-    const commit = caretProvenanceDetail();
-    if (commit !== undefined && level !== "error" && level !== "warning") {
-      // Truncate against the bar's two paddings plus the band glyph + its space lead.
-      const text = truncate(commit.text, Math.max(1, terminalWidth() - 4));
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: undefined,
-        message: "",
-        provenanceCommit: { band: commit.band, text },
-        recencyAt: undefined,
-        text,
-      };
-    }
     const latest = latestActivity(activityLog());
     const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
-    // Budget the path + message against the right slot after the marks the bar draws: the
-    // Severity glyph (2 cells, with a status), the recency dot before the path (2), and the
-    // Gap between the two groups (2, only when both are present). The path yields first, its
-    // Front truncating against the full status; if the status still overruns it caps too, so
-    // The groups never spill past the slot into the left hint. The path is tinted by change
-    // Kind and fades with recency (no "Ns ago"), the same cue the tree gives a changed file.
-    const GLYPH_CELLS = 2;
-    const DOT_CELLS = 2;
-    const GAP_CELLS = 2;
-    const overhead =
-      (displayStatus === "" ? 0 : GLYPH_CELLS) +
-      (recent === undefined ? 0 : DOT_CELLS) +
-      (recent === undefined || displayStatus === "" ? 0 : GAP_CELLS);
-    const textBudget = Math.max(1, width - overhead);
-    const activityPath =
-      recent === undefined
-        ? ""
-        : truncateLeft(recent.path, Math.max(1, textBudget - displayStatus.length));
-    const message = truncate(displayStatus, Math.max(1, textBudget - activityPath.length));
-    const text = [activityPath, message].filter((part) => part !== "").join(" · ");
-    // The recent file's git change kind tints the path (the tree's changed-file color);
-    // Its timestamp feeds both the fading tint and the recency dot the bar draws.
-    const changeKind =
-      recent === undefined ? undefined : gitModel().changedByPath.get(recent.path)?.kind;
-    return {
-      activityPath,
-      changeKind,
-      level,
-      message,
-      provenanceCommit: undefined,
-      recencyAt: recent?.at,
-      text,
-    };
+    const finding = cursorFindings()?.[0];
+    return buildStatusBarModel({
+      activity:
+        recent === undefined
+          ? undefined
+          : {
+              at: recent.at,
+              changeKind: gitModel().changedByPath.get(recent.path)?.kind,
+              path: recent.path,
+            },
+      backgroundProgress: provisioning ?? (checksRunning() ? "checking…" : undefined),
+      contextualFinding:
+        finding === undefined
+          ? undefined
+          : {
+              level: finding.severity satisfies LogLevel,
+              text: `${finding.checker}: ${finding.message}`,
+            },
+      foregroundProgress: intelStatus(),
+      hint: statusHint(),
+      notification: notice(),
+      outcome: status() === "" ? undefined : { level: statusLevel(), text: status() },
+      provenance: caretProvenanceDetail(),
+      width: terminalWidth(),
+    });
   });
-  const statusRight = () => statusRightModel().text;
-  const statusRightLevel = () => statusRightModel().level;
-  const statusRightPath = () => statusRightModel().activityPath;
-  const statusRightMessage = () => statusRightModel().message;
-  const statusRightRecencyAt = () => statusRightModel().recencyAt;
-  const statusRightChangeKind = () => statusRightModel().changeKind;
-  const statusProvenanceCommit = () => statusRightModel().provenanceCommit;
 
   // --- navigation ---
   const canGoBack = createMemo(() => canBack(navState()));
@@ -4676,14 +4587,7 @@ function createState() {
     sidebarScrollTop,
     sidebarWidth,
     status,
-    statusHint,
-    statusProvenanceCommit,
-    statusRight,
-    statusRightChangeKind,
-    statusRightLevel,
-    statusRightMessage,
-    statusRightPath,
-    statusRightRecencyAt,
+    statusBarModel,
     switchWorktree,
     symbolsIndex,
     symbolsOpen,

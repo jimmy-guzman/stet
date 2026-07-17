@@ -56,6 +56,23 @@ describe("truncate", () => {
   });
 });
 
+describe("truncateLeft", () => {
+  test("keeps the tail within a display-cell budget", () => {
+    const result = truncateLeft("src/🐛🐛/file.ts", 10);
+
+    expect(result.startsWith("…")).toBe(true);
+    expect(result.endsWith("file.ts")).toBe(true);
+    expect(Bun.stringWidth(result)).toBeLessThanOrEqual(10);
+  });
+
+  test("never splits a grapheme cluster", () => {
+    const result = truncateLeft("src/👨‍👩‍👧xyz", 4);
+
+    expect(result).toBe("…xyz");
+    expect(Bun.stringWidth(result)).toBe(4);
+  });
+});
+
 describe("truncateAroundMatch", () => {
   test("returns the text unchanged when it already fits", () => {
     const matched = [0, 1, 2];

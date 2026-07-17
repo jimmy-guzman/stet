@@ -24,6 +24,7 @@ import { Process } from "./process";
 import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance, setSelection } from "./theme/active";
+import { prefersMonochrome } from "./theme/mono";
 import { hasTheme, registerThemes, resolveThemes, selectThemeName } from "./theme/registry";
 import { runUpgrade } from "./upgrade/run";
 
@@ -98,14 +99,13 @@ try {
   // Renderer nor the detected appearance; appearance is applied just below.
   const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
   registerThemes(themes);
-  // NO_COLOR (read via Bun.enableANSIColors, the gate log/terminal.ts already
-  // Uses, so FORCE_COLOR still wins) replaces the configured selection with the
-  // Built-in monochrome pair. A later explicit pick in the theme switcher still
-  // Applies: no-color.org asks that color stop being the default, not that the
-  // User be locked out of requesting it.
-  const themeSelection = Bun.enableANSIColors
-    ? config.theme
-    : { dark: "mono-dark", light: "mono-light" };
+  // The prefersMonochrome check (see theme/mono.ts) replaces the configured
+  // Selection with the built-in monochrome pair. A later explicit pick in the
+  // Theme switcher still applies: no-color.org asks that color stop being the
+  // Default, not that the user be locked out of requesting it.
+  const themeSelection = prefersMonochrome(process.env)
+    ? { dark: "mono-dark", light: "mono-light" }
+    : config.theme;
   setSelection(themeSelection);
 
   // Resolve servers first because language profiles validate their named references. Everything

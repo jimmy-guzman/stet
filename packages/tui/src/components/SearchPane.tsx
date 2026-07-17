@@ -213,6 +213,11 @@ export function SearchPane() {
     batch(() => {
       state.setFocusedPane("search");
       state.setSearchFocus("results");
+      // Advance the double-click tracker on every row, before the early returns for a
+      // Header (collapse) or context/gap row, so a click on one of those between two
+      // Clicks on the same match breaks the sequence, rather than being invisible to
+      // The tracker and letting the second match click read as a double.
+      const isDouble = isDoubleClick(item.id);
       if (item.kind === "header") {
         state.toggleSearchGroup(item.path);
         return;
@@ -220,7 +225,7 @@ export function SearchPane() {
       if (item.kind !== "line") {
         return;
       }
-      if (isDoubleClick(item.id)) {
+      if (isDouble) {
         state.jumpToSearchItem(index);
         return;
       }

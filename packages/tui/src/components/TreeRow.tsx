@@ -29,7 +29,9 @@ export function TreeRow(props: { row: FileTreeRow; isDoubleClick: (id: string) =
   return (
     <>
       <Show when={asDirectoryNode(props.row)}>
-        {(node) => <DirectoryRow node={node()} row={props.row} />}
+        {(node) => (
+          <DirectoryRow node={node()} row={props.row} isDoubleClick={props.isDoubleClick} />
+        )}
       </Show>
       <Show when={asFileNode(props.row)}>
         {(node) => <FileRow node={node()} row={props.row} isDoubleClick={props.isDoubleClick} />}
@@ -38,7 +40,11 @@ export function TreeRow(props: { row: FileTreeRow; isDoubleClick: (id: string) =
   );
 }
 
-function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
+function DirectoryRow(props: {
+  node: DirectoryNode;
+  row: FileTreeRow;
+  isDoubleClick: (id: string) => boolean;
+}) {
   const theme = useTheme();
   const indent = () => " ".repeat(Math.max(0, props.row.depth) * 2);
   const focused = () =>
@@ -63,6 +69,11 @@ function DirectoryRow(props: { node: DirectoryNode; row: FileTreeRow }) {
     batch(() => {
       state.setFocusedPane("tree");
       state.setFocusedNodeId(props.node.id);
+      // Advance the shared double-click tracker (its result is unused here, a directory
+      // Has no double-click action), so a directory click between two clicks on the same
+      // File registers as a distinct row and breaks the sequence, rather than being
+      // Invisible to the tracker and letting the second file click read as a double-pin.
+      props.isDoubleClick(props.node.id);
       const next = new Set(state.expandedDirectories());
       if (next.has(props.node.id)) {
         next.delete(props.node.id);

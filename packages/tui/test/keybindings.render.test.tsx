@@ -21,44 +21,50 @@ describe("configured keybindings", () => {
       "src/a.ts": "export const a = 1\n",
       "zz.md": "sentinel\n",
     });
-    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-    seedState(model, { kind: "all", ref: "HEAD" });
+    // Teardown wraps everything after each resource appears (the keys registry
+    // Is process-global and outside resetState, so a throw during setup must
+    // Not leak the rebind into later tests).
     const baseline = snapshotKeybindings();
-    const { issues, set } = resolveKeybindings({ "toggle-sidebar": "ctrl+e" });
-    expect(issues).toEqual([]);
-    registerKeybindings(set);
-
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 90,
-    });
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-
     try {
-      await settleUntil("app chrome", (frame) => frame.includes("zz.md"), 5);
+      const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+      seedState(model, { kind: "all", ref: "HEAD" });
+      const { issues, set } = resolveKeybindings({ "toggle-sidebar": "ctrl+e" });
+      expect(issues).toEqual([]);
+      registerKeybindings(set);
 
-      // The default combo no longer toggles.
-      mockInput.pressKey("b", { ctrl: true });
-      const afterDefault = await settleUntil(
-        "sidebar intact",
-        (frame) => frame.includes("zz.md"),
-        3,
+      const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(
+        () => <App />,
+        { height: 30, width: 90 },
       );
-      expect(afterDefault).toContain("zz.md");
+      const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-      // The configured combo does.
-      mockInput.pressKey("e", { ctrl: true });
-      await settleUntil("sidebar closed", (frame) => !frame.includes("zz.md"));
+      try {
+        await settleUntil("app chrome", (frame) => frame.includes("zz.md"), 5);
 
-      mockInput.pressKey("e", { ctrl: true });
-      await settleUntil("sidebar reopened", (frame) => frame.includes("zz.md"));
+        // The default combo no longer toggles.
+        mockInput.pressKey("b", { ctrl: true });
+        const afterDefault = await settleUntil(
+          "sidebar intact",
+          (frame) => frame.includes("zz.md"),
+          3,
+        );
+        expect(afterDefault).toContain("zz.md");
 
-      // The rendered help reflects the rebind.
-      expect(helpText()).toContain("ctrl+e");
-      expect(helpText()).not.toContain("ctrl-b");
+        // The configured combo does.
+        mockInput.pressKey("e", { ctrl: true });
+        await settleUntil("sidebar closed", (frame) => !frame.includes("zz.md"));
+
+        mockInput.pressKey("e", { ctrl: true });
+        await settleUntil("sidebar reopened", (frame) => frame.includes("zz.md"));
+
+        // The rendered help reflects the rebind.
+        expect(helpText()).toContain("ctrl+e");
+        expect(helpText()).not.toContain("ctrl-b");
+      } finally {
+        renderer.destroy();
+      }
     } finally {
       restoreKeybindings(baseline);
-      renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);

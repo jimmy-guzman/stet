@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { keyHelpGroups } from "../src/help/keys";
+import { keyHelpGroups } from "@/help/keys";
 
 /**
  * Single-sources the docs keybindings from `src/help/keys.ts` (rendered with the default combos,

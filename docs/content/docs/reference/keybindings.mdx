@@ -106,10 +106,12 @@ A combo is optional `ctrl`/`shift` modifiers joined by `+` or `-`, then a key:
 a letter, a symbol (`?`, `[`), an arrow (`↑` or `up`), `tab`, `enter`, or an
 F-key. A single uppercase letter means shift (`"G"` is `"shift+g"`), and
 modifiers must match exactly, so binding `"s"` never fires on `ctrl+s`. An
-unknown id, a combo that does not parse, or a combo already taken by another
-action reports a notice at startup and keeps the default; `?` and `--help`
-always show the bindings actually in effect. Keys inside overlays (pickers,
-menus, the quit confirm, the search pane) and `ctrl+c` are fixed.
+unknown id or a combo that does not parse reports a notice at startup and
+keeps the default. A combo bound to two actions also reports a notice, but
+both bindings stay registered and the action listed first in the tables above
+fires (a global binding beats a pane one). `?` and `--help` always show the
+bindings actually in effect. Keys inside overlays (pickers, menus, the quit
+confirm, the search pane) and `ctrl+c` are fixed.
 
 ## Mouse
 

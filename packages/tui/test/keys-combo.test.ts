@@ -35,6 +35,9 @@ describe("parseCombo", () => {
     expect(parseCombo("shift+?")).toBeUndefined();
     expect(parseCombo("meta+x")).toBeUndefined();
     expect(parseCombo("not a key")).toBeUndefined();
+    // A misspelled named key would otherwise bind a key that can never fire.
+    expect(parseCombo("retrun")).toBeUndefined();
+    expect(parseCombo("ctrl+retrun")).toBeUndefined();
   });
 });
 

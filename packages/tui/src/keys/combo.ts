@@ -19,6 +19,28 @@ const aliases = new Map([
   ["↓", "down"],
 ]);
 
+// The named keys OpenTUI's keypress parser can actually report; anything else
+// Would parse into a binding that can never fire, so a typo ("retrun") is
+// Rejected here and surfaces as an invalid-combo issue instead of a dead key.
+const namedKeys = new Set([
+  "backspace",
+  "delete",
+  "down",
+  "end",
+  "escape",
+  "home",
+  "insert",
+  "left",
+  "pagedown",
+  "pageup",
+  "return",
+  "right",
+  "space",
+  "tab",
+  "up",
+  ...Array.from({ length: 12 }, (_, index) => `f${index + 1}`),
+]);
+
 const isLetter = (text: string) => /^[a-z]$/i.test(text);
 
 /**
@@ -42,7 +64,7 @@ export function parseCombo(text: string): Combo | undefined {
       // So a shift modifier on one is meaningless and rejected as a typo.
       return shift ? undefined : { ctrl, name, shift: false };
     }
-    return /^[a-z]+\d*$/.test(name.toLowerCase())
+    return namedKeys.has(name.toLowerCase())
       ? { ctrl, name: name.toLowerCase(), shift }
       : undefined;
   };

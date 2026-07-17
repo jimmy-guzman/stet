@@ -233,7 +233,8 @@ export function createKeyHandler(host: HostEffects) {
         }
         // Toggle chords live on keys the input's readline set does not own
         // (ctrl-a/ctrl-e stay line home/end for editing): ctrl-r regex,
-        // Ctrl-x exact case, ctrl-g changes<->repo, ctrl-s the scope picker.
+        // Ctrl-x exact case, ctrl-g changes<->repo, ctrl-o the scope picker,
+        // Ctrl-s save settings.
         if (key.ctrl && key.name === "r") {
           state.toggleSearchRegex();
           return;

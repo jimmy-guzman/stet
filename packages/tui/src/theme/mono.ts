@@ -1,5 +1,21 @@
 import type { Theme } from "./tokens";
 
+// Answers "does the user want a monochrome palette", deliberately not
+// Bun.enableANSIColors: that getter folds in TTY detection plus Bun's own
+// NO_COLOR resolution, which was measured (real TTY, piped, and unpiped) to
+// Treat NO_COLOR=0 and NO_COLOR=false as unset, which no-color.org does not:
+// The spec disables color whenever NO_COLOR is present and non-empty,
+// Regardless of its value. FORCE_COLOR, when present at all, decides outright
+// (only "0"/"false" mean off, matching the supports-color convention every
+// FORCE_COLOR-aware tool follows); otherwise NO_COLOR wins whenever it is set
+// To anything but the empty string.
+export function prefersMonochrome(env: Record<string, string | undefined>) {
+  if (env.FORCE_COLOR !== undefined) {
+    return env.FORCE_COLOR === "0" || env.FORCE_COLOR === "false";
+  }
+  return env.NO_COLOR !== undefined && env.NO_COLOR !== "";
+}
+
 // The NO_COLOR pair: every token is a pure grey (r = g = b), so no hue ever
 // Carries meaning; ordering signals (recency, provenance, severity, stage) keep
 // Their ramps as brightness. `icon` is empty so every glyph falls back to

@@ -128,12 +128,13 @@ Without it, Go files show as unavailable rather than falsely clean.
 
 `vscode-json-language-server` validates against schemas (`package.json`,
 `tsconfig.json`, and anything [SchemaStore](https://www.schemastore.org/)
-knows) in every repo, and Biome adds its lint where configured.
+knows) in every repo, and Biome adds its lint where configured. The same
+server answers hover and the symbol outline.
 
 ### YAML
 
 `yaml-language-server` provides schema-aware validation for `.yaml` and
-`.yml`.
+`.yml`, plus go to definition, hover, and the symbol outline.
 
 ### CSS & GraphQL
 
@@ -146,8 +147,9 @@ Go to definition, find references, implementations, call hierarchy, hover,
 and the symbol outline work for the TypeScript & JavaScript family, for Rust,
 for Python, and for Go, through the same servers that produce their diagnostics
 (a ty repo has everything but go to implementation, which ty does not yet
-answer). See [code intelligence](/docs/guides/code-intelligence) for the keys
-and flows.
+answer). JSON and YAML get hover and the symbol outline (YAML also go to
+definition); ruff adds hover on Python. See
+[code intelligence](/docs/guides/code-intelligence) for the keys and flows.
 
 ## How servers are found
 

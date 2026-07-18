@@ -155,7 +155,8 @@ const builtinRegistry: Record<string, ServerSpec> = {
     // Up, and the per-file merge unions them.
     args: ["--stdio"],
     binary: "vscode-json-language-server",
-    provides: [],
+    // Measured from the pinned binary's initialize reply: hover, documentSymbol, pullDiagnostics.
+    provides: ["hover", "documentSymbol", "pullDiagnostics"],
     provision: { kind: "npm", packages: ["vscode-langservers-extracted@4.10.0"] },
   },
   "oxlint": {
@@ -174,12 +175,12 @@ const builtinRegistry: Record<string, ServerSpec> = {
   // Ruff is the always-on Python linter (the oxlint analog), run over its LSP (`ruff server`). It is
   // Not on npm, so it comes through the binary channel as a `tar.gz` cargo-dist archive (the binary
   // Nested one directory in), sha256-verified per platform against the release's `.sha256` companion
-  // Before the extractor pulls it out. Lint only, no code intel, so `provides` is empty.
+  // Before the extractor pulls it out. Lint plus hover (measured from the pinned binary's initialize).
   "ruff": {
     args: ["server"],
     binary: "ruff",
     discovery: "python",
-    provides: [],
+    provides: ["hover"],
     provision: {
       archive: "tar.gz",
       assets: [
@@ -328,7 +329,8 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "yaml": {
     args: ["--stdio"],
     binary: "yaml-language-server",
-    provides: [],
+    // Measured from the pinned binary's initialize reply: definition, hover, documentSymbol.
+    provides: ["definition", "hover", "documentSymbol"],
     provision: { kind: "npm", packages: ["yaml-language-server@1.23.0"] },
   },
 };

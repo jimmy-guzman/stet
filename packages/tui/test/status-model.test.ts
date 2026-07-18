@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "@/status/model";
+import {
+  buildStatusBarModel,
+  clearAlertSource,
+  latestAlert,
+  raiseAlert,
+  restateAlert,
+} from "@/status/model";
 import type { StatusBarModelInput } from "@/status/model";
 
 const baseInput = {
@@ -128,19 +134,36 @@ describe("status bar priority", () => {
 
 describe("status bar alerts", () => {
   const diagnostics = { level: "error", source: "diagnostics", text: "tsc failed" } as const;
-  const worktree = { level: "warning", source: "worktree", text: "missing worktree" } as const;
+  const switchFail = {
+    level: "warning",
+    source: "worktree-switch",
+    text: "missing worktree",
+  } as const;
+  const listFail = {
+    level: "error",
+    source: "worktree-list",
+    text: "couldn't list worktrees",
+  } as const;
 
   // The whole reason alerts carry a source. One untyped channel meant a diagnostics run starting
   // Up wiped a worktree failure that nothing had resolved, and vice versa.
   test("clearing one source leaves an unrelated source's alert standing", () => {
-    const raised = raiseAlert(raiseAlert([], worktree), diagnostics);
+    const raised = raiseAlert(raiseAlert([], switchFail), diagnostics);
 
-    expect(clearAlertSource(raised, "diagnostics")).toEqual([worktree]);
-    expect(clearAlertSource(raised, "worktree")).toEqual([diagnostics]);
+    expect(clearAlertSource(raised, "diagnostics")).toEqual([switchFail]);
+    expect(clearAlertSource(raised, "worktree-switch")).toEqual([diagnostics]);
+  });
+
+  // A failed list and a failed switch are separate lifecycles: reopening the picker (which clears
+  // The list source) must not retire an unretried switch error.
+  test("clearing the list source leaves a switch failure standing", () => {
+    const raised = raiseAlert(raiseAlert([], switchFail), listFail);
+
+    expect(clearAlertSource(raised, "worktree-list")).toEqual([switchFail]);
   });
 
   test("clearing a source with no alert is a no-op", () => {
-    expect(clearAlertSource([worktree], "diagnostics")).toEqual([worktree]);
+    expect(clearAlertSource([switchFail], "diagnostics")).toEqual([switchFail]);
   });
 
   test("a source raising again replaces its own alert rather than stacking", () => {
@@ -152,14 +175,28 @@ describe("status bar alerts", () => {
   // One row cannot rank a worktree failure against a diagnostics one, so recency decides: the
   // Problem the user just provoked is the one they are waiting on.
   test("the newest alert is the one the bar shows", () => {
-    expect(latestAlert(raiseAlert(raiseAlert([], worktree), diagnostics))).toEqual(diagnostics);
-    expect(latestAlert(raiseAlert(raiseAlert([], diagnostics), worktree))).toEqual(worktree);
+    expect(latestAlert(raiseAlert(raiseAlert([], switchFail), diagnostics))).toEqual(diagnostics);
+    expect(latestAlert(raiseAlert(raiseAlert([], diagnostics), switchFail))).toEqual(switchFail);
   });
 
   test("a re-raised source becomes the newest", () => {
-    const raised = raiseAlert(raiseAlert([], diagnostics), worktree);
+    const raised = raiseAlert(raiseAlert([], diagnostics), switchFail);
 
     expect(latestAlert(raiseAlert(raised, diagnostics))).toEqual(diagnostics);
+  });
+
+  // Restating a persisting condition keeps its old recency, so a background diagnostics re-check
+  // Cannot leapfrog a worktree error the user provoked more recently.
+  test("restating an alert returns it to the oldest slot, so a fresher alert still shows", () => {
+    const raised = raiseAlert(raiseAlert([], diagnostics), switchFail);
+
+    const restated = restateAlert(raised, { ...diagnostics, text: "tsc failed again" });
+    expect(restated).toEqual([{ ...diagnostics, text: "tsc failed again" }, switchFail]);
+    expect(latestAlert(restated)).toEqual(switchFail);
+  });
+
+  test("restating with no fresher alert still shows the restated one", () => {
+    expect(latestAlert(restateAlert([diagnostics], diagnostics))).toEqual(diagnostics);
   });
 
   test("no alerts reads as none", () => {

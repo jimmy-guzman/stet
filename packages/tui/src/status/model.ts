@@ -15,7 +15,10 @@ export interface StatusBarActivity {
   path: string;
 }
 
-export type StatusAlertSource = "diagnostics" | "worktree";
+// One tag per lifecycle, not per feature: a failed worktree list retries by reopening the picker,
+// A failed switch retries by switching, so they must not clear each other (browsing the picker
+// Cannot be allowed to retire an unretried switch error). Diagnostics is its own lifecycle again.
+export type StatusAlertSource = "diagnostics" | "worktree-list" | "worktree-switch";
 
 /**
  * An unresolved problem the user has not been told about anywhere else, held until its own source
@@ -42,6 +45,16 @@ export type StatusAlerts = readonly StatusAlert[];
 /** Replaces any alert from the same source and moves it to the newest position. */
 export function raiseAlert(alerts: StatusAlerts, alert: StatusAlert): StatusAlerts {
   return [...alerts.filter((current) => current.source !== alert.source), alert];
+}
+
+/**
+ * Re-state an alert for a condition that never went away, without advancing its recency: it returns
+ * to the _oldest_ slot, so a fresher user-provoked alert still owns the row. This is how a
+ * background diagnostics re-check re-reports a persisting failure without leapfrogging a worktree
+ * error the user just provoked, which `raiseAlert` (newest wins) would.
+ */
+export function restateAlert(alerts: StatusAlerts, alert: StatusAlert): StatusAlerts {
+  return [alert, ...alerts.filter((current) => current.source !== alert.source)];
 }
 
 /** Retires one source's alert, leaving every other source's untouched. */

@@ -117,7 +117,13 @@ import type { IntelRequestError } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
-import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "./status/model";
+import {
+  buildStatusBarModel,
+  clearAlertSource,
+  latestAlert,
+  raiseAlert,
+  restateAlert,
+} from "./status/model";
 import type { StatusAlert, StatusAlerts, StatusAlertSource } from "./status/model";
 import { activeThemeName, appearance, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
@@ -676,6 +682,11 @@ function createState() {
   const [switchProgress, setSwitchProgress] = tracked<string | undefined>(undefined);
   const raise = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
     setAlerts((current) => raiseAlert(current, { level, source, text }));
+  };
+  // Re-report a persisting condition without advancing its recency (a background re-check finding
+  // The same failure), so it cannot leapfrog a fresher user-provoked alert into the one row.
+  const restate = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
+    setAlerts((current) => restateAlert(current, { level, source, text }));
   };
   const clearAlert = (source: StatusAlertSource) => {
     setAlerts((current) => clearAlertSource(current, source));
@@ -2405,6 +2416,11 @@ function createState() {
     checksController?.abort();
     const controller = new AbortController();
     checksController = controller;
+    // Whether a diagnostics failure was already standing before this run cleared it: if so, a fresh
+    // Failure is the *same* ongoing condition re-reported, not a newly provoked one, so it must
+    // Return to its old recency (via `restate`) rather than jumping to the newest slot and evicting
+    // A worktree error the user provoked more recently.
+    const diagnosticsWasAlerting = alerts().some((alert) => alert.source === "diagnostics");
     // The prior failure describes a run that no longer exists, so retire it as this one starts
     // Rather than leaving it to contradict the progress line beside it.
     clearAlert("diagnostics");
@@ -2440,9 +2456,11 @@ function createState() {
       // Only a failure is worth the row. A clean run is already reported by everything it just
       // Updated (the counts badge, the file badges, the problems panel), and the completion copy
       // It used to leave behind outlived its usefulness: `checks passed` sat there indefinitely,
-      // Beside a red error count it had never contradicted.
+      // Beside a red error count it had never contradicted. A first failure is newly provoked
+      // (`raise`, newest); a re-report of a still-broken condition keeps its old recency
+      // (`restate`), so a background re-check cannot bump it over a fresher worktree error.
       if (failures[0] !== undefined) {
-        raise("diagnostics", "error", failures[0]);
+        (diagnosticsWasAlerting ? restate : raise)("diagnostics", "error", failures[0]);
       }
     } catch {
       // Interrupted by a newer run or a worktree switch
@@ -3689,8 +3707,9 @@ function createState() {
     const epoch = resetEpoch;
     // Opening the picker is the retry for a prior list failure, so retire that alert before the
     // Attempt: on success nothing re-raises and the stale error is gone, on failure the catch
-    // Below raises it afresh.
-    clearAlert("worktree");
+    // Below raises it afresh. Only the list source: browsing the picker must not clear an
+    // Unretried switch error, which is a separate lifecycle.
+    clearAlert("worktree-list");
     runtime
       .runPromise(Git.use((git) => git.worktrees(root)))
       .then((list) => {
@@ -3728,7 +3747,7 @@ function createState() {
         batch(() => {
           setWorktreeComboboxOpen(false);
           raise(
-            "worktree",
+            "worktree-list",
             "error",
             `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
           );
@@ -3971,13 +3990,13 @@ function createState() {
     }
     const label = options?.label ?? worktreeLabel(worktree);
     if (!existsSync(worktree.path)) {
-      raise("worktree", "warning", `missing worktree: ${worktree.path}`);
+      raise("worktree-switch", "warning", `missing worktree: ${worktree.path}`);
       return;
     }
-    // This attempt owns the worktree alert from here: a retry clears the failure it is retrying
+    // This attempt owns the switch alert from here: a retry clears the failure it is retrying
     // Before it can contradict the progress line.
     batch(() => {
-      clearAlert("worktree");
+      clearAlert("worktree-switch");
       setSwitchProgress(`switching to ${label}…`);
     });
     try {
@@ -4041,7 +4060,7 @@ function createState() {
       batch(() => {
         setSwitchProgress(undefined);
         raise(
-          "worktree",
+          "worktree-switch",
           "error",
           `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
         );

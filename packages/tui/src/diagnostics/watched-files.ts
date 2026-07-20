@@ -307,9 +307,12 @@ function acceptsKind(mask: number, type: FileChangeType) {
  * thousands of paths in one batch, and `watchedFileEvent` is a synchronous `existsSync` on the one
  * thread that also renders the TUI (Bun runs JS single-threaded, so 32k stats measured 207ms of
  * frozen frames and queued keystrokes). Typing every path and letting the caller discard the ones
- * no server claimed made every JS/TS/Rust repo pay that freeze for a channel it does not even
- * consume, since basedpyright is the only built-in that registers globs. Matching first makes the
- * stat unreachable for a path nobody asked about.
+ * no server claimed made every repo pay that freeze up front, even for the paths no registered glob
+ * wanted. Several built-ins register globs (basedpyright, oxlint in every JS/TS repo, ruff, ty, and
+ * gopls; rust-analyzer stays pinned to its own watcher), so the point is not that the channel goes
+ * unused but that an install writes tens of thousands of paths and each server claims only a narrow
+ * slice (or, like pyright's `**`, all of them, which is why the typing is chunked). Matching first
+ * makes the stat unreachable for a path nobody asked about.
  *
  * `isTracked` is git's view of the path, the tiebreak `fs.watch` cannot give: a rename over a path
  * git already knows is an atomic save (write-temp then rename, which vim and most formatters do),

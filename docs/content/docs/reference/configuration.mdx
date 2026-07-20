@@ -308,6 +308,28 @@ repository being inspected, although a configured executable may resolve from th
   association drop only the affected facet.
 </Callout>
 
+## Schemas
+
+`schemas` associates a file-match pattern with a JSON Schema, for both the JSON and YAML servers
+(each applies the patterns that match the files it opens). `package.json`, `tsconfig.json`,
+`tsconfig.*.json`, and `jsconfig.json` are built in for JSON, whose server ships no catalog of its
+own; YAML additionally validates well-known files through its own SchemaStore integration with no
+configuration. Map a pattern to a schema URL, a list of URLs, or `false` to disable a built-in:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "schemas": {
+    "*.deploy.json": "https://example.com/deploy.schema.json",
+    "values.yaml": ["https://example.com/a.json", "https://example.com/b.json"],
+    "app.config.json": "./schemas/app.schema.json",
+    "tsconfig.json": false,
+  },
+}
+```
+
+A relative or bare path resolves to a `file://` URL under the repository root, so a schema stored in
+the repo is read locally and works offline; an `http(s)` URL is fetched over the network.
+
 ## Environment variables
 
 | Variable               | Effect                                                                                                            |

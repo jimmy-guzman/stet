@@ -19,6 +19,7 @@ import { LspProcess } from "./lsp-process";
 import type { LspSpawnError } from "./lsp-process";
 import { cachedBinaryPath, Provisioner } from "./provision";
 import type { ProvisionChannel, ProvisionSpec } from "./provision";
+import { builtinSchemas } from "./schemas";
 import { LspRequestError } from "./transport";
 import type { LspConnection } from "./transport";
 import type { WatchedPathChange } from "./watched-files";
@@ -45,6 +46,12 @@ interface HandshakeConfig {
   readonly workspaceCapabilities?: Record<string, unknown>;
   readonly initializationOptions?: unknown;
   readonly onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>;
+  /**
+   * Notifications to send once, right after `initialized`. The JSON server takes its schema
+   * associations only this way: it never pulls `workspace/configuration`, so the `settings` channel
+   * cannot reach it.
+   */
+  readonly notifications?: readonly { readonly method: string; readonly params: unknown }[];
 }
 
 /** The read-only LSP intents stet uses, keyed off each server's advertised `*Provider`. */
@@ -81,6 +88,13 @@ export interface ServerSpec {
    * makes a settings-pulling server (oxlint) publish at all.
    */
   readonly settings?: unknown;
+  /**
+   * File-match pattern -> schema URI(s), sent to the JSON server as a post-`initialized`
+   * `json/schemaAssociations` notification (the map form; the array form the server also parses
+   * silently registers no schema). `{repoRoot}` in a leaf substitutes per repo for a local
+   * `file://` schema. The user `schemas` config merges over the built-in map before registration.
+   */
+  readonly schemaAssociations?: Record<string, readonly string[]>;
   /**
    * Escape hatch for handshake shapes the `initializationOptions`/`settings` data can't express (a
    * server whose `workspace/configuration` answer depends on the request's items). When set it
@@ -151,12 +165,15 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "json": {
     // Always-on (no `when`) so JSON gets schema validation in every repo. It overlaps Biome's
     // Json coverage where a biome config exists, but the two are complementary: Biome lints, this
-    // Validates against schemas (package.json/tsconfig/SchemaStore); only raw syntax errors double
-    // Up, and the per-file merge unions them.
+    // Validates against the associated schemas; only raw syntax errors double up, and the per-file
+    // Merge unions them. The server ships no catalog and never pulls `workspace/configuration`, so
+    // The associations reach it only through `schemaAssociations` (the `settings` channel cannot).
     args: ["--stdio"],
     binary: "vscode-json-language-server",
-    provides: [],
+    // Measured from the pinned binary's initialize reply: hover, documentSymbol, pullDiagnostics.
+    provides: ["hover", "documentSymbol", "pullDiagnostics"],
     provision: { kind: "npm", packages: ["vscode-langservers-extracted@4.10.0"] },
+    schemaAssociations: builtinSchemas,
   },
   "oxlint": {
     args: ["--lsp"],
@@ -174,12 +191,12 @@ const builtinRegistry: Record<string, ServerSpec> = {
   // Ruff is the always-on Python linter (the oxlint analog), run over its LSP (`ruff server`). It is
   // Not on npm, so it comes through the binary channel as a `tar.gz` cargo-dist archive (the binary
   // Nested one directory in), sha256-verified per platform against the release's `.sha256` companion
-  // Before the extractor pulls it out. Lint only, no code intel, so `provides` is empty.
+  // Before the extractor pulls it out. Lint plus hover (measured from the pinned binary's initialize).
   "ruff": {
     args: ["server"],
     binary: "ruff",
     discovery: "python",
-    provides: [],
+    provides: ["hover"],
     provision: {
       archive: "tar.gz",
       assets: [
@@ -328,8 +345,13 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "yaml": {
     args: ["--stdio"],
     binary: "yaml-language-server",
-    provides: [],
+    // Measured from the pinned binary's initialize reply: definition, hover, documentSymbol.
+    provides: ["definition", "hover", "documentSymbol"],
     provision: { kind: "npm", packages: ["yaml-language-server@1.23.0"] },
+    // The server pulls `workspace/configuration` and fetches the SchemaStore catalog itself once
+    // `schemaStore.enable` is on, so it validates well-known YAML (GitHub workflows, and so on)
+    // With no client-supplied associations. `validate` is the master diagnostics switch.
+    settings: { schemaStore: { enable: true }, validate: true },
   },
 };
 
@@ -361,18 +383,24 @@ function substitutePlaceholders(value: unknown, repoRoot: string): unknown {
 
 /**
  * The handshake extras for a server: the `handshake` closure verbatim when present (the escape
- * hatch), otherwise derived from the `initializationOptions`/`settings` data. `settings` answers
- * every `workspace/configuration` item with one substituted copy and advertises the workspace caps
- * that invite the pull; other server-to-client requests keep the transport's null default.
+ * hatch), otherwise derived from the `initializationOptions`/`settings`/`schemaAssociations` data.
+ * `settings` answers every `workspace/configuration` item with one substituted copy and advertises
+ * the workspace caps that invite the pull; other server-to-client requests keep the transport's
+ * null default. `schemaAssociations` becomes a post-`initialized` `json/schemaAssociations`
+ * notification, the only channel that reaches the JSON server's schema map.
  */
 export function handshakeConfigFor(
-  spec: Pick<ServerSpec, "handshake" | "initializationOptions" | "settings">,
+  spec: Pick<ServerSpec, "handshake" | "initializationOptions" | "schemaAssociations" | "settings">,
   repoRoot: string,
 ): HandshakeConfig | undefined {
   if (spec.handshake !== undefined) {
     return spec.handshake(repoRoot);
   }
-  if (spec.initializationOptions === undefined && spec.settings === undefined) {
+  if (
+    spec.initializationOptions === undefined &&
+    spec.settings === undefined &&
+    spec.schemaAssociations === undefined
+  ) {
     return undefined;
   }
   const settings =
@@ -391,6 +419,16 @@ export function handshakeConfigFor(
                 : null,
             ),
           workspaceCapabilities: { configuration: true, workspaceFolders: true },
+        }),
+    ...(spec.schemaAssociations === undefined
+      ? {}
+      : {
+          notifications: [
+            {
+              method: "json/schemaAssociations",
+              params: substitutePlaceholders(spec.schemaAssociations, repoRoot),
+            },
+          ],
         }),
   };
 }
@@ -845,6 +883,13 @@ export function performHandshake(
         ),
       );
     yield* connection.notify("initialized", {});
+    // One-shot notifications the server only accepts after `initialized` (the JSON server's schema
+    // Associations); a server with none pays nothing.
+    yield* Effect.forEach(
+      config?.notifications ?? [],
+      (message) => connection.notify(message.method, message.params),
+      { discard: true },
+    );
     return {
       capabilities: parseCapabilities(result),
       connection,

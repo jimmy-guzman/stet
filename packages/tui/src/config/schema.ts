@@ -38,6 +38,9 @@ export const UserConfigSchema = Schema.Struct({
   keybindings: Schema.optionalKey(RawRegistry),
   languages: Schema.optionalKey(RawRegistry),
   provenance: Schema.optionalKey(Toggle),
+  // Values are a schema URL, a list of URLs, or false; `resolveSchemas` validates
+  // Them and merges over the built-in JSON associations.
+  schemas: Schema.optionalKey(RawRegistry),
   search: Schema.optionalKey(
     Schema.Struct({
       caseSensitive: Schema.optionalKey(Schema.Boolean),

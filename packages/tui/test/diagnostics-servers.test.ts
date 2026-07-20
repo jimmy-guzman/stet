@@ -8,6 +8,7 @@ import { Effect, Layer, Queue, Stream } from "effect";
 
 import { LspProcess } from "@/diagnostics/lsp-process";
 import { Provisioner } from "@/diagnostics/provision";
+import { builtinSchemas } from "@/diagnostics/schemas";
 import {
   activeServersForPath,
   handshakeConfigFor,
@@ -57,9 +58,10 @@ test("plain Python repos select basedpyright while retaining ty as a possible se
     ]);
     expect(lspLanguageId("src/main.py")).toBe("python");
     expect(lspLanguageId("stubs/typed.pyi")).toBe("python");
-    // Code-intel is basedpyright's; ruff lints only, so it never surfaces for a pull or warm.
+    // Ruff answers hover too, so both surface for a hover pull; references stays basedpyright's.
     expect(await Effect.runPromise(serversProviding("src/main.py", "hover", repo))).toEqual([
       "basedpyright",
+      "ruff",
     ]);
     expect(await Effect.runPromise(serversProviding("src/main.py", "references", repo))).toEqual([
       "basedpyright",
@@ -93,6 +95,7 @@ test("every built-in ty signal selects ty instead of basedpyright", async () => 
         ]);
         expect(await Effect.runPromise(serversProviding("src/main.py", "hover", repo))).toEqual([
           "ty",
+          "ruff",
         ]);
         expect(
           await Effect.runPromise(serversProviding("src/main.py", "implementation", repo)),
@@ -188,11 +191,16 @@ test("only the intel-capable server answers a code-intel pull for a file", async
     expect(await Effect.runPromise(serversProviding("src/a.mjs", "hover", repo))).toEqual([
       "typescript",
     ]);
-    // CSS/JSON/YAML only match intel-less servers, and an extensionless file matches none: no warm.
+    // CSS matches only intel-less biome (gated off here) and an extensionless file matches none.
     expect(await Effect.runPromise(serversProviding("src/a.css", "hover", repo))).toEqual([]);
-    expect(await Effect.runPromise(serversProviding("package.json", "hover", repo))).toEqual([]);
-    expect(await Effect.runPromise(serversProviding("config.yaml", "hover", repo))).toEqual([]);
     expect(await Effect.runPromise(serversProviding("Makefile", "hover", repo))).toEqual([]);
+    // JSON and YAML answer hover (measured from their initialize replies), so they warm too.
+    expect(await Effect.runPromise(serversProviding("package.json", "hover", repo))).toEqual([
+      "json",
+    ]);
+    expect(await Effect.runPromise(serversProviding("config.yaml", "hover", repo))).toEqual([
+      "yaml",
+    ]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -221,11 +229,14 @@ test("serversProviding keeps only servers whose static hint can answer the inten
     expect(await Effect.runPromise(serversProviding("src/a.ts", "implementation", repo))).toEqual([
       "typescript",
     ]);
-    // Json and yaml only push diagnostics (validation-only), so they never surface for a code-intel pull.
+    // Json answers hover and documentSymbol but not definition; yaml answers definition too. A
+    // Capability the matched server does not declare still filters out.
     expect(await Effect.runPromise(serversProviding("package.json", "definition", repo))).toEqual(
       [],
     );
-    expect(await Effect.runPromise(serversProviding("config.yaml", "hover", repo))).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("config.yaml", "definition", repo))).toEqual([
+      "yaml",
+    ]);
     expect(await Effect.runPromise(serversProviding("README.md", "definition", repo))).toEqual([]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
@@ -379,6 +390,42 @@ test("handshake parses advertised providers into the capability set", async () =
   });
 });
 
+test("performHandshake sends config notifications after initialized, in order", async () => {
+  const notified: { method: string; params: unknown }[] = [];
+  const connection: LspConnection = {
+    changeDocument: () => Effect.void,
+    clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
+    closed: Effect.sync(() => false),
+    endPublishWait: Effect.void,
+    notify: (method, params) => Effect.sync(() => void notified.push({ method, params })),
+    openDocument: () => Effect.void,
+    published: Effect.sync(() => new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
+    request: (method) => Effect.sync(() => (method === "initialize" ? { capabilities: {} } : null)),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
+    whenProjectLoaded: Effect.void,
+  };
+
+  await Effect.runPromise(
+    performHandshake(connection, "/repo", {
+      notifications: [
+        { method: "json/schemaAssociations", params: { "package.json": ["https://s/pkg.json"] } },
+      ],
+    }),
+  );
+
+  // `initialized` first, then the one-shot association notification.
+  expect(notified).toEqual([
+    { method: "initialized", params: {} },
+    { method: "json/schemaAssociations", params: { "package.json": ["https://s/pkg.json"] } },
+  ]);
+});
+
 test("rust-analyzer keeps watching its own files rather than depending on ours", () => {
   // Its `files.watcher` defaults to `client`, so advertising didChangeWatchedFiles would otherwise
   // Flip it off its own `notify` backend and onto stet's event stream. It watches correctly today.
@@ -529,6 +576,39 @@ test("handshakeConfigFor derives the handshake from data, substituting repo plac
 
 test("handshakeConfigFor yields nothing for a server with no handshake needs", () => {
   expect(handshakeConfigFor({}, "/some/repo")).toBeUndefined();
+});
+
+test("the json server carries its schema associations as a post-initialized notification", () => {
+  // The server never pulls configuration, so associations reach it only this way (the map form).
+  const config = handshakeConfigFor(registry.json ?? {}, "/repo");
+  expect(config?.notifications).toEqual([
+    { method: "json/schemaAssociations", params: builtinSchemas },
+  ]);
+});
+
+test("a local file schema resolves {repoUri} per repo in the association notification", () => {
+  const config = handshakeConfigFor(
+    { schemaAssociations: { "config.json": ["{repoUri}/schemas/config.json"] } },
+    "/home/me/repo",
+  );
+  expect(config?.notifications).toEqual([
+    {
+      method: "json/schemaAssociations",
+      params: { "config.json": ["file:///home/me/repo/schemas/config.json"] },
+    },
+  ]);
+});
+
+test("the yaml server enables SchemaStore through the configuration answer", async () => {
+  const config = handshakeConfigFor(registry.yaml ?? {}, "/repo");
+  expect(config?.workspaceCapabilities).toEqual({ configuration: true, workspaceFolders: true });
+  const answer = await Effect.runPromise(
+    config?.onRequest?.("workspace/configuration", { items: [{}, {}] }) ?? Effect.succeed(null),
+  );
+  expect(answer).toEqual([
+    { schemaStore: { enable: true }, validate: true },
+    { schemaStore: { enable: true }, validate: true },
+  ]);
 });
 
 test("a handshake closure replaces the data-derived handshake entirely", () => {

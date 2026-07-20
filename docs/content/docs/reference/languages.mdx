@@ -127,8 +127,8 @@ Without it, Go files show as unavailable rather than falsely clean.
 ### JSON & JSONC
 
 `vscode-json-language-server` validates well-known files against their schemas:
-`package.json`, `tsconfig.json`, and `jsconfig.json` out of the box, plus any
-file you associate through the
+`package.json`, `tsconfig.json`, `tsconfig.*.json`, and `jsconfig.json` out of
+the box, plus any file you associate through the
 [`schemas`](/docs/reference/configuration#schemas) config. Biome adds its lint
 where configured, and the same server answers hover and the symbol outline. The
 built-in associations point at [SchemaStore](https://www.schemastore.org/) URLs

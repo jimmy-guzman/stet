@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.9.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.8.0...stet-v0.9.0) (2026-07-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** 💥 the search pane's scope picker moved from `ctrl-s`  to `ctrl-o`
+* **config:** 💥 top-level servers moved to diagnostics.servers and the flat icons glyph map moved to icons.glyphs
+
+### Features
+
+* **config:** ✨ save session settings to config w/ `ctrl-s` ([#313](https://github.com/jimmy-guzman/stet/issues/313)) ([1e01274](https://github.com/jimmy-guzman/stet/commit/1e012740dd370268323ee78f683db397f85463df))
+* **config:** ✨ shape user config by feature w/ off switches ([#310](https://github.com/jimmy-guzman/stet/issues/310)) ([99fd89f](https://github.com/jimmy-guzman/stet/commit/99fd89fe973461fecc7de9838ca257d16f5cbf6b))
+* **diagnostics:** ✨ deliver json/yaml schema validation & intel capabilities ([#326](https://github.com/jimmy-guzman/stet/issues/326)) ([9434aa7](https://github.com/jimmy-guzman/stet/commit/9434aa7fd3cb8cc8f4c870453f70a69a924238aa))
+* **diagnostics:** ✨ discover Python servers in virtualenvs ([#302](https://github.com/jimmy-guzman/stet/issues/302)) ([df8008e](https://github.com/jimmy-guzman/stet/commit/df8008ebea7f706f89673c0786d0856c103e9bb4))
+* **go:** ✨ add diagnostics & code intel via gopls ([#308](https://github.com/jimmy-guzman/stet/issues/308)) ([57d9374](https://github.com/jimmy-guzman/stet/commit/57d93741433fc865e5919b9f5473a0472af82200))
+* **icons:** ✨ swap the json & git file glyphs ([#306](https://github.com/jimmy-guzman/stet/issues/306)) ([29948b0](https://github.com/jimmy-guzman/stet/commit/29948b03a154eed8cd4b170a43748cf000a5b6e6))
+* **keys:** ✨ configurable keybindings ([#315](https://github.com/jimmy-guzman/stet/issues/315)) ([caeb8be](https://github.com/jimmy-guzman/stet/commit/caeb8be5f4d37acb572d0725d0cb1fd5ca4e6432))
+* **problems:** ✨ copy entries and focus by mouse ([#316](https://github.com/jimmy-guzman/stet/issues/316)) ([8d595c4](https://github.com/jimmy-guzman/stet/commit/8d595c4a16ad5f801abbbe2f2f34f742e754637b))
+* **sidebar:** ✨ reopen a collapsed sidebar with `]` ([#304](https://github.com/jimmy-guzman/stet/issues/304)) ([e990dfa](https://github.com/jimmy-guzman/stet/commit/e990dfabad4f509e61f979a89a246a3474a9bde2))
+* **status:** ✨ context-aware status bar over source-tagged alerts ([#317](https://github.com/jimmy-guzman/stet/issues/317)) ([82a4cbd](https://github.com/jimmy-guzman/stet/commit/82a4cbd4fdf80b2676d994024ec0d7da170da407))
+* **theme:** ✨ honor the `NO_COLOR` convention ([#311](https://github.com/jimmy-guzman/stet/issues/311)) ([4c66778](https://github.com/jimmy-guzman/stet/commit/4c667784e094e60c050fba0674c3a92d97abbbd5)), closes [#64](https://github.com/jimmy-guzman/stet/issues/64)
+
+
+### Bug Fixes
+
+* **mouse:** 🐛 reset double-click tracker on ignored row clicks ([#323](https://github.com/jimmy-guzman/stet/issues/323)) ([e2fc2fc](https://github.com/jimmy-guzman/stet/commit/e2fc2fc96c80029b27d3a631745c3db1ab310145))
+* **theme:** 🐛 honor NO_COLOR=0/false per no-color.org ([#324](https://github.com/jimmy-guzman/stet/issues/324)) ([4549435](https://github.com/jimmy-guzman/stet/commit/4549435f2c09b652574dfa1bbe5010d5842bd85f))
+* **tree:** 🐛 keep sidebar row text on one line ([#307](https://github.com/jimmy-guzman/stet/issues/307)) ([e475af8](https://github.com/jimmy-guzman/stet/commit/e475af8855fd6cdc34b6b969856de4367d2bbe82))
+* **viewer:** 🐛 restore drag selection & add edge auto-scroll ([#305](https://github.com/jimmy-guzman/stet/issues/305)) ([7a62a5e](https://github.com/jimmy-guzman/stet/commit/7a62a5e93cc7b388ffa7d5470e2f7e63def11a45)), closes [#217](https://github.com/jimmy-guzman/stet/issues/217)
+
 ## [0.8.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.7.4...stet-v0.8.0) (2026-07-15)
 
 

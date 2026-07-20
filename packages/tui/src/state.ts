@@ -41,6 +41,7 @@ import {
   formatProblemEntry,
   formatProblemItems,
   isNavigableProblemItem,
+  problemsEmptyState,
 } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import {
@@ -116,6 +117,14 @@ import type { IntelRequestError } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
+import {
+  buildStatusBarModel,
+  clearAlertSource,
+  latestAlert,
+  raiseAlert,
+  restateAlert,
+} from "./status/model";
+import type { StatusAlert, StatusAlerts, StatusAlertSource } from "./status/model";
 import { activeThemeName, appearance, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
@@ -125,7 +134,6 @@ import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
 import { relativeTime } from "./utils/relative-time";
-import { truncate, truncateLeft } from "./utils/text";
 import {
   back,
   canBack,
@@ -662,15 +670,26 @@ function createState() {
   });
   const [jumpTarget, setJumpTarget] = tracked<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = tracked<CheckerState>(initialCheckerState([]));
-  const [status, setStatus] = tracked("");
-  const [statusLevel, setStatusLevel] = tracked<LogLevel>("info");
+  // Unresolved problems, tagged by the source that owns each one's lifecycle. A single untyped
+  // Status channel was why a worktree failure and a diagnostics failure overwrote each other, and
+  // Why either one's retry wiped the other's alert.
+  const [alerts, setAlerts] = tracked<StatusAlerts>([]);
   // A live in-flight indicator for a code-intel pull (F12), distinct from the
   // Auto-clearing `notice` acknowledgment: it is set on the keystroke and cleared
   // When the pull settles, so the status bar shows the action is underway.
   const [intelStatus, setIntelStatus] = tracked<string | undefined>(undefined);
-  const report = (text: string, level: LogLevel = "info") => {
-    setStatus(text);
-    setStatusLevel(level);
+  // The same in-flight shape for a worktree switch, which reloads the whole model.
+  const [switchProgress, setSwitchProgress] = tracked<string | undefined>(undefined);
+  const raise = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
+    setAlerts((current) => raiseAlert(current, { level, source, text }));
+  };
+  // Re-report a persisting condition without advancing its recency (a background re-check finding
+  // The same failure), so it cannot leapfrog a fresher user-provoked alert into the one row.
+  const restate = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
+    setAlerts((current) => restateAlert(current, { level, source, text }));
+  };
+  const clearAlert = (source: StatusAlertSource) => {
+    setAlerts((current) => clearAlertSource(current, source));
   };
   // An ephemeral acknowledgment of a user action (copied, scope changed, …),
   // Held for a fixed dwell so it outlives the keystroke that triggered it.
@@ -822,6 +841,12 @@ function createState() {
   // Reuse the `problems` memo's sorted findings so one checker update pays the
   // AllFindings sort once, not once here and once inside buildProblemItems.
   const allProblemItems = createMemo(() => buildProblemItems(checkerState(), problems()));
+  const problemsEmpty = createMemo(() =>
+    problemsEmptyState(checkerState(), {
+      enabled: diagnosticsEnabled(),
+      running: checksRunning(),
+    }),
+  );
   // The first row the problems cursor can land on; headers and help sub-lines are
   // Skipped so opening the panel never parks the cursor on a non-navigable row.
   const firstNavigableProblemIndex = createMemo(() => {
@@ -1780,18 +1805,16 @@ function createState() {
             .join(" · ");
     return { band: provenance.band, text };
   });
-  // The status bar's left key hints, keyed to the active mode. Lives here (not in
-  // The StatusBar component) so the right-status budget below can reserve the exact
-  // Width the hint takes, instead of a hardcoded copy that drifts from the render.
-  const statusHint = createMemo(() =>
+  // The bar's lowest tier: context-aware only for the temporary find modes, which have controls a
+  // User cannot guess, and otherwise the one hint that reaches everything else. The panes get no
+  // Standing tutorial line, since any live content outranks this and would bury it anyway.
+  const guidance = createMemo(() =>
     findOpen()
-      ? "type to find · enter confirm · esc cancel"
+      ? "enter find · esc cancel"
       : findActive()
-        ? "n/N next/prev · esc clear find"
-        : "? keys · q quit",
+        ? "n/N next/prev · esc clear"
+        : "? help · q quit",
   );
-  // A terse, live "installing…" line while servers download. Terse because the status slot is tight:
-  // It shares the line with the activity path and spends a glyph + space on a leveled message.
   const provisioningStatus = createMemo(() => {
     const languages = [...provisioningLanguages()].toSorted();
     if (languages.length === 0) {
@@ -1801,129 +1824,37 @@ function createState() {
       ? `installing ${languages[0]} server…`
       : `installing ${languages.length} servers…`;
   });
-  const statusRightModel = createMemo(() => {
-    // Reserve the left hint plus the bar's two paddings and a gap between the halves;
-    // What remains is the right status's, less the leading level glyph + space it prepends.
-    const width = Math.max(10, terminalWidth() - statusHint().length - 4);
-    const textWidth = Math.max(1, width - 2);
-    // An in-flight code-intel pull outranks even a held acknowledgment: it is the
-    // Acknowledgment of the very keystroke the user is waiting on, so it stays until
-    // The pull settles (which then clears it, letting any follow-up notice show).
-    // The transient tiers are pure leveled messages with no changed-file lead, so their
-    // Whole text is the message and they carry no path, change kind, or recency; only the
-    // Default activity tier below shows a recent changed file the bar tints and fades.
-    const busy = intelStatus();
-    if (busy !== undefined) {
-      const message = truncate(busy, textWidth);
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: "info" as const,
-        message,
-        provenanceCommit: undefined,
-        recencyAt: undefined,
-        text: message,
-      };
-    }
-    // A held acknowledgment wins over ambient status for its dwell, so the user
-    // Sees their action confirmed even as checks/activity churn underneath.
-    const held = notice();
-    if (held !== undefined) {
-      const message = truncate(held.text, textWidth);
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: held.level,
-        message,
-        provenanceCommit: undefined,
-        recencyAt: undefined,
-        text: message,
-      };
-    }
-    const finding = cursorFindings()?.[0];
-    if (finding !== undefined) {
-      const message = truncate(`${finding.checker}: ${finding.message}`, textWidth);
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: finding.severity satisfies LogLevel,
-        message,
-        provenanceCommit: undefined,
-        recencyAt: undefined,
-        text: message,
-      };
-    }
+  const statusBarModel = createMemo(() => {
     const provisioning = provisioningStatus();
-    const displayStatus = provisioning ?? (checksRunning() ? "checking…" : status());
-    // A glyph belongs only to an actual status message. Activity alone is ambient and idle is
-    // Empty, so neither carries a level: the bar renders the text bare, never a lone glyph.
-    const level =
-      displayStatus === ""
-        ? undefined
-        : provisioning !== undefined || checksRunning()
-          ? "info"
-          : statusLevel();
-    // In provenance mode the caret line's commit fills the whole bar (a blame inspector),
-    // Replacing the ambient recent-file + status lead. The transient tiers above (intel pull,
-    // Held notice, cursor finding) and an error/warning-level ambient status (a failed check)
-    // Preempt it, so a real problem is never hidden behind blame; a plain "checking…"/idle does not.
-    const commit = caretProvenanceDetail();
-    if (commit !== undefined && level !== "error" && level !== "warning") {
-      // Truncate against the bar's two paddings plus the band glyph + its space lead.
-      const text = truncate(commit.text, Math.max(1, terminalWidth() - 4));
-      return {
-        activityPath: "",
-        changeKind: undefined,
-        level: undefined,
-        message: "",
-        provenanceCommit: { band: commit.band, text },
-        recencyAt: undefined,
-        text,
-      };
-    }
     const latest = latestActivity(activityLog());
     const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
-    // Budget the path + message against the right slot after the marks the bar draws: the
-    // Severity glyph (2 cells, with a status), the recency dot before the path (2), and the
-    // Gap between the two groups (2, only when both are present). The path yields first, its
-    // Front truncating against the full status; if the status still overruns it caps too, so
-    // The groups never spill past the slot into the left hint. The path is tinted by change
-    // Kind and fades with recency (no "Ns ago"), the same cue the tree gives a changed file.
-    const GLYPH_CELLS = 2;
-    const DOT_CELLS = 2;
-    const GAP_CELLS = 2;
-    const overhead =
-      (displayStatus === "" ? 0 : GLYPH_CELLS) +
-      (recent === undefined ? 0 : DOT_CELLS) +
-      (recent === undefined || displayStatus === "" ? 0 : GAP_CELLS);
-    const textBudget = Math.max(1, width - overhead);
-    const activityPath =
-      recent === undefined
-        ? ""
-        : truncateLeft(recent.path, Math.max(1, textBudget - displayStatus.length));
-    const message = truncate(displayStatus, Math.max(1, textBudget - activityPath.length));
-    const text = [activityPath, message].filter((part) => part !== "").join(" · ");
-    // The recent file's git change kind tints the path (the tree's changed-file color);
-    // Its timestamp feeds both the fading tint and the recency dot the bar draws.
-    const changeKind =
-      recent === undefined ? undefined : gitModel().changedByPath.get(recent.path)?.kind;
-    return {
-      activityPath,
-      changeKind,
-      level,
-      message,
-      provenanceCommit: undefined,
-      recencyAt: recent?.at,
-      text,
-    };
+    const finding = cursorFindings()?.[0];
+    return buildStatusBarModel({
+      activity:
+        recent === undefined
+          ? undefined
+          : {
+              at: recent.at,
+              changeKind: gitModel().changedByPath.get(recent.path)?.kind,
+              path: recent.path,
+            },
+      alert: latestAlert(alerts()),
+      backgroundProgress: provisioning ?? (checksRunning() ? "running diagnostics…" : undefined),
+      contextualFinding:
+        finding === undefined
+          ? undefined
+          : {
+              level: finding.severity satisfies LogLevel,
+              text: `${finding.checker}: ${finding.message}`,
+            },
+      // A worktree switch repoints the whole app, so it leads an intel pull scoped to one caret.
+      foregroundProgress: switchProgress() ?? intelStatus(),
+      guidance: guidance(),
+      notification: notice(),
+      provenance: caretProvenanceDetail(),
+      width: terminalWidth(),
+    });
   });
-  const statusRight = () => statusRightModel().text;
-  const statusRightLevel = () => statusRightModel().level;
-  const statusRightPath = () => statusRightModel().activityPath;
-  const statusRightMessage = () => statusRightModel().message;
-  const statusRightRecencyAt = () => statusRightModel().recencyAt;
-  const statusRightChangeKind = () => statusRightModel().changeKind;
-  const statusProvenanceCommit = () => statusRightModel().provenanceCommit;
 
   // --- navigation ---
   const canGoBack = createMemo(() => canBack(navState()));
@@ -2485,6 +2416,14 @@ function createState() {
     checksController?.abort();
     const controller = new AbortController();
     checksController = controller;
+    // Whether a diagnostics failure was already standing before this run cleared it: if so, a fresh
+    // Failure is the *same* ongoing condition re-reported, not a newly provoked one, so it must
+    // Return to its old recency (via `restate`) rather than jumping to the newest slot and evicting
+    // A worktree error the user provoked more recently.
+    const diagnosticsWasAlerting = alerts().some((alert) => alert.source === "diagnostics");
+    // The prior failure describes a run that no longer exists, so retire it as this one starts
+    // Rather than leaving it to contradict the progress line beside it.
+    clearAlert("diagnostics");
     // Keep prior diagnostics while re-checking (update in place); only files new to the set get a
     // Pending placeholder. Changed files are already marked pending by the edit-detection effect.
     setCheckerState((current) => markPending(current, model.changed, []));
@@ -2514,7 +2453,15 @@ function createState() {
         ),
         { signal: controller.signal },
       );
-      report(failures[0] ?? "checks passed", failures[0] !== undefined ? "error" : "success");
+      // Only a failure is worth the row. A clean run is already reported by everything it just
+      // Updated (the counts badge, the file badges, the problems panel), and the completion copy
+      // It used to leave behind outlived its usefulness: `checks passed` sat there indefinitely,
+      // Beside a red error count it had never contradicted. A first failure is newly provoked
+      // (`raise`, newest); a re-report of a still-broken condition keeps its old recency
+      // (`restate`), so a background re-check cannot bump it over a fresher worktree error.
+      if (failures[0] !== undefined) {
+        (diagnosticsWasAlerting ? restate : raise)("diagnostics", "error", failures[0]);
+      }
     } catch {
       // Interrupted by a newer run or a worktree switch
     } finally {
@@ -3758,6 +3705,11 @@ function createState() {
 
   function loadWorktrees(root: string) {
     const epoch = resetEpoch;
+    // Opening the picker is the retry for a prior list failure, so retire that alert before the
+    // Attempt: on success nothing re-raises and the stale error is gone, on failure the catch
+    // Below raises it afresh. Only the list source: browsing the picker must not clear an
+    // Unretried switch error, which is a separate lifecycle.
+    clearAlert("worktree-list");
     runtime
       .runPromise(Git.use((git) => git.worktrees(root)))
       .then((list) => {
@@ -3794,9 +3746,10 @@ function createState() {
         }
         batch(() => {
           setWorktreeComboboxOpen(false);
-          report(
-            `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+          raise(
+            "worktree-list",
             "error",
+            `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
           );
         });
       });
@@ -4011,25 +3964,41 @@ function createState() {
   // Without a restart. Lives in state, not App, so the keymap, the picker's
   // Mouse click, and App's deleted-worktree recovery all reach the one action
   // Directly. It only writes state and reloads the model (no `renderer`), so it
-  // Belongs here next to `runChecks`; `reason` overrides the status.
+  // Belongs here next to `runChecks`.
+  //
+  // `label` names the target in the progress line, and `successNotice` is for a switch the user
+  // Did not ask for (the deleted-worktree recovery): an unrequested switch has to say so, where a
+  // Requested one is already answered by the header it repointed.
   let switchRequest = 0;
   onReset(() => {
     switchRequest += 1;
   });
-  async function switchWorktree(worktree: Worktree, reason?: string) {
+  async function switchWorktree(
+    worktree: Worktree,
+    options?: { label?: string; successNotice?: { level: LogLevel; text: string } },
+  ) {
     setWorktreeComboboxOpen(false);
+    // Stamp and clear at the very top, before the validations, so every call supersedes: a load is
+    // Async, and a second switch started before the first resolves could otherwise land out of
+    // Order and overwrite the newer worktree. The stamp and the progress clear must lead the
+    // Same-path and missing-path early returns too, or an invalid selection would leave an older
+    // In-flight request as the latest one, and its stale completion could still commit or report.
+    const request = ++switchRequest;
+    setSwitchProgress(undefined);
     if (worktree.path === gitModel().repoRoot) {
       return;
     }
+    const label = options?.label ?? worktreeLabel(worktree);
     if (!existsSync(worktree.path)) {
-      report(`missing worktree: ${worktree.path}`, "warning");
+      raise("worktree-switch", "warning", `missing worktree: ${worktree.path}`);
       return;
     }
-    // The load is async, so a second switch started before the first resolves
-    // Could land out of order and overwrite the newer worktree. Stamp each call
-    // And bail if a later one superseded it, mirroring the diff/search pipelines'
-    // Restart-on-rekey guard, so only the latest request commits or reports.
-    const request = ++switchRequest;
+    // This attempt owns the switch alert from here: a retry clears the failure it is retrying
+    // Before it can contradict the progress line.
+    batch(() => {
+      clearAlert("worktree-switch");
+      setSwitchProgress(`switching to ${label}…`);
+    });
     try {
       // Re-pin session/last-commit to the target worktree's history before loading.
       const { sessionBase: nextSessionBase, scope: nextScope } = await rebaselineScope(
@@ -4076,17 +4045,26 @@ function createState() {
         setCheckerState(initialCheckerState(diagnosticsEnabled() ? fresh.changed : []));
         setActivityLog(emptyActivityLog);
         setFocusedPane("tree");
-        report(reason ?? `switched to ${worktreeLabel(worktree)}`);
+        // The header now names the worktree we landed in, so a success line here would only
+        // Repeat it, and would still be sitting there long after it stopped being news.
+        setSwitchProgress(undefined);
+        if (options?.successNotice !== undefined) {
+          notify(options.successNotice.text, options.successNotice.level);
+        }
       });
       void runChecks(fresh);
     } catch (error) {
       if (request !== switchRequest) {
         return;
       }
-      report(
-        `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
-        "error",
-      );
+      batch(() => {
+        setSwitchProgress(undefined);
+        raise(
+          "worktree-switch",
+          "error",
+          `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+        );
+      });
     }
   }
 
@@ -4543,6 +4521,7 @@ function createState() {
     pinActiveTab,
     problemIndex,
     problems,
+    problemsEmpty,
     problemsOpen,
     problemsScrollTop,
     provenanceForRow,
@@ -4675,15 +4654,7 @@ function createState() {
     sidebarOpen,
     sidebarScrollTop,
     sidebarWidth,
-    status,
-    statusHint,
-    statusProvenanceCommit,
-    statusRight,
-    statusRightChangeKind,
-    statusRightLevel,
-    statusRightMessage,
-    statusRightPath,
-    statusRightRecencyAt,
+    statusBarModel,
     switchWorktree,
     symbolsIndex,
     symbolsOpen,

@@ -1,71 +1,88 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 
 import { emptyActivityLog, recordActivity } from "@/git/activity";
 import { state } from "@/state";
 
-// State is a global singleton; reset everything these tests write.
-afterEach(() => {
-  state.setNotice(undefined);
-  state.setActivityLog(emptyActivityLog);
-  state.setNow(Date.now());
-  state.setTerminalWidth(80);
-  state.setProvisioningLanguages(new Set<string>());
-});
+// The pure ladder and its fitting are covered in status-model.test.ts. These cover the seam: that
+// Each live signal reaches the input it is supposed to feed, and that the bar reflects it.
 
-test("a downloading language server surfaces a live installing status", () => {
+test("a downloading language server surfaces background progress", () => {
   state.setProvisioningLanguages(new Set(["typescript"]));
 
-  expect(state.statusRight()).toContain("installing typescript server");
-  expect(state.statusRightLevel()).toBe("info");
+  expect(state.statusBarModel()).toMatchObject({
+    category: "background-progress",
+    kind: "message",
+    level: "info",
+    message: "installing typescript server…",
+  });
 });
 
 test("a second downloading server collapses to a count", () => {
   state.setProvisioningLanguages(new Set(["typescript", "oxlint"]));
 
-  expect(state.statusRight()).toContain("installing 2 servers");
+  expect(state.statusBarModel()).toMatchObject({ message: "installing 2 servers…" });
 });
 
 test("the installing status clears once no server is downloading", () => {
   state.setProvisioningLanguages(new Set(["typescript"]));
   state.setProvisioningLanguages(new Set<string>());
 
-  expect(state.statusRight()).not.toContain("installing");
+  expect(state.statusBarModel()).toMatchObject({ kind: "guidance" });
 });
 
-test("the installing status keeps its verb when the pane is narrow", () => {
-  state.setTerminalWidth(40);
-  state.setProvisioningLanguages(new Set(["typescript"]));
-
-  // Truncates from the tail (like checking…), but the leading verb survives so the line still reads.
-  expect(state.statusRight().startsWith("installing")).toBe(true);
-});
-
-test("a notice surfaces its text and level on the status line", () => {
+test("a notice surfaces its text and level as a full-row notification", () => {
   state.notify("copied src/state.ts", "success");
 
-  expect(state.statusRight()).toBe("copied src/state.ts");
-  expect(state.statusRightLevel()).toBe("success");
+  expect(state.statusBarModel()).toMatchObject({
+    category: "notification",
+    kind: "message",
+    level: "success",
+    message: "copied src/state.ts",
+  });
 });
 
 test("a notice defaults to the info level", () => {
   state.notify("showing all files");
 
-  expect(state.statusRight()).toBe("showing all files");
-  expect(state.statusRightLevel()).toBe("info");
+  expect(state.statusBarModel()).toMatchObject({
+    category: "notification",
+    level: "info",
+    message: "showing all files",
+  });
 });
 
-test("an error notice carries the error level for the status bar to color", () => {
+test("an error notice carries the error level", () => {
   state.notify("couldn't reach the language server", "error");
 
-  expect(state.statusRightLevel()).toBe("error");
+  expect(state.statusBarModel()).toMatchObject({ level: "error" });
 });
 
-// A createEffect in state re-stamps `now` to the real clock whenever activity is
-// Recorded (it keeps the recency clock live), so these tests record at real time.
-// Status() is a process-wide signal other suites may leave set (a long diagnostics
-// Error, say), and it trails the path behind " · ", eating into the path's budget.
-// So these use a generous width and a path far longer than any realistic budget:
-// The path always truncates (leading "…") yet keeps ample room for the filename.
+test("an idle bar shows guidance", () => {
+  expect(state.statusBarModel()).toMatchObject({ kind: "guidance", text: "? help · q quit" });
+});
+
+test("the find modes carry their own guidance", () => {
+  state.setFindOpen(true);
+  expect(state.statusBarModel()).toMatchObject({ text: "enter find · esc cancel" });
+
+  // Committing the find closes the input and leaves the matches navigable.
+  state.setFindOpen(false);
+  state.setFindActive(true);
+  expect(state.statusBarModel()).toMatchObject({ text: "n/N next/prev · esc clear" });
+});
+
+test("a recent changed file surfaces as ambient activity", () => {
+  state.setTerminalWidth(300);
+  state.setActivityLog(
+    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
+  );
+
+  expect(state.statusBarModel()).toMatchObject({
+    activity: { path: "src/foo.ts" },
+    category: "ambient",
+  });
+});
+
 test("a long recent path is shortened from the front, keeping the filename", () => {
   state.setTerminalWidth(400);
   const deep = `src/${"components/".repeat(50)}DiffView.tsx`;
@@ -73,24 +90,15 @@ test("a long recent path is shortened from the front, keeping the filename", () 
     recordActivity(emptyActivityLog, [{ kind: "changed", path: deep }], Date.now()),
   );
 
-  const line = state.statusRight();
-  // A leading "…" proves the head was dropped, not the filename tail.
-  expect(line).toMatch(/^…/);
-  expect(line).toContain("DiffView.tsx");
-});
-
-test("a short recent path is shown whole", () => {
-  state.setTerminalWidth(300);
-  state.setActivityLog(
-    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
-  );
-
-  // No truncation: the full path is present rather than an ellipsized fragment.
-  expect(state.statusRight()).toContain("src/foo.ts");
+  const model = state.statusBarModel();
+  if (model.kind !== "ambient") {
+    throw new Error("expected ambient activity");
+  }
+  expect(model.activity.path).toStartWith("…");
+  expect(model.activity.path).toContain("DiffView.tsx");
 });
 
 test("activity older than the recency window drops off the status line", () => {
-  state.setTerminalWidth(80);
   state.setActivityLog(
     recordActivity(
       emptyActivityLog,
@@ -99,56 +107,31 @@ test("activity older than the recency window drops off the status line", () => {
     ),
   );
 
-  expect(state.statusRight()).not.toContain("src/foo.ts");
+  expect(state.statusBarModel()).toMatchObject({ kind: "guidance" });
 });
 
-// The status bar shows the recent changed file (path) apart from the leveled status
-// (message), so it can tint the path and color the message independently. These lock
-// The pieces the two renderers consume.
-test("the recent changed file is exposed as a path, separate from the leveled status", () => {
+test("background progress outranks a recent changed file", () => {
   state.setTerminalWidth(300);
   state.setActivityLog(
     recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
   );
   state.setProvisioningLanguages(new Set(["typescript"]));
 
-  expect(state.statusRightPath()).toBe("src/foo.ts");
-  expect(state.statusRightMessage()).toBe("installing typescript server…");
-  // The plain-text projection still joins them with the divider the bar renders.
-  expect(state.statusRight()).toBe("src/foo.ts · installing typescript server…");
+  // One row, one tenant: the install is what the user is waiting on, so the changed file waits.
+  expect(state.statusBarModel()).toMatchObject({
+    category: "background-progress",
+    message: "installing typescript server…",
+  });
 });
 
-test("a narrow bar caps the status message so it can't overflow past the path and dot", () => {
-  state.setTerminalWidth(40);
-  state.setActivityLog(
-    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
-  );
-  state.setProvisioningLanguages(new Set(["typescript"]));
-
-  // At a narrow width the full "installing typescript server…" cannot sit beside the path
-  // And its dot, so it is truncated rather than spilling into the left hint.
-  expect(state.statusRightMessage().length).toBeLessThan("installing typescript server…".length);
-});
-
-test("a leveled message with no recent activity has no path", () => {
-  state.notify("copied src/state.ts", "success");
-
-  expect(state.statusRightPath()).toBe("");
-  expect(state.statusRightMessage()).toBe("copied src/state.ts");
-  // No changed file backs it, so there is no recency timestamp for the dot or the fade.
-  expect(state.statusRightRecencyAt()).toBeUndefined();
-});
-
-// The recent path exposes its activity timestamp so the bar can fade the tint and draw
-// The recency dot off it, then drops it once the file ages past the 30s window.
-test("the recent path exposes its recency timestamp, then drops it once aged out", () => {
+test("the recent activity timestamp reaches the bar, then drops once it ages out", () => {
   state.setTerminalWidth(300);
-
   const at = Date.now();
   state.setActivityLog(
     recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], at),
   );
-  expect(state.statusRightRecencyAt()).toBe(at);
+
+  expect(state.statusBarModel()).toMatchObject({ activity: { at } });
 
   state.setActivityLog(
     recordActivity(
@@ -157,5 +140,25 @@ test("the recent path exposes its recency timestamp, then drops it once aged out
       Date.now() - 60_000,
     ),
   );
-  expect(state.statusRightRecencyAt()).toBeUndefined();
+  expect(state.statusBarModel()).toMatchObject({ kind: "guidance" });
+});
+
+// A worktree that vanished before the switch is the one alert path reachable without a repo, so it
+// Is how the wiring from `raise` through to the rendered row gets covered here.
+test("a missing worktree raises a persistent alert that outlives its keystroke", () => {
+  // The path check is synchronous and bails before any git, so the alert is already up.
+  void state.switchWorktree({
+    bare: false,
+    detached: false,
+    head: "",
+    locked: false,
+    path: "/nowhere/does-not-exist",
+    prunable: false,
+  });
+
+  expect(state.statusBarModel()).toMatchObject({
+    category: "persistent-alert",
+    level: "warning",
+    message: "missing worktree: /nowhere/does-not-exist",
+  });
 });

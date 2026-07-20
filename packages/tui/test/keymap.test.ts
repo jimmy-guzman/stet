@@ -441,10 +441,16 @@ describe("createKeyHandler", () => {
       const handle = createKeyHandler({ openInEditor: noop, quit: noop });
 
       handle(keyEvent({ name: "y" }));
-      expect(state.statusRightMessage()).toBe("no problems to copy");
+      expect(state.statusBarModel()).toMatchObject({
+        kind: "message",
+        message: "no problems to copy",
+      });
 
       handle(keyEvent({ name: "Y", shift: true }));
-      expect(state.statusRightMessage()).toBe("no problems to copy");
+      expect(state.statusBarModel()).toMatchObject({
+        kind: "message",
+        message: "no problems to copy",
+      });
     });
 
     test("the viewer keeps its own copy targets once focus leaves the panel", () => {

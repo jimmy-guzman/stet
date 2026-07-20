@@ -128,7 +128,12 @@ export function App() {
         path: main,
         prunable: false,
       };
-      void state.switchWorktree(target, `worktree deleted, switched to ${label}`);
+      // Nobody asked for this switch, so it has to announce itself; a warning, because losing the
+      // Worktree under you is a degraded condition, not a routine move.
+      void state.switchWorktree(target, {
+        label,
+        successNotice: { level: "warning", text: `worktree deleted, switched to ${label}` },
+      });
       return;
     }
     // Nothing recoverable: the repository itself is gone. A clean exit (code 0) of a

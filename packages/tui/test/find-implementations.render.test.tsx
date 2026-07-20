@@ -38,7 +38,10 @@ describe("find-implementations", () => {
       // Action shares with go-to-definition (covered in definition.render.test.tsx, on this same
       // Fixture) never appears, because there is nothing to wait for.
       const pending = state.findImplementations();
-      expect(state.statusRight()).not.toContain("resolving implementations…");
+      const pendingContent = state.statusBarModel();
+      expect(pendingContent.kind === "message" ? pendingContent.message : "").not.toContain(
+        "resolving implementations…",
+      );
 
       await pending;
 
@@ -48,7 +51,10 @@ describe("find-implementations", () => {
         frame.includes("ℹ no implementation support for this file type"),
       );
       expect(settled).not.toContain("no implementations");
-      expect(state.statusRightLevel()).toBe("info");
+      expect(state.statusBarModel()).toMatchObject({
+        category: "notification",
+        level: "info",
+      });
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
@@ -78,7 +84,10 @@ describe("find-implementations", () => {
       state.selectFile("other.txt");
       await pending;
 
-      expect(state.statusRight()).not.toContain("no implementation support");
+      const content = state.statusBarModel();
+      expect(content.kind === "message" ? content.message : "").not.toContain(
+        "no implementation support",
+      );
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

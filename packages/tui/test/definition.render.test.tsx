@@ -40,8 +40,11 @@ describe("go-to-definition in-flight indicator", () => {
       // So its exact value is asserted on the model the status bar renders from; the
       // Rendered info glyph and the clearing are covered by the settled frame below.
       const pending = state.goToDefinition();
-      expect(state.statusRight()).toContain("resolving definition…");
-      expect(state.statusRightLevel()).toBe("info");
+      expect(state.statusBarModel()).toMatchObject({
+        category: "foreground-progress",
+        level: "info",
+        message: "resolving definition…",
+      });
 
       await pending;
 

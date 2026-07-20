@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import type { CheckerState, Diagnostic } from "@/diagnostics/checker";
+import type { CheckerFileState, CheckerState, Diagnostic } from "@/diagnostics/checker";
 import {
   buildProblemItems,
   formatProblemEntry,
   formatProblemItems,
   isNavigableProblemItem,
   problemLocationLabel,
+  problemsEmptyState,
   sourceLabel,
   splitDiagnosticMessage,
 } from "@/diagnostics/problems";
@@ -382,5 +383,69 @@ describe("formatProblemItems", () => {
 
   test("an empty panel copies nothing", () => {
     expect(formatProblemItems(buildProblemItems({ diagnostics: new Map() }))).toBe("");
+  });
+});
+
+describe("problemsEmptyState", () => {
+  const withStatus = (status: CheckerFileState["status"]): CheckerState => ({
+    diagnostics: new Map([["src/a.ts", { count: 0, diagnostics: [], status }]]),
+  });
+  const on = { enabled: true, running: false };
+
+  test("switched off says so rather than claiming the code is clean", () => {
+    expect(problemsEmptyState(withStatus("failed"), { enabled: false, running: true })).toBe(
+      "diagnostics disabled",
+    );
+  });
+
+  test("a run in flight supersedes whatever the last run left behind", () => {
+    expect(problemsEmptyState(withStatus("failed"), { enabled: true, running: true })).toBe(
+      "running diagnostics…",
+    );
+  });
+
+  // The panel is empty here precisely because the failure carried no message to fill it with, so
+  // Without this state it would read as a clean bill of health.
+  test("a failure with no rows to show still reports the failure", () => {
+    expect(problemsEmptyState(withStatus("failed"), on)).toBe("diagnostics failed");
+  });
+
+  test("a failure outranks the pending files it left behind", () => {
+    const mixed: CheckerState = {
+      diagnostics: new Map([
+        ["src/a.ts", { count: 0, diagnostics: [], status: "pending" }],
+        ["src/b.ts", { count: 0, diagnostics: [], status: "failed" }],
+      ]),
+    };
+
+    expect(problemsEmptyState(mixed, on)).toBe("diagnostics failed");
+  });
+
+  test("files still awaiting an answer read as pending", () => {
+    expect(problemsEmptyState(withStatus("pending"), on)).toBe("diagnostics pending");
+  });
+
+  test("pending outranks unavailable, which is only worth saying once nothing is outstanding", () => {
+    const mixed: CheckerState = {
+      diagnostics: new Map([
+        ["src/a.ts", { count: 0, diagnostics: [], status: "unavailable" }],
+        ["src/b.ts", { count: 0, diagnostics: [], status: "pending" }],
+      ]),
+    };
+
+    expect(problemsEmptyState(mixed, on)).toBe("diagnostics pending");
+  });
+
+  test("a file nothing could answer for reports the coverage gap", () => {
+    expect(problemsEmptyState(withStatus("unavailable"), on)).toBe("some diagnostics unavailable");
+  });
+
+  // The one case that is actually a claim about the code, so the one case that has to earn it.
+  test("only a resolved, fully covered run reads as no problems", () => {
+    expect(problemsEmptyState(withStatus("clean"), on)).toBe("no problems");
+  });
+
+  test("a repo with nothing to check reads as no problems", () => {
+    expect(problemsEmptyState({ diagnostics: new Map() }, on)).toBe("no problems");
   });
 });

@@ -106,7 +106,7 @@ const KEY_HELP_GROUPS: {
       { actions: ["worktrees"], description: "switch to another git worktree" },
       { actions: ["changes-only"], description: "toggle changes-only filter for the tree" },
       { actions: ["save-settings"], description: "save current settings to config" },
-      { actions: ["run-checks"], description: "re-run checks" },
+      { actions: ["run-checks"], description: "re-run diagnostics" },
       { actions: ["restart-servers"], description: "restart language servers" },
     ],
     heading: "workspace",

@@ -32,7 +32,7 @@ describe("scope switching", () => {
       void state.runChecks(model);
       await settleUntil(
         "all scope shows the unstaged change",
-        (frame) => frame.includes("+1 -1") && frame.includes("checks passed"),
+        (frame) => frame.includes("+1 -1") && !state.checksRunning(),
         5,
         400,
       );
@@ -50,9 +50,7 @@ describe("scope switching", () => {
       const after = await settleUntil(
         "staged scope drops the unstaged change",
         (frame) =>
-          frame.includes("staged vs HEAD") &&
-          !frame.includes("+1 -1") &&
-          frame.includes("checks passed"),
+          frame.includes("staged vs HEAD") && !frame.includes("+1 -1") && !state.checksRunning(),
         1,
         400,
       );

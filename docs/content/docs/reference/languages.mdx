@@ -11,18 +11,18 @@ file-type icon, and structural folding; language servers add diagnostics and
 code intelligence for the profiles the table marks. You can change any layer
 through [your config](/docs/reference/configuration#file-support).
 
-| Language                | Highlighting | Folding    | Diagnostics   | Code intelligence |
-| ----------------------- | ------------ | ---------- | ------------- | ----------------- |
-| TypeScript & JavaScript | yes          | indent     | types + lint  | yes               |
-| Rust                    | yes          | indent     | types + cargo | yes               |
-| Python                  | yes          | indent     | types + lint  | yes               |
-| Go                      | yes          | indent     | types + vet   | yes               |
-| JSON & JSONC            | yes          | indent     | schema + lint |                   |
-| YAML                    | yes          | indent     | schema        |                   |
-| CSS                     | yes          | indent     | lint          |                   |
-| GraphQL                 | yes          | indent     | lint          |                   |
-| Markdown                | yes          | by heading |               |                   |
-| 200+ others             | yes          | indent     | via config    |                   |
+| Language                | Highlighting | Folding    | Diagnostics   | Code intelligence          |
+| ----------------------- | ------------ | ---------- | ------------- | -------------------------- |
+| TypeScript & JavaScript | yes          | indent     | types + lint  | yes                        |
+| Rust                    | yes          | indent     | types + cargo | yes                        |
+| Python                  | yes          | indent     | types + lint  | yes                        |
+| Go                      | yes          | indent     | types + vet   | yes                        |
+| JSON & JSONC            | yes          | indent     | schema + lint | hover, outline             |
+| YAML                    | yes          | indent     | schema        | hover, outline, definition |
+| CSS                     | yes          | indent     | lint          |                            |
+| GraphQL                 | yes          | indent     | lint          |                            |
+| Markdown                | yes          | by heading |               |                            |
+| 200+ others             | yes          | indent     | via config    |                            |
 
 ## Syntax highlighting
 
@@ -126,15 +126,21 @@ Without it, Go files show as unavailable rather than falsely clean.
 
 ### JSON & JSONC
 
-`vscode-json-language-server` validates against schemas (`package.json`,
-`tsconfig.json`, and anything [SchemaStore](https://www.schemastore.org/)
-knows) in every repo, and Biome adds its lint where configured. The same
-server answers hover and the symbol outline.
+`vscode-json-language-server` validates well-known files against their schemas:
+`package.json`, `tsconfig.json`, and `jsconfig.json` out of the box, plus any
+file you associate through the
+[`schemas`](/docs/reference/configuration#schemas) config. Biome adds its lint
+where configured, and the same server answers hover and the symbol outline. The
+built-in associations point at [SchemaStore](https://www.schemastore.org/) URLs
+fetched over the network, so an offline repo falls back to syntax checking.
 
 ### YAML
 
-`yaml-language-server` provides schema-aware validation for `.yaml` and
-`.yml`, plus go to definition, hover, and the symbol outline.
+`yaml-language-server` validates `.yaml` and `.yml` against schemas it
+discovers through [SchemaStore](https://www.schemastore.org/) (GitHub
+workflows, and so on), and answers go to definition, hover, and the symbol
+outline. It fetches those schemas over the network, so an offline repo falls
+back to syntax checking.
 
 ### CSS & GraphQL
 

@@ -10,6 +10,7 @@ import { App } from "./App";
 import { helpText, parseCommand } from "./cli";
 import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
+import { resolveSchemas, yamlSchemaSettings } from "./diagnostics/schemas";
 import { registerServers, resolveServers } from "./diagnostics/servers";
 import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import { resolveFileSupportConfig } from "./file-support/config";
@@ -112,6 +113,16 @@ try {
   // Registers before the runtime builds, so diff, icons, diagnostics, and intel share one startup
   // Snapshot for the full session.
   const { issues: serverIssues, servers } = resolveServers(config.diagnostics?.servers ?? {});
+  // The JSON server takes its schema map only as a post-`initialized` notification; the YAML server
+  // Takes user associations through its `settings`. Fold both onto their specs before they register
+  // (per-repo `{repoUri}` substitution happens later in `handshakeConfigFor`).
+  const { issues: schemaIssues, schemas, userSchemas } = resolveSchemas(config.schemas ?? {});
+  if (servers.json !== undefined) {
+    servers.json = { ...servers.json, schemaAssociations: schemas };
+  }
+  if (servers.yaml !== undefined) {
+    servers.yaml = { ...servers.yaml, settings: yamlSchemaSettings(userSchemas) };
+  }
   registerServers(servers);
   const { issues: fileSupportIssues, registry: fileSupport } = resolveFileSupportConfig(
     { files: config.files, icons: config.icons?.glyphs, languages: config.languages },
@@ -254,6 +265,7 @@ try {
         ...configIssues,
         ...themeIssues,
         ...serverIssues,
+        ...schemaIssues,
         ...fileSupportIssues,
         ...keybindingIssues,
       ];

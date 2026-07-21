@@ -24,6 +24,16 @@ import type { WatchedPathChange, WatcherRegistration } from "./watched-files";
  */
 const MATERIALIZE_CHUNK = 256;
 
+/**
+ * How long the first `whenProjectLoaded` wait holds for a server that has announced nothing before
+ * concluding it has no project-load phase. A server that reports load progress announces it well
+ * within this window (typescript-language-server creates its token 25-42ms after `didOpen` across
+ * measured runs, rust-analyzer 24ms after `initialized`), so 2 seconds is ~50x that latency with
+ * ample slack for a busy machine. Paid at most once per connection: a silent server latches
+ * "loaded" after it, and a warm hold pays it in the background before the first user pull.
+ */
+const PROJECT_LOAD_GRACE = "2 seconds";
+
 export class LspRequestError extends Data.TaggedError("LspRequestError")<{
   readonly method: string;
   readonly message: string;
@@ -118,6 +128,11 @@ export interface LspConnection {
    * typescript-language-server answers `textDocument/definition` from the local import binding
    * instead of resolving cross-file, so intel pulls await this before requesting. Also resolves on
    * connection close so a pull never hangs past server death.
+   *
+   * A load window is only waited on when the server signals one exists (a `window/workDoneProgress/
+   * create` request or a `$/progress` "begin"). A server with no project-load phase (the JSON,
+   * YAML, basedpyright, and ruff binaries announce nothing) resolves after a bounded grace instead
+   * of hanging on a signal that never comes, so a pull on those never pays the request timeout.
    */
   readonly whenProjectLoaded: Effect.Effect<void>;
 }
@@ -208,6 +223,11 @@ export function makeTransport(
     // Resolved on the first project-load `$/progress` "end" (or on close); `whenProjectLoaded`
     // Gates intel pulls so a request never lands during the load window with a premature reply.
     let loaded = false;
+    // True once the server signals it will report work-done progress (a `window/workDoneProgress/
+    // Create` request, or a `$/progress` "begin"): the evidence a load window exists to wait for.
+    // A server with no project-load phase (vscode-json, yaml, basedpyright, ruff, measured against
+    // Their pinned binaries) never sets this, so `whenProjectLoaded` must not wait on it forever.
+    let progressAnnounced = false;
     const projectLoaded = yield* Deferred.make<void>();
     const markLoaded = Effect.suspend(() => {
       if (loaded) {
@@ -265,6 +285,13 @@ export function makeTransport(
             .send({ id, jsonrpc: "2.0", result: null })
             .pipe(Effect.andThen(removed.length === 0 ? Effect.void : announceBases));
         }
+        // The server creating a work-done progress token: it intends to report load progress, so a
+        // Genuine load window exists. Record that (`whenProjectLoaded` waits only when it is set),
+        // Then answer `null` so the server proceeds.
+        if (message.method === "window/workDoneProgress/create") {
+          progressAnnounced = true;
+          return channel.send({ id, jsonrpc: "2.0", result: null });
+        }
         // Answer other server-to-client requests so the server does not stall waiting on us; the
         // Handler (or the null default) decides the result.
         return respond(message.method, message.params).pipe(
@@ -295,8 +322,13 @@ export function makeTransport(
         }
         // A workDoneProgress "end" marks the project load complete; before it, intel replies are
         // Resolved from the local import binding rather than cross-file (the F12-stops-at-import bug).
+        // A "begin" counts as the load-window announcement too, for a server that skips the
+        // `window/workDoneProgress/create` request and opens progress directly.
         if (message.method === "$/progress" && isObject(message.params)) {
           const { value } = message.params;
+          if (isObject(value) && value.kind === "begin") {
+            progressAnnounced = true;
+          }
           return isObject(value) && value.kind === "end" ? markLoaded : Effect.void;
         }
         return Effect.logDebug(`lsp notification ${message.method}`);
@@ -483,9 +515,25 @@ export function makeTransport(
             }),
           );
         }),
-      whenProjectLoaded: Effect.suspend(() =>
-        loaded ? Effect.void : Deferred.await(projectLoaded),
-      ),
+      whenProjectLoaded: Effect.suspend(() => {
+        if (loaded) {
+          return Effect.void;
+        }
+        if (progressAnnounced) {
+          return Deferred.await(projectLoaded);
+        }
+        // Nothing announced yet: a load may be about to start, or this server has no load phase at
+        // All. Wait on the real signal, but only for a bounded grace, so a close or a late "end"
+        // Inside the window still resolves at once. If the grace elapses first, re-decide: announced
+        // Mid-grace -> keep waiting on the real signal; still silent -> latch "loaded" so this
+        // Negative result sticks and no later pull re-pays the grace.
+        return Deferred.await(projectLoaded).pipe(
+          Effect.timeout(PROJECT_LOAD_GRACE),
+          Effect.catchTag("TimeoutError", () =>
+            Effect.suspend(() => (progressAnnounced ? Deferred.await(projectLoaded) : markLoaded)),
+          ),
+        );
+      }),
     } satisfies LspConnection;
   });
 }

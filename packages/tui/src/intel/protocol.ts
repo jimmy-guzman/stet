@@ -183,16 +183,27 @@ function trimBlankEdges(lines: string[]): string[] {
   return lines.slice(start, end);
 }
 
+// A CommonMark backslash escape is a `\` before ASCII punctuation, standing for the literal
+// Punctuation character (`\.` -> `.`, `space\-separated` -> `space-separated`). Servers escape
+// Prose this way (the JSON server's schema descriptions), so the card would otherwise show stray
+// Backslashes. A `\` before anything else is a literal backslash and is left as-is. This runs on the
+// Whole line and does not exempt inline code spans (CommonMark keeps those verbatim): the card
+// Renders prose as plain text with no inline-markdown parsing, so there is no code span to protect.
+function unescapeMarkdown(line: string) {
+  return line.replaceAll(/\\(?<char>[!-/:-@[\\\]^_`{-~])/g, "$<char>");
+}
+
 // Split a markdown string into ordered code-fence and prose segments. A line whose
 // First non-space is ``` toggles code mode; the opening fence's info string is the
-// Code language, and the fence lines themselves are dropped.
+// Code language, and the fence lines themselves are dropped. Prose is unescaped as markdown;
+// Code fences stay verbatim (their backslashes are source, not escapes).
 function markdownSegments(text: string): HoverSegment[] {
   const segments: HoverSegment[] = [];
   let prose: string[] = [];
   let code: string[] | undefined;
   let lang: string | undefined;
   const flushProse = () => {
-    const lines = trimBlankEdges(prose);
+    const lines = trimBlankEdges(prose).map(unescapeMarkdown);
     if (lines.length > 0) {
       segments.push({ kind: "prose", lines });
     }

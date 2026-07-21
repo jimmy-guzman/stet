@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Exit, Option, Queue, Stream } from "effect";
+import { Effect, Exit, Fiber, Option, Queue, Ref, Stream } from "effect";
 import type { Cause } from "effect";
+import { adjust, layer as testClockLayer } from "effect/testing/TestClock";
 
 import { isJsonRpcNotification, isJsonRpcRequest, isJsonRpcResponse } from "@/diagnostics/jsonrpc";
 import type { JsonRpcMessage } from "@/diagnostics/jsonrpc";
@@ -55,6 +56,32 @@ function withPeer<A, E>(
         });
       }),
     ),
+  );
+}
+
+// Same fake peer, but on a virtual clock so a test drives the project-load grace with `adjust`
+// Instead of waiting 2 real seconds. The transport's grace sleep reads the same clock `adjust`
+// Moves, so it is deterministic and instant.
+function withClockPeer<A, E>(run: (peer: Peer) => Effect.Effect<A, E>) {
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* fakePeer() {
+        const inbound = yield* Queue.make<unknown, Cause.Done>();
+        const sent = yield* Queue.make<JsonRpcMessage, Cause.Done>();
+        const connection = yield* makeTransport(
+          { inbound, send: (message) => Queue.offer(sent, message).pipe(Effect.asVoid) },
+          REPO,
+          undefined,
+          undefined,
+        );
+        return yield* run({
+          close: Queue.end(inbound).pipe(Effect.asVoid),
+          connection,
+          reply: (message) => Queue.offer(inbound, message).pipe(Effect.asVoid),
+          sent,
+        });
+      }),
+    ).pipe(Effect.provide(testClockLayer())),
   );
 }
 
@@ -267,6 +294,61 @@ test("whenProjectLoaded resolves when the connection closes", async () => {
     ),
   );
   expect(phase).toBe("loaded");
+});
+
+test("whenProjectLoaded resolves after the grace when the server announces no progress", async () => {
+  const result = await withClockPeer(({ connection }) =>
+    Effect.gen(function* scenario() {
+      const done = yield* Ref.make(false);
+      const fiber = yield* Effect.forkChild(
+        connection.whenProjectLoaded.pipe(Effect.andThen(Ref.set(done, true))),
+      );
+      // Partway through the 2s grace: no progress announced, so the wait is still parked.
+      yield* adjust("1 second");
+      const midway = yield* Ref.get(done);
+      // Past the grace now: a silent server latches "loaded" and the wait resolves.
+      yield* adjust("1500 millis");
+      yield* Fiber.await(fiber);
+      const after = yield* Ref.get(done);
+      // The negative result stuck: a second wait resolves without any further clock advance.
+      const second = yield* connection.whenProjectLoaded.pipe(Effect.as("immediate"));
+      return { after, midway, second };
+    }),
+  );
+  expect(result).toEqual({ after: true, midway: false, second: "immediate" });
+});
+
+test("an announced load waits for its end, not the grace", async () => {
+  const result = await withClockPeer(({ connection, reply, sent }) =>
+    Effect.gen(function* scenario() {
+      const done = yield* Ref.make(false);
+      const fiber = yield* Effect.forkChild(
+        connection.whenProjectLoaded.pipe(Effect.andThen(Ref.set(done, true))),
+      );
+      yield* adjust("1 second");
+      // The server creates a progress token mid-grace, then does not finish loading.
+      yield* reply({
+        id: 1,
+        jsonrpc: "2.0",
+        method: "window/workDoneProgress/create",
+        params: { token: "t" },
+      });
+      // The router's reply to that request proves it processed the announcement.
+      yield* Queue.take(sent);
+      // Long past the grace: it must not resolve on the timer, since a load was announced.
+      yield* adjust("30 seconds");
+      const afterGrace = yield* Ref.get(done);
+      yield* reply({
+        jsonrpc: "2.0",
+        method: "$/progress",
+        params: { token: "t", value: { kind: "end" } },
+      });
+      yield* Fiber.await(fiber);
+      const afterEnd = yield* Ref.get(done);
+      return { afterEnd, afterGrace };
+    }),
+  );
+  expect(result).toEqual({ afterEnd: true, afterGrace: false });
 });
 
 test("a closed connection fails an in-flight request instead of hanging", async () => {

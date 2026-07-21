@@ -113,6 +113,42 @@ test("parseHover keeps a multi-line code block and a bare fence has no language"
   ]);
 });
 
+test("parseHover unescapes markdown backslash escapes in prose", () => {
+  // The JSON server's schema descriptions arrive escaped like this.
+  const value = String.raw`The name of the package\. One or more space\-separated descriptors\.`;
+  expect(parseHover({ contents: { kind: "markdown", value } })).toEqual([
+    { kind: "prose", lines: ["The name of the package. One or more space-separated descriptors."] },
+  ]);
+});
+
+test("parseHover leaves code-fence backslashes verbatim", () => {
+  const markdown = "```typescript\nconst re = /a\\.b/\n```\n\nMatches `a\\.b`\\.";
+  expect(parseHover({ contents: { kind: "markdown", value: markdown } })).toEqual([
+    { kind: "code", lang: "typescript", lines: [String.raw`const re = /a\.b/`] },
+    { kind: "prose", lines: ["Matches `a.b`."] },
+  ]);
+});
+
+test("parseHover leaves a literal backslash before a non-punctuation character", () => {
+  const value = String.raw`a path C:\Users and \n`;
+  expect(parseHover({ contents: { kind: "markdown", value } })).toEqual([
+    { kind: "prose", lines: [String.raw`a path C:\Users and \n`] },
+  ]);
+});
+
+test("parseHover does not unescape a plaintext MarkupContent", () => {
+  // Plaintext is not markdown, so its backslashes are literal content.
+  expect(parseHover({ contents: { kind: "plaintext", value: String.raw`escaped\. dot` } })).toEqual(
+    [{ kind: "prose", lines: [String.raw`escaped\. dot`] }],
+  );
+});
+
+test("parseHover yields nothing for an empty-string reply", () => {
+  // The JSON server answers `{ contents: [""] }` when the caret is on a value the schema does not
+  // Describe (a dependency name), which must read as "no hover info", not an empty card.
+  expect(parseHover({ contents: [""] })).toEqual([]);
+});
+
 // A DocumentSymbol carries a whole-declaration `range` and a name-only `selectionRange`; the
 // Normalizer reads the name position, so give the two different starts to prove it picks the latter.
 const documentSymbol = (

@@ -808,7 +808,7 @@ test("warmHold pre-loads the project then closes the doc, holding the server unt
     const log: Recorded[] = [];
     let acquired = 0;
     let released = 0;
-    const ts = handle(["definition"], () => Effect.succeed(null), log);
+    const ts = handle(["definition", "hover"], () => Effect.succeed(null), log);
     // An acquire that registers a scope finalizer, so releasing the pool reference is observable.
     const servers = Layer.succeed(LanguageServers)({
       acquire: () =>
@@ -846,6 +846,39 @@ test("warmHold pre-loads the project then closes the doc, holding the server unt
         // Interrupting the fiber closes the caller's scope and releases the pooled server.
         yield* Fiber.interrupt(fiber);
         expect(released).toBe(1);
+      }).pipe(Effect.timeout("5 seconds")),
+    );
+  });
+});
+
+test("warmHold warms a server that advertises only hover", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    // A hover-only server, the JSON server's shape: it advertises no definition. Probing on
+    // Definition (the old behavior) would never warm it, so its first hover paid a cold spawn.
+    const hoverOnly = handle(["hover"], () => Effect.succeed(null), log);
+    const servers = Layer.succeed(LanguageServers)({
+      acquire: () => Effect.succeed(hoverOnly),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
+    });
+
+    await Effect.runPromise(
+      Effect.gen(function* warmHoldTest() {
+        const fiber = yield* Effect.forkChild(
+          Effect.scoped(
+            Intel.pipe(Effect.flatMap((intel) => intel.warmHold(dir, "src/a.ts"))),
+          ).pipe(Effect.provide(IntelLive.pipe(Layer.provide(servers)))),
+        );
+        // The pre-load opening and closing the document proves the hover-only server was warmed.
+        while (!log.some((entry) => entry.method === "textDocument/didClose")) {
+          yield* Effect.sleep("1 milli");
+        }
+        expect(log.map((entry) => entry.method)).toEqual([
+          "textDocument/didOpen",
+          "textDocument/didClose",
+        ]);
+        yield* Fiber.interrupt(fiber);
       }).pipe(Effect.timeout("5 seconds")),
     );
   });

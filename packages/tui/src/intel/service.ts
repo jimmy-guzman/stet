@@ -434,7 +434,11 @@ export const IntelLive = Layer.effect(
       warmHold: (repoRoot, path) => {
         const hold = (attempt: number): Effect.Effect<never, never, Scope.Scope> =>
           Effect.gen(function* warm() {
-            const handle = yield* firstCapableServer(repoRoot, path, "definition");
+            // Probe on `hover`, the one capability every intel-capable server provides: a
+            // Hover-only server (the JSON server has no definition/references) would otherwise never
+            // Warm, so its first hover paid a cold spawn plus the one-time schema fetch. The
+            // Selection order is unchanged for servers that provide both.
+            const handle = yield* firstCapableServer(repoRoot, path, "hover");
             if (handle === undefined) {
               // No intel server yet: it may still be installing on first launch, or a transient
               // Acquire miss, so retry with backoff rather than parking immediately. But a genuinely

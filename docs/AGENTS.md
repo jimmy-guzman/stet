@@ -30,17 +30,17 @@ The site deploys from `main` on every push while the CLI release is gated to `pa
 
 ### Keeping docs in sync with code
 
-The site is hand-written and drifts from the TUI unless two rules hold. The `GENERATED-KEYS` region is the proof: the one fact generated from code is the one fact that never drifted.
+The site is hand-written and drifts from the TUI unless two rules hold. The `GENERATED-KEYS` region shows the alternative: `bun run gen:keys` regenerates it from the TUI's `src/help/keys.ts`, and `docs:check` runs `gen:keys --check`, which fails when the region no longer matches its source.
 
 - **One owner per fact.** A fact that can be enumerated from code lives on one page; every other page links to that owner instead of restating it. Re-enumerating is how copies drift, and it already happened: the language matrix carried Rust and Go but never Python until an audit caught it.
 - **Update the owner when its code changes.** A change to a `Driven by` module below must update the page that owns the fact. Nothing enforces this beyond `gen:keys --check`, so it is a review-time responsibility, named in the repo-wide docs rule in `packages/tui/AGENTS.md`.
 
-| Fact                                                                 | Owner page                                     | Driven by                                                          |
-| -------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ |
-| Language and diagnostics matrix, per-language detail                 | `reference/languages.mdx`                      | `src/diagnostics/servers.ts`, `languages.ts`, `when.ts`            |
-| Config keys, environment variables, editor / theme / schema settings | `reference/configuration.mdx`                  | `src/config/schema.ts`, `src/editor/reference.ts`                  |
-| Keybindings                                                          | `reference/keybindings.mdx` (`GENERATED-KEYS`) | `src/help/keys.ts`, `src/keys/actions.ts`, then `bun run gen:keys` |
-| Install, usage, flags, requirements                                  | `index.mdx`                                    | `src/cli.ts`                                                       |
+| Fact                                                                 | Owner page                                     | Driven by                                                                                                                      |
+| -------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Language and diagnostics matrix, per-language detail                 | `docs/content/docs/reference/languages.mdx`    | `packages/tui/src/file-support/builtins.ts`, `packages/tui/src/diagnostics/servers.ts`, `packages/tui/src/diagnostics/when.ts` |
+| Config keys, environment variables, editor / theme / schema settings | `reference/configuration.mdx`                  | `src/config/schema.ts`, `src/editor/reference.ts`                                                                              |
+| Keybindings                                                          | `reference/keybindings.mdx` (`GENERATED-KEYS`) | `src/help/keys.ts`, `src/keys/actions.ts`, then `bun run gen:keys`                                                             |
+| Install, usage, flags, requirements                                  | `index.mdx`                                    | `src/cli.ts`                                                                                                                   |
 
 ### Coverage
 

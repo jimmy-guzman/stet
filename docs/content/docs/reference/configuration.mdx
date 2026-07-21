@@ -102,11 +102,15 @@ Without a config value, the two keys fall back differently:
   `$EDITOR`, following the convention that `$VISUAL` names a GUI editor where
   `$EDITOR` names a terminal one. If nothing is configured, `o` does nothing.
 
-A bare editor name with no `{file}` is expanded to a known template (`nvim`
-becomes `nvim +{line} {file}`, `code` becomes `code {repo} --goto {file}:{line}`,
-and so on), so `code`, `cursor`, `zed`, and `idea` each open a workspace without
-a template. Templates are split on whitespace, so an editor binary path with
-spaces is not supported.
+A bare editor name with no `{file}` is expanded to a known template: `nvim`
+becomes `nvim +{line} {file}`, `code` becomes `code {repo} --goto {file}:{line}`.
+The recognized names are `code`, `cursor`, `emacs`, `helix`, `hx`, `idea`, `kak`,
+`micro`, `nano`, `nvim`, `subl`, `vi`, `vim`, and `zed`; the GUI editors among
+them (`code`, `cursor`, `idea`, `zed`) carry `{repo}` and open a workspace, the
+rest a terminal `{line}`/`{file}`. An unrecognized bare name gets `+{line} {file}`
+appended, and a value that already contains `{file}` is used verbatim as a full
+template. Templates are split on whitespace, so an editor binary path with spaces
+is not supported.
 
 The `O` key opens the current file in your OS default app (`open` on macOS,
 `xdg-open` on Linux). It uses the system handler, so it needs no template or

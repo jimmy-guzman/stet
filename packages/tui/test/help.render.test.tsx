@@ -117,6 +117,8 @@ describe("help overlay", () => {
       );
       // The view swapped: the keybinding descriptions are gone and the marks are explained.
       expect(marks).not.toContain("switch to another git worktree");
+      // The active view is bracketed (a NO_COLOR-safe cue), not just brightened.
+      expect(marks).toContain("[marks]");
       expect(marks).toContain("modified");
       expect(marks).toContain("staged and unstaged");
       expect(marks).toContain("committed this session");

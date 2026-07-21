@@ -52,7 +52,12 @@ const PROVENANCE_ORDER = [
 ] as const satisfies readonly Provenance[];
 
 const SEVERITY_ORDER = ["error", "warning", "info"] as const;
-const CHECK_ORDER = ["pending", "failed", "clean", "unavailable"] as const;
+const CHECK_ORDER = [
+  "pending",
+  "failed",
+  "clean",
+  "unavailable",
+] as const satisfies readonly (keyof typeof CHECK_BADGES)[];
 
 /**
  * The `?` overlay's marks view, the counterpart to `keyHelpGroups()`. Every glyph is read from the

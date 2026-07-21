@@ -109,16 +109,17 @@ export function HelpDialog() {
         backgroundColor={theme.colors.surface.panel}
       >
         <box flexDirection="row">
+          {/* The active view is bracketed as well as brightened, so it reads under NO_COLOR. */}
           <text
             fg={state.helpView() === "keys" ? theme.colors.text.strong : theme.colors.text.faint}
           >
-            keys
+            {state.helpView() === "keys" ? "[keys]" : "keys"}
           </text>
           <text fg={theme.colors.text.faint}>{" · "}</text>
           <text
             fg={state.helpView() === "marks" ? theme.colors.text.strong : theme.colors.text.faint}
           >
-            marks
+            {state.helpView() === "marks" ? "[marks]" : "marks"}
           </text>
         </box>
         <text fg={theme.colors.text.faint}>stet@{packageJson.version}</text>

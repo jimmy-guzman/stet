@@ -20,13 +20,39 @@ The site deploys from `main` on every push while the CLI release is gated to `pa
 
 ### Editorial standards
 
-- Treat the TUI's `README.md` as the user-facing contract, `SPEC.md` and `AGENTS.md` as its invariants, and the implementation or observed CLI output as the source for exact details. Do not treat existing docs copy as proof that a behavioral claim is current.
+- Treat the repo-root `README.md` as stet's user-facing contract, `packages/tui/SPEC.md` and `packages/tui/AGENTS.md` as its invariants, and the implementation or observed CLI output as the source for exact details. Do not treat existing docs copy as proof that a behavioral claim is current.
 - Use `TUI` without expanding it. The docs are for readers who already know the acronym.
 - Begin a getting-started flow with a concise introduction that defines the product and maps its main capabilities. Follow it with installation, a verification step, and the first run. Keep reference pages organized around lookup rather than forcing this order everywhere.
 - After a command whose success the reader must confirm, show the verification command or expected result. Use stable placeholders such as `X.Y.Z` instead of committing a release number that will age.
 - Keep control-heavy instructions scannable. Use short paragraphs for state and cause, and a compact control/action table when a paragraph would enumerate several keys or fields.
 - Make headings match the section's job. Use "Introduction" for product orientation, action-oriented headings for workflows, and "inspect" only for content that describes inspection.
 - Prefer direct, active, specific prose. Remove promotional adjectives, metaphors that replace behavior, formulaic negative lists, and claims such as "works out of the box" or "sensible defaults" that do not name what happens.
+
+### Keeping docs in sync with code
+
+The site is hand-written and drifts from the TUI unless two rules hold. The `GENERATED-KEYS` region is the proof: the one fact generated from code is the one fact that never drifted.
+
+- **One owner per fact.** A fact that can be enumerated from code lives on one page; every other page links to that owner instead of restating it. Re-enumerating is how copies drift, and it already happened: the language matrix carried Rust and Go but never Python until an audit caught it.
+- **Update the owner when its code changes.** A change to a `Driven by` module below must update the page that owns the fact. Nothing enforces this beyond `gen:keys --check`, so it is a review-time responsibility, named in the repo-wide docs rule in `packages/tui/AGENTS.md`.
+
+| Fact                                                                 | Owner page                                     | Driven by                                                          |
+| -------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ |
+| Language and diagnostics matrix, per-language detail                 | `reference/languages.mdx`                      | `src/diagnostics/servers.ts`, `languages.ts`, `when.ts`            |
+| Config keys, environment variables, editor / theme / schema settings | `reference/configuration.mdx`                  | `src/config/schema.ts`, `src/editor/reference.ts`                  |
+| Keybindings                                                          | `reference/keybindings.mdx` (`GENERATED-KEYS`) | `src/help/keys.ts`, `src/keys/actions.ts`, then `bun run gen:keys` |
+| Install, usage, flags, requirements                                  | `index.mdx`                                    | `src/cli.ts`                                                       |
+
+### Coverage
+
+Pages that exist and are maintained, and gaps an audit identified but that are not yet written. Check a box when a page lands; add a row when a gap is filled or found.
+
+- [x] Getting started (`index.mdx`)
+- [x] Guides: reading files & diffs, search & navigation, code intelligence, scopes & worktrees, themes
+- [x] Reference: keybindings, configuration, languages
+- [ ] Guide: the interface, what the reader is looking at (tree change marks `M`/`A`/`D`/`R`/`U`, diagnostic badges, the status bar tiers, the header, the viewer gutter)
+- [ ] Guide: working alongside an agent (the loop, live refresh and the safety poll, the non-goals contract)
+- [ ] Reference: troubleshooting (`R` vs `r`, server downloads, gopls, Nerd Fonts, clipboard, config parse errors)
+- [ ] Under-documented on existing pages: `session` scope's fixed base, the search pathspec grammar, large-file truncation, the changes-only filter
 
 ## Markdown for agents
 

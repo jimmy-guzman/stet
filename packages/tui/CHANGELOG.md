@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.9.0...stet-v0.9.1) (2026-07-21)
+
+
+### Features
+
+* **help:** ✨ explain the tree & gutter marks in the ? overlay ([#331](https://github.com/jimmy-guzman/stet/issues/331)) ([2514e6b](https://github.com/jimmy-guzman/stet/commit/2514e6bb9ba9228b200d2bedb5a2517b8178165c))
+
+
+### Bug Fixes
+
+* **diagnostics:** 🐛 unblock intel on servers with no load phase ([#329](https://github.com/jimmy-guzman/stet/issues/329)) ([085acf8](https://github.com/jimmy-guzman/stet/commit/085acf8f01fc86cf3cf87f314c79dbf7a99f85fa))
+
 ## [0.9.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.8.0...stet-v0.9.0) (2026-07-20)
 
 

@@ -39,27 +39,27 @@ here is optional and shown with its default:
   "sidebar": { "open": true, "changesOnly": false }, // "width" defaults to responsive
   "provenance": { "enabled": false }, // the per-line provenance rail
   "diagnostics": { "enabled": true, "download": true }, // LSP diagnostics
-  "intel": { "enabled": true }, // definitions, references, hover, symbols
+  "intel": { "enabled": true }, // language-server code intelligence
   "update": { "check": true }, // background release check at launch
   "search": { "regex": false, "caseSensitive": false, "scope": "changed" },
 }
 ```
 
-| Key                    | Default     | Effect                                                                                                     |
-| ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |
-| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                       |
-| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`x` toggles per session, `--wrap` forces on for a run)                      |
-| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                           |
-| `sidebar.width`        | responsive  | fixed sidebar width in cells, clamped to the terminal (`[` / `]` adjust, `\` resets)                       |
-| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                            |
-| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                           |
-| `diagnostics.enabled`  | `true`      | `false` runs no language servers for checks; the problems panel reads `diagnostics disabled`               |
-| `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run) |
-| `intel.enabled`        | `true`      | `false` turns the caret code-intel pulls (definition, references, hover, symbols, hierarchy) into a notice |
-| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                               |
-| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                     |
-| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                    |
-| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                          |
+| Key                    | Default     | Effect                                                                                                                     |
+| ---------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                                       |
+| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there)                                      |
+| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                                           |
+| `sidebar.width`        | responsive  | fixed sidebar width in cells, clamped to the terminal (`[` / `]` adjust, `\` resets)                                       |
+| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                                            |
+| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                                           |
+| `diagnostics.enabled`  | `true`      | `false` runs no language servers for checks; the problems panel reads `diagnostics disabled`                               |
+| `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run)                 |
+| `intel.enabled`        | `true`      | `false` turns the code-intel pulls (definition, references, implementations, hover, symbols, call hierarchy) into a notice |
+| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                                               |
+| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                                     |
+| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                                    |
+| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                                          |
 
 A CLI flag wins over its config key for the run it was passed on. `diagnostics.enabled` and
 `intel.enabled` are independent switches over the same language-server pool: turning diagnostics
@@ -82,11 +82,11 @@ literal flag. With no config file yet, `ctrl-s` creates one.
 ## Editor and IDE
 
 Use `editor` and `ide` to set persistent command templates for the `e` key
-(terminal editor) and the `o` key (GUI / IDE). Both use `{file}` and `{line}` as
-placeholders; `{line}` is omitted automatically when no cursor line is
-available. The `ide` template also takes `{repo}` (the repo root), which passes
-the folder to the IDE so it opens the file as a workspace instead of a bare
-single-file window.
+(terminal editor) and the `o` key (GUI / IDE). Both accept `{file}`, `{line}`,
+and `{repo}` (the repo root); `{line}` is omitted automatically when no cursor
+line is available. `{repo}` matters most in an `ide` template, where passing the
+folder makes the IDE open the file as a workspace instead of a bare single-file
+window.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -95,13 +95,18 @@ single-file window.
 }
 ```
 
-Without a config value, each key falls back to `STET_EDITOR` / `STET_IDE`, then
-`$EDITOR` / `$VISUAL`, then `vim` (editor only); `o` does nothing if nothing is
-configured. A bare editor name with no `{file}` is expanded to a known template
-(`nvim` becomes `nvim +{line} {file}`, `code` becomes `code {repo} --goto
-{file}:{line}`, and so on), so the known GUI IDEs (`code`, `cursor`, `zed`,
-`idea`) open a workspace out of the box. Templates are split on whitespace, so an
-editor binary path with spaces is not supported.
+Without a config value, the two keys fall back differently:
+
+- `editor` falls back to `STET_EDITOR`, then `$EDITOR` or `$VISUAL`, then `vim`.
+- `ide` falls back to `STET_IDE`, then `$VISUAL` but only when it differs from
+  `$EDITOR`, following the convention that `$VISUAL` names a GUI editor where
+  `$EDITOR` names a terminal one. If nothing is configured, `o` does nothing.
+
+A bare editor name with no `{file}` is expanded to a known template (`nvim`
+becomes `nvim +{line} {file}`, `code` becomes `code {repo} --goto {file}:{line}`,
+and so on), so `code`, `cursor`, `zed`, and `idea` each open a workspace without
+a template. Templates are split on whitespace, so an editor binary path with
+spaces is not supported.
 
 The `O` key opens the current file in your OS default app (`open` on macOS,
 `xdg-open` on Linux). It uses the system handler, so it needs no template or
@@ -251,9 +256,11 @@ A server accepts `command`, `discovery`, `when`, `initializationOptions`, `setti
 `{repoRoot}` and `{repoUri}` placeholders in initialization and settings string values are replaced
 per repository. Capability hints may contain `definition`, `references`, `hover`, `documentSymbol`,
 `callHierarchy`, `implementation`, and `pullDiagnostics`; the server's initialize reply remains the
-authoritative check. Omitting `capabilities` defaults it to the full code-intel set. The hint only
-routes code intelligence; it never gates diagnostics, which run for any server its language profile
-selects, and the server's initialize reply decides whether it answers pull diagnostics or only pushes.
+authoritative check. Omitting `capabilities` on a new server defaults it to the full code-intel set;
+omitting it when overriding a built-in inherits that server's existing capabilities instead, so a
+built-in that answers no code intel keeps answering none. The hint only routes code intelligence; it
+never gates diagnostics, which run for any server its language profile selects, and the server's
+initialize reply decides whether it answers pull diagnostics or only pushes.
 
 `when` is declarative data, never a shell command. It accepts a repo-relative path, a manifest key,
 or a Python dependency declaration. Relative paths may include parent-directory segments; absolute
@@ -336,6 +343,10 @@ the repo is read locally and works offline; an `http(s)` URL is fetched over the
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `STET_EDITOR`          | fallback command template for the `e` key                                                                         |
 | `STET_IDE`             | fallback command template for the `o` key                                                                         |
+| `EDITOR` / `VISUAL`    | consulted after the `STET_*` variables; the two keys read them differently, see [Editor and IDE](#editor-and-ide) |
 | `STET_NO_LSP_DOWNLOAD` | do not auto-download a missing language server (same as `--no-lsp-download`)                                      |
+| `VIRTUAL_ENV`          | the active virtualenv, checked first when a server uses `"python"` discovery                                      |
 | `NO_COLOR`             | any non-empty value starts stet on the monochrome `mono-dark` / `mono-light` themes instead of the configured one |
+| `FORCE_COLOR`          | overrides `NO_COLOR`; `0` or `false` force monochrome, any other value keeps the configured theme                 |
 | `XDG_CONFIG_HOME`      | base directory for the config file                                                                                |
+| `XDG_CACHE_HOME`       | base directory for the language-server cache (`$XDG_CACHE_HOME/stet/lsp`, otherwise `~/.cache/stet/lsp`)          |

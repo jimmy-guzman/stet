@@ -1,10 +1,11 @@
 ---
 title: Keybindings
-description: Every stet shortcut, grouped by what it acts on. Press ? in the app for the same list.
+description: Every rebindable stet shortcut, grouped by what it acts on. Press ? in the app for the same list.
 ---
 
-The keyboard drives everything in stet. Press `?` at any time to see the full
-list inside the app.
+The keyboard drives everything in stet. Press `?` at any time to see this list
+inside the app. Overlays (pickers, menus, the quit confirm) carry their own keys
+in a hint row along their bottom edge, so those are not repeated here.
 
 {/* GENERATED-KEYS: edit src/help/keys.ts then run bun run gen:keys */}
 
@@ -103,15 +104,27 @@ to a combo, a list of combos, or `false` to unbind it.
 ```
 
 A combo is optional `ctrl`/`shift` modifiers joined by `+` or `-`, then a key:
-a letter, a symbol (`?`, `[`), an arrow (`↑` or `up`), `tab`, `enter`, or an
-F-key. A single uppercase letter means shift (`"G"` is `"shift+g"`), and
-modifiers must match exactly, so binding `"s"` never fires on `ctrl+s`. An
-unknown id or a combo that does not parse reports a notice at startup and
-keeps the default. A combo bound to two actions also reports a notice, but
-both bindings stay registered and the action listed first in the tables above
-fires (a global binding beats a pane one). `?` and `--help` always show the
-bindings actually in effect. Keys inside overlays (pickers, menus, the quit
-confirm, the search pane) and `ctrl+c` are fixed.
+a letter, a symbol (`?`, `[`), an arrow (`↑` or `up`), an F-key, or one of
+`tab`, `enter`, `return`, `esc`, `space`, `backspace`, `delete`, `insert`,
+`home`, `end`, `pageup`, `pagedown`. A single uppercase letter means shift
+(`"G"` is `"shift+g"`). Modifiers match exactly, so binding `"s"` never fires on
+`ctrl+s`; the one exception is shift on a symbol key, which is ignored.
+
+The tables list each action's primary combo. Several movement actions keep an
+arrow as a second default: `↑` / `↓` beside `j` / `k`, and `←` / `→` beside
+`h` / `l`.
+
+An unknown id, or a combo that does not parse, keeps the default. Binding one
+combo to two actions leaves both registered, and which of them fires follows
+stet's internal dispatch order rather than the order of these tables, so unbind
+the one you do not want with `false` rather than relying on the winner. Startup
+surfaces only the first configuration problem it finds, so a keybinding issue
+can sit behind an unrelated one; `?` and `--help` always show the bindings
+actually in effect.
+
+Keys inside overlays (pickers, menus, the quit confirm, the search pane) and
+`ctrl+c` are fixed. A committed find also holds `n` and `N` to cycle its matches
+until `esc` clears it, ahead of the global `n`.
 
 ## Mouse
 

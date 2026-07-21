@@ -63,11 +63,8 @@ structure. Unlike go-to-definition it needs no caret, only an open file.
 ## Problems
 
 Diagnostics from the repo's language servers stream into a problems panel as
-checks finish: type errors from TypeScript, Rust findings from rust-analyzer
-and cargo check, Go type and vet findings from gopls, lint findings from
-oxlint, Biome where it is configured, and schema-aware JSON and YAML
-validation. Each is tagged with its source and
-pinpointed to its `line:col`. Press `p` to open the panel and `enter` to jump
+checks finish. Each finding is tagged with its source and pinpointed to its
+`line:col`. Press `p` to open the panel and `enter` to jump
 to a finding. The [languages reference](/docs/reference/languages) lists what
 each language gets and how to add your own.
 

@@ -607,6 +607,7 @@ function createState() {
     new Map(),
   );
   const [helpDialogOpen, setHelpDialogOpen] = tracked(false);
+  const [helpView, setHelpView] = tracked<"keys" | "marks">("keys");
   const [quitConfirmOpen, setQuitConfirmOpen] = tracked(false);
   const [themeComboboxOpen, setThemeComboboxOpen] = tracked(false);
   const [themeComboboxIndex, setThemeComboboxIndex] = tracked(0);
@@ -4483,6 +4484,7 @@ function createState() {
     goForward,
     goToDefinition,
     helpDialogOpen,
+    helpView,
     iconsEnabled,
     ideTemplate,
     intelEnabled,
@@ -4599,6 +4601,7 @@ function createState() {
     setFullContentPaths,
     setGitModel,
     setHelpDialogOpen,
+    setHelpView,
     setIconsEnabled,
     setIdeFlag,
     setIdeTemplate,

@@ -1,17 +1,17 @@
 import { createMemo, For, Show } from "solid-js";
 
 import { keyHelpGroups } from "@/help/keys";
+import { legendGroups } from "@/help/legend";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
 
 import packageJson from "../../package.json";
 
-// Minimum width of the combo column box; the action text wraps in whatever remains
-// Of the overlay row after it. A reserved-width box (not string padding) keeps the
-// Action column aligned even on rows whose description wraps to a second line. The
-// Column widens to the longest rendered combo (a rebind can exceed `Shift+F12`), or
-// The combo itself wraps and the height calc (which counts only description wraps)
-// Undercounts and clips a row.
+// Minimum width of the left column box (the key combo or, on the marks view, the glyph); the
+// Description wraps in whatever remains of the row. A reserved-width box (not string padding) keeps
+// The right column aligned even on rows whose description wraps to a second line. It widens to the
+// Longest rendered left cell (a rebind can exceed `Shift+F12`), or that cell wraps and the height
+// Calc (which counts only description wraps) undercounts and clips a row.
 const COMBO_WIDTH = 11;
 
 // Word-wrapped line count of `text` at display `width` (matches OpenTUI's word
@@ -39,27 +39,49 @@ function wrappedLineCount(text: string, width: number) {
 
 export function HelpDialog() {
   const theme = useTheme();
-  // The registry is fixed after startup, so the groups resolve once per mount
-  // (the dialog mounts on open, so a session that never rebinds pays nothing).
-  const groups = keyHelpGroups();
-  const comboWidth = Math.max(
-    COMBO_WIDTH,
-    ...groups.flatMap((group) => group.entries.map((entry) => Bun.stringWidth(entry.combo) + 2)),
+  // Both views reduce to one row shape: a left cell (key combo or colored glyph) and a description.
+  // The registry and the mark set are both fixed, so this recomputes only on a view toggle or a
+  // Live theme flip.
+  const groups = createMemo(() =>
+    state.helpView() === "marks"
+      ? legendGroups().map((group) => ({
+          entries: group.entries.map((entry) => ({
+            left: entry.glyph,
+            leftColor: entry.color?.(theme.colors) ?? theme.colors.text.strong,
+            right: entry.meaning,
+          })),
+          heading: group.heading,
+        }))
+      : keyHelpGroups().map((group) => ({
+          entries: group.entries.map((entry) => ({
+            left: entry.combo,
+            leftColor: theme.colors.text.strong,
+            right: entry.description,
+          })),
+          heading: group.heading,
+        })),
   );
-  // Size the list by its rendered height (descriptions can wrap to two lines), so
-  // The overlay shows every shortcut without scrolling whenever the terminal has
-  // The room; sizing by entry count alone clipped wrapped rows off the bottom.
+  // A glyph needs only a few cells; a combo column holds `Shift+F12` and wider rebinds.
+  const leftWidth = createMemo(() =>
+    Math.max(
+      state.helpView() === "keys" ? COMBO_WIDTH : 3,
+      ...groups().flatMap((group) => group.entries.map((entry) => Bun.stringWidth(entry.left) + 2)),
+    ),
+  );
+  // Size the list by its rendered height (descriptions can wrap to two lines), so the overlay shows
+  // Every row without scrolling whenever the terminal has the room; sizing by entry count alone
+  // Clipped wrapped rows off the bottom.
   const listHeight = createMemo(() => {
-    // Row interior after the border (2), scrollbar gutter (1), padding (2), and
-    // The combo column — slightly conservative so the list never clips a row.
-    const actionWidth = state.overlayWidth() - 5 - comboWidth;
-    const rendered = groups.reduce(
+    // Row interior after the border (2), scrollbar gutter (1), padding (2), and the left column,
+    // Slightly conservative so the list never clips a row.
+    const rightWidth = state.overlayWidth() - 5 - leftWidth();
+    const rendered = groups().reduce(
       (sum, group, index) =>
         // Heading row (1) + a one-line spacer before every group but the first.
         sum +
         (index === 0 ? 1 : 2) +
         group.entries.reduce(
-          (lines, entry) => lines + wrappedLineCount(entry.description, actionWidth),
+          (lines, entry) => lines + wrappedLineCount(entry.right, rightWidth),
           0,
         ),
       0,
@@ -86,7 +108,20 @@ export function HelpDialog() {
         paddingRight={1}
         backgroundColor={theme.colors.surface.panel}
       >
-        <text fg={theme.colors.text.strong}>keyboard shortcuts</text>
+        <box flexDirection="row">
+          {/* The active view is bracketed as well as brightened, so it reads under NO_COLOR. */}
+          <text
+            fg={state.helpView() === "keys" ? theme.colors.text.strong : theme.colors.text.faint}
+          >
+            {state.helpView() === "keys" ? "[keys]" : "keys"}
+          </text>
+          <text fg={theme.colors.text.faint}>{" · "}</text>
+          <text
+            fg={state.helpView() === "marks" ? theme.colors.text.strong : theme.colors.text.faint}
+          >
+            {state.helpView() === "marks" ? "[marks]" : "marks"}
+          </text>
+        </box>
         <text fg={theme.colors.text.faint}>stet@{packageJson.version}</text>
       </box>
       <scrollbox
@@ -101,35 +136,29 @@ export function HelpDialog() {
           },
         }}
       >
-        <For each={groups}>
+        <For each={groups()}>
           {(group, index) => (
             <box width="100%" flexDirection="column">
               <Show when={index() > 0}>
                 <box height={1} backgroundColor={theme.colors.surface.panel} />
               </Show>
-              <box
-                id={`help-dialog-heading-${group.heading}`}
-                height={1}
-                paddingLeft={1}
-                backgroundColor={theme.colors.surface.panel}
-              >
+              <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
                 <text fg={theme.colors.text.muted}>{group.heading}</text>
               </box>
               <For each={group.entries}>
                 {(entry) => (
                   <box
-                    id={`help-dialog-${entry.combo}`}
                     width="100%"
                     flexDirection="row"
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={theme.colors.surface.panel}
                   >
-                    <box width={comboWidth} flexShrink={0}>
-                      <text fg={theme.colors.text.strong}>{entry.combo}</text>
+                    <box width={leftWidth()} flexShrink={0}>
+                      <text fg={entry.leftColor}>{entry.left}</text>
                     </box>
                     <box flexGrow={1}>
-                      <text fg={theme.colors.text.secondary}>{entry.description}</text>
+                      <text fg={theme.colors.text.secondary}>{entry.right}</text>
                     </box>
                   </box>
                 )}
@@ -139,7 +168,7 @@ export function HelpDialog() {
         </For>
       </scrollbox>
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
-        <text fg={theme.colors.text.muted}>esc close</text>
+        <text fg={theme.colors.text.muted}>esc close · tab switch</text>
       </box>
     </box>
   );

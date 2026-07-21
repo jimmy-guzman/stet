@@ -89,6 +89,8 @@ export function createKeyHandler(host: HostEffects) {
       if (state.helpDialogOpen()) {
         if (key.name === "escape" || key.name === "?" || key.name === "q") {
           state.setHelpDialogOpen(false);
+        } else if (key.name === "tab") {
+          state.setHelpView(state.helpView() === "keys" ? "marks" : "keys");
         }
         return;
       }
@@ -568,6 +570,7 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (pressed("help")) {
+        state.setHelpView("keys");
         state.setHelpDialogOpen(true);
         return;
       }

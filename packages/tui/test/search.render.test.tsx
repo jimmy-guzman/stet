@@ -232,11 +232,11 @@ describe("project content search", () => {
       // Results focus has no text input, so global keys still work: ? opens
       // The help overlay over the pane.
       mockInput.pressKey("?");
-      await settleUntil("help over search", (frame) => frame.includes("keyboard shortcuts"));
+      await settleUntil("help over search", (frame) => frame.includes("esc close · tab switch"));
       mockInput.pressEscape();
       await settleUntil(
         "help closed, pane intact",
-        (frame) => !frame.includes("keyboard shortcuts") && frame.includes("▸"),
+        (frame) => !frame.includes("esc close · tab switch") && frame.includes("▸"),
       );
     } finally {
       renderer.destroy();

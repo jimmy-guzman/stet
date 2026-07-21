@@ -90,4 +90,45 @@ describe("help overlay", () => {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("tab switches to the marks legend and back to the keys", async () => {
+    const repoRoot = createFixtureRepo("stet-marks-", { "src/a.ts": "export const a = 1\n" });
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 72,
+      width: 120,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
+
+      mockInput.pressKey("?");
+      await settleUntil("help keys view", (frame) =>
+        frame.includes("switch to another git worktree"),
+      );
+
+      // Settle on a meaning unique to the legend ("provenance rail" also rides the `a` keybinding
+      // Description, so it cannot tell the two views apart).
+      mockInput.pressTab();
+      const marks = await settleUntil("marks legend", (frame) =>
+        frame.includes("no server for this file"),
+      );
+      // The view swapped: the keybinding descriptions are gone and the marks are explained.
+      expect(marks).not.toContain("switch to another git worktree");
+      expect(marks).toContain("modified");
+      expect(marks).toContain("staged and unstaged");
+      expect(marks).toContain("committed this session");
+
+      mockInput.pressTab();
+      const back = await settleUntil("back to the keys", (frame) =>
+        frame.includes("switch to another git worktree"),
+      );
+      expect(back).not.toContain("no server for this file");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

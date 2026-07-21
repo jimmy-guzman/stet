@@ -6,7 +6,7 @@ import type { DirectoryNode, FileNode, FileTreeRow } from "@/git/tree";
 import { levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { useTheme } from "@/theme/context";
-import { kindLetter } from "@/ui-helpers";
+import { CHECK_BADGES, kindLetter } from "@/ui-helpers";
 import { folderIconModel } from "@/utils/file-icon";
 import { truncate, truncateName } from "@/utils/text";
 
@@ -153,8 +153,8 @@ function DirectoryRow(props: {
       </box>
       <box flexDirection="row">
         {summary()?.failed ? (
-          <text wrapMode="none" height={1} fg={theme.colors.severity.error}>
-            ⊗{" "}
+          <text wrapMode="none" height={1} fg={CHECK_BADGES.failed.color(theme.colors)}>
+            {CHECK_BADGES.failed.glyph}{" "}
           </text>
         ) : null}
         {(summary()?.errors ?? 0) > 0 ? (
@@ -179,8 +179,8 @@ function DirectoryRow(props: {
           >{`${levelGlyph("info")}${summary()?.info} `}</text>
         ) : null}
         {summary()?.pending ? (
-          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
-            …{" "}
+          <text wrapMode="none" height={1} fg={CHECK_BADGES.pending.color(theme.colors)}>
+            {CHECK_BADGES.pending.glyph}{" "}
           </text>
         ) : null}
         {summary() !== null &&
@@ -194,16 +194,16 @@ function DirectoryRow(props: {
           <text
             wrapMode="none"
             height={1}
-            fg={theme.colors.success}
-          >{`${levelGlyph("success")} `}</text>
+            fg={CHECK_BADGES.clean.color(theme.colors)}
+          >{`${CHECK_BADGES.clean.glyph} `}</text>
         ) : null}
         {summary()?.unavailable &&
         !summary()?.failed &&
         !summary()?.pending &&
         (summary()?.errors ?? 0) === 0 &&
         (summary()?.warnings ?? 0) === 0 ? (
-          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
-            ○{" "}
+          <text wrapMode="none" height={1} fg={CHECK_BADGES.unavailable.color(theme.colors)}>
+            {CHECK_BADGES.unavailable.glyph}{" "}
           </text>
         ) : null}
         {props.node.changedCount > 0 ? (
@@ -310,8 +310,8 @@ function FileRow(props: {
       </box>
       <box flexDirection="row">
         {summary().failed ? (
-          <text wrapMode="none" height={1} fg={theme.colors.severity.error}>
-            ⊗{" "}
+          <text wrapMode="none" height={1} fg={CHECK_BADGES.failed.color(theme.colors)}>
+            {CHECK_BADGES.failed.glyph}{" "}
           </text>
         ) : null}
         {summary().errors > 0 ? (
@@ -350,8 +350,8 @@ function FileRow(props: {
           <text
             wrapMode="none"
             height={1}
-            fg={theme.colors.success}
-          >{`${levelGlyph("success")} `}</text>
+            fg={CHECK_BADGES.clean.color(theme.colors)}
+          >{`${CHECK_BADGES.clean.glyph} `}</text>
         ) : null}
         {changed() !== undefined &&
         !pending() &&
@@ -359,8 +359,8 @@ function FileRow(props: {
         summary().unavailable &&
         summary().errors === 0 &&
         summary().warnings === 0 ? (
-          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
-            ○{" "}
+          <text wrapMode="none" height={1} fg={CHECK_BADGES.unavailable.color(theme.colors)}>
+            {CHECK_BADGES.unavailable.glyph}{" "}
           </text>
         ) : null}
         <Show when={changed()}>
@@ -373,8 +373,8 @@ function FileRow(props: {
           )}
         </Show>
         {pending() ? (
-          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
-            …{" "}
+          <text wrapMode="none" height={1} fg={CHECK_BADGES.pending.color(theme.colors)}>
+            {CHECK_BADGES.pending.glyph}{" "}
           </text>
         ) : null}
         <Show when={changed()}>

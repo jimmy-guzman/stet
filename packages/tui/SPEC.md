@@ -1,6 +1,6 @@
 # stet: implementation spec
 
-The README is the source of truth for what stet does, its keys, and its non-goals. This file holds the invariants behind those features, the contract the README doesn't state. Read it before changing tree construction, the viewer, recency, diagnostics, scopes, or worktree handling.
+The repo-root `README.md` is the source of truth for what stet does, its keys, and its non-goals. This file holds the invariants behind those features, the contract the README doesn't state. Read it before changing tree construction, the viewer, recency, diagnostics, scopes, or worktree handling.
 
 ## Architecture invariant
 

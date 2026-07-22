@@ -69,8 +69,8 @@ unconditional `{ "server": "name" }` or its own `when`.
 
 `.ts`, `.tsx`, `.js`, `.jsx`, and the `.mts`/`.cts`/`.mjs`/`.cjs` variants run
 through three servers: `typescript-language-server` reports type errors (label
-`typescript`), oxlint reports lint findings (label `oxc`), and Biome joins
-them (label `biome`) when the repo has a `biome.json` or `biome.jsonc`.
+`tsc`), oxlint reports lint findings (label `oxc`), and Biome joins them (label
+`biome`) when the repo has a `biome.json` or `biome.jsonc`.
 
 ### Rust
 
@@ -87,9 +87,9 @@ opted into it, basedpyright (label `basedpyright`) everywhere else, never both.
 So the warnings you see are the ones your CI gates on.
 
 A repo counts as a ty repo when it has a `ty.toml` or `.ty.toml`, a `[tool.ty]`
-table in `pyproject.toml`, or ty among its declared dependencies (a dependency
-group, an optional-dependencies extra, `[tool.uv] dev-dependencies`, or a
-Poetry dependency table). That
+table in `pyproject.toml`, or ty among its declared dependencies (`[project]`
+dependencies, a dependency group, an optional-dependencies extra, `[tool.uv]
+dev-dependencies`, or a Poetry dependency table). That
 rule is not private machinery: it is ty's `when` gate, and the one-checker rule
 is a `firstOf` group, both written in the exact grammar
 [your config uses](/docs/reference/configuration#configure-servers-and-selection), so you can

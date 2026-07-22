@@ -29,12 +29,12 @@ highlighted worktree reads out below the list.
 
 ![The worktree picker, worktrees ranked by how recently each was touched, each with its age, and the highlighted one's full path below the list](/screenshots/worktree-picker.png)
 
-Touched means anything an agent or git did there: an uncommitted edit, a commit,
-a checkout, a rebase. Uncommitted changes alone would not be enough, because a
-worktree would go quiet the moment an agent committed its work, which is exactly
-when it had been busiest.
+Touched means anything an agent or git did there, such as an uncommitted edit, a
+commit, a checkout, a rebase, or creating the worktree. Committing counts, so a
+worktree does not drop down the list the moment an agent finishes its work there.
 
-The age ranks how recently each worktree saw activity: it glows on one touched
-moments ago and cools as the work there gets older. It is a recency ranking, not
-a live presence check, so a warm age means work landed there recently, not that
-something is still running.
+Each age is tinted by how recently the worktree was touched, fading toward the
+background over five minutes of quiet. That window is longer than the 30 seconds
+a changed file stays marked, because an agent can pause for minutes and still be
+working. The age ranks recency, not live presence: a recent age means work landed
+there recently, not that something is running now.

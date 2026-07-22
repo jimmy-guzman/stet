@@ -27,13 +27,16 @@ The site deploys from `main` on every push while the CLI release is gated to `pa
 - Keep control-heavy instructions scannable. Use short paragraphs for state and cause, and a compact control/action table when a paragraph would enumerate several keys or fields.
 - Make headings match the section's job. Use "Introduction" for product orientation, action-oriented headings for workflows, and "inspect" only for content that describes inspection.
 - Prefer direct, active, specific prose. Remove promotional adjectives, metaphors that replace behavior, formulaic negative lists, and claims such as "works out of the box" or "sensible defaults" that do not name what happens.
+- Prefer a self-explaining interface over a doc. Before a page explains what the UI shows, ask whether the UI should say it itself: a legend, a label, an actionable empty or error state. A page earns its place for what the UI cannot say, the concepts, the workflow, and the why; it does not exist to translate glyphs the UI could label. The `?` marks legend is the pattern, it closed the interface guide the Coverage list once planned to write.
 
 ### Keeping docs in sync with code
 
-The site is hand-written and drifts from the TUI unless two rules hold. The `GENERATED-KEYS` region shows the alternative: `bun run gen:keys` regenerates it from the TUI's `src/help/keys.ts`, and `docs:check` runs `gen:keys --check`, which fails when the region no longer matches its source.
+The site is hand-written, so it drifts from the TUI unless it is kept honest. Prefer an enforced guard over a rule wherever a fact is enumerable from code: an enforced fact cannot drift, a rule relies on the next contributor remembering it. Two facts are enforced today, and both held where a hand-maintained copy did not. `bun run gen:keys` regenerates the keybindings region from the TUI's `src/help/keys.ts`, and `docs:check` runs `gen:keys --check`, which fails when the region no longer matches. The `?` marks legend reads each glyph from the function that draws it, and enum-keyed `Record`s in `packages/tui/src/help/legend.ts` make a new change kind, stage, or provenance tier a compile error until it earns a row.
+
+Where generating the fact is too heavy for a guard, such as the language matrix's prose cells, it stays hand-written under two rules:
 
 - **One owner per fact.** A fact that can be enumerated from code lives on one page; every other page links to that owner instead of restating it. Re-enumerating is how copies drift, and it already happened: the language matrix carried Rust and Go but never Python until an audit caught it.
-- **Update the owner when its code changes.** A change to a `Driven by` module below must update the page that owns the fact. Nothing enforces this beyond `gen:keys --check`, so it is a review-time responsibility, named in the repo-wide docs rule in `packages/tui/AGENTS.md`.
+- **Update the owner when its code changes.** A change to a `Driven by` module below must update the page that owns the fact. Nothing enforces this, so it is a review-time responsibility, named in the repo-wide docs rule in `packages/tui/AGENTS.md`.
 
 | Fact                                                                 | Owner page                                                       | Driven by                                                                                                                      |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -44,12 +47,13 @@ The site is hand-written and drifts from the TUI unless two rules hold. The `GEN
 
 ### Coverage
 
-Pages that exist and are maintained, and gaps an audit identified but that are not yet written. Check a box when a page lands; add a row when a gap is filled or found.
+Not every gap is a page. Per the self-explaining-interface standard above, a gap can be closed in the UI instead. What exists and is maintained, and the gaps an audit found; check a box when a gap is closed in a page or in-app, and add a row when one is filled or found.
 
 - [x] Getting started (`index.mdx`)
 - [x] Guides: reading files & diffs, search & navigation, code intelligence, scopes & worktrees, themes
 - [x] Reference: keybindings, configuration, languages
-- [ ] Guide: the interface, what the reader is looking at (tree change marks `M`/`A`/`D`/`R`/`U`, diagnostic badges, the status bar tiers, the header, the viewer gutter)
+- [x] The tree and diagnostics marks (change kinds `M`/`A`/`D`/`R`/`U`, badges, recency, the provenance rail): explained in-app by the `?` legend, not a page (#331)
+- [ ] The rest of the interface: the status bar tiers and the header (a short guide, or more in-app cues)
 - [ ] Guide: working alongside an agent (the loop, live refresh and the safety poll, the non-goals contract)
 - [ ] Reference: troubleshooting (`R` vs `r`, server downloads, gopls, Nerd Fonts, clipboard, config parse errors)
 - [ ] Under-documented on existing pages: `session` scope's fixed base, the search pathspec grammar, large-file truncation, the changes-only filter

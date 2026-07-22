@@ -140,7 +140,7 @@ const KEY_HELP_GROUPS: {
         actions: ["context-menu"],
         description: "context menu for the focused row or symbol (or right-click)",
       },
-      { actions: ["help"], description: "show all keybindings" },
+      { actions: ["help"], description: "show all keybindings and the marks legend" },
       { actions: ["quit"], description: "quit (confirm with y)" },
     ],
     heading: "app",

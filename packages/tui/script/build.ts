@@ -4,7 +4,6 @@
 // Modeled on opencode's build script (anomalyco/opencode packages/opencode/script/build.ts),
 // Which established the pattern for compiling OpenTUI apps with `bun build --compile`.
 
-import fs from "node:fs";
 import path from "node:path";
 
 import solidPlugin from "@opentui/solid/bun-plugin";
@@ -12,9 +11,8 @@ import { $ } from "bun";
 
 import pkg from "../package.json";
 
-// Repo root, not the package: the hoisted node_modules lives here, `dist/` stays
-// Here (release.yml uploads dist/*), and the parser-worker define below must remain
-// A node_modules-relative path for the /$bunfs/root/ mapping to hold.
+// Repo root, not the package: the hoisted node_modules lives here and `dist/` stays
+// Here (release.yml uploads dist/*).
 const dir = path.resolve(import.meta.dirname, "../../..");
 process.chdir(dir);
 
@@ -52,12 +50,6 @@ if (!skipInstall) {
   );
 }
 
-const parserWorker = fs.realpathSync(
-  path.resolve(dir, "node_modules/@opentui/core/parser.worker.js"),
-);
-const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/");
-const bunfsRoot = "/$bunfs/root/";
-
 const built: string[] = [];
 
 for (const target of targets) {
@@ -77,11 +69,12 @@ for (const target of targets) {
       target: `bun-${target.os}-${target.arch}`,
     },
     conditions: ["bun", "node"],
-    define: {
-      OTUI_TREE_SITTER_WORKER_PATH: JSON.stringify(bunfsRoot + workerRelativePath),
-      ...(target.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify("glibc") } : {}),
-    },
-    entrypoints: ["./packages/tui/src/main.tsx", parserWorker],
+    define: target.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify("glibc") } : {},
+    // The app entry is the only entrypoint: OpenTUI discovers its own bundled assets (the
+    // Tree-sitter worker, the wasm grammars, the native library) from the literal
+    // `import(..., { with: { type: "file" } })` at its call site, and listing one of those
+    // Files here would put it in the graph as a JS module, shadowing that resolution.
+    entrypoints: ["./packages/tui/src/main.tsx"],
     format: "esm",
     minify: true,
     plugins: [solidPlugin],

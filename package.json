@@ -29,10 +29,10 @@
   },
   "devDependencies": {
     "@effect/language-service": "0.87.0",
-    "knip": "6.26.0",
+    "knip": "6.29.0",
     "lefthook": "2.1.10",
-    "oxfmt": "0.59.0",
-    "oxlint": "1.74.0",
-    "oxlint-tsgolint": "0.24.0"
+    "oxfmt": "0.60.0",
+    "oxlint": "1.75.0",
+    "oxlint-tsgolint": "7.0.2001"
   }
 }

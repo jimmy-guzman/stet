@@ -19,8 +19,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@opentui/core": "0.4.3",
-    "@opentui/solid": "0.4.3",
+    "@opentui/core": "0.4.5",
+    "@opentui/solid": "0.4.5",
     "@pierre/diffs": "1.2.12",
     "diff": "9.0.0",
     "effect": "4.0.0-beta.98",

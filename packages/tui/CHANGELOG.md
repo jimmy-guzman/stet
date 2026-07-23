@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.9.1...stet-v0.9.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* **deps:** 🐛 bump opentui to 0.4.5 & unbreak the compiled build ([#333](https://github.com/jimmy-guzman/stet/issues/333)) ([7b641ae](https://github.com/jimmy-guzman/stet/commit/7b641aedadb1a066bd830b1386fca83e22d607fb))
+
 ## [0.9.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.9.0...stet-v0.9.1) (2026-07-21)
 
 

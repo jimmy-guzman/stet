@@ -19,13 +19,7 @@ import { Clipboard } from "./clipboard/service";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
 import { Config } from "./config/service";
-import {
-  PROBLEMS_HEIGHT,
-  REFERENCES_MAX_ROWS,
-  SIDEBAR_MIN_WIDTH,
-  SIDEBAR_VIEWER_MIN,
-  SYMBOLS_MAX_ROWS,
-} from "./constants";
+import { REFERENCES_MAX_ROWS, SYMBOLS_MAX_ROWS } from "./constants";
 import {
   allFindings,
   countBySeverity,
@@ -114,6 +108,7 @@ import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from ".
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import type { IntelRequestError } from "./intel/service";
+import { computeLayout, PANE_MIN_WIDTH } from "./layout/regions";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
@@ -815,9 +810,9 @@ function createState() {
     rowCount: () => treeRows().length,
     scrollTop: sidebarScrollTop,
     setScrollTop: setSidebarScrollTop,
-    // A thunk, not the memo itself: paneHeight is declared later in this root,
+    // A thunk, not the memo itself: `layout` is declared later in this root,
     // And the effects only run after the whole root body has executed.
-    viewport: () => paneHeight(),
+    viewport: () => layout().sidebar.content.height,
   });
 
   // The default tree is the whole repo, so it stays empty until the deferred
@@ -862,7 +857,7 @@ function createState() {
     rowCount: () => allProblemItems().length,
     scrollTop: problemsScrollTop,
     setScrollTop: setProblemsScrollTop,
-    viewport: () => PROBLEMS_HEIGHT - 2,
+    viewport: () => layout().problems.content.height,
   });
 
   // The references overlay windows its rows like the problems panel rather than leaning on a
@@ -1636,29 +1631,41 @@ function createState() {
     setSelection(item === undefined ? themeComboboxOrigin() : item.selection);
   });
 
-  // --- layout (derived from terminal dimensions) ---
-  const problemsHeight = createMemo(() => (problemsOpen() ? PROBLEMS_HEIGHT : 0));
-  const paneHeight = createMemo(() => Math.max(1, terminalHeight() - 4 - problemsHeight()));
+  // --- layout ---
+  // Terminal dimensions become pane geometry in exactly one place, `computeLayout`.
+  // Renderers read a rect off this record; none re-derives its own budget from the
+  // Terminal size, which is why there is no `sidebarWidth`/`paneHeight` accessor to
+  // Subtract from. Docking and zoom are model inputs already, pinned to today's
+  // Arrangement until the signals that drive them land.
+  const layout = createMemo(() =>
+    computeLayout({
+      problems: {
+        heightOverride: null,
+        open: problemsOpen(),
+        position: "bottom",
+        widthOverride: null,
+      },
+      sidebar: {
+        heightOverride: null,
+        open: sidebarOpen(),
+        position: "left",
+        widthOverride: sidebarWidthOverride(),
+      },
+      terminalHeight: terminalHeight(),
+      terminalWidth: terminalWidth(),
+      zoom: undefined,
+    }),
+  );
   // A truncated file reserves one row for the "N more lines" footer, so the diff
   // Content shrinks by it; DiffView derives its whole windowing from this height,
-  // So the single subtraction keeps the slice and scroll math correct.
-  const viewerHeight = createMemo(() => Math.max(1, paneHeight() - 1 - (truncated() ? 1 : 0)));
+  // So the single subtraction keeps the slice and scroll math correct. Chrome the
+  // Viewer owns inside its own border stays here rather than in the pure model.
+  const viewerHeight = createMemo(() =>
+    Math.max(1, layout().viewer.content.height - 1 - (truncated() ? 1 : 0)),
+  );
   // The search view's results band: the pane interior minus its four fixed chrome
   // Rows (query, filter, summary, footer). Fixed chrome, so no state ever shifts it.
-  const searchListHeight = createMemo(() => Math.max(1, paneHeight() - 4));
-  // A manual width is stored raw and only clamped here, so it never overflows a
-  // Shrunken terminal yet is restored intact when the terminal grows back. The
-  // Responsive default and a manual override share the same clamp, so the
-  // Viewer-preserving max holds in both cases.
-  const sidebarMax = () => Math.max(SIDEBAR_MIN_WIDTH, terminalWidth() - SIDEBAR_VIEWER_MIN);
-  const sidebarWidth = createMemo(() => {
-    if (!sidebarOpen()) {
-      return 0;
-    }
-    const responsive = Math.max(34, Math.min(54, Math.floor(terminalWidth() * 0.34)));
-    const desired = sidebarWidthOverride() ?? responsive;
-    return Math.max(SIDEBAR_MIN_WIDTH, Math.min(desired, sidebarMax()));
-  });
+  const searchListHeight = createMemo(() => Math.max(1, layout().viewer.content.height - 4));
   // Closing the sidebar moves focus off the now-hidden tree so keys still land
   // Somewhere, on whichever view the main area shows; the `ctrl-b` toggle and a
   // Shrink-past-minimum share this one path.
@@ -1687,8 +1694,8 @@ function createState() {
       }
       return;
     }
-    const next = (sidebarWidthOverride() ?? sidebarWidth()) + delta;
-    if (next < SIDEBAR_MIN_WIDTH) {
+    const next = (sidebarWidthOverride() ?? layout().sidebar.width) + delta;
+    if (next < PANE_MIN_WIDTH) {
       collapseSidebar();
       return;
     }
@@ -3546,7 +3553,12 @@ function createState() {
       setCommandMenuAnchor(
         context === "viewer"
           ? undefined
-          : (anchor ?? { x: 2, y: 2 + focusedRowIndex() - sidebarScrollTop() }),
+          : // The focused row's first text cell: the tree's interior, plus the one
+            // Column of padding a `TreeRow` adds inside it.
+            (anchor ?? {
+              x: layout().sidebar.content.x + 1,
+              y: layout().sidebar.content.y + focusedRowIndex() - sidebarScrollTop(),
+            }),
       );
       setCommandMenuIndex(0);
       // Snapshot the context so the clear effect can dismiss the menu the moment a
@@ -4492,6 +4504,7 @@ function createState() {
     jumpToReference,
     jumpToSearchItem,
     jumpToSymbol,
+    layout,
     lineMap,
     loadCommits,
     loadFullContent,
@@ -4517,7 +4530,6 @@ function createState() {
     overlayLeft,
     overlayWidth,
     pageSearchSelection,
-    paneHeight,
     pendingRestore,
     persistSettings,
     pinActiveTab,
@@ -4656,7 +4668,6 @@ function createState() {
     showHover,
     sidebarOpen,
     sidebarScrollTop,
-    sidebarWidth,
     statusBarModel,
     switchWorktree,
     symbolsIndex,

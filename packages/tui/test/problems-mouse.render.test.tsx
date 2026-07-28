@@ -3,9 +3,9 @@ import { describe, expect, test } from "bun:test";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
-import { PROBLEMS_HEIGHT } from "@/constants";
 import { stateForResolvedChecker } from "@/diagnostics/checker";
 import type { Diagnostic } from "@/diagnostics/checker";
+import { PROBLEMS_DEFAULT_HEIGHT } from "@/layout/regions";
 import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
@@ -20,15 +20,15 @@ describe("problems panel mouse", () => {
 
   // Row coordinates are read back off the rendered frame rather than hardcoded, so the
   // Test does not encode the panel's row positions. The search is scoped to the panel's
-  // Own box (the bottom pane, PROBLEMS_HEIGHT rows above the status bar) because the
+  // Own box (the bottom pane, PROBLEMS_DEFAULT_HEIGHT rows above the status bar) because the
   // Same text appears elsewhere on screen: the viewer's title row also reads `src/a.ts`
   // And the status bar echoes the finding's message, so an unscoped match lands on the
   // Wrong pane entirely.
   const problemsRowOf = (frame: string, text: string) => {
-    const top = HEIGHT - 1 - PROBLEMS_HEIGHT;
+    const top = HEIGHT - 1 - PROBLEMS_DEFAULT_HEIGHT;
     const offset = frame
       .split("\n")
-      .slice(top, top + PROBLEMS_HEIGHT)
+      .slice(top, top + PROBLEMS_DEFAULT_HEIGHT)
       .findIndex((line) => line.includes(text));
     return offset === -1 ? -1 : top + offset;
   };

@@ -1,7 +1,6 @@
 import type { MouseEvent } from "@opentui/core";
 import { batch, createMemo, Index, Show } from "solid-js";
 
-import { PROBLEMS_HEIGHT } from "@/constants";
 import { isNavigableProblemItem, problemLocationLabel, sourceLabel } from "@/diagnostics/problems";
 import type { ProblemItem } from "@/diagnostics/problems";
 import { levelGlyph } from "@/log/levels";
@@ -31,13 +30,13 @@ const asHelp = (item: ProblemItem) => (item.kind === "help" ? item : undefined);
 
 export function ProblemsPanel() {
   const theme = useTheme();
-  const viewport = PROBLEMS_HEIGHT - 2;
+  const viewport = () => state.layout().problems.content.height;
 
   const visibleItems = createMemo(() => {
     const start = state.problemsScrollTop();
     return state
       .allProblemItems()
-      .slice(start, start + viewport)
+      .slice(start, start + viewport())
       .map((item, offset) => ({ index: start + offset, item }));
   });
 
@@ -51,8 +50,8 @@ export function ProblemsPanel() {
   const rowBg = (index: number, item: ProblemItem) =>
     selected(index, item) ? theme.colors.surface.cursor : theme.colors.surface.base;
 
-  // Border (2) + scrollbar (1) eat the panel width before the row's own padding.
-  const contentWidth = () => Math.max(0, state.terminalWidth() - 3);
+  // The panel interior reserves its width-1 scrollbar column before the row's own padding.
+  const contentWidth = () => Math.max(0, state.layout().problems.content.width - 1);
 
   const severityColor = (severity: "error" | "warning" | "info") =>
     severity === "error"
@@ -65,7 +64,7 @@ export function ProblemsPanel() {
     rowCount: () => state.allProblemItems().length,
     scrollTop: state.problemsScrollTop,
     setScrollTop: state.setProblemsScrollTop,
-    viewport: () => viewport,
+    viewport,
   });
 
   // A single click selects (a focus-intent click must never navigate the whole view
@@ -108,11 +107,11 @@ export function ProblemsPanel() {
   return (
     <PaneFrame
       focused={focused()}
-      height={PROBLEMS_HEIGHT}
       width="100%"
+      height="100%"
       onMouseDown={() => state.setFocusedPane("problems")}
     >
-      <box width="100%" height={viewport} flexDirection="row" onMouseScroll={onWheel}>
+      <box width="100%" height={viewport()} flexDirection="row" onMouseScroll={onWheel}>
         <box
           ref={(el) => {
             // A click activates a row; it must never start a text selection.
@@ -269,7 +268,7 @@ export function ProblemsPanel() {
         </box>
         <ListScrollbar
           rowCount={() => state.allProblemItems().length}
-          viewport={() => viewport}
+          viewport={viewport}
           scrollTop={state.problemsScrollTop}
         />
       </box>

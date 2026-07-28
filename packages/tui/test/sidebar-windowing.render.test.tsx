@@ -7,7 +7,7 @@ import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
-// The sidebar windows the tree to the viewport (only ~paneHeight rows are ever
+// The sidebar windows the tree to the viewport (only ~viewport rows are ever
 // Mounted), so these tests pin the behaviors that windowing must preserve: the
 // Cursor stays framed while navigating deep into a directory far larger than
 // The viewport, a wheel scroll moves the window away without the cursor

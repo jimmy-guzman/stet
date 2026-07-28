@@ -155,17 +155,58 @@ export function App() {
       flexDirection="column"
       backgroundColor={theme.colors.surface.base}
     >
-      <HeaderBar />
-      <box flexGrow={1} flexDirection="row">
-        <Show when={state.sidebarOpen()}>
+      {/* Every region is placed at the rect `computeLayout` returned, in terminal
+          cells. Nothing here re-derives a position or a size, so a pane that docks
+          to another edge moves by changing the model's input, not this markup. */}
+      <box
+        position="absolute"
+        left={state.layout().header.x}
+        top={state.layout().header.y}
+        width={state.layout().header.width}
+        height={state.layout().header.height}
+      >
+        <HeaderBar />
+      </box>
+      <Show when={state.layout().sidebar.width > 0}>
+        <box
+          position="absolute"
+          left={state.layout().sidebar.x}
+          top={state.layout().sidebar.y}
+          width={state.layout().sidebar.width}
+          height={state.layout().sidebar.height}
+        >
           <Sidebar />
-        </Show>
+        </box>
+      </Show>
+      <box
+        position="absolute"
+        left={state.layout().viewer.x}
+        top={state.layout().viewer.y}
+        width={state.layout().viewer.width}
+        height={state.layout().viewer.height}
+      >
         <Viewer />
       </box>
-      <Show when={state.problemsOpen()}>
-        <ProblemsPanel />
+      <Show when={state.layout().problems.width > 0}>
+        <box
+          position="absolute"
+          left={state.layout().problems.x}
+          top={state.layout().problems.y}
+          width={state.layout().problems.width}
+          height={state.layout().problems.height}
+        >
+          <ProblemsPanel />
+        </box>
       </Show>
-      <StatusBar />
+      <box
+        position="absolute"
+        left={state.layout().status.x}
+        top={state.layout().status.y}
+        width={state.layout().status.width}
+        height={state.layout().status.height}
+      >
+        <StatusBar />
+      </box>
       <Show when={state.fileComboboxOpen()}>
         <FileCombobox />
       </Show>

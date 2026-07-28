@@ -109,9 +109,9 @@ describe("double-click tracker resets on an intervening row click", () => {
 
       // Match-a -> header-b -> same match, back to back. The header click must break the
       // Sequence, or the second match click opens the file (leaving the search view).
-      await mockMouse.click(state.sidebarWidth() + 5, matchY);
-      await mockMouse.click(state.sidebarWidth() + 5, headerBY);
-      await mockMouse.click(state.sidebarWidth() + 5, matchY);
+      await mockMouse.click(state.layout().viewer.x + 5, matchY);
+      await mockMouse.click(state.layout().viewer.x + 5, headerBY);
+      await mockMouse.click(state.layout().viewer.x + 5, matchY);
       await renderOnce();
 
       expect(state.mainView()).toBe("search");

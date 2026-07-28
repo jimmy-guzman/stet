@@ -51,7 +51,7 @@ export function Tabs() {
       0,
       cells.findIndex((cell) => cell.active),
     );
-    const budget = Math.max(8, state.terminalWidth() - state.sidebarWidth() - 4 - RIGHT_RESERVE);
+    const budget = Math.max(8, state.layout().viewer.content.width - 2 - RIGHT_RESERVE);
     const last = cells.length - 1;
     // A clipped side shows a ‹ / › glyph (one column each), so a candidate window
     // Must fit its own width plus the markers it would still leave on; expanding to

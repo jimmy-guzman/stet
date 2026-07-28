@@ -158,7 +158,7 @@ describe("list scrollbar", () => {
 
       for (let i = 0; i < 10; i += 1) {
         // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
-        await mockMouse.scroll(state.sidebarWidth() + 10, 12, "down");
+        await mockMouse.scroll(state.layout().viewer.x + 10, 12, "down");
         // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
         await renderOnce();
       }

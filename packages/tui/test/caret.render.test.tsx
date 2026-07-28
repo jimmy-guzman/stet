@@ -87,7 +87,7 @@ describe("word caret", () => {
 
       // Click the gutter (just past the sidebar, before the content): line-level,
       // So the stats line drops the column and `y` copies path:line.
-      await mouse.click(state.sidebarWidth() + 2, rowIndex);
+      await mouse.click(state.layout().viewer.x + 2, rowIndex);
       const onLine = await settleUntil(
         "line-level selection",
         (current) => /ln \d+(?!:)/.test(current) && !/ln \d+:\d/.test(current),

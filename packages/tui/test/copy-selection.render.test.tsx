@@ -111,7 +111,7 @@ describe("line selection copy", () => {
       expect(alphaRow).toBeGreaterThan(-1);
       expect(gammaRow).toBeGreaterThan(alphaRow);
 
-      const contentX = state.sidebarWidth() + 5;
+      const contentX = state.layout().viewer.x + 5;
       await mouse.click(contentX, alphaRow);
       await settleUntil("caret on the first line", () => state.cursorIndex() === 0);
       expect(state.selectionRange()).toBeUndefined();
@@ -168,7 +168,7 @@ describe("line selection copy", () => {
       expect(baseRow).toBeGreaterThan(0);
       const viewerTop = baseRow;
       const viewerBottom = viewerTop + state.viewerHeight() - 1;
-      const contentX = state.sidebarWidth() + 8;
+      const contentX = state.layout().viewer.x + 8;
 
       await mouse.pressDown(contentX, baseRow);
       await mouse.moveTo(contentX, viewerBottom);

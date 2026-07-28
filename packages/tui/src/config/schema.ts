@@ -63,4 +63,29 @@ export const UserConfigSchema = Schema.Struct({
 
 export type UserConfig = Schema.Schema.Type<typeof UserConfigSchema>;
 
+/**
+ * What an omitted key means, and the only place that says so. Two readers need it and used to
+ * restate every default independently: `main.tsx`, seeding a session signal, and `config/write.ts`,
+ * deciding whether a session value diverges from the file. A disagreement between those copies
+ * makes `ctrl-s` either decline to write a setting the user changed or write one they did not, and
+ * the structure guaranteed a fresh pair of copies for every key added. The `satisfies` clause
+ * checks it against `UserConfig`, so a typo, a stale key, or a value the schema would reject is a
+ * compile error rather than a default nothing reads.
+ *
+ * Only keys whose absence means a value belong here. `editor`, `ide`, and `theme` are absent
+ * because an unset key means "nothing to say" and is deliberately never written; `sidebar.width`
+ * because an absent width is the responsive default the layout model computes, not a config value;
+ * the registries because they are merge bases their own resolvers fold over, not settings.
+ */
+export const configDefaults = {
+  diagnostics: { download: true, enabled: true },
+  icons: { enabled: true },
+  intel: { enabled: true },
+  provenance: { enabled: false },
+  search: { caseSensitive: false, regex: false, scope: "changed" },
+  sidebar: { changesOnly: false, open: true },
+  update: { check: true },
+  viewer: { wrap: false },
+} as const satisfies { [K in keyof UserConfig]?: UserConfig[K] };
+
 export const emptyConfig: UserConfig = {};

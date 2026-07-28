@@ -2,6 +2,7 @@ import { Result } from "effect";
 import { applyEdits, createScanner, modify, SyntaxKind } from "jsonc-parser";
 
 import { loadConfigText } from "./load";
+import { configDefaults } from "./schema";
 
 /**
  * The session values `ctrl-s` can persist: exactly the signals whose keys the config schema owns,
@@ -155,30 +156,55 @@ export function updateSettingsText(
     ...(snapshot.ide !== undefined && snapshot.ide !== config.ide
       ? [{ label: "ide", path: ["ide"], value: snapshot.ide }]
       : []),
-    ...diff("icons", ["icons", "enabled"], snapshot.iconsEnabled, config.icons?.enabled ?? true),
-    ...diff("wrap", ["viewer", "wrap"], snapshot.wrap, config.viewer?.wrap ?? false),
-    ...diff("sidebar", ["sidebar", "open"], snapshot.sidebarOpen, config.sidebar?.open ?? true),
+    ...diff(
+      "icons",
+      ["icons", "enabled"],
+      snapshot.iconsEnabled,
+      config.icons?.enabled ?? configDefaults.icons.enabled,
+    ),
+    ...diff(
+      "wrap",
+      ["viewer", "wrap"],
+      snapshot.wrap,
+      config.viewer?.wrap ?? configDefaults.viewer.wrap,
+    ),
+    ...diff(
+      "sidebar",
+      ["sidebar", "open"],
+      snapshot.sidebarOpen,
+      config.sidebar?.open ?? configDefaults.sidebar.open,
+    ),
     ...diff("sidebar", ["sidebar", "width"], snapshot.sidebarWidth, config.sidebar?.width),
     ...diff(
       "changes only",
       ["sidebar", "changesOnly"],
       snapshot.changesOnly,
-      config.sidebar?.changesOnly ?? false,
+      config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly,
     ),
     ...diff(
       "provenance",
       ["provenance", "enabled"],
       snapshot.provenanceEnabled,
-      config.provenance?.enabled ?? false,
+      config.provenance?.enabled ?? configDefaults.provenance.enabled,
     ),
-    ...diff("search", ["search", "regex"], snapshot.searchRegex, config.search?.regex ?? false),
+    ...diff(
+      "search",
+      ["search", "regex"],
+      snapshot.searchRegex,
+      config.search?.regex ?? configDefaults.search.regex,
+    ),
     ...diff(
       "search",
       ["search", "caseSensitive"],
       snapshot.searchCaseSensitive,
-      config.search?.caseSensitive ?? false,
+      config.search?.caseSensitive ?? configDefaults.search.caseSensitive,
     ),
-    ...diff("search", ["search", "scope"], snapshot.searchScope, config.search?.scope ?? "changed"),
+    ...diff(
+      "search",
+      ["search", "scope"],
+      snapshot.searchScope,
+      config.search?.scope ?? configDefaults.search.scope,
+    ),
   ];
 
   if (edits.length === 0) {

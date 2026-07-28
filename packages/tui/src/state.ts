@@ -108,7 +108,7 @@ import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from ".
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import type { IntelRequestError } from "./intel/service";
-import { computeLayout, PANE_MIN_WIDTH } from "./layout/regions";
+import { computeLayout, PANE_MIN_HEIGHT, PANE_MIN_WIDTH } from "./layout/regions";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
@@ -549,6 +549,7 @@ function createState() {
   const [sidebarWidthOverride, setSidebarWidthOverride] = tracked<number | null>(null);
   const [sidebarScrollTop, setSidebarScrollTop] = tracked(0);
   const [problemsOpen, setProblemsOpen] = tracked(false);
+  const [problemsHeightOverride, setProblemsHeightOverride] = tracked<number | null>(null);
   const [problemIndex, setProblemIndex] = tracked(0);
   const [problemsScrollTop, setProblemsScrollTop] = tracked(0);
   const [fileComboboxOpen, setFileComboboxOpen] = tracked(false);
@@ -1640,7 +1641,7 @@ function createState() {
   const layout = createMemo(() =>
     computeLayout({
       problems: {
-        heightOverride: null,
+        heightOverride: problemsHeightOverride(),
         open: problemsOpen(),
         position: "bottom",
         widthOverride: null,
@@ -1702,6 +1703,45 @@ function createState() {
     setSidebarWidthOverride(next);
   };
   const resetSidebarWidth = () => setSidebarWidthOverride(null);
+  // Closing the panel moves focus off it the way collapsing the sidebar does, and
+  // Lands on the tree only while the tree is on screen: with the sidebar collapsed,
+  // The old unconditional jump to "tree" left the keys driving a pane nobody could
+  // See. `esc`, the `p` toggle, and a shrink past the minimum share this one path.
+  const collapseProblems = () => {
+    if (focusedPane() === "problems") {
+      setFocusedPane(sidebarOpen() ? "tree" : mainView() === "search" ? "search" : "diff");
+    }
+    setProblemsOpen(false);
+  };
+  const toggleProblems = () => {
+    if (problemsOpen()) {
+      collapseProblems();
+      return;
+    }
+    setProblemsOpen(true);
+    // Opening the panel is an action meaning "go look at problems", so unlike the
+    // Config seeding it takes focus and frames the first navigable finding.
+    setFocusedPane("problems");
+    setProblemIndex(firstNavigableProblemIndex());
+  };
+  // Only reachable while the panel is open and focused, so unlike the sidebar's
+  // Nudge there is no reopen branch: `p` is what brings a closed panel back.
+  const nudgeProblemsHeight = (delta: number) => {
+    const next = (problemsHeightOverride() ?? layout().problems.height) + delta;
+    if (next < PANE_MIN_HEIGHT) {
+      collapseProblems();
+      return;
+    }
+    setProblemsHeightOverride(next);
+  };
+  // The tree and the panel are the two sizable panes. The viewer is whatever the
+  // Docks leave, so it has no size of its own and the keys fall back to the sidebar
+  // From it, which is what they did everywhere before the panel became sizable.
+  const sizingProblems = () => focusedPane() === "problems";
+  const growPane = () => (sizingProblems() ? nudgeProblemsHeight(1) : nudgeSidebarWidth(2));
+  const shrinkPane = () => (sizingProblems() ? nudgeProblemsHeight(-1) : nudgeSidebarWidth(-2));
+  const resetPane = () =>
+    sizingProblems() ? setProblemsHeightOverride(null) : resetSidebarWidth();
   const overlayWidth = createMemo(() => Math.max(30, Math.min(70, terminalWidth() - 8)));
   const overlayLeft = createMemo(() =>
     Math.max(0, Math.floor((terminalWidth() - overlayWidth()) / 2)),
@@ -3816,6 +3856,8 @@ function createState() {
       editor: editorFlag(),
       iconsEnabled: iconsEnabled(),
       ide: ideFlag(),
+      problemsHeight: problemsHeightOverride() ?? undefined,
+      problemsOpen: problemsOpen(),
       provenanceEnabled: blameEnabled(),
       searchCaseSensitive: searchCaseSensitive(),
       searchRegex: searchRegex(),
@@ -4442,6 +4484,7 @@ function createState() {
     closeSymbols,
     closeThemePicker,
     closeViewerDecoration,
+    collapseProblems,
     collapseSidebar,
     commandMenuAnchor,
     commandMenuContext,
@@ -4486,7 +4529,6 @@ function createState() {
     findQuery,
     findReferences,
     findSymbols,
-    firstNavigableProblemIndex,
     focusedNodeId,
     focusedPane,
     focusedRowIndex,
@@ -4495,6 +4537,7 @@ function createState() {
     goBack,
     goForward,
     goToDefinition,
+    growPane,
     helpDialogOpen,
     helpView,
     iconsEnabled,
@@ -4536,6 +4579,7 @@ function createState() {
     problemIndex,
     problems,
     problemsEmpty,
+    problemsHeightOverride,
     problemsOpen,
     problemsScrollTop,
     provenanceForRow,
@@ -4552,6 +4596,7 @@ function createState() {
     repoFilesLoading,
     repoRoot,
     resetFind,
+    resetPane,
     resetSidebarWidth,
     resetState,
     resolveViewerDecoration,
@@ -4626,6 +4671,7 @@ function createState() {
     setOverflow,
     setPendingRestore,
     setProblemIndex,
+    setProblemsHeightOverride,
     setProblemsOpen,
     setProblemsScrollTop,
     setProvisioningLanguages,
@@ -4666,6 +4712,7 @@ function createState() {
     setWorktrees,
     showFileContent,
     showHover,
+    shrinkPane,
     sidebarOpen,
     sidebarScrollTop,
     statusBarModel,
@@ -4687,6 +4734,7 @@ function createState() {
     toggleFold,
     toggleGap,
     togglePinActiveTab,
+    toggleProblems,
     toggleReferencesDirection,
     toggleRegionAtCaret,
     toggleSearchCase,

@@ -19,6 +19,8 @@ function snapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
     editor: undefined,
     iconsEnabled: true,
     ide: undefined,
+    problemsHeight: undefined,
+    problemsOpen: false,
     provenanceEnabled: false,
     searchCaseSensitive: false,
     searchRegex: false,
@@ -108,6 +110,28 @@ describe("updateSettingsText", () => {
     expect(text).toContain(`"wrap": true`);
     expect(text).toContain(`"open": false`);
     expect(text).toContain(`"width": 44`);
+  });
+
+  test("a divergent problems panel writes its section", () => {
+    const { saved, text } = unwrap(
+      updateSettingsText("{}", snapshot({ problemsHeight: 14, problemsOpen: true })),
+    );
+
+    expect(saved).toEqual(["problems"]);
+    expect(text).toContain(`"open": true`);
+    expect(text).toContain(`"height": 14`);
+  });
+
+  test("a default panel height removes the file's height and keeps its siblings", () => {
+    const source = `{ "problems": { "open": true, "height": 14 } }`;
+
+    const { saved, text } = unwrap(
+      updateSettingsText(source, snapshot({ problemsHeight: undefined, problemsOpen: true })),
+    );
+
+    expect(saved).toEqual(["problems"]);
+    expect(text).not.toContain("height");
+    expect(text).toContain(`"open": true`);
   });
 
   test("a session value matching the file is not written, and its comment survives", () => {

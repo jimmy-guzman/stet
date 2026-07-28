@@ -53,6 +53,20 @@ describe("persistSettings", () => {
     });
   });
 
+  test("a resized problems panel round-trips through the file", async () => {
+    await withConfigDir(async (dir) => {
+      state.setTerminalHeight(40);
+      state.toggleProblems();
+      state.growPane();
+      state.growPane();
+      await state.persistSettings();
+
+      const text = readFileSync(join(dir, "stet", "config.jsonc"), "utf8");
+      expect(Bun.JSONC.parse(text)).toEqual({ problems: { height: 12, open: true } });
+      expect(statusMessage()).toBe("saved problems to config");
+    });
+  });
+
   test("creates config.jsonc when none exists", async () => {
     await withConfigDir(async (dir) => {
       state.setChangesOnly(true);

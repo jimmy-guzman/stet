@@ -128,6 +128,29 @@ describe("createKeyHandler", () => {
     expect(state.sidebarOpen()).toBe(true);
   });
 
+  test("the resize keys act on the focused pane, not always the sidebar", () => {
+    state.setTerminalHeight(40);
+    state.toggleProblems(); // Opens and focuses the panel
+    const before = state.layout().sidebar.width;
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ name: "]" }));
+
+    expect(state.layout().problems.height).toBe(11);
+    expect(state.layout().sidebar.width).toBe(before);
+  });
+
+  test("p closes the panel through the same path escape uses", () => {
+    state.toggleProblems();
+    expect(state.problemsOpen()).toBe(true);
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ name: "p" }));
+
+    expect(state.problemsOpen()).toBe(false);
+    expect(state.focusedPane()).toBe("tree");
+  });
+
   test("ctrl-t pins; a later navigation opens a fresh preview; { } cycle; ctrl-w closes", () => {
     state.selectFile("a.ts");
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
@@ -379,9 +402,7 @@ describe("createKeyHandler", () => {
             ],
           ]),
         });
-        state.setProblemsOpen(true);
-        state.setFocusedPane("problems");
-        state.setProblemIndex(state.firstNavigableProblemIndex());
+        state.toggleProblems();
       });
     };
 

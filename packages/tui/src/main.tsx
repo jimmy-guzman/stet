@@ -210,6 +210,10 @@ try {
       state.setSidebarOpen(false);
       state.setFocusedPane("diff");
     }
+    state.setProblemsHeightOverride(config.problems?.height ?? null);
+    // Seeding the panel open is an initial condition, so unlike `p` it does not take
+    // Focus: only the action that means "go look at problems" focuses the panel.
+    state.setProblemsOpen(config.problems?.open ?? configDefaults.problems.open);
     state.setBlameEnabled(config.provenance?.enabled ?? configDefaults.provenance.enabled);
     state.setDiagnosticsEnabled(diagnosticsEnabled);
     state.setIntelEnabled(config.intel?.enabled ?? configDefaults.intel.enabled);

@@ -48,6 +48,12 @@ describe("resolveKeybindings", () => {
     expect(set.texts.get("provenance")).toEqual([]);
   });
 
+  test("a renamed action id reports where it went", () => {
+    const { issues } = resolveKeybindings({ "grow-sidebar": "ctrl-l" });
+
+    expect(issues).toEqual(['keybinding "grow-sidebar" is now "grow-pane"']);
+  });
+
   test("an unknown action id is reported and skipped", () => {
     const { issues, set } = resolveKeybindings({ "toggle-sidbar": "ctrl+e" });
 

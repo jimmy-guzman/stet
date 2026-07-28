@@ -510,10 +510,7 @@ export function createKeyHandler(host: HostEffects) {
         // Screen with the tree focused, then nothing. Esc never quits; quitting is
         // Q, which raises the confirm above.
         if (state.problemsOpen()) {
-          state.setProblemsOpen(false);
-          if (state.focusedPane() === "problems") {
-            state.setFocusedPane("tree");
-          }
+          state.collapseProblems();
           return;
         }
         if (state.mainView() === "search") {
@@ -536,12 +533,7 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (pressed("problems")) {
-        const open = state.problemsOpen();
-        state.setFocusedPane(open ? "tree" : "problems");
-        state.setProblemsOpen(!open);
-        if (!open) {
-          state.setProblemIndex(state.firstNavigableProblemIndex());
-        }
+        state.toggleProblems();
         return;
       }
 
@@ -552,20 +544,21 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // Grow also re-opens a collapsed sidebar, the inverse of shrink collapsing
-      // It past the minimum; shrink/reset only adjust an already-open sidebar.
-      if (pressed("grow-sidebar")) {
-        state.nudgeSidebarWidth(2);
+      // Resize the focused pane along its dock axis. Grow also re-opens a collapsed
+      // Sidebar, the inverse of shrink collapsing it past the minimum; shrink/reset
+      // Only adjust an already-open pane.
+      if (pressed("grow-pane")) {
+        state.growPane();
         return;
       }
 
-      if (pressed("shrink-sidebar") && state.sidebarOpen()) {
-        state.nudgeSidebarWidth(-2);
+      if (pressed("shrink-pane") && (state.sidebarOpen() || state.problemsOpen())) {
+        state.shrinkPane();
         return;
       }
 
-      if (pressed("reset-sidebar") && state.sidebarOpen()) {
-        state.resetSidebarWidth();
+      if (pressed("reset-pane") && (state.sidebarOpen() || state.problemsOpen())) {
+        state.resetPane();
         return;
       }
 

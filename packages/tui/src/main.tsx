@@ -8,6 +8,7 @@ import { batch } from "solid-js";
 import packageJson from "../package.json";
 import { App } from "./App";
 import { helpText, parseCommand } from "./cli";
+import { configDefaults } from "./config/schema";
 import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
 import { resolveSchemas, yamlSchemaSettings } from "./diagnostics/schemas";
@@ -88,9 +89,16 @@ try {
   );
   await configRuntime.dispose();
 
+  // Read once: the seeding batch and the post-load checker state both branch on it,
+  // And two sites resolving the same key is how a default drifts from itself.
+  const diagnosticsEnabled = config.diagnostics?.enabled ?? configDefaults.diagnostics.enabled;
+
   // The provisioner reads this env var; set it before any check runs the runtime.
-  // The flag wins over config, and both only ever turn downloads off.
-  if (!options.lspDownload || config.diagnostics?.download === false) {
+  // The flag wins over config, and both only ever turn downloads off, so they
+  // Compose with `&&` the way the icons flag does below.
+  if (
+    !(options.lspDownload && (config.diagnostics?.download ?? configDefaults.diagnostics.download))
+  ) {
     process.env.STET_NO_LSP_DOWNLOAD = "1";
   }
 
@@ -186,9 +194,11 @@ try {
   batch(() => {
     state.setScope(options.scope);
     state.setCliBaseRef(options.scope.ref);
-    state.setIconsEnabled(options.icons && (config.icons?.enabled ?? true));
+    state.setIconsEnabled(options.icons && (config.icons?.enabled ?? configDefaults.icons.enabled));
     state.setOverflow(
-      options.overflow === "wrap" || config.viewer?.wrap === true ? "wrap" : "scroll",
+      options.overflow === "wrap" || (config.viewer?.wrap ?? configDefaults.viewer.wrap)
+        ? "wrap"
+        : "scroll",
     );
     state.setEditorTemplate(resolveEditorTemplate(options.editor ?? config.editor));
     state.setIdeTemplate(resolveIdeTemplate(options.ide ?? config.ide));
@@ -197,18 +207,20 @@ try {
     state.setEditorFlag(options.editor);
     state.setIdeFlag(options.ide);
     state.setSidebarWidthOverride(config.sidebar?.width ?? null);
-    state.setChangesOnly(config.sidebar?.changesOnly ?? false);
-    if (config.sidebar?.open === false) {
+    state.setChangesOnly(config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly);
+    if (!(config.sidebar?.open ?? configDefaults.sidebar.open)) {
       // Mirror collapseSidebar: focus must leave the hidden tree so keys land.
       state.setSidebarOpen(false);
       state.setFocusedPane("diff");
     }
-    state.setBlameEnabled(config.provenance?.enabled ?? false);
-    state.setDiagnosticsEnabled(config.diagnostics?.enabled ?? true);
-    state.setIntelEnabled(config.intel?.enabled ?? true);
-    state.setSearchRegex(config.search?.regex ?? false);
-    state.setSearchCaseSensitive(config.search?.caseSensitive ?? false);
-    state.setSearchScope(config.search?.scope ?? "changed");
+    state.setBlameEnabled(config.provenance?.enabled ?? configDefaults.provenance.enabled);
+    state.setDiagnosticsEnabled(diagnosticsEnabled);
+    state.setIntelEnabled(config.intel?.enabled ?? configDefaults.intel.enabled);
+    state.setSearchRegex(config.search?.regex ?? configDefaults.search.regex);
+    state.setSearchCaseSensitive(
+      config.search?.caseSensitive ?? configDefaults.search.caseSensitive,
+    );
+    state.setSearchScope(config.search?.scope ?? configDefaults.search.scope);
     // Seed the real terminal size before the first paint. Without this, the shell
     // Paints once at the default 24 rows (a 20-row tree viewport) before App's terminal
     // Dimensions effect supplies the true size, so a tree that fits the real pane
@@ -227,7 +239,7 @@ try {
 
   // Check for a newer release in the background, independent of the git load, so it neither gates
   // Nor is gated by it. A hit surfaces on the way out via the quit notice.
-  if (config.update?.check !== false) {
+  if (config.update?.check ?? configDefaults.update.check) {
     void state.checkForUpdate(packageJson.version);
   }
 
@@ -254,9 +266,7 @@ try {
         );
         state.setExpandedDirectories(initialExpanded);
         // Disabled diagnostics seed empty, or the pending placeholders never resolve.
-        state.setCheckerState(
-          initialCheckerState(config.diagnostics?.enabled === false ? [] : model.changed),
-        );
+        state.setCheckerState(initialCheckerState(diagnosticsEnabled ? model.changed : []));
       });
       void state.runChecks(model);
 

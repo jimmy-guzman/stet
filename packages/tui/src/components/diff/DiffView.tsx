@@ -163,8 +163,7 @@ export function DiffView() {
   // Turning it on grows the gutter by exactly one column and never oscillates per line.
   const gutterWidth = () => numberWidth() + 4 + (state.blameEnabled() ? 1 : 0);
 
-  const contentWidth = () =>
-    Math.max(1, state.terminalWidth() - state.sidebarWidth() - 2 - gutterWidth());
+  const contentWidth = () => Math.max(1, state.layout().viewer.content.width - gutterWidth());
 
   // Per-row terminal heights for windowing spacers and cursor-follow. In non-wrap
   // Mode every row is exactly one terminal row (`wrapMode="none"`), so heights are

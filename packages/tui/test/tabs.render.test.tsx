@@ -117,7 +117,7 @@ describe("tabs strip", () => {
       // Locate the pinned "a.ts" tab in the strip (right of the sidebar columns).
       const lines = frame.split("\n");
       const rowIndex = lines.findIndex((line) => line.includes("src/b.ts"));
-      const column = lines[rowIndex].indexOf("a.ts", state.sidebarWidth());
+      const column = lines[rowIndex].indexOf("a.ts", state.layout().viewer.x);
       expect(column).toBeGreaterThan(0);
 
       // A single click switches to a.ts; no terminal cursor lingers.

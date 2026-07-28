@@ -16,31 +16,32 @@ export function Sidebar() {
   const isDoubleFileClick = createDoubleClickGuard();
 
   const focused = () => state.focusedPane() === "tree";
+  const viewport = () => state.layout().sidebar.content.height;
 
-  // Window the tree to the viewport, the SearchPane pattern: only ~paneHeight
+  // Window the tree to its viewport, the SearchPane pattern: only ~viewport
   // TreeRow renderables ever exist, so a 100k-file repo mounts and scrolls at
   // The same cost as a small one. The cursor-follow and clamp live in state.
   const visibleRows = createMemo(() => {
     const start = state.sidebarScrollTop();
-    return state.treeRows().slice(start, start + state.paneHeight());
+    return state.treeRows().slice(start, start + viewport());
   });
 
   const onWheel = windowWheelHandler({
     rowCount: () => state.treeRows().length,
     scrollTop: state.sidebarScrollTop,
     setScrollTop: state.setSidebarScrollTop,
-    viewport: state.paneHeight,
+    viewport,
   });
 
   return (
     <PaneFrame
       focused={focused()}
-      width={state.sidebarWidth()}
+      width="100%"
       height="100%"
       backgroundColor={theme.colors.surface.base}
       onMouseDown={() => state.setFocusedPane("tree")}
     >
-      <box width="100%" height={state.paneHeight()} flexDirection="row" onMouseScroll={onWheel}>
+      <box width="100%" height={viewport()} flexDirection="row" onMouseScroll={onWheel}>
         <box
           ref={(el) => {
             // A click activates a row; it must never start a text selection.
@@ -53,14 +54,14 @@ export function Sidebar() {
             when={state.treeRows().length > 0}
             fallback={
               // No rows yet. During the deferred repoFiles load, render nothing: the
-              // Window is already a fixed paneHeight, so the pane stays blank and
+              // Window is already a fixed viewport, so the pane stays blank and
               // Reserved on its own. Only a genuinely loaded, file-less repo gets
               // The real empty state.
               <Show when={!state.repoFilesLoading()}>
                 <box
                   id="tree-empty"
                   width="100%"
-                  height={state.paneHeight()}
+                  height={viewport()}
                   flexDirection="column"
                   justifyContent="center"
                   alignItems="center"
@@ -85,7 +86,7 @@ export function Sidebar() {
         </box>
         <ListScrollbar
           rowCount={() => state.treeRows().length}
-          viewport={state.paneHeight}
+          viewport={viewport}
           scrollTop={state.sidebarScrollTop}
         />
       </box>

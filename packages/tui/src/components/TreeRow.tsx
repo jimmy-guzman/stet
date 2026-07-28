@@ -50,7 +50,7 @@ function DirectoryRow(props: {
   const focused = () =>
     state.focusedPane() === "tree" && props.row.index === state.focusedRowIndex();
   const background = () => (focused() ? theme.colors.surface.cursor : theme.colors.surface.base);
-  const contentWidth = () => state.sidebarWidth() - 5;
+  const contentWidth = () => state.layout().sidebar.content.width - 3;
 
   // Clicking a directory row reproduces the keyboard outcome: move the cursor
   // There and toggle its expansion (collapsing `l`/`h` into one click).
@@ -234,7 +234,7 @@ function FileRow(props: {
   const focused = () =>
     state.focusedPane() === "tree" && props.row.index === state.focusedRowIndex();
   const background = () => (focused() ? theme.colors.surface.cursor : theme.colors.surface.base);
-  const contentWidth = () => state.sidebarWidth() - 5;
+  const contentWidth = () => state.layout().sidebar.content.width - 3;
 
   // Clicking a file row reproduces the keyboard outcome: select and open (like
   // `enter`), and double-clicking pins it as a tab. stopPropagation keeps the

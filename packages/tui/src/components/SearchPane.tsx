@@ -38,7 +38,7 @@ const asLine = (item: SearchItem) => (item.kind === "line" ? item : undefined);
 export function SearchPane() {
   const theme = useTheme();
 
-  const innerWidth = () => Math.max(1, state.terminalWidth() - state.sidebarWidth() - 2);
+  const innerWidth = () => Math.max(1, state.layout().viewer.content.width);
   // The results band reserves a width-1 scrollbar column; the full-width chrome
   // Rows (inputs, status, footer) keep `innerWidth`.
   const resultsWidth = () => Math.max(1, innerWidth() - 1);

@@ -210,7 +210,7 @@ try {
     state.setSearchCaseSensitive(config.search?.caseSensitive ?? false);
     state.setSearchScope(config.search?.scope ?? "changed");
     // Seed the real terminal size before the first paint. Without this, the shell
-    // Paints once at the default 24 rows (paneHeight 20) before App's terminal
+    // Paints once at the default 24 rows (a 20-row tree viewport) before App's terminal
     // Dimensions effect supplies the true size, so a tree that fits the real pane
     // Briefly overflows the too-short default and flashes a scrollbar.
     state.setTerminalWidth(renderer.width);

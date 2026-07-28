@@ -184,14 +184,14 @@ describe("project content search", () => {
       // Away on a focus-intent click): the footer flips to the results variant
       // And the results stay on screen. Rows: header y=5, context y=6, match y=7.
       const matchRowY = 7;
-      await mockMouse.click(state.sidebarWidth() + 10, matchRowY);
+      await mockMouse.click(state.layout().viewer.x + 10, matchRowY);
       const clicked = await settleUntil("click selects", (frame) => frame.includes("g/G ends"));
       expect(clicked).toContain("1 match in 1 file");
 
       // Past the double-click window, two rapid clicks read as a double: open.
       await settleUntil("double-click window elapsed", () => true, 45);
-      await mockMouse.click(state.sidebarWidth() + 10, matchRowY);
-      await mockMouse.click(state.sidebarWidth() + 10, matchRowY);
+      await mockMouse.click(state.layout().viewer.x + 10, matchRowY);
+      await mockMouse.click(state.layout().viewer.x + 10, matchRowY);
       await settleUntil("double click opens", (frame) => frame.includes("ln 2:7"));
 
       // Back into the pane for the states below.
@@ -270,7 +270,7 @@ describe("project content search", () => {
       const selectionBefore = state.searchIndex();
       for (let i = 0; i < 5; i += 1) {
         // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
-        await mockMouse.scroll(state.sidebarWidth() + 10, 12, "down");
+        await mockMouse.scroll(state.layout().viewer.x + 10, 12, "down");
         // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
         await renderOnce();
       }

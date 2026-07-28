@@ -246,7 +246,7 @@ export function Viewer() {
   return (
     <PaneFrame
       focused={focused()}
-      flexGrow={1}
+      width="100%"
       height="100%"
       onMouseDown={() => state.setFocusedPane(state.mainView() === "search" ? "search" : "diff")}
     >

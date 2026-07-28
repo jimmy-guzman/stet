@@ -21,6 +21,9 @@ export interface SettingsSnapshot {
   editor: string | undefined;
   iconsEnabled: boolean;
   ide: string | undefined;
+  /** The manual height override; undefined is the layout model's default (key absent). */
+  problemsHeight: number | undefined;
+  problemsOpen: boolean;
   provenanceEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegex: boolean;
@@ -168,6 +171,13 @@ export function updateSettingsText(
       snapshot.wrap,
       config.viewer?.wrap ?? configDefaults.viewer.wrap,
     ),
+    ...diff(
+      "problems",
+      ["problems", "open"],
+      snapshot.problemsOpen,
+      config.problems?.open ?? configDefaults.problems.open,
+    ),
+    ...diff("problems", ["problems", "height"], snapshot.problemsHeight, config.problems?.height),
     ...diff(
       "sidebar",
       ["sidebar", "open"],

@@ -52,8 +52,8 @@ const STATUS_ROWS = 1;
 
 /** Narrowest a docked pane may become; shrinking past it closes the pane instead of clamping. */
 export const PANE_MIN_WIDTH = 24;
-/** Shortest a docked pane may become: its border plus three content rows. */
-const PANE_MIN_HEIGHT = 5;
+/** Shortest a docked pane may become; shrinking past it closes the pane instead of clamping. */
+export const PANE_MIN_HEIGHT = 5;
 /** Columns the viewer is guaranteed, capping how wide a side dock can grow. */
 const VIEWER_MIN_WIDTH = 28;
 /** Rows the viewer is guaranteed: its border, its title row, and one line of content. */

@@ -37,6 +37,7 @@ here is optional and shown with its default:
   "icons": { "enabled": true }, // Nerd Font file-type icons
   "viewer": { "wrap": false }, // wrap long lines instead of scrolling
   "sidebar": { "open": true, "changesOnly": false }, // "width" defaults to responsive
+  "problems": { "open": false }, // "height" defaults to 10 rows
   "provenance": { "enabled": false }, // the per-line provenance rail
   "diagnostics": { "enabled": true, "download": true }, // LSP diagnostics
   "intel": { "enabled": true }, // language-server code intelligence
@@ -52,6 +53,8 @@ here is optional and shown with its default:
 | `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                                           |
 | `sidebar.width`        | responsive  | fixed sidebar width in cells, clamped to the terminal (`[` / `]` adjust, `\` resets)                                       |
 | `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                                            |
+| `problems.open`        | `false`     | show the problems panel at startup (`p` toggles; unlike `p`, this does not take focus)                                     |
+| `problems.height`      | `10`        | problems panel height in rows, clamped to the terminal (`[` / `]` resize it while focused, `\` resets)                     |
 | `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                                           |
 | `diagnostics.enabled`  | `true`      | `false` runs no language servers for checks; the problems panel reads `diagnostics disabled`                               |
 | `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run)                 |
@@ -72,8 +75,8 @@ an action. The ids, the combo grammar, and the fixed exceptions live in the
 [keybindings reference](/docs/reference/keybindings#custom-keybindings).
 
 You never have to edit the file by hand for these: press `ctrl-s` anywhere to
-save your current session settings (theme, icons, wrap, sidebar, changes-only,
-provenance, search toggles, plus any `--editor`/`--ide` passed this run) back
+save your current session settings (theme, icons, wrap, sidebar, problems panel,
+changes-only, provenance, search toggles, plus any `--editor`/`--ide` passed this run) back
 to the config. Only keys that differ from the file are written, as targeted
 edits that keep your comments, and the notice names what changed; an editor
 resolved from `$EDITOR`-style environment fallbacks is never written, only a

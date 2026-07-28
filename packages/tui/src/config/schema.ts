@@ -37,6 +37,12 @@ export const UserConfigSchema = Schema.Struct({
   // Validates them against the action registry.
   keybindings: Schema.optionalKey(RawRegistry),
   languages: Schema.optionalKey(RawRegistry),
+  problems: Schema.optionalKey(
+    Schema.Struct({
+      height: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
+      open: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
   provenance: Schema.optionalKey(Toggle),
   // Values are a schema URL, a list of URLs, or false; `resolveSchemas` validates
   // Them and merges over the built-in JSON associations.
@@ -74,13 +80,14 @@ export type UserConfig = Schema.Schema.Type<typeof UserConfigSchema>;
  *
  * Only keys whose absence means a value belong here. `editor`, `ide`, and `theme` are absent
  * because an unset key means "nothing to say" and is deliberately never written; `sidebar.width`
- * because an absent width is the responsive default the layout model computes, not a config value;
- * the registries because they are merge bases their own resolvers fold over, not settings.
+ * and `problems.height` because an absent size is the one the layout model computes, not a config
+ * value; the registries because they are merge bases their own resolvers fold over, not settings.
  */
 export const configDefaults = {
   diagnostics: { download: true, enabled: true },
   icons: { enabled: true },
   intel: { enabled: true },
+  problems: { open: false },
   provenance: { enabled: false },
   search: { caseSensitive: false, regex: false, scope: "changed" },
   sidebar: { changesOnly: false, open: true },

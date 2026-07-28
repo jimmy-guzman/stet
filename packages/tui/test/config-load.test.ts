@@ -171,6 +171,22 @@ describe("loadConfigText", () => {
     ]);
   });
 
+  test("problems height must be a positive integer", () => {
+    expect(loadConfigText(`{ "problems": { "height": 0 } }`).issues).toHaveLength(1);
+    expect(loadConfigText(`{ "problems": { "height": 8.5 } }`).issues).toHaveLength(1);
+    expect(loadConfigText(`{ "problems": { "height": 8 } }`).config.problems?.height).toBe(8);
+  });
+
+  test("a bad problems value costs only its own section", () => {
+    const { config, issues } = loadConfigText(
+      `{ "problems": { "open": "yes" }, "sidebar": { "open": false } }`,
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(config.problems).toBeUndefined();
+    expect(config.sidebar).toEqual({ open: false });
+  });
+
   test("sidebar width must be a positive integer", () => {
     expect(loadConfigText(`{ "sidebar": { "width": 0 } }`).issues).toHaveLength(1);
     expect(loadConfigText(`{ "sidebar": { "width": 40.5 } }`).issues).toHaveLength(1);

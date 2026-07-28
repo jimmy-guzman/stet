@@ -39,6 +39,17 @@ function isKeyActionId(id: string): id is KeyActionId {
 }
 
 /**
+ * Ids that moved, mirroring `config/load.ts`'s `movedKeys`. The resize keys grew from sidebar-only
+ * to acting on the focused pane, so an id that still names the sidebar is a rebind the user wrote
+ * against the old registry, not a typo, and the notice should say where it went.
+ */
+const renamedIds = new Map([
+  ["grow-sidebar", "grow-pane"],
+  ["reset-sidebar", "reset-pane"],
+  ["shrink-sidebar", "shrink-pane"],
+]);
+
+/**
  * Merge `config.keybindings` over the defaults, the registry-resolver way: an unknown action id or
  * an unparseable combo reports an issue and leaves the default in place, and `false` (or an empty
  * list) unbinds the action. A combo bound twice in one context, or in `global` and any pane (the
@@ -51,7 +62,12 @@ export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybin
 
   for (const [id, value] of Object.entries(raw)) {
     if (!isKeyActionId(id)) {
-      issues.push(`keybinding "${id}": unknown action`);
+      const renamed = renamedIds.get(id);
+      issues.push(
+        renamed === undefined
+          ? `keybinding "${id}": unknown action`
+          : `keybinding "${id}" is now "${renamed}"`,
+      );
       continue;
     }
     if (value === false) {

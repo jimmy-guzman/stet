@@ -89,13 +89,10 @@ try {
   );
   await configRuntime.dispose();
 
-  // Read once: the seeding batch and the post-load checker state both branch on it,
-  // And two sites resolving the same key is how a default drifts from itself.
   const diagnosticsEnabled = config.diagnostics?.enabled ?? configDefaults.diagnostics.enabled;
 
   // The provisioner reads this env var; set it before any check runs the runtime.
-  // The flag wins over config, and both only ever turn downloads off, so they
-  // Compose with `&&` the way the icons flag does below.
+  // The flag wins over config, and both only ever turn downloads off.
   if (
     !(options.lspDownload && (config.diagnostics?.download ?? configDefaults.diagnostics.download))
   ) {

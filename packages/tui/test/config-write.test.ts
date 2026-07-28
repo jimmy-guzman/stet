@@ -5,11 +5,13 @@ import { Result } from "effect";
 import { updateSettingsText } from "@/config/write";
 import type { SettingsSnapshot } from "@/config/write";
 
-// Defaults mirror the built-ins, so a test overrides only what it exercises. These
-// Literals are deliberately not read from `configDefaults`: stated independently they
-// Are what pins that record's values, since a session at the defaults against a file
-// That omits every key must produce no edit. Sourcing them from the record instead
-// Would make every case below agree with itself and guard nothing.
+/**
+ * Defaults mirror the built-ins, so a test overrides only what it exercises. These literals are
+ * deliberately not read from `configDefaults`: stated independently they are what pins that
+ * record's values, since a session at the defaults against a file omitting every key must produce
+ * no edit. Sourcing them from the record would make every case below agree with itself and guard
+ * nothing.
+ */
 function snapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
   return {
     appearance: "dark",

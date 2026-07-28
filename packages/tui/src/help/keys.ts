@@ -117,7 +117,8 @@ const KEY_HELP_GROUPS: {
       { actions: ["toggle-sidebar"], description: "toggle the file tree sidebar" },
       {
         actions: ["shrink-pane", "grow-pane", "reset-pane"],
-        description: "shrink (closes past min) / grow / reset the focused pane",
+        description:
+          "shrink (closes past min) / grow / reset the focused problems panel, else the tree",
       },
     ],
     heading: "layout",

@@ -78,15 +78,30 @@ const withContent = (rect: Rect): PaneRect => ({
 const responsiveWidth = (available: number) =>
   Math.max(34, Math.min(54, Math.floor(available * 0.34)));
 
+const horizontal = (position: Dock) => position === "left" || position === "right";
+
+/**
+ * Cells a later pane on the same axis still needs, so the first carve cannot spend the second's
+ * minimum. Panes on one axis are carved in turn, and each clamp only sees the band as it stands, so
+ * without this the pair walks the viewer under its floor while every carve looks correct alone.
+ */
+const siblingReserve = (pane: DockedPane, next: DockedPane) => {
+  if (!next.open || horizontal(pane.position) !== horizontal(next.position)) {
+    return 0;
+  }
+  return horizontal(next.position) ? PANE_MIN_WIDTH : PANE_MIN_HEIGHT;
+};
+
 // A manual extent is stored raw and only clamped here, so it never overflows a
 // Shrunken terminal yet is restored intact when the terminal grows back. The
-// Responsive default and a manual override share the clamp, so the
-// Viewer-preserving max holds in both cases; the outer floor covers a band too
-// Small to satisfy either minimum, where the pane simply takes what there is.
-const clampExtent = (desired: number, available: number, paneMin: number, viewerMin: number) =>
+// Responsive default and a manual override share the clamp, so what must survive
+// The carve holds in both cases; the outer floor covers a band too small to
+// Satisfy every minimum, where the pane falls back to its own and takes what
+// There is, which is what a single over-wide pane on a narrow terminal already did.
+const clampExtent = (desired: number, available: number, paneMin: number, reserved: number) =>
   Math.min(
     available,
-    Math.max(paneMin, Math.min(desired, Math.max(paneMin, available - viewerMin))),
+    Math.max(paneMin, Math.min(desired, Math.max(paneMin, available - reserved))),
   );
 
 /**
@@ -94,17 +109,18 @@ const clampExtent = (desired: number, available: number, paneMin: number, viewer
  *
  * @param band - The area still unclaimed, in absolute terminal cells.
  * @param pane - The pane to place; a closed one claims nothing and yields a zero rect.
+ * @param reserve - Cells a later same-axis pane needs, kept free on top of the viewer's own floor.
  */
-function carve(band: Rect, pane: DockedPane): { band: Rect; rect: PaneRect } {
+function carve(band: Rect, pane: DockedPane, reserve: number): { band: Rect; rect: PaneRect } {
   if (!pane.open) {
     return { band, rect: EMPTY_PANE };
   }
-  if (pane.position === "left" || pane.position === "right") {
+  if (horizontal(pane.position)) {
     const extent = clampExtent(
       pane.widthOverride ?? responsiveWidth(band.width),
       band.width,
       PANE_MIN_WIDTH,
-      VIEWER_MIN_WIDTH,
+      VIEWER_MIN_WIDTH + reserve,
     );
     const leading = pane.position === "left";
     return {
@@ -121,7 +137,7 @@ function carve(band: Rect, pane: DockedPane): { band: Rect; rect: PaneRect } {
     pane.heightOverride ?? PROBLEMS_DEFAULT_HEIGHT,
     band.height,
     PANE_MIN_HEIGHT,
-    VIEWER_MIN_HEIGHT,
+    VIEWER_MIN_HEIGHT + reserve,
   );
   const leading = pane.position === "top";
   return {
@@ -173,8 +189,8 @@ export function computeLayout(input: LayoutInput): Layout {
     };
   }
 
-  const problems = carve(band, input.problems);
-  const sidebar = carve(problems.band, input.sidebar);
+  const problems = carve(band, input.problems, siblingReserve(input.problems, input.sidebar));
+  const sidebar = carve(problems.band, input.sidebar, 0);
   return {
     header,
     problems: problems.rect,

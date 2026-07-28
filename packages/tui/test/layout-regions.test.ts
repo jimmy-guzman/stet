@@ -160,6 +160,30 @@ test("a bottom-docked panel spans the terminal while a left-docked tree runs ful
   expect(result.sidebar.height).toBe(result.viewer.height);
 });
 
+test("a pair on one axis leaves the viewer its minimum, not just the first of them", () => {
+  // Each carve sees only the band as it stands, so without reserving the second
+  // Pane's minimum up front the pair walks the viewer under its floor while both
+  // Carves look correct alone. 24 + 24 + 28 fits in 85 columns, so it must.
+  const columns = layout({
+    problems: pane({ open: true, position: "left" }),
+    sidebar: pane({ position: "left" }),
+    terminalWidth: 85,
+  });
+  expect(columns.viewer.width).toBeGreaterThanOrEqual(28);
+  expect(columns.problems.width).toBeGreaterThanOrEqual(24);
+  expect(columns.sidebar.width).toBeGreaterThanOrEqual(24);
+
+  // The same hole on the vertical axis: 5 + 5 + 4 fits in an 18-row terminal.
+  const rows = layout({
+    problems: pane({ open: true, position: "bottom" }),
+    sidebar: pane({ position: "top" }),
+    terminalHeight: 18,
+  });
+  expect(rows.viewer.height).toBeGreaterThanOrEqual(4);
+  expect(rows.problems.height).toBeGreaterThanOrEqual(5);
+  expect(rows.sidebar.height).toBeGreaterThanOrEqual(5);
+});
+
 test("two panes on the same edge stack, the panel outermost", () => {
   const result = layout({
     problems: pane({ open: true, position: "bottom" }),

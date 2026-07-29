@@ -17,7 +17,7 @@ describe("help overlay", () => {
       // Tall enough to fit the whole grouped keybindings list (its section headers
       // And spacers included), so the last-row assertions below verify it sizes to
       // Show every shortcut (no clip) when there's room.
-      height: 72,
+      height: 80,
       width: 120,
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
@@ -51,7 +51,10 @@ describe("help overlay", () => {
       expect(help).toContain("open in terminal editor");
       expect(help).toContain("open in GUI / IDE");
       // The list sizes to fit (wrapped descriptions included), so even the last
-      // Row is visible without scrolling — guards the clip regression.
+      // Row is visible without scrolling — guards the clip regression, where sizing by
+      // Entry count alone clipped wrapped rows off the bottom. The terminal has to be
+      // Tall enough for the whole list (`listHeight` caps at `terminalHeight - 7`), so
+      // A key added to the registry raises the height here rather than weakening this.
       expect(help).toContain("pin / unpin the current file as a tab");
       expect(help).toContain("quit (confirm with y)");
 

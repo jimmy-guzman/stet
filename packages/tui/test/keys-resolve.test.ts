@@ -34,7 +34,9 @@ describe("resolveKeybindings", () => {
   });
 
   test("a list binds several combos to one action", () => {
-    const { issues, set } = resolveKeybindings({ "cursor-down": ["j", "m"] });
+    // The second combo just has to be unbound by default, or the global action holding
+    // It reports a conflict (which `the defaults are conflict-free` above already pins).
+    const { issues, set } = resolveKeybindings({ "cursor-down": ["j", "i"] });
 
     expect(issues).toEqual([]);
     expect(set.combos.get("cursor-down")).toHaveLength(2);

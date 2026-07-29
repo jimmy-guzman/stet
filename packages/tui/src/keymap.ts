@@ -568,6 +568,11 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      if (pressed("zoom-pane")) {
+        state.toggleZoom();
+        return;
+      }
+
       if (pressed("help")) {
         state.setHelpView("keys");
         state.setHelpDialogOpen(true);

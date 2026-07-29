@@ -566,6 +566,10 @@ function createState() {
   const [sidebarHeightOverride, setSidebarHeightOverride] = tracked<number | null>(null);
   const [sidebarScrollTop, setSidebarScrollTop] = tracked(0);
   const [problemsOpen, setProblemsOpen] = tracked(false);
+  // Zoom follows focus rather than pinning a pane, so one boolean is the whole state:
+  // `tab` moves which pane fills the screen with no rule of its own, and focus and
+  // Visibility can never disagree.
+  const [zoomed, setZoomed] = tracked(false);
   const [problemsPosition, setProblemsPosition] = tracked<Dock>("bottom");
   const [problemsWidthOverride, setProblemsWidthOverride] = tracked<number | null>(null);
   const [problemsHeightOverride, setProblemsHeightOverride] = tracked<number | null>(null);
@@ -1672,7 +1676,13 @@ function createState() {
       },
       terminalHeight: terminalHeight(),
       terminalWidth: terminalWidth(),
-      zoom: undefined,
+      zoom: zoomed()
+        ? focusedPane() === "problems"
+          ? "problems"
+          : focusedPane() === "tree"
+            ? "tree"
+            : "viewer"
+        : undefined,
     }),
   );
   // A truncated file reserves one row for the "N more lines" footer, so the diff
@@ -1695,6 +1705,11 @@ function createState() {
     setSidebarOpen(false);
   };
   const toggleSidebar = () => {
+    // Opening or closing a pane is a visibility change, and zoom's premise is that only
+    // The focused pane is visible, so it exits first; otherwise the toggle would land
+    // Invisibly behind the zoom and surprise on the way out. `tab` only moves focus, so
+    // It carries the zoom instead.
+    setZoomed(false);
     if (sidebarOpen()) {
       collapseSidebar();
     } else {
@@ -1712,6 +1727,7 @@ function createState() {
     setProblemsOpen(false);
   };
   const toggleProblems = () => {
+    setZoomed(false);
     if (problemsOpen()) {
       collapseProblems();
       return;
@@ -1777,6 +1793,9 @@ function createState() {
   // Rather than clamping, like an IDE pane; growing a closed one re-opens it at its
   // Remembered extent, the exact inverse of that shrink.
   const nudgePane = (pane: SizablePane, direction: -1 | 1) => {
+    if (zoomed()) {
+      return;
+    }
     if (!pane.open()) {
       if (direction > 0) {
         pane.setOpen(true);
@@ -1794,6 +1813,10 @@ function createState() {
   // The tree and the panel are the two sizable panes. The viewer is whatever the
   // Docks leave, so it has no size of its own and the keys fall back to the sidebar
   // From it, which is what they did everywhere before the panel became sizable.
+  // Zoom is a temporary "show only this" mode, so every geometry key is inert until it
+  // Clears: resizing a pane that already fills the screen means nothing, and the others
+  // Are hidden without being closed, so a write there would land invisibly.
+  const toggleZoom = () => setZoomed((zoom) => !zoom);
   const sizingPane = () => (focusedPane() === "problems" ? problemsPane : sidebarPane);
   const growPane = () => nudgePane(sizingPane(), 1);
   const shrinkPane = () => nudgePane(sizingPane(), -1);
@@ -1803,7 +1826,7 @@ function createState() {
   // Keys fall back to it from the viewer) and silently discarded the width `]` reopens at.
   const resetPane = () => {
     const pane = sizingPane();
-    if (!pane.open()) {
+    if (zoomed() || !pane.open()) {
       return;
     }
     sizingAxis(pane).setOverride(null);
@@ -1813,7 +1836,7 @@ function createState() {
   // Edge the other pane holds, since the model stacks a same-edge pair on purpose.
   const movePane = () => {
     const pane = sizingPane();
-    if (!pane.open()) {
+    if (zoomed() || !pane.open()) {
       return;
     }
     pane.setPosition(NEXT_DOCK[pane.position()]);
@@ -4826,6 +4849,7 @@ function createState() {
     toggleSearchRegex,
     toggleSearchScope,
     toggleSidebar,
+    toggleZoom,
     treeRows,
     truncated,
     truncatedHidden,
@@ -4840,6 +4864,7 @@ function createState() {
     worktreeComboboxResults,
     worktreeSummaries,
     worktrees,
+    zoomed,
   };
 }
 

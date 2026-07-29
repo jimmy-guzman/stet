@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 
+import { DOCKS } from "@/layout/regions";
+
 const ThemeSelection = Schema.Union([
   Schema.String,
   Schema.Struct({ dark: Schema.String, light: Schema.String }),
@@ -12,6 +14,11 @@ const ThemeSelection = Schema.Union([
 const RawRegistry = Schema.Record(Schema.String, Schema.Unknown);
 
 const Toggle = Schema.Struct({ enabled: Schema.optionalKey(Schema.Boolean) });
+
+// Built from the layout model's own tuple: `Schema.Literals` infers `L[number]`, so the schema
+// And the `Dock` union cannot drift apart in either direction.
+const DockPosition = Schema.Literals(DOCKS);
+const PaneExtent = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0));
 
 // Config is shaped by feature: each section owns its settings, including its
 // Off switch, so a feature's whole surface lives under one key.
@@ -39,8 +46,10 @@ export const UserConfigSchema = Schema.Struct({
   languages: Schema.optionalKey(RawRegistry),
   problems: Schema.optionalKey(
     Schema.Struct({
-      height: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
+      height: Schema.optionalKey(PaneExtent),
       open: Schema.optionalKey(Schema.Boolean),
+      position: Schema.optionalKey(DockPosition),
+      width: Schema.optionalKey(PaneExtent),
     }),
   ),
   provenance: Schema.optionalKey(Toggle),
@@ -57,8 +66,10 @@ export const UserConfigSchema = Schema.Struct({
   sidebar: Schema.optionalKey(
     Schema.Struct({
       changesOnly: Schema.optionalKey(Schema.Boolean),
+      height: Schema.optionalKey(PaneExtent),
       open: Schema.optionalKey(Schema.Boolean),
-      width: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
+      position: Schema.optionalKey(DockPosition),
+      width: Schema.optionalKey(PaneExtent),
     }),
   ),
   theme: Schema.optionalKey(ThemeSelection),
@@ -87,10 +98,10 @@ export const configDefaults = {
   diagnostics: { download: true, enabled: true },
   icons: { enabled: true },
   intel: { enabled: true },
-  problems: { open: false },
+  problems: { open: false, position: "bottom" },
   provenance: { enabled: false },
   search: { caseSensitive: false, regex: false, scope: "changed" },
-  sidebar: { changesOnly: false, open: true },
+  sidebar: { changesOnly: false, open: true, position: "left" },
   update: { check: true },
   viewer: { wrap: false },
 } as const satisfies { [K in keyof UserConfig]?: UserConfig[K] };

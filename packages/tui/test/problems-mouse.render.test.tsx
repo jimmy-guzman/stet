@@ -5,7 +5,6 @@ import { testRender } from "@opentui/solid";
 import { App } from "@/App";
 import { stateForResolvedChecker } from "@/diagnostics/checker";
 import type { Diagnostic } from "@/diagnostics/checker";
-import { PROBLEMS_DEFAULT_HEIGHT } from "@/layout/regions";
 import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
@@ -20,17 +19,18 @@ describe("problems panel mouse", () => {
 
   // Row coordinates are read back off the rendered frame rather than hardcoded, so the
   // Test does not encode the panel's row positions. The search is scoped to the panel's
-  // Own box (the bottom pane, PROBLEMS_DEFAULT_HEIGHT rows above the status bar) because the
-  // Same text appears elsewhere on screen: the viewer's title row also reads `src/a.ts`
-  // And the status bar echoes the finding's message, so an unscoped match lands on the
-  // Wrong pane entirely.
+  // Own rect because the same text appears elsewhere on screen: the viewer's title row
+  // Also reads `src/a.ts` and the status bar echoes the finding's message, so an unscoped
+  // Match lands on the wrong pane entirely. The scope comes from `state.layout()`, the one
+  // Owner of geometry, rather than from `HEIGHT - 1 - <default height>`, which was a
+  // Re-derivation of the layout that silently assumed a bottom dock.
   const problemsRowOf = (frame: string, text: string) => {
-    const top = HEIGHT - 1 - PROBLEMS_DEFAULT_HEIGHT;
+    const { height, y } = state.layout().problems;
     const offset = frame
       .split("\n")
-      .slice(top, top + PROBLEMS_DEFAULT_HEIGHT)
+      .slice(y, y + height)
       .findIndex((line) => line.includes(text));
-    return offset === -1 ? -1 : top + offset;
+    return offset === -1 ? -1 : y + offset;
   };
 
   const openPanel = async () => {

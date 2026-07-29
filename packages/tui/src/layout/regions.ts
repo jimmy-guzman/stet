@@ -4,8 +4,15 @@
 // Pinned the tree context menu to a hardcoded column. Kept free of Solid/OpenTUI
 // So the geometry is unit-tested directly, the way `viewer/anchor.ts` is.
 
+/**
+ * Every edge a pane can dock to, in the clockwise order the move key walks. This tuple is the one
+ * list: `Dock` derives from it and the config schema's literals are built from it, so an edge added
+ * here reaches the type, the rotation, and the schema together and none can drift from the others.
+ */
+export const DOCKS = ["left", "top", "right", "bottom"] as const;
+
 /** Which edge a pane docks to. The viewer is always the center, so it never carries one. */
-type Dock = "bottom" | "left" | "right" | "top";
+export type Dock = (typeof DOCKS)[number];
 
 /** The pane that fills the band alone while zoomed. */
 type ZoomTarget = "problems" | "tree" | "viewer";
@@ -58,8 +65,11 @@ export const PANE_MIN_HEIGHT = 5;
 const VIEWER_MIN_WIDTH = 28;
 /** Rows the viewer is guaranteed: its border, its title row, and one line of content. */
 const VIEWER_MIN_HEIGHT = 4;
-/** Rows a top- or bottom-docked problems panel takes without a manual size. */
-export const PROBLEMS_DEFAULT_HEIGHT = 10;
+/**
+ * Rows a top- or bottom-docked pane takes without a manual size; the vertical peer of
+ * `responsiveWidth`.
+ */
+export const PANE_DEFAULT_HEIGHT = 10;
 
 const EMPTY: Rect = { height: 0, width: 0, x: 0, y: 0 };
 const EMPTY_PANE: PaneRect = { ...EMPTY, content: EMPTY };
@@ -78,7 +88,8 @@ const withContent = (rect: Rect): PaneRect => ({
 const responsiveWidth = (available: number) =>
   Math.max(34, Math.min(54, Math.floor(available * 0.34)));
 
-const horizontal = (position: Dock) => position === "left" || position === "right";
+/** Whether an edge sizes in columns; a top or bottom dock sizes in rows. */
+export const horizontalDock = (position: Dock) => position === "left" || position === "right";
 
 /**
  * Cells a later pane on the same axis still needs, so the first carve cannot spend the second's
@@ -86,10 +97,10 @@ const horizontal = (position: Dock) => position === "left" || position === "righ
  * without this the pair walks the viewer under its floor while every carve looks correct alone.
  */
 const siblingReserve = (pane: DockedPane, next: DockedPane) => {
-  if (!next.open || horizontal(pane.position) !== horizontal(next.position)) {
+  if (!next.open || horizontalDock(pane.position) !== horizontalDock(next.position)) {
     return 0;
   }
-  return horizontal(next.position) ? PANE_MIN_WIDTH : PANE_MIN_HEIGHT;
+  return horizontalDock(next.position) ? PANE_MIN_WIDTH : PANE_MIN_HEIGHT;
 };
 
 // A manual extent is stored raw and only clamped here, so it never overflows a
@@ -115,7 +126,7 @@ function carve(band: Rect, pane: DockedPane, reserve: number): { band: Rect; rec
   if (!pane.open) {
     return { band, rect: EMPTY_PANE };
   }
-  if (horizontal(pane.position)) {
+  if (horizontalDock(pane.position)) {
     const extent = clampExtent(
       pane.widthOverride ?? responsiveWidth(band.width),
       band.width,
@@ -134,7 +145,7 @@ function carve(band: Rect, pane: DockedPane, reserve: number): { band: Rect; rec
     };
   }
   const extent = clampExtent(
-    pane.heightOverride ?? PROBLEMS_DEFAULT_HEIGHT,
+    pane.heightOverride ?? PANE_DEFAULT_HEIGHT,
     band.height,
     PANE_MIN_HEIGHT,
     VIEWER_MIN_HEIGHT + reserve,

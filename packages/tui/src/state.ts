@@ -108,7 +108,8 @@ import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from ".
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import type { IntelRequestError } from "./intel/service";
-import { computeLayout, PANE_MIN_HEIGHT, PANE_MIN_WIDTH } from "./layout/regions";
+import { computeLayout, horizontalDock, PANE_MIN_HEIGHT, PANE_MIN_WIDTH } from "./layout/regions";
+import type { Dock } from "./layout/regions";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
@@ -278,6 +279,18 @@ const SEARCH_RESULT_CAP = 500;
 
 // Lines of surrounding context shown on each side of a search match.
 const SEARCH_CONTEXT_LINES = 2;
+
+/**
+ * Clockwise, so one press of the move key is a 90 degree turn to an adjacent edge and four presses
+ * return the pane home. Keyed by every edge, so a new `Dock` is a compile error until it earns a
+ * place in the rotation, the way `legend.ts` keys change kinds and provenance tiers.
+ */
+const NEXT_DOCK: Record<Dock, Dock> = {
+  bottom: "left",
+  left: "top",
+  right: "bottom",
+  top: "right",
+};
 
 const emptyModel: GitModel = {
   branch: undefined,
@@ -546,9 +559,15 @@ function createState() {
   const [focusedNodeId, setFocusedNodeId] = tracked("");
   const [focusedPane, setFocusedPane] = tracked<"tree" | "diff" | "problems" | "search">("tree");
   const [sidebarOpen, setSidebarOpen] = tracked(true);
+  const [sidebarPosition, setSidebarPosition] = tracked<Dock>("left");
+  // A pane keeps a size per axis: 50 columns is not 50 rows, so a move never converts,
+  // And a size set on one edge is still there when the pane comes back to it.
   const [sidebarWidthOverride, setSidebarWidthOverride] = tracked<number | null>(null);
+  const [sidebarHeightOverride, setSidebarHeightOverride] = tracked<number | null>(null);
   const [sidebarScrollTop, setSidebarScrollTop] = tracked(0);
   const [problemsOpen, setProblemsOpen] = tracked(false);
+  const [problemsPosition, setProblemsPosition] = tracked<Dock>("bottom");
+  const [problemsWidthOverride, setProblemsWidthOverride] = tracked<number | null>(null);
   const [problemsHeightOverride, setProblemsHeightOverride] = tracked<number | null>(null);
   const [problemIndex, setProblemIndex] = tracked(0);
   const [problemsScrollTop, setProblemsScrollTop] = tracked(0);
@@ -1636,20 +1655,19 @@ function createState() {
   // Terminal dimensions become pane geometry in exactly one place, `computeLayout`.
   // Renderers read a rect off this record; none re-derives its own budget from the
   // Terminal size, which is why there is no `sidebarWidth`/`paneHeight` accessor to
-  // Subtract from. Docking and zoom are model inputs already, pinned to today's
-  // Arrangement until the signals that drive them land.
+  // Subtract from. Zoom is still a model input with no signal behind it.
   const layout = createMemo(() =>
     computeLayout({
       problems: {
         heightOverride: problemsHeightOverride(),
         open: problemsOpen(),
-        position: "bottom",
-        widthOverride: null,
+        position: problemsPosition(),
+        widthOverride: problemsWidthOverride(),
       },
       sidebar: {
-        heightOverride: null,
+        heightOverride: sidebarHeightOverride(),
         open: sidebarOpen(),
-        position: "left",
+        position: sidebarPosition(),
         widthOverride: sidebarWidthOverride(),
       },
       terminalHeight: terminalHeight(),
@@ -1683,26 +1701,6 @@ function createState() {
       setSidebarOpen(true);
     }
   };
-  // Nudges seed from the current rendered width on first use so the step is
-  // Relative to what's on screen, not a stale override. Shrinking past the
-  // Minimum collapses the sidebar rather than clamping, like an IDE pane.
-  const nudgeSidebarWidth = (delta: number) => {
-    if (!sidebarOpen()) {
-      // A grow (`]`) re-opens a collapsed sidebar to its remembered width, the
-      // Inverse of the shrink past the minimum that collapsed it; a shrink is a no-op.
-      if (delta > 0) {
-        setSidebarOpen(true);
-      }
-      return;
-    }
-    const next = (sidebarWidthOverride() ?? layout().sidebar.width) + delta;
-    if (next < PANE_MIN_WIDTH) {
-      collapseSidebar();
-      return;
-    }
-    setSidebarWidthOverride(next);
-  };
-  const resetSidebarWidth = () => setSidebarWidthOverride(null);
   // Closing the panel moves focus off it the way collapsing the sidebar does, and
   // Lands on the tree only while the tree is on screen: with the sidebar collapsed,
   // The old unconditional jump to "tree" left the keys driving a pane nobody could
@@ -1724,24 +1722,102 @@ function createState() {
     setFocusedPane("problems");
     setProblemIndex(firstNavigableProblemIndex());
   };
-  // Only reachable while the panel is open and focused, so unlike the sidebar's
-  // Nudge there is no reopen branch: `p` is what brings a closed panel back.
-  const nudgeProblemsHeight = (delta: number) => {
-    const next = (problemsHeightOverride() ?? layout().problems.height) + delta;
-    if (next < PANE_MIN_HEIGHT) {
-      collapseProblems();
+  // The two sizable panes as one shape, so an action names a pane and reads the same
+  // Accessors for either. Nothing new is stored: every field is a signal declared above.
+  const sidebarPane = {
+    collapse: collapseSidebar,
+    heightOverride: sidebarHeightOverride,
+    open: sidebarOpen,
+    position: sidebarPosition,
+    rect: () => layout().sidebar,
+    setHeightOverride: setSidebarHeightOverride,
+    setOpen: setSidebarOpen,
+    setPosition: setSidebarPosition,
+    setWidthOverride: setSidebarWidthOverride,
+    widthOverride: sidebarWidthOverride,
+  };
+  type SizablePane = typeof sidebarPane;
+  // Annotated, not inferred: a field that drifts from the sidebar's shape is a compile
+  // Error here rather than a branch `sizingAxis` silently cannot reach.
+  const problemsPane: SizablePane = {
+    collapse: collapseProblems,
+    heightOverride: problemsHeightOverride,
+    open: problemsOpen,
+    position: problemsPosition,
+    rect: () => layout().problems,
+    setHeightOverride: setProblemsHeightOverride,
+    setOpen: setProblemsOpen,
+    setPosition: setProblemsPosition,
+    setWidthOverride: setProblemsWidthOverride,
+    widthOverride: problemsWidthOverride,
+  };
+  // Which axis a nudge steps on, which floor it stops at, and which override holds the
+  // Extent all come from the pane's *current edge*, never its identity: a top-docked tree
+  // Resizes in rows against PANE_MIN_HEIGHT exactly as the panel does. The step is per
+  // Axis too, since a terminal cell is taller than it is wide, so two columns read as
+  // About one row; that is why 2 and 1 are no longer attached to "tree" and "panel".
+  const sizingAxis = (pane: SizablePane) =>
+    horizontalDock(pane.position())
+      ? {
+          extent: () => pane.rect().width,
+          min: PANE_MIN_WIDTH,
+          override: pane.widthOverride,
+          setOverride: pane.setWidthOverride,
+          step: 2,
+        }
+      : {
+          extent: () => pane.rect().height,
+          min: PANE_MIN_HEIGHT,
+          override: pane.heightOverride,
+          setOverride: pane.setHeightOverride,
+          step: 1,
+        };
+  // Nudges seed from the current rendered extent on first use so the step is relative to
+  // What's on screen, not a stale override. Shrinking past the minimum closes the pane
+  // Rather than clamping, like an IDE pane; growing a closed one re-opens it at its
+  // Remembered extent, the exact inverse of that shrink.
+  const nudgePane = (pane: SizablePane, direction: -1 | 1) => {
+    if (!pane.open()) {
+      if (direction > 0) {
+        pane.setOpen(true);
+      }
       return;
     }
-    setProblemsHeightOverride(next);
+    const axis = sizingAxis(pane);
+    const next = (axis.override() ?? axis.extent()) + direction * axis.step;
+    if (next < axis.min) {
+      pane.collapse();
+      return;
+    }
+    axis.setOverride(next);
   };
   // The tree and the panel are the two sizable panes. The viewer is whatever the
   // Docks leave, so it has no size of its own and the keys fall back to the sidebar
   // From it, which is what they did everywhere before the panel became sizable.
-  const sizingProblems = () => focusedPane() === "problems";
-  const growPane = () => (sizingProblems() ? nudgeProblemsHeight(1) : nudgeSidebarWidth(2));
-  const shrinkPane = () => (sizingProblems() ? nudgeProblemsHeight(-1) : nudgeSidebarWidth(-2));
-  const resetPane = () =>
-    sizingProblems() ? setProblemsHeightOverride(null) : resetSidebarWidth();
+  const sizingPane = () => (focusedPane() === "problems" ? problemsPane : sidebarPane);
+  const growPane = () => nudgePane(sizingPane(), 1);
+  const shrinkPane = () => nudgePane(sizingPane(), -1);
+  // Only the docked axis resets, so a left-docked tree's `\` never wipes a height set
+  // While it was on top, which is what makes a four-press round trip idempotent. A closed
+  // Pane ignores it, like `nudgePane`: otherwise `\` reached past a collapsed tree (the
+  // Keys fall back to it from the viewer) and silently discarded the width `]` reopens at.
+  const resetPane = () => {
+    const pane = sizingPane();
+    if (!pane.open()) {
+      return;
+    }
+    sizingAxis(pane).setOverride(null);
+  };
+  // A closed pane does not move: relocating something off-screen shows nothing and
+  // Quietly rewrites a setting `ctrl-s` would persist. It deliberately does not skip an
+  // Edge the other pane holds, since the model stacks a same-edge pair on purpose.
+  const movePane = () => {
+    const pane = sizingPane();
+    if (!pane.open()) {
+      return;
+    }
+    pane.setPosition(NEXT_DOCK[pane.position()]);
+  };
   const overlayWidth = createMemo(() => Math.max(30, Math.min(70, terminalWidth() - 8)));
   const overlayLeft = createMemo(() =>
     Math.max(0, Math.floor((terminalWidth() - overlayWidth()) / 2)),
@@ -3858,11 +3934,15 @@ function createState() {
       ide: ideFlag(),
       problemsHeight: problemsHeightOverride() ?? undefined,
       problemsOpen: problemsOpen(),
+      problemsPosition: problemsPosition(),
+      problemsWidth: problemsWidthOverride() ?? undefined,
       provenanceEnabled: blameEnabled(),
       searchCaseSensitive: searchCaseSensitive(),
       searchRegex: searchRegex(),
       searchScope: searchScope(),
+      sidebarHeight: sidebarHeightOverride() ?? undefined,
       sidebarOpen: sidebarOpen(),
+      sidebarPosition: sidebarPosition(),
       sidebarWidth: sidebarWidthOverride() ?? undefined,
       theme: selection(),
       wrap: overflow() === "wrap",
@@ -4554,12 +4634,12 @@ function createState() {
     mainView,
     mainWorktreePath,
     moveFocus,
+    movePane,
     moveSearchSelection,
     navState,
     navigableLines,
     notify,
     now,
-    nudgeSidebarWidth,
     openCommandMenu,
     openExternally,
     openFileCombobox,
@@ -4579,8 +4659,8 @@ function createState() {
     problemIndex,
     problems,
     problemsEmpty,
-    problemsHeightOverride,
     problemsOpen,
+    problemsPosition,
     problemsScrollTop,
     provenanceForRow,
     quitConfirmOpen,
@@ -4597,7 +4677,6 @@ function createState() {
     repoRoot,
     resetFind,
     resetPane,
-    resetSidebarWidth,
     resetState,
     resolveViewerDecoration,
     restartLanguageServers,
@@ -4673,7 +4752,9 @@ function createState() {
     setProblemIndex,
     setProblemsHeightOverride,
     setProblemsOpen,
+    setProblemsPosition,
     setProblemsScrollTop,
+    setProblemsWidthOverride,
     setProvisioningLanguages,
     setQuitConfirmOpen,
     setReferencesIndex,
@@ -4694,7 +4775,9 @@ function createState() {
     setSearchSelection,
     setSelectionAnchor,
     setSessionBase,
+    setSidebarHeightOverride,
     setSidebarOpen,
+    setSidebarPosition,
     setSidebarScrollTop,
     setSidebarWidthOverride,
     setSymbolsIndex,
@@ -4714,6 +4797,7 @@ function createState() {
     showHover,
     shrinkPane,
     sidebarOpen,
+    sidebarPosition,
     sidebarScrollTop,
     statusBarModel,
     switchWorktree,

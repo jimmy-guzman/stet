@@ -544,21 +544,27 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // Resize the focused pane along its dock axis. Grow also re-opens a collapsed
-      // Sidebar, the inverse of shrink collapsing it past the minimum; shrink/reset
-      // Only adjust an already-open pane.
+      // Resize the focused pane along its dock axis. Every one self-guards on that
+      // Pane's own open state, so there is no gate here: grow re-opens a collapsed
+      // Sidebar, and shrink/reset are no-ops on a pane that is already closed.
       if (pressed("grow-pane")) {
         state.growPane();
         return;
       }
 
-      if (pressed("shrink-pane") && (state.sidebarOpen() || state.problemsOpen())) {
+      if (pressed("shrink-pane")) {
         state.shrinkPane();
         return;
       }
 
-      if (pressed("reset-pane") && (state.sidebarOpen() || state.problemsOpen())) {
+      if (pressed("reset-pane")) {
         state.resetPane();
+        return;
+      }
+
+      // Self-guarding (a closed pane does not move), and nothing later claims `d`.
+      if (pressed("move-pane")) {
+        state.movePane();
         return;
       }
 

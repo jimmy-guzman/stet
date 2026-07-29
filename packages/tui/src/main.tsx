@@ -203,14 +203,18 @@ try {
     // Resolved template, which folds in environment fallbacks).
     state.setEditorFlag(options.editor);
     state.setIdeFlag(options.ide);
+    state.setSidebarPosition(config.sidebar?.position ?? configDefaults.sidebar.position);
     state.setSidebarWidthOverride(config.sidebar?.width ?? null);
+    state.setSidebarHeightOverride(config.sidebar?.height ?? null);
     state.setChangesOnly(config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly);
     if (!(config.sidebar?.open ?? configDefaults.sidebar.open)) {
       // Mirror collapseSidebar: focus must leave the hidden tree so keys land.
       state.setSidebarOpen(false);
       state.setFocusedPane("diff");
     }
+    state.setProblemsPosition(config.problems?.position ?? configDefaults.problems.position);
     state.setProblemsHeightOverride(config.problems?.height ?? null);
+    state.setProblemsWidthOverride(config.problems?.width ?? null);
     // Seeding the panel open is an initial condition, so unlike `p` it does not take
     // Focus: only the action that means "go look at problems" focuses the panel.
     state.setProblemsOpen(config.problems?.open ?? configDefaults.problems.open);

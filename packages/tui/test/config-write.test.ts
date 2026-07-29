@@ -21,11 +21,15 @@ function snapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
     ide: undefined,
     problemsHeight: undefined,
     problemsOpen: false,
+    problemsPosition: "bottom",
+    problemsWidth: undefined,
     provenanceEnabled: false,
     searchCaseSensitive: false,
     searchRegex: false,
     searchScope: "changed",
+    sidebarHeight: undefined,
     sidebarOpen: true,
+    sidebarPosition: "left",
     sidebarWidth: undefined,
     theme: undefined,
     wrap: false,
@@ -132,6 +136,15 @@ describe("updateSettingsText", () => {
     expect(saved).toEqual(["problems"]);
     expect(text).not.toContain("height");
     expect(text).toContain(`"open": true`);
+  });
+
+  test("moving a pane writes its position", () => {
+    const { saved, text } = unwrap(
+      updateSettingsText("{}", snapshot({ sidebarPosition: "right" })),
+    );
+
+    expect(saved).toEqual(["sidebar"]);
+    expect(text).toContain(`"position": "right"`);
   });
 
   test("a session value matching the file is not written, and its comment survives", () => {

@@ -120,6 +120,10 @@ const KEY_HELP_GROUPS: {
         description:
           "shrink (closes past min) / grow / reset the focused problems panel, else the tree",
       },
+      {
+        actions: ["move-pane"],
+        description: "dock the focused pane to the next edge, clockwise",
+      },
     ],
     heading: "layout",
   },

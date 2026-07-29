@@ -20,6 +20,7 @@ export const keyActions = [
   { combos: ["]"], context: "global", id: "grow-pane" },
   { combos: ["["], context: "global", id: "shrink-pane" },
   { combos: ["\\"], context: "global", id: "reset-pane" },
+  { combos: ["d"], context: "global", id: "move-pane" },
   { combos: ["?"], context: "global", id: "help" },
   { combos: ["ctrl-t"], context: "global", id: "pin-tab" },
   { combos: ["ctrl-w"], context: "global", id: "close-tab" },

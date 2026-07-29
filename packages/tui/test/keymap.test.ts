@@ -119,7 +119,7 @@ describe("createKeyHandler", () => {
   });
 
   test("] re-opens a collapsed sidebar", () => {
-    state.nudgeSidebarWidth(-100); // Shrink past the minimum -> collapsed
+    state.toggleSidebar(); // Collapsed, the same path a shrink past the minimum takes
     expect(state.sidebarOpen()).toBe(false);
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
 

@@ -99,6 +99,31 @@ test("growing is clamped so the viewer keeps its floor", () => {
   expect(state.layout().viewer.height).toBeGreaterThanOrEqual(4);
 });
 
+test("collapsing a minimum-sized panel with no override reopens at the same height", () => {
+  // At 11 rows the clamped default lands exactly on the minimum, so the first shrink
+  // Closes the panel with no override ever written. `p` is what brings it back (the
+  // Close moved focus off it, so the resize keys now target the tree), and it returns
+  // To the same default.
+  batch(() => {
+    state.setTerminalHeight(11);
+    state.toggleProblems();
+  });
+  expect(state.layout().problems.height).toBe(5);
+
+  state.shrinkPane();
+  expect(state.problemsOpen()).toBe(false);
+
+  state.toggleProblems();
+  expect(state.layout().problems.height).toBe(5);
+
+  // 5 alone cannot tell "no override, and the default happens to be 5" from "an override
+  // Of 5 was written on the way down". Growing the terminal is what separates them: still
+  // Tracking the default means the panel follows it, where a leftover override would pin
+  // The panel at 5 forever.
+  state.setTerminalHeight(40);
+  expect(state.layout().problems.height).toBe(10);
+});
+
 test("the resize keys fall back to the sidebar from any other pane", () => {
   batch(() => {
     state.setTerminalWidth(80);

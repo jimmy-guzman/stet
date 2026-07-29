@@ -562,6 +562,12 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // Self-guarding (a closed pane does not move), and nothing later claims `d`.
+      if (pressed("move-pane")) {
+        state.movePane();
+        return;
+      }
+
       if (pressed("help")) {
         state.setHelpView("keys");
         state.setHelpDialogOpen(true);

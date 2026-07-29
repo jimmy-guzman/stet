@@ -1,83 +1,83 @@
-import { afterEach, expect, test } from "bun:test";
-
-import { batch } from "solid-js";
+import { expect, test } from "bun:test";
 
 import { state } from "@/state";
 
-// State is a global singleton shared across test files; restore the sidebar
-// Defaults (open, no override, 80-col terminal) after each case.
-afterEach(() => {
-  batch(() => {
-    state.setSidebarOpen(true);
-    state.resetSidebarWidth();
-    state.setTerminalWidth(80);
-  });
-});
+// The tree's half of the resize contract, the peer of `problems-height.test.ts`.
+// Both drive the public actions with focus set, since "resize the focused pane" is
+// The behavior; the tree is the default target, so these need no focus setup. The
+// Preload resets state before every test, so nothing here has to undo itself.
+const grow = (times: number) => {
+  for (let step = 0; step < times; step += 1) {
+    state.growPane();
+  }
+};
+const shrink = (times: number) => {
+  for (let step = 0; step < times; step += 1) {
+    state.shrinkPane();
+  }
+};
 
 test("with no override the width is the responsive default", () => {
   state.setTerminalWidth(80);
+
   expect(state.layout().sidebar.width).toBe(34);
 });
 
 test("on a medium terminal the auto width is capped so growing never shrinks it", () => {
   // At 60 cols the responsive default (34) exceeds the viewer-preserving max (32),
-  // So it caps to 32 and a grow nudge cannot push the rendered width below that.
+  // So it caps to 32 and a grow cannot push the rendered width below that.
   state.setTerminalWidth(60);
   expect(state.layout().sidebar.width).toBe(32);
 
-  state.nudgeSidebarWidth(2);
+  grow(1);
   expect(state.layout().sidebar.width).toBe(32);
 });
 
-test("nudging seeds from the current width then steps by the delta", () => {
+test("resizing steps by two columns from the current width", () => {
   state.setTerminalWidth(80);
 
-  state.nudgeSidebarWidth(2);
+  grow(1);
   expect(state.layout().sidebar.width).toBe(36);
 
-  state.nudgeSidebarWidth(-4);
+  shrink(2);
   expect(state.layout().sidebar.width).toBe(32);
 });
 
 test("growing is clamped to the viewer-preserving max", () => {
   state.setTerminalWidth(80);
 
-  state.nudgeSidebarWidth(100);
+  grow(20);
+
   expect(state.layout().sidebar.width).toBe(52);
-});
-
-test("shrinking past the minimum collapses the sidebar instead of clamping", () => {
-  state.setTerminalWidth(80);
-
-  state.nudgeSidebarWidth(-100);
-  expect(state.sidebarOpen()).toBe(false);
-  expect(state.layout().sidebar.width).toBe(0);
 });
 
 test("shrinking step by step rests at the minimum before collapsing", () => {
   state.setTerminalWidth(80);
 
-  // 34 -> 24 lands on the minimum, still open
-  state.nudgeSidebarWidth(-10);
+  // 34 -> 24 lands on the minimum, still open.
+  shrink(5);
   expect(state.sidebarOpen()).toBe(true);
   expect(state.layout().sidebar.width).toBe(24);
 
-  // One more step would dip below the minimum, so it collapses
-  state.nudgeSidebarWidth(-2);
+  // One more step would dip below the minimum, so it collapses.
+  shrink(1);
   expect(state.sidebarOpen()).toBe(false);
+  expect(state.focusedPane()).not.toBe("tree");
 });
 
 test("reset returns to the responsive default", () => {
-  state.nudgeSidebarWidth(11);
-  expect(state.layout().sidebar.width).toBe(45);
+  state.setTerminalWidth(80);
+  grow(2);
+  expect(state.layout().sidebar.width).toBe(38);
 
-  state.resetSidebarWidth();
+  state.resetPane();
+
   expect(state.layout().sidebar.width).toBe(34);
 });
 
-test("a manual width survives a shrink-and-grow without overflowing", () => {
+test("a manual width survives the terminal shrinking and growing back", () => {
   state.setTerminalWidth(80);
-  state.nudgeSidebarWidth(16);
+  grow(8);
   expect(state.layout().sidebar.width).toBe(50);
 
   state.setTerminalWidth(40);
@@ -87,36 +87,45 @@ test("a manual width survives a shrink-and-grow without overflowing", () => {
   expect(state.layout().sidebar.width).toBe(50);
 });
 
-test("a width set before collapsing is restored when the sidebar reopens", () => {
-  state.setTerminalWidth(80);
-  state.nudgeSidebarWidth(16); // 34 -> 50, stored
-  state.nudgeSidebarWidth(-100); // Collapses, override untouched
-  expect(state.sidebarOpen()).toBe(false);
-
-  state.setSidebarOpen(true);
-  expect(state.layout().sidebar.width).toBe(50);
-});
-
 test("a closed sidebar has zero width regardless of override", () => {
-  state.nudgeSidebarWidth(11);
+  state.setTerminalWidth(80);
+  grow(8);
+
   state.setSidebarOpen(false);
+
   expect(state.layout().sidebar.width).toBe(0);
 });
 
-test("growing re-opens a collapsed sidebar to its remembered width", () => {
+test("growing re-opens a sidebar collapsed by the toggle at its remembered width", () => {
   state.setTerminalWidth(80);
-  state.nudgeSidebarWidth(16); // 34 -> 50, stored
-  state.nudgeSidebarWidth(-100); // Collapses, override intact
-  expect(state.sidebarOpen()).toBe(false);
+  grow(8); // 34 -> 50, stored
+  state.toggleSidebar(); // Closing this way never touches the width
 
-  state.nudgeSidebarWidth(2); // `]` re-opens
+  grow(1);
+
   expect(state.sidebarOpen()).toBe(true);
   expect(state.layout().sidebar.width).toBe(50);
 });
 
+test("shrinking all the way down leaves the minimum as the remembered width", () => {
+  state.setTerminalWidth(80);
+  grow(8); // 34 -> 50
+
+  shrink(20); // Steps down to 24, then one more step closes it
+  expect(state.sidebarOpen()).toBe(false);
+
+  // Reopening restores where the shrinking actually stopped, not where it began:
+  // Every step wrote the override, so 50 was walked down long before the close.
+  grow(1);
+  expect(state.layout().sidebar.width).toBe(24);
+});
+
 test("shrinking a collapsed sidebar stays closed", () => {
   state.setTerminalWidth(80);
-  state.nudgeSidebarWidth(-100); // Collapses
-  state.nudgeSidebarWidth(-2); // `[` is a no-op while closed
+  shrink(20);
+  expect(state.sidebarOpen()).toBe(false);
+
+  shrink(1);
+
   expect(state.sidebarOpen()).toBe(false);
 });

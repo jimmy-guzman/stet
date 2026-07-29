@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { DockedPane, Layout, LayoutInput } from "@/layout/regions";
-import { computeLayout, PROBLEMS_DEFAULT_HEIGHT } from "@/layout/regions";
+import { computeLayout, DOCKS, PANE_DEFAULT_HEIGHT } from "@/layout/regions";
 
 const pane = (overrides: Partial<DockedPane> = {}): DockedPane => ({
   heightOverride: null,
@@ -35,8 +35,6 @@ const covered = (result: Layout) => [
   ...cells(result.problems),
   ...cells(result.status),
 ];
-
-const DOCKS = ["bottom", "left", "right", "top"] as const;
 
 test("the regions tile the terminal exactly, for every pairing of docks", () => {
   for (const sidebarPosition of DOCKS) {
@@ -73,8 +71,8 @@ test("the default arrangement reproduces the shell it replaces", () => {
   // The panel spans the whole terminal, the tree included, and the viewer keeps
   // The `terminalHeight - header - status - border` rows it had as `paneHeight`.
   expect(result.problems.width).toBe(80);
-  expect(result.problems.height).toBe(PROBLEMS_DEFAULT_HEIGHT);
-  expect(result.viewer.content.height).toBe(24 - 4 - PROBLEMS_DEFAULT_HEIGHT);
+  expect(result.problems.height).toBe(PANE_DEFAULT_HEIGHT);
+  expect(result.viewer.content.height).toBe(24 - 4 - PANE_DEFAULT_HEIGHT);
 });
 
 test("content is the frame inside its single-cell border", () => {
@@ -124,7 +122,7 @@ test("a docked pane never squeezes the viewer out of the terminal", () => {
     terminalHeight: 12,
   });
 
-  expect(result.problems.height).toBeLessThan(PROBLEMS_DEFAULT_HEIGHT);
+  expect(result.problems.height).toBeLessThan(PANE_DEFAULT_HEIGHT);
   expect(result.viewer.height).toBeGreaterThanOrEqual(4);
 });
 
@@ -182,6 +180,43 @@ test("a pair on one axis leaves the viewer its minimum, not just the first of th
   expect(rows.viewer.height).toBeGreaterThanOrEqual(4);
   expect(rows.problems.height).toBeGreaterThanOrEqual(5);
   expect(rows.sidebar.height).toBeGreaterThanOrEqual(5);
+});
+
+test("a pane honors only the override on the axis it is docked to", () => {
+  // Every `src/` call site passes both overrides now, so the model has to ignore the
+  // One that does not match the edge rather than rely on the caller nulling it.
+  const both = pane({ heightOverride: 20, widthOverride: 50 });
+
+  expect(layout({ sidebar: both, terminalHeight: 40 }).sidebar.width).toBe(50);
+
+  const top = layout({ sidebar: { ...both, position: "top" }, terminalHeight: 40 }).sidebar;
+  expect(top.height).toBe(20);
+  expect(top.width).toBe(80);
+});
+
+test("the defaults belong to the axis, not to the pane", () => {
+  const onTop = layout({ sidebar: pane({ position: "top" }), terminalHeight: 40 });
+  expect(onTop.sidebar.height).toBe(PANE_DEFAULT_HEIGHT);
+
+  const onLeft = layout({
+    problems: pane({ open: true, position: "left" }),
+    sidebar: pane({ open: false }),
+  });
+  expect(onLeft.problems.width).toBe(34);
+});
+
+test("the carve order holds on a trailing edge too", () => {
+  const left = layout({
+    problems: pane({ open: true, position: "left" }),
+    sidebar: pane({ position: "left" }),
+  });
+  expect(left.problems.x).toBeLessThan(left.sidebar.x);
+
+  const right = layout({
+    problems: pane({ open: true, position: "right" }),
+    sidebar: pane({ position: "right" }),
+  });
+  expect(right.problems.x).toBeGreaterThan(right.sidebar.x);
 });
 
 test("two panes on the same edge stack, the panel outermost", () => {

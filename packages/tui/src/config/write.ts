@@ -1,6 +1,8 @@
 import { Result } from "effect";
 import { applyEdits, createScanner, modify, SyntaxKind } from "jsonc-parser";
 
+import type { Dock } from "@/layout/regions";
+
 import { loadConfigText } from "./load";
 import { configDefaults } from "./schema";
 
@@ -21,15 +23,18 @@ export interface SettingsSnapshot {
   editor: string | undefined;
   iconsEnabled: boolean;
   ide: string | undefined;
-  /** The manual height override; undefined is the layout model's default (key absent). */
+  /** A manual extent; undefined is the layout model's default (key absent). Same for the others. */
   problemsHeight: number | undefined;
   problemsOpen: boolean;
+  problemsPosition: Dock;
+  problemsWidth: number | undefined;
   provenanceEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegex: boolean;
   searchScope: "changed" | "repo";
+  sidebarHeight: number | undefined;
   sidebarOpen: boolean;
-  /** The manual width override; undefined is the responsive default (key absent). */
+  sidebarPosition: Dock;
   sidebarWidth: number | undefined;
   theme: string | { dark: string; light: string } | undefined;
   wrap: boolean;
@@ -178,6 +183,13 @@ export function updateSettingsText(
       config.problems?.open ?? configDefaults.problems.open,
     ),
     ...diff("problems", ["problems", "height"], snapshot.problemsHeight, config.problems?.height),
+    ...diff("problems", ["problems", "width"], snapshot.problemsWidth, config.problems?.width),
+    ...diff(
+      "problems",
+      ["problems", "position"],
+      snapshot.problemsPosition,
+      config.problems?.position ?? configDefaults.problems.position,
+    ),
     ...diff(
       "sidebar",
       ["sidebar", "open"],
@@ -185,6 +197,13 @@ export function updateSettingsText(
       config.sidebar?.open ?? configDefaults.sidebar.open,
     ),
     ...diff("sidebar", ["sidebar", "width"], snapshot.sidebarWidth, config.sidebar?.width),
+    ...diff("sidebar", ["sidebar", "height"], snapshot.sidebarHeight, config.sidebar?.height),
+    ...diff(
+      "sidebar",
+      ["sidebar", "position"],
+      snapshot.sidebarPosition,
+      config.sidebar?.position ?? configDefaults.sidebar.position,
+    ),
     ...diff(
       "changes only",
       ["sidebar", "changesOnly"],

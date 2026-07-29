@@ -67,6 +67,17 @@ describe("persistSettings", () => {
     });
   });
 
+  test("a docked pane round-trips through the file", async () => {
+    await withConfigDir(async (dir) => {
+      state.movePane(); // The tree docks top
+      await state.persistSettings();
+
+      const text = readFileSync(join(dir, "stet", "config.jsonc"), "utf8");
+      expect(Bun.JSONC.parse(text)).toEqual({ sidebar: { position: "top" } });
+      expect(statusMessage()).toBe("saved sidebar to config");
+    });
+  });
+
   test("creates config.jsonc when none exists", async () => {
     await withConfigDir(async (dir) => {
       state.setChangesOnly(true);

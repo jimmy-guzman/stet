@@ -36,8 +36,8 @@ here is optional and shown with its default:
 {
   "icons": { "enabled": true }, // Nerd Font file-type icons
   "viewer": { "wrap": false }, // wrap long lines instead of scrolling
-  "sidebar": { "open": true, "changesOnly": false }, // "width" defaults to responsive
-  "problems": { "open": false }, // "height" defaults to 10 rows
+  "sidebar": { "open": true, "changesOnly": false, "position": "left" }, // sizes default to the layout
+  "problems": { "open": false, "position": "bottom" }, // sizes default to the layout
   "provenance": { "enabled": false }, // the per-line provenance rail
   "diagnostics": { "enabled": true, "download": true }, // LSP diagnostics
   "intel": { "enabled": true }, // language-server code intelligence
@@ -51,10 +51,14 @@ here is optional and shown with its default:
 | `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                                       |
 | `viewer.wrap`          | `false`     | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there)                                      |
 | `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                                           |
-| `sidebar.width`        | responsive  | fixed sidebar width in cells, clamped to the terminal (`[` / `]` adjust, `\` resets)                                       |
+| `sidebar.position`     | `"left"`    | which edge the file tree docks to: `left`, `top`, `right`, or `bottom` (`d` cycles clockwise)                              |
+| `sidebar.width`        | responsive  | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets)                     |
+| `sidebar.height`       | `10`        | tree height in rows while docked top or bottom; each axis keeps its own size                                               |
 | `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                                            |
 | `problems.open`        | `false`     | show the problems panel at startup (`p` toggles; unlike `p`, this does not take focus)                                     |
-| `problems.height`      | `10`        | problems panel height in rows, clamped to the terminal (`[` / `]` resize it while focused, `\` resets)                     |
+| `problems.position`    | `"bottom"`  | which edge the problems panel docks to (`d` cycles clockwise while it is focused)                                          |
+| `problems.height`      | `10`        | panel height in rows while docked top or bottom, clamped to the terminal (`[` / `]` resize it while focused, `\` resets)   |
+| `problems.width`       | responsive  | panel width in cells while docked left or right; each axis keeps its own size                                              |
 | `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                                           |
 | `diagnostics.enabled`  | `true`      | `false` runs no language servers for checks; the problems panel reads `diagnostics disabled`                               |
 | `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run)                 |

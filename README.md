@@ -47,6 +47,9 @@ beneath, and it stays.
   branch, changed since the file's start, or original to it, git blame reframed
   around how much of what you are reviewing is yours and how recent it is.
 - Shows diagnostics in the tree, the viewer, and a problems panel.
+- Rearranges its own layout: the tree and the problems panel dock to any edge and
+  resize along it, with `d` cycling the focused pane clockwise and `ctrl-s`
+  persisting the arrangement.
 - Navigates code through read-only language-server pulls: go to definition, find
   references, find implementations, call hierarchy, hover, and a symbol outline.
 - Copies a reference and snippet to paste back to the agent: `path` in the tree,

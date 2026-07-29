@@ -171,6 +171,21 @@ describe("loadConfigText", () => {
     ]);
   });
 
+  test("every dock edge decodes, and an unknown one drops only its section", () => {
+    for (const edge of ["left", "top", "right", "bottom"] as const) {
+      expect(
+        loadConfigText(`{ "sidebar": { "position": "${edge}" } }`).config.sidebar?.position,
+      ).toBe(edge);
+    }
+
+    const { config, issues } = loadConfigText(
+      `{ "sidebar": { "position": "middle" }, "problems": { "open": true } }`,
+    );
+    expect(issues).toHaveLength(1);
+    expect(config.sidebar).toBeUndefined();
+    expect(config.problems).toEqual({ open: true });
+  });
+
   test("problems height must be a positive integer", () => {
     expect(loadConfigText(`{ "problems": { "height": 0 } }`).issues).toHaveLength(1);
     expect(loadConfigText(`{ "problems": { "height": 8.5 } }`).issues).toHaveLength(1);

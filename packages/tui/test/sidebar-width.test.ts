@@ -120,6 +120,20 @@ test("shrinking all the way down leaves the minimum as the remembered width", ()
   expect(state.layout().sidebar.width).toBe(24);
 });
 
+test("resetting while collapsed keeps the remembered width", () => {
+  state.setTerminalWidth(80);
+  grow(8); // 34 -> 50, stored
+  state.toggleSidebar();
+  // The panel being open is what lets `\` dispatch at all while the tree is hidden.
+  state.toggleProblems();
+  state.setFocusedPane("diff");
+
+  state.resetPane();
+
+  grow(1); // Reopens
+  expect(state.layout().sidebar.width).toBe(50);
+});
+
 test("shrinking a collapsed sidebar stays closed", () => {
   state.setTerminalWidth(80);
   shrink(20);

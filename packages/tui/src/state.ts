@@ -1798,8 +1798,16 @@ function createState() {
   const growPane = () => nudgePane(sizingPane(), 1);
   const shrinkPane = () => nudgePane(sizingPane(), -1);
   // Only the docked axis resets, so a left-docked tree's `\` never wipes a height set
-  // While it was on top, which is what makes a four-press round trip idempotent.
-  const resetPane = () => sizingAxis(sizingPane()).setOverride(null);
+  // While it was on top, which is what makes a four-press round trip idempotent. A closed
+  // Pane ignores it, like `nudgePane`: otherwise `\` reached past a collapsed tree (the
+  // Keys fall back to it from the viewer) and silently discarded the width `]` reopens at.
+  const resetPane = () => {
+    const pane = sizingPane();
+    if (!pane.open()) {
+      return;
+    }
+    sizingAxis(pane).setOverride(null);
+  };
   // A closed pane does not move: relocating something off-screen shows nothing and
   // Quietly rewrites a setting `ctrl-s` would persist. It deliberately does not skip an
   // Edge the other pane holds, since the model stacks a same-edge pair on purpose.
@@ -4651,7 +4659,6 @@ function createState() {
     problemIndex,
     problems,
     problemsEmpty,
-    problemsHeightOverride,
     problemsOpen,
     problemsPosition,
     problemsScrollTop,
@@ -4789,7 +4796,6 @@ function createState() {
     showFileContent,
     showHover,
     shrinkPane,
-    sidebarHeightOverride,
     sidebarOpen,
     sidebarPosition,
     sidebarScrollTop,

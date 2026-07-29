@@ -132,6 +132,11 @@ test("collapsing a minimum-sized tree with no override reopens at the same width
 
   grow(1);
   expect(state.layout().sidebar.width).toBe(24);
+
+  // 24 alone cannot tell "no override" from "an override of 24 was written on the way
+  // Down"; widening the terminal separates them, since only the former still tracks.
+  state.setTerminalWidth(200);
+  expect(state.layout().sidebar.width).toBe(54);
 });
 
 test("resetting while collapsed keeps the remembered width", () => {

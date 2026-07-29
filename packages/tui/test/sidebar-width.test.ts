@@ -120,6 +120,20 @@ test("shrinking all the way down leaves the minimum as the remembered width", ()
   expect(state.layout().sidebar.width).toBe(24);
 });
 
+test("collapsing a minimum-sized tree with no override reopens at the same width", () => {
+  // At 52 columns the clamped responsive default lands exactly on the minimum, so the
+  // First shrink collapses while no override has ever been written. Nothing is lost:
+  // Reopening recomputes the same default from the same terminal.
+  state.setTerminalWidth(52);
+  expect(state.layout().sidebar.width).toBe(24);
+
+  shrink(1);
+  expect(state.sidebarOpen()).toBe(false);
+
+  grow(1);
+  expect(state.layout().sidebar.width).toBe(24);
+});
+
 test("resetting while collapsed keeps the remembered width", () => {
   state.setTerminalWidth(80);
   grow(8); // 34 -> 50, stored

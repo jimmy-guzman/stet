@@ -880,6 +880,37 @@ function createState() {
     return index === -1 ? 0 : index;
   });
 
+  // Keep the cursor on a navigable row as the item list changes underneath it, the same shape
+  // The search pane keeps its selection. `problemIndex` is a raw index into a list that mixes
+  // Headers, spacers, and help sub-lines in with the findings, and only `p` ever seeded it, so
+  // Every other way of arriving left it wherever it last pointed: a panel seeded open from
+  // Config sat on index 0, a file header, and rendered with no row marked at all. The row
+  // Highlight is the only thing in the panel that says "cursor", so there was nothing left in
+  // Its place. Re-homing searches backward for the nearest finding at or before where the
+  // Cursor was, so a rebuild that drops rows under it lands near where the user was rather
+  // Than at the top, and a cursor already on a finding resolves to itself, which is what keeps
+  // A background re-check from disturbing a settled selection.
+  createEffect(() => {
+    // Gated the way the follow window below is, and for the same two reasons: the cursor only
+    // Means anything while the panel is on screen, and the gate is tracked, so opening re-runs
+    // This and frames a finding at once. Ungated it would also sort every finding on each
+    // Diagnostics update in sessions that never open the panel.
+    if (!problemsOpen()) {
+      return;
+    }
+    const items = allProblemItems();
+    const index = untrack(problemIndex);
+    const item = items[index];
+    if (item !== undefined && isNavigableProblemItem(item)) {
+      return;
+    }
+    const bounded = Math.min(index, items.length - 1);
+    const previous = items.findLastIndex(
+      (candidate, candidateIndex) => candidateIndex <= bounded && isNavigableProblemItem(candidate),
+    );
+    setProblemIndex(previous === -1 ? firstNavigableProblemIndex() : previous);
+  });
+
   // The `active` gate is tracked, so opening the panel frames the cursor at once.
   followListWindow({
     active: problemsOpen,

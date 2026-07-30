@@ -132,6 +132,9 @@ test("zoom never resurrects a pane that is closed", () => {
 
   state.toggleZoom();
 
+  // Pin that zoom is genuinely on: a closed sidebar renders the same widths either way,
+  // So without this the case would still pass if zoom stopped engaging entirely.
+  expect(state.zoomed()).toBe(true);
   expect(state.layout().sidebar.width).toBe(0);
   expect(state.layout().viewer.width).toBe(80);
 });

@@ -178,15 +178,21 @@ export function App() {
           <Sidebar />
         </box>
       </Show>
-      <box
-        position="absolute"
-        left={state.layout().viewer.x}
-        top={state.layout().viewer.y}
-        width={state.layout().viewer.width}
-        height={state.layout().viewer.height}
-      >
-        <Viewer />
-      </box>
+      {/* Gated like the other two panes: zoom gives one pane the whole band and leaves
+          the rest a zero rect, and a zero-sized box still paints its frame, which stamped
+          a collapsed `┌┐` over the header. The viewer used to be exempt only because it
+          was the center and always had a rect. */}
+      <Show when={state.layout().viewer.width > 0}>
+        <box
+          position="absolute"
+          left={state.layout().viewer.x}
+          top={state.layout().viewer.y}
+          width={state.layout().viewer.width}
+          height={state.layout().viewer.height}
+        >
+          <Viewer />
+        </box>
+      </Show>
       <Show when={state.layout().problems.width > 0}>
         <box
           position="absolute"

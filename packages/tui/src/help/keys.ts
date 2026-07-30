@@ -124,6 +124,10 @@ const KEY_HELP_GROUPS: {
         actions: ["move-pane"],
         description: "dock the focused pane to the next edge, clockwise",
       },
+      {
+        actions: ["zoom-pane"],
+        description: "toggle zooming the focused pane to fill the window",
+      },
     ],
     heading: "layout",
   },

@@ -52,6 +52,44 @@ test("the move key docks the tree to the right, and it renders there", async () 
   }
 });
 
+test("m zooms the focused pane to fill the band, and again restores it", async () => {
+  const repoRoot = createFixtureRepo("stet-pane-zoom-", { "src/a.ts": "export const a = 1;\n" });
+  const scope = { kind: "all", ref: "HEAD" } as const;
+  seedState(await loadModel(repoRoot, scope), scope);
+
+  const { renderer, mockInput, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+    height: 24,
+    width: 100,
+  });
+  try {
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    await settleUntil("first render", (current) => current.includes("a.ts"));
+
+    // Focus starts on the tree, so that is what zooms. (`tab` is not used to move it:
+    // The mock input never delivers it to the keymap, since OpenTUI consumes Tab for its
+    // Own focus traversal first. `pane-zoom.test.ts` covers zoom following focus.)
+    const before = captureCharFrame().split("\n")[0];
+    mockInput.pressKey("m");
+    const zoomed = await settleUntil("zoomed", () => state.zoomed());
+
+    // The header is durable and sits outside the band, so zoom must not touch it. A
+    // Zero-rect pane still paints its frame, and the viewer's collapsed `┌┐` landed here.
+    expect(zoomed.split("\n")[0]).toBe(before);
+    expect(state.layout().viewer.width).toBe(0);
+    expect(state.layout().sidebar.width).toBe(100);
+    expect(paneLines(zoomed, state.layout().sidebar).join("\n")).toContain("a.ts");
+    // The status row survives the zoom, so the app never loses its live channel.
+    expect(zoomed).toContain("q quit");
+
+    mockInput.pressKey("m");
+    const restored = await settleUntil("restored", () => !state.zoomed());
+    expect(state.layout().viewer.width).toBeGreaterThan(0);
+    expect(paneLines(restored, state.layout().viewer).join("\n")).toContain("export const a = 1");
+  } finally {
+    renderer.destroy();
+  }
+});
+
 test("a bare d never fires the move while the search pane owns the keys", async () => {
   const repoRoot = createFixtureRepo("stet-pane-dock-search-", {
     "src/a.ts": "export const a = 1;\n",

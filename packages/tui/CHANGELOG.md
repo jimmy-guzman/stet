@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.10.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.9.1...stet-v0.10.0) (2026-07-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **layout:** 💥 the resize rebind ids grow-sidebar, shrink-sidebar and reset-sidebar are now grow-pane, shrink-pane and reset-pane, and `[ `/ `]`  resize the focused pane rather than always the sidebar
+
+### Features
+
+* **layout:** ✨ dock panels to any edge ([#338](https://github.com/jimmy-guzman/stet/issues/338)) ([1da8ffb](https://github.com/jimmy-guzman/stet/commit/1da8ffb7995e83f559eeb5a8f685add241f64807))
+* **layout:** ✨ make the problems panel a resizable pane ([#337](https://github.com/jimmy-guzman/stet/issues/337)) ([543caae](https://github.com/jimmy-guzman/stet/commit/543caaee145cbc9f59afa34231d1889cdfcd36b6))
+* **layout:** ✨ zoom the focused pane with m ([#339](https://github.com/jimmy-guzman/stet/issues/339)) ([feabfb0](https://github.com/jimmy-guzman/stet/commit/feabfb0ed202204393b126388fcdf4565864b43a))
+
+
+### Bug Fixes
+
+* **deps:** 🐛 bump opentui to 0.4.5 & unbreak the compiled build ([#333](https://github.com/jimmy-guzman/stet/issues/333)) ([7b641ae](https://github.com/jimmy-guzman/stet/commit/7b641aedadb1a066bd830b1386fca83e22d607fb))
+* **layout:** 🐛 cycle focus through the panes that are open ([#341](https://github.com/jimmy-guzman/stet/issues/341)) ([95812bb](https://github.com/jimmy-guzman/stet/commit/95812bbde654e431778a1635304ccb74c1f663ef))
+* **problems:** 🐛 keep the panel cursor on a finding ([#342](https://github.com/jimmy-guzman/stet/issues/342)) ([b18ff1e](https://github.com/jimmy-guzman/stet/commit/b18ff1ee9ffbce6de0915573c5ee302221913f14))
+
 ## [0.9.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.9.0...stet-v0.9.1) (2026-07-21)
 
 

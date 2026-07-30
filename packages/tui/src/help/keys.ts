@@ -31,7 +31,10 @@ const KEY_HELP_GROUPS: {
         actions: ["collapse", "expand", "caret-prev", "caret-next"],
         description: "collapse / expand folders (tree) or hop the caret by word (viewer)",
       },
-      { actions: ["switch-pane"], description: "switch focus between tree and viewer" },
+      {
+        actions: ["switch-pane"],
+        description: "cycle focus through the open panes; the search pane's tab cycles its fields",
+      },
       {
         actions: ["open", "open-problem"],
         description: "open the focused item / jump to a problem",

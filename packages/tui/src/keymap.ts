@@ -521,14 +521,7 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (pressed("switch-pane")) {
-        // From the tree, the switch lands on whichever view the main area shows.
-        state.setFocusedPane(
-          state.focusedPane() === "tree"
-            ? state.mainView() === "search"
-              ? "search"
-              : "diff"
-            : "tree",
-        );
+        state.focusNextPane();
         return;
       }
 
@@ -916,7 +909,7 @@ export function createKeyHandler(host: HostEffects) {
         } else if (pressed("caret-next")) {
           state.caretNextWord();
         } else if (pressed("caret-prev")) {
-          // The caret hops words; switch-pane is the way back to the tree (a
+          // The caret hops words; switch-pane is the way out to another pane (a
           // No-op here at the first word).
           state.caretPrevWord();
         } else if (pressed("fold")) {

@@ -248,7 +248,7 @@ export function Viewer() {
       focused={focused()}
       width="100%"
       height="100%"
-      onMouseDown={() => state.setFocusedPane(state.mainView() === "search" ? "search" : "diff")}
+      onMouseDown={() => state.setFocusedPane(state.viewerFocus())}
     >
       {/* The main-area view switch: exactly one view owns the pane interior.
           The file view keeps its header/body/truncated rows as before; the

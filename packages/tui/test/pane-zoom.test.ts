@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 
+import { KeyEvent } from "@opentui/core";
 import { batch } from "solid-js";
 
+import { createKeyHandler } from "@/keymap";
 import { state } from "@/state";
 
 // Zoom follows focus, so the rule is one line: whichever pane is focused fills the band.
@@ -85,6 +87,36 @@ test("opening the problems panel exits zoom rather than filling the screen with 
   expect(state.zoomed()).toBe(false);
   expect(state.layout().problems.height).toBe(10);
   expect(state.layout().sidebar.width).toBe(34);
+});
+
+test("escape closes a zoomed panel without leaving the next pane zoomed", () => {
+  wide();
+  state.toggleProblems();
+  state.toggleZoom();
+  expect(state.layout().problems.height).toBe(38);
+  const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
+
+  handle(
+    new KeyEvent({
+      ctrl: false,
+      eventType: "press",
+      meta: false,
+      name: "escape",
+      number: false,
+      option: false,
+      raw: "",
+      sequence: "",
+      shift: false,
+      source: "raw",
+    }),
+  );
+
+  // Escape closes the panel, which is a visibility change, so it must exit zoom too:
+  // Otherwise the pane focus lands on silently fills the screen instead.
+  expect(state.problemsOpen()).toBe(false);
+  expect(state.zoomed()).toBe(false);
+  expect(state.layout().sidebar.width).toBe(34);
+  expect(state.layout().viewer.width).toBe(46);
 });
 
 test("the geometry keys are inert while zoomed, and write nothing behind it", () => {

@@ -126,7 +126,7 @@ const KEY_HELP_GROUPS: {
       },
       {
         actions: ["zoom-pane"],
-        description: "zoom the focused pane to fill the window",
+        description: "toggle zooming the focused pane to fill the window",
       },
     ],
     heading: "layout",

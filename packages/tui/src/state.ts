@@ -1721,17 +1721,23 @@ function createState() {
   // The old unconditional jump to "tree" left the keys driving a pane nobody could
   // See. `esc`, the `p` toggle, and a shrink past the minimum share this one path.
   const collapseProblems = () => {
+    // Closing the panel is a visibility change, so it exits zoom. This lives here rather
+    // Than only in the toggle because `esc` reaches this path directly, and without it the
+    // Pane focus lands on would silently take over the whole screen.
+    setZoomed(false);
     if (focusedPane() === "problems") {
       setFocusedPane(sidebarOpen() ? "tree" : mainView() === "search" ? "search" : "diff");
     }
     setProblemsOpen(false);
   };
   const toggleProblems = () => {
-    setZoomed(false);
     if (problemsOpen()) {
       collapseProblems();
       return;
     }
+    // The open direction needs its own clear: opening the panel would otherwise inherit
+    // The zoom through focus and fill the screen with it rather than docking it.
+    setZoomed(false);
     setProblemsOpen(true);
     // Opening the panel is an action meaning "go look at problems", so unlike the
     // Config seeding it takes focus and frames the first navigable finding.

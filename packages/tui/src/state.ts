@@ -1676,13 +1676,17 @@ function createState() {
       },
       terminalHeight: terminalHeight(),
       terminalWidth: terminalWidth(),
-      zoom: zoomed()
-        ? focusedPane() === "problems"
+      // Zoom follows focus, but only to a pane that is actually on screen: `switch-pane`
+      // Focuses the tree without checking whether it is open, so focus can name a closed
+      // Pane, and the model's zoom branch does not consult the open flags. Falling back to
+      // The viewer keeps zoom from painting a pane the user closed back into view.
+      zoom: !zoomed()
+        ? undefined
+        : focusedPane() === "problems" && problemsOpen()
           ? "problems"
-          : focusedPane() === "tree"
+          : focusedPane() === "tree" && sidebarOpen()
             ? "tree"
-            : "viewer"
-        : undefined,
+            : "viewer",
     }),
   );
   // A truncated file reserves one row for the "N more lines" footer, so the diff

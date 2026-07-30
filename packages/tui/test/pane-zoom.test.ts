@@ -9,6 +9,20 @@ import { state } from "@/state";
 // Zoom follows focus, so the rule is one line: whichever pane is focused fills the band.
 // The line that keeps it coherent is that actions changing pane *visibility* exit zoom,
 // While actions that only move *focus* carry it.
+const key = (name: string) =>
+  new KeyEvent({
+    ctrl: false,
+    eventType: "press",
+    meta: false,
+    name,
+    number: false,
+    option: false,
+    raw: "",
+    sequence: "",
+    shift: false,
+    source: "raw",
+  });
+
 function wide() {
   batch(() => {
     state.setTerminalWidth(80);
@@ -96,20 +110,7 @@ test("escape closes a zoomed panel without leaving the next pane zoomed", () => 
   expect(state.layout().problems.height).toBe(38);
   const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
 
-  handle(
-    new KeyEvent({
-      ctrl: false,
-      eventType: "press",
-      meta: false,
-      name: "escape",
-      number: false,
-      option: false,
-      raw: "",
-      sequence: "",
-      shift: false,
-      source: "raw",
-    }),
-  );
+  handle(key("escape"));
 
   // Escape closes the panel, which is a visibility change, so it must exit zoom too:
   // Otherwise the pane focus lands on silently fills the screen instead.
@@ -117,6 +118,22 @@ test("escape closes a zoomed panel without leaving the next pane zoomed", () => 
   expect(state.zoomed()).toBe(false);
   expect(state.layout().sidebar.width).toBe(34);
   expect(state.layout().viewer.width).toBe(46);
+});
+
+test("zoom never resurrects a pane that is closed", () => {
+  wide();
+  state.toggleSidebar();
+  expect(state.sidebarOpen()).toBe(false);
+  const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
+  // `tab` focuses the tree without checking whether it is on screen, so focus can name a
+  // Closed pane. Zoom must not take that at face value and paint the pane back.
+  handle(key("tab"));
+  expect(state.focusedPane()).toBe("tree");
+
+  state.toggleZoom();
+
+  expect(state.layout().sidebar.width).toBe(0);
+  expect(state.layout().viewer.width).toBe(80);
 });
 
 test("the geometry keys are inert while zoomed, and write nothing behind it", () => {

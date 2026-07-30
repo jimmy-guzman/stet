@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { DockedPane, Layout, LayoutInput } from "@/layout/regions";
-import { computeLayout, DOCKS, PANE_DEFAULT_HEIGHT } from "@/layout/regions";
+import { computeLayout, DOCKS, PANE_DEFAULT_HEIGHT, paneReadingOrder } from "@/layout/regions";
 
 const pane = (overrides: Partial<DockedPane> = {}): DockedPane => ({
   heightOverride: null,
@@ -243,4 +243,50 @@ test("zoom gives one pane the band without touching the open flags", () => {
   expect(layout({ ...open, zoom: "problems" }).problems.height).toBe(22);
   // The header and status rows are never zoomed away.
   expect(layout({ ...open, zoom: "tree" }).header.height).toBe(1);
+});
+
+test("the reading order matches where the panes actually land, for every pairing of docks", () => {
+  for (const sidebarPosition of DOCKS) {
+    for (const problemsPosition of DOCKS) {
+      for (const [width, height] of [
+        [80, 24],
+        [120, 40],
+        [200, 60],
+      ]) {
+        const placed = layout({
+          problems: pane({ open: true, position: problemsPosition }),
+          sidebar: pane({ position: sidebarPosition }),
+          terminalHeight: height,
+          terminalWidth: width,
+        });
+        // Sorting the rects the model produced is the definition the helper has to meet, so a
+        // Pairing it gets wrong fails here rather than waiting for someone to press tab.
+        const onScreen = (
+          [
+            ["tree", placed.sidebar],
+            ["viewer", placed.viewer],
+            ["problems", placed.problems],
+          ] as const
+        )
+          .toSorted(([, left], [, right]) => left.y - right.y || left.x - right.x)
+          .map(([slot]) => slot);
+        const where = `${sidebarPosition}/${problemsPosition} at ${width}x${height}`;
+        expect(`${where}: ${paneReadingOrder(sidebarPosition, problemsPosition).join(" ")}`).toBe(
+          `${where}: ${onScreen.join(" ")}`,
+        );
+      }
+    }
+  }
+});
+
+test("the panel falls between the tree and the viewer when it shares their first row", () => {
+  // The case an edge-keyed table gets wrong: a right-docked panel starts on the same row as a
+  // Top-docked tree, so it reads second, while the same tree against a bottom-docked panel
+  // Reads it last.
+  expect(paneReadingOrder("top", "right")).toEqual(["tree", "problems", "viewer"]);
+  expect(paneReadingOrder("top", "bottom")).toEqual(["tree", "viewer", "problems"]);
+});
+
+test("the default arrangement reads tree, viewer, problems", () => {
+  expect(paneReadingOrder("left", "bottom")).toEqual(["tree", "viewer", "problems"]);
 });

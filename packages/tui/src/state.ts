@@ -108,7 +108,13 @@ import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from ".
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import type { IntelRequestError } from "./intel/service";
-import { computeLayout, horizontalDock, PANE_MIN_HEIGHT, PANE_MIN_WIDTH } from "./layout/regions";
+import {
+  computeLayout,
+  horizontalDock,
+  PANE_MIN_HEIGHT,
+  PANE_MIN_WIDTH,
+  paneReadingOrder,
+} from "./layout/regions";
 import type { Dock } from "./layout/regions";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
@@ -1676,15 +1682,16 @@ function createState() {
       },
       terminalHeight: terminalHeight(),
       terminalWidth: terminalWidth(),
-      // Zoom follows focus, but only to a pane that is actually on screen: `switch-pane`
-      // Focuses the tree without checking whether it is open, so focus can name a closed
-      // Pane, and the model's zoom branch does not consult the open flags. Falling back to
-      // The viewer keeps zoom from painting a pane the user closed back into view.
+      // Zoom follows focus, and needs no open-flag check of its own because focus never names
+      // A closed pane: every writer either targets the viewer, sits on a pane that is mounted
+      // Only while open, or routes through `focusNextPane`/`collapseSidebar`/`collapseProblems`,
+      // Which each land only on something open. The map is still a map, not an identity: the
+      // Search view is a second focus value for the one viewer slot.
       zoom: !zoomed()
         ? undefined
-        : focusedPane() === "problems" && problemsOpen()
+        : focusedPane() === "problems"
           ? "problems"
-          : focusedPane() === "tree" && sidebarOpen()
+          : focusedPane() === "tree"
             ? "tree"
             : "viewer",
     }),
@@ -1699,12 +1706,17 @@ function createState() {
   // The search view's results band: the pane interior minus its four fixed chrome
   // Rows (query, filter, summary, footer). Fixed chrome, so no state ever shifts it.
   const searchListHeight = createMemo(() => Math.max(1, layout().viewer.content.height - 4));
+  // The viewer is one pane holding two views, so "focus the viewer" is whichever the main
+  // Area shows. Every path that lands focus there without already knowing the view reads it
+  // From here; the two that still name "diff" outright (`closeSearch`, and the keymap opening
+  // Find) do so because `mainView` is provably "file" there, not as a shortcut.
+  const viewerFocus = () => (mainView() === "search" ? "search" : "diff");
   // Closing the sidebar moves focus off the now-hidden tree so keys still land
   // Somewhere, on whichever view the main area shows; the `ctrl-b` toggle and a
   // Shrink-past-minimum share this one path.
   const collapseSidebar = () => {
     if (focusedPane() === "tree") {
-      setFocusedPane(mainView() === "search" ? "search" : "diff");
+      setFocusedPane(viewerFocus());
     }
     setSidebarOpen(false);
   };
@@ -1730,7 +1742,7 @@ function createState() {
     // Pane focus lands on would silently take over the whole screen.
     setZoomed(false);
     if (focusedPane() === "problems") {
-      setFocusedPane(sidebarOpen() ? "tree" : mainView() === "search" ? "search" : "diff");
+      setFocusedPane(sidebarOpen() ? "tree" : viewerFocus());
     }
     setProblemsOpen(false);
   };
@@ -1747,6 +1759,21 @@ function createState() {
     // Config seeding it takes focus and frames the first navigable finding.
     setFocusedPane("problems");
     setProblemIndex(firstNavigableProblemIndex());
+  };
+  // `tab` walks the panes that are open, in the order they sit on screen, which is the whole
+  // Rule: focus lands only where something is, so it can never name a pane the user closed and
+  // The zoom that follows it can never paint one back. Open, not painted, is the test, because
+  // Zoom hides the other panes without closing them and `tab` carries the zoom along rather
+  // Than being trapped in whatever it lit up. One pane open means one entry and no-op, and an
+  // Unlisted focus value starts the walk rather than falling out of `(-1 + 1) % n`.
+  const focusNextPane = () => {
+    const order = paneReadingOrder(sidebarPosition(), problemsPosition())
+      .filter((slot) =>
+        slot === "tree" ? sidebarOpen() : slot === "problems" ? problemsOpen() : true,
+      )
+      .map((slot) => (slot === "viewer" ? viewerFocus() : slot));
+    const at = order.indexOf(focusedPane());
+    setFocusedPane(at === -1 ? order[0] : order[(at + 1) % order.length]);
   };
   // The two sizable panes as one shape, so an action names a pane and reads the same
   // Accessors for either. Nothing new is stored: every field is a signal declared above.
@@ -4212,7 +4239,11 @@ function createState() {
         // Disabled diagnostics seed empty, or the pending placeholders never resolve.
         setCheckerState(initialCheckerState(diagnosticsEnabled() ? fresh.changed : []));
         setActivityLog(emptyActivityLog);
-        setFocusedPane("tree");
+        // The new worktree starts at the tree, but only when the tree is on screen. This has to
+        // Stay after `seedNav`, which can route through `closeSearch`: reads inside a batch see
+        // Earlier writes, so `viewerFocus` needs the settled `mainView`, and `seedNav(undefined)`
+        // Returns early without closing the search view, so both branches depend on the order.
+        setFocusedPane(sidebarOpen() ? "tree" : viewerFocus());
         // The header now names the worktree we landed in, so a success line here would only
         // Repeat it, and would still be sitting there long after it stopped being news.
         setSwitchProgress(undefined);
@@ -4642,6 +4673,7 @@ function createState() {
     findQuery,
     findReferences,
     findSymbols,
+    focusNextPane,
     focusedNodeId,
     focusedPane,
     focusedRowIndex,
@@ -4864,6 +4896,7 @@ function createState() {
     truncated,
     truncatedHidden,
     viewerDecoration,
+    viewerFocus,
     viewerHeight,
     viewerRows,
     viewerScrollTop,

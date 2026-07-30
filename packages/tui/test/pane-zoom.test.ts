@@ -125,10 +125,10 @@ test("zoom never resurrects a pane that is closed", () => {
   state.toggleSidebar();
   expect(state.sidebarOpen()).toBe(false);
   const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
-  // `tab` focuses the tree without checking whether it is on screen, so focus can name a
-  // Closed pane. Zoom must not take that at face value and paint the pane back.
+  // Zoom takes its target from focus with no open-flag check of its own, so what keeps it from
+  // Painting a closed pane back is that `tab` cannot focus one in the first place.
   handle(key("tab"));
-  expect(state.focusedPane()).toBe("tree");
+  expect(state.focusedPane()).toBe("diff");
 
   state.toggleZoom();
 
@@ -137,6 +137,23 @@ test("zoom never resurrects a pane that is closed", () => {
   expect(state.zoomed()).toBe(true);
   expect(state.layout().sidebar.width).toBe(0);
   expect(state.layout().viewer.width).toBe(80);
+});
+
+test("zoom follows focus around the whole cycle, and every stop is a pane that is open", () => {
+  wide();
+  state.toggleProblems();
+  state.toggleZoom();
+  const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
+
+  // Walk the full ring while zoomed: each stop must fill the band, which is only true if the
+  // Pane focus named was open to begin with.
+  expect(state.layout().problems.height).toBe(38);
+  handle(key("tab"));
+  expect(state.layout().sidebar.width).toBe(80);
+  handle(key("tab"));
+  expect(state.layout().viewer.width).toBe(80);
+  handle(key("tab"));
+  expect(state.layout().problems.height).toBe(38);
 });
 
 test("the geometry keys are inert while zoomed, and write nothing behind it", () => {

@@ -208,9 +208,9 @@ try {
     state.setSidebarHeightOverride(config.sidebar?.height ?? null);
     state.setChangesOnly(config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly);
     if (!(config.sidebar?.open ?? configDefaults.sidebar.open)) {
-      // Mirror collapseSidebar: focus must leave the hidden tree so keys land.
-      state.setSidebarOpen(false);
-      state.setFocusedPane("diff");
+      // The one close path rather than a copy of it, so focus leaving the hidden tree is
+      // Decided in the same place here as it is for `ctrl-b` and a shrink past the minimum.
+      state.collapseSidebar();
     }
     state.setProblemsPosition(config.problems?.position ?? configDefaults.problems.position);
     state.setProblemsHeightOverride(config.problems?.height ?? null);

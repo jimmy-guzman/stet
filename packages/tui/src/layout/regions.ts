@@ -14,8 +14,8 @@ export const DOCKS = ["left", "top", "right", "bottom"] as const;
 /** Which edge a pane docks to. The viewer is always the center, so it never carries one. */
 export type Dock = (typeof DOCKS)[number];
 
-/** The pane that fills the band alone while zoomed. */
-type ZoomTarget = "problems" | "tree" | "viewer";
+/** One of the three panes: the two dockable ones and the viewer they carve from. */
+export type PaneSlot = "problems" | "tree" | "viewer";
 
 interface Rect {
   x: number;
@@ -43,7 +43,7 @@ export interface LayoutInput {
   terminalHeight: number;
   sidebar: DockedPane;
   problems: DockedPane;
-  zoom: ZoomTarget | undefined;
+  zoom: PaneSlot | undefined;
 }
 
 export interface Layout {
@@ -209,4 +209,42 @@ export function computeLayout(input: LayoutInput): Layout {
     status,
     viewer: withContent(sidebar.band),
   };
+}
+
+/**
+ * The three panes in screen reading order, top to bottom then left to right, which is the order
+ * focus cycling walks so that `tab` follows what is on screen rather than a list that contradicts
+ * it once a pane is re-docked.
+ *
+ * Read off placed rects instead of a table keyed by edge, because the edge alone does not decide
+ * the order: the carve does. With the panel docked right and the tree on top the two share the
+ * first row, so the panel falls between them, while the same tree against a bottom-docked panel
+ * puts the panel last. A table would have to restate all sixteen pairings and could then disagree
+ * with `carve`. Sizes only scale those rects and never reorder them, so the arrangement is read
+ * from a nominal terminal where every pane is placed, which also keeps a pane that is closed,
+ * zoomed away, or squeezed to nothing from sorting as if it sat at the origin.
+ *
+ * @param sidebar - The edge the tree holds.
+ * @param problems - The edge the problems panel holds.
+ * @returns All three slots, including panes that are currently closed; the caller filters.
+ */
+export function paneReadingOrder(sidebar: Dock, problems: Dock): PaneSlot[] {
+  const placed = computeLayout({
+    problems: { heightOverride: null, open: true, position: problems, widthOverride: null },
+    sidebar: { heightOverride: null, open: true, position: sidebar, widthOverride: null },
+    // Comfortably past every minimum, so both panes take their default extent and each lands
+    // At its own edge; anything smaller could clamp a pane onto another's coordinates.
+    terminalHeight: 60,
+    terminalWidth: 200,
+    zoom: undefined,
+  });
+  return (
+    [
+      ["tree", placed.sidebar],
+      ["viewer", placed.viewer],
+      ["problems", placed.problems],
+    ] as const
+  )
+    .toSorted(([, left], [, right]) => left.y - right.y || left.x - right.x)
+    .map(([slot]) => slot);
 }

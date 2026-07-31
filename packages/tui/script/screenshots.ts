@@ -12,9 +12,12 @@
  * screen names to shoot a subset, e.g. `bun run screenshots find problems`.
  *
  * Screens marked `worktree: true` launch from a throwaway linked worktree instead, so the header
- * renders its worktree identity rather than the main checkout's.
+ * renders its worktree identity rather than the main checkout's. Screens marked `recentEdits: true`
+ * append a line to real source files mid-run and restore them byte-for-byte afterwards, since
+ * recency only exists for a change stet observes while it is running; they run last for that
+ * reason.
  */
-import { existsSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -66,21 +69,29 @@ const IMAGE_FIXTURE = `${REPO}/packages/tui/_demo-image.png`;
 const WORKTREE_DIR = `${REPO}/.claude/worktrees/pull-diagnostics`;
 const WORKTREE_BRANCH = "feat/pull-diagnostics";
 /**
- * A throwaway config dir for the theme-switcher shot only: stet reads `XDG_CONFIG_HOME`, so
- * pointing that one tape here populates the theme list with named palettes (rich swatches and a
- * real diff re-theme on preview) without touching the user's real config or the other tapes.
+ * A throwaway config dir for the `config: true` shots: stet reads `XDG_CONFIG_HOME`, so pointing
+ * those tapes here gives them named themes and a reachable context-menu binding without touching
+ * the user's real config or the other tapes. It is rewritten before every such shot, because
+ * `ctrl-s` makes one of them a writer.
  */
-const THEME_CONFIG_DIR = resolve(tmpdir(), "stet-screenshots-config");
-const THEME_CONFIG_FILE = resolve(THEME_CONFIG_DIR, "stet", "config.jsonc");
+const SCREENSHOT_CONFIG_DIR = resolve(tmpdir(), "stet-screenshots-config");
+const SCREENSHOT_CONFIG_FILE = resolve(SCREENSHOT_CONFIG_DIR, "stet", "config.jsonc");
 /** Where git and stet alike look for their per-user config when `XDG_CONFIG_HOME` is unset. */
 const REAL_CONFIG_HOME = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
-// Named palettes for the theme-switcher shot: each carries a distinct accent (the row swatch) and a
-// Bundled Shiki `syntax` (so previewing one re-themes the diff). `theme` stays unset so the app
-// Starts on `auto`, keeping the ✓ on `auto` while the highlighted row previews a different theme.
-const THEME_CONFIG = JSON.stringify(
+const SCREENSHOT_CONFIG = JSON.stringify(
   {
-    // Registration (and so list) order after auto/dark/light, sorted: catppuccin,
-    // Gruvbox, rose-pine, tokyo-night, so Down x6 lands the highlight on tokyo-night.
+    /**
+     * VHS has no F-key: it rejects a bare `F10`, and `Shift+F10` parses as the shift modifier over
+     * the literal text "F10", which it types instead of sending the key. The context menu's only
+     * other opener is a right-click, which VHS cannot send either, so the shot rebinds it. Nothing
+     * in the capture reveals this: the menu's footer hint names its own keys, never its opener.
+     */
+    keybindings: { "context-menu": "ctrl+n" },
+    // Named palettes for the theme-switcher shot: each carries a distinct accent (the row swatch)
+    // And a bundled Shiki `syntax` (so previewing one re-themes the diff). `theme` stays unset so
+    // The app starts on `auto`, keeping the ✓ there while the highlighted row previews another.
+    // Registration (and so list) order after the built-ins, sorted: catppuccin, gruvbox,
+    // Rose-pine, tokyo-night, the last of the nine rows the switcher then lists.
     themes: {
       "catppuccin": { accent: { primary: "#cba6f7" }, base: "dark", syntax: "catppuccin-mocha" },
       "gruvbox": { accent: { primary: "#fabd2f" }, base: "dark", syntax: "gruvbox-dark-medium" },
@@ -91,6 +102,27 @@ const THEME_CONFIG = JSON.stringify(
   null,
   2,
 );
+/**
+ * The recency shot's edits, applied in order while stet is already running. Recency cannot be
+ * staged before launch: the activity log is built by diffing successive git models and the first
+ * one is only a baseline, so a file already changed at startup carries no cue however recent its
+ * mtime is. These are real source files this diff window already changed, so an appended line reads
+ * as an agent's edit rather than a planted file.
+ *
+ * Two things here are calibrated, and the first attempt got both wrong. They all sit directly under
+ * `src/`, so the jump to the newest leaves the other two on screen; three files from three
+ * directories left the earliest one scrolled out of the tree. And they are spaced well past the 5s
+ * `FRESH_MS`, so the dots land on three visibly different points of the fade; 3s apart put every
+ * one of them in the same bracket and the ramp the shot exists to show read as one flat state.
+ *
+ * `afterMs` is the wait before each edit, cumulative, and coupled to the tape's own settle below:
+ * every edit must land before it presses `.`, and the oldest must still be inside the 30s window.
+ */
+const RECENT_EDITS = [
+  { afterMs: 5000, path: `${REPO}/packages/tui/src/App.tsx` },
+  { afterMs: 6000, path: `${REPO}/packages/tui/src/keymap.ts` },
+  { afterMs: 6000, path: `${REPO}/packages/tui/src/state.ts` },
+];
 
 // Canvas height, shared by every capture.
 const CANVAS_HEIGHT = 1520;
@@ -180,15 +212,74 @@ const screens = [
   {
     /**
      * Open a diff so a real code hunk sits behind the overlay, open the switcher, then arrow down
-     * to a vivid theme (auto, dark, light, then the planted palettes) so the shot shows the full
-     * themed list (accent swatches, the ✓ on the active `auto`, the highlighted preview row) with
-     * the UI and diff live-re-themed to it. `Down` reaches the keymap's picker branch even with the
-     * filter input focused, same as the palette/find tapes. Needs the planted demo config.
+     * to a vivid theme so the shot shows the full themed list (accent swatches, the ✓ on the active
+     * `auto`, the highlighted preview row) with the UI and diff live-re-themed to it. `Down`
+     * reaches the keymap's picker branch even with the filter input focused, same as the
+     * palette/find tapes. Needs the planted demo config.
+     *
+     * The count is positional, so it goes stale when the built-in list grows: it was 6 for a list
+     * of auto/dark/light plus the four planted palettes, and the `mono-dark`/`mono-light` pair
+     * landed between them, which quietly moved the highlight two rows short of its target. Recount
+     * it against `themeNames()` whenever a built-in theme is added.
      */
     config: true,
-    launchEnv: `XDG_CONFIG_HOME=${THEME_CONFIG_DIR} `,
+    launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
     name: "theme-switcher",
-    steps: [openServersDiff, 'Type "t"', "Sleep 700ms", "Down@200ms 6", "Sleep 1200ms"].join("\n"),
+    steps: [openServersDiff, 'Type "t"', "Sleep 700ms", "Down@200ms 8", "Sleep 1200ms"].join("\n"),
+  },
+  {
+    /**
+     * The one shot that must land inside the 1.5s notice window, so it screenshots right after the
+     * keypress. Turn two settings on (`x` wrap, `a` provenance), then `ctrl-s`: the planted config
+     * declares neither, so both diverge from the file and the notice names both. It writes into the
+     * throwaway config dir rather than the user's own, which is why `config: true` rewrites that
+     * file before every shot that uses it.
+     */
+    config: true,
+    launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
+    name: "save-settings",
+    steps: [
+      openServersDiff,
+      'Type "x"',
+      "Sleep 400ms",
+      'Type "a"',
+      "Sleep 800ms",
+      "Ctrl+S",
+      "Sleep 700ms",
+    ].join("\n"),
+  },
+  {
+    /**
+     * Put the caret on a symbol (same `v` + `/` + word-hop approach as the hover tape, since the
+     * intel rows only appear for a symbol) and open the context menu, which the prose beside it
+     * does not enumerate. Note it cannot also show the menu _omitting_ rows: a symbol is exactly
+     * the case where every row applies. `Ctrl+N` is the planted rebind; see the config's
+     * `keybindings` note for why.
+     */
+    config: true,
+    launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
+    name: "context-menu",
+    steps: [
+      "Ctrl+P",
+      'Type "diff/engine"',
+      "Sleep 500ms",
+      "Enter",
+      "Sleep 1500ms",
+      'Type "v"',
+      "Sleep 600ms",
+      'Type "/"',
+      "Sleep 300ms",
+      'Type "function highlightSnippet"',
+      "Sleep 500ms",
+      "Enter",
+      "Sleep 500ms",
+      "Escape",
+      "Sleep 300ms",
+      'Type "lll"',
+      "Sleep 400ms",
+      "Ctrl+N",
+      "Sleep 1200ms",
+    ].join("\n"),
   },
   { name: "go-to-file", steps: ["Ctrl+P", 'Type "diff"', "Sleep 600ms"].join("\n") },
   {
@@ -240,20 +331,23 @@ const screens = [
   },
   {
     /**
-     * Open a source file, jump the caret onto a function header with `/`, and press `z` to fold its
-     * body: the block collapses behind a `▸ N lines folded` marker while the header stays. `Type
-     * "z"` reaches the diff pane's fold toggle (the caret is inside the function after the jump).
+     * Open a diff, jump the caret onto a function header with `/`, and press `z` to fold its body:
+     * the block collapses behind a `▸ N lines folded` marker while the header stays. `Type "z"`
+     * reaches the diff pane's fold toggle (the caret is inside the function after the jump).
+     * `layout/regions` is a file this window adds wholesale, so every line renders as a diff row
+     * with no elided gap for the jump to miss, which an already-existing file cannot promise: the
+     * old target here was unchanged in the window, so the shot was plain source, not a diff.
      */
     name: "folding",
     steps: [
       "Ctrl+P",
-      'Type "git/tree"',
+      'Type "layout/regions"',
       "Sleep 500ms",
       "Enter",
       "Sleep 1500ms",
       'Type "/"',
       "Sleep 300ms",
-      'Type "function flattenTree"',
+      'Type "function computeLayout"',
       "Sleep 500ms",
       "Enter",
       "Sleep 500ms",
@@ -424,6 +518,45 @@ const screens = [
       "Sleep 16s",
     ].join("\n"),
   },
+  {
+    /**
+     * Findings docked beside the diff instead of under it, which is the arrangement the layout
+     * guide is actually about. `p` both opens the panel and focuses it, which `d` needs, and `d`
+     * rotates clockwise from the panel's `bottom` default, so three presses land it on the right
+     * with the tree still left. Reuses the diagnostics fixture so the panel has real rows to show,
+     * and waits out tsserver's project load before docking, the same as the problems shot.
+     */
+    fixture: true,
+    name: "pane-docking",
+    steps: [
+      "Ctrl+P",
+      'Type "diagnostics-demo"',
+      "Sleep 400ms",
+      "Enter",
+      "Sleep 800ms",
+      'Type "p"',
+      "Sleep 16s",
+      'Type "d"',
+      "Sleep 300ms",
+      'Type "d"',
+      "Sleep 300ms",
+      'Type "d"',
+      "Sleep 1200ms",
+    ].join("\n"),
+  },
+  {
+    /**
+     * The tree marking what an agent just touched. The settle waits out `RECENT_EDITS` (the last of
+     * them lands ~17s after launch) and leaves each one a different age inside the 30s recency
+     * window, so the dots read as a ramp rather than one flat state. `.` then jumps to the newest
+     * of them. Deliberately captured while diagnostics are still running: background progress
+     * outranks the ambient tier, so the status bar's own recency row is not reachable here, and the
+     * tree cue is what this section claims anyway.
+     */
+    name: "recent-activity",
+    recentEdits: true,
+    steps: ["Sleep 18s", 'Type "."', "Sleep 1500ms"].join("\n"),
+  },
 ];
 
 function tapeFor(screen: (typeof screens)[number]) {
@@ -450,6 +583,9 @@ async function run(cmd: string, cmdArgs: string[], cwd = TAPES) {
 }
 
 async function shoot(screen: (typeof screens)[number]) {
+  if (screen.config) {
+    await writeScreenshotConfig();
+  }
   await Bun.write(`${TAPES}/${screen.name}.tape`, tapeFor(screen));
   console.log(`▶ ${screen.name}`);
   await run(VHS, [`${TAPES}/${screen.name}.tape`]);
@@ -565,21 +701,50 @@ function removeWorktree() {
   plantedWorktree = false;
 }
 
-async function writeThemeConfig() {
-  await Bun.write(THEME_CONFIG_FILE, THEME_CONFIG);
+// Rewritten before every `config: true` shot rather than once per run, because the save-settings
+// Tape presses `ctrl-s` and leaves the keys it wrote behind; a later shot must not inherit them.
+async function writeScreenshotConfig() {
+  await Bun.write(SCREENSHOT_CONFIG_FILE, SCREENSHOT_CONFIG);
   // `XDG_CONFIG_HOME` is not stet's alone: git resolves its own global config there too, and with it
   // `core.excludesFile`. A bare override drops the user's global ignores, so files they ignore
   // (`.claude/settings.local.json`) count as changed and this shot's tree and count disagree with
   // Every other one. Link the real git config back in so only stet's config moves.
   const realGitConfig = join(REAL_CONFIG_HOME, "git");
-  if (existsSync(realGitConfig)) {
-    symlinkSync(realGitConfig, join(THEME_CONFIG_DIR, "git"), "dir");
+  const linked = join(SCREENSHOT_CONFIG_DIR, "git");
+  if (existsSync(realGitConfig) && !existsSync(linked)) {
+    symlinkSync(realGitConfig, linked, "dir");
   }
 }
 
 // Recursive, but `rmSync` unlinks the linked-in git config rather than descending into it.
-function removeThemeConfig() {
-  rmSync(THEME_CONFIG_DIR, { force: true, recursive: true });
+function removeScreenshotConfig() {
+  rmSync(SCREENSHOT_CONFIG_DIR, { force: true, recursive: true });
+}
+
+/**
+ * Appends a marker line to each `RECENT_EDITS` file on its own delay, so stet's watcher observes a
+ * real edit while it is running rather than finding one already there. Runs alongside the vhs
+ * process; the caller awaits it before restoring, so no write can land after the restore.
+ */
+const plantedRecentEdits: { original: string; path: string }[] = [];
+async function applyRecentEdits() {
+  for (const edit of RECENT_EDITS) {
+    // oxlint-disable-next-line no-await-in-loop -- the delays are cumulative by design
+    await Bun.sleep(edit.afterMs);
+    // oxlint-disable-next-line no-await-in-loop -- one edit's content is read after the last landed
+    const original = await Bun.file(edit.path).text();
+    plantedRecentEdits.push({ original, path: edit.path });
+    // oxlint-disable-next-line no-await-in-loop -- sequential so each edit is a separate watcher tick
+    await Bun.write(edit.path, `${original}\n// agent edit (screenshot fixture)\n`);
+  }
+}
+
+// Sync like the other removers so the signal handler can reach it, and byte-exact so an interrupted
+// Run leaves the checkout as it found it. Draining the list keeps a second call a no-op.
+function restoreRecentEdits() {
+  for (const { original, path } of plantedRecentEdits.splice(0)) {
+    writeFileSync(path, original);
+  }
 }
 
 const only = new Set(Bun.argv.slice(2));
@@ -596,14 +761,15 @@ if (!OXIPNG) {
 
 const wanted = screens.filter((screen) => only.size === 0 || only.has(screen.name));
 const standalone = wanted.filter(
-  (screen) => !screen.fixture && !screen.worktree && !screen.imageFixture,
+  (screen) => !screen.fixture && !screen.worktree && !screen.imageFixture && !screen.recentEdits,
 );
 const worktreed = wanted.filter((screen) => screen.worktree);
 const fixtured = wanted.filter((screen) => screen.fixture);
 const imageFixtured = wanted.filter((screen) => screen.imageFixture);
+const recentEdited = wanted.filter((screen) => screen.recentEdits);
 
 // One cleanup list drives both the finally and the signal handlers, so a Ctrl-C mid-shoot leaves
-// Behind neither the temp theme config nor the diagnostics fixture.
+// Behind neither the temp config, the diagnostics fixture, nor a source file the recency shot edited.
 const cleanups: (() => void)[] = [];
 function cleanup() {
   for (const remove of cleanups.splice(0)) {
@@ -618,11 +784,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 try {
-  // The theme shot reads named palettes from a temp config via XDG_CONFIG_HOME; it creates no repo
-  // File, so planting it up front never pollutes the other shots.
+  // The config shots read a temp config via XDG_CONFIG_HOME, rewritten per shot inside `shoot`;
+  // It creates no repo file, so it never pollutes another shot's tree. Only the teardown is global.
   if (wanted.some((screen) => screen.config)) {
-    await writeThemeConfig();
-    cleanups.push(removeThemeConfig);
+    cleanups.push(removeScreenshotConfig);
   }
 
   for (const screen of standalone) {
@@ -661,6 +826,25 @@ try {
       // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
       await shoot(screen);
     }
+  }
+
+  if (recentEdited.length > 0) {
+    // Last, because these edits change real source files: their churn would show in any tree
+    // Captured after them, and the recency they create would put stray dots on those rows too.
+    // The edits run alongside vhs rather than before it, since stet has to be watching to see them.
+    cleanups.push(restoreRecentEdits);
+    // Both awaited together rather than starting the edits as a floating promise: a rejection while
+    // Vhs is still running would otherwise go unhandled for the whole shot. Awaiting the edits here
+    // Also guarantees no scheduled write lands after the cleanup has restored a file.
+    await Promise.all([
+      applyRecentEdits(),
+      (async () => {
+        for (const screen of recentEdited) {
+          // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
+          await shoot(screen);
+        }
+      })(),
+    ]);
   }
 } finally {
   cleanup();

@@ -6,7 +6,7 @@ description: stet is a read-only companion TUI for inspecting an agent's changes
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Callout } from "fumadocs-ui/components/callout";
 import { Card, Cards } from "fumadocs-ui/components/card";
-import { FileText, GitBranch, Palette, Search, Waypoints } from "lucide-react";
+import { FileText, GitBranch, Palette, PanelsTopLeft, Search, Waypoints } from "lucide-react";
 
 ## Introduction
 
@@ -19,7 +19,12 @@ changed.
 It shows you the repo, the diff, and the problems. It never reviews, approves,
 or talks to the agent. You decide what to say next.
 
+![stet showing the repository tree beside a diff of a changed file](/screenshots/stet.png)
+
 <Cards>
+  <Card icon={<PanelsTopLeft />} title="Panes & layout" href="/docs/guides/panes-and-layout">
+    Move between the tree, viewer, and problems panel, then resize, dock, and zoom them.
+  </Card>
   <Card
     icon={<FileText />}
     title="Reading files & diffs"
@@ -103,10 +108,38 @@ Diagnostics appear as language servers report them.
   tree.
 </Callout>
 
-Press `?` at any time to see every keybinding, or read the
-[keybindings reference](/docs/reference/keybindings). See
-[configuration](/docs/reference/configuration) to set a permanent theme and
-editor.
+Press `?` at any time to see every keybinding and the legend for the marks in
+the tree and the gutter, or read the
+[keybindings reference](/docs/reference/keybindings).
+
+## Configure it
+
+stet runs with no configuration. When you do want one, you do not have to write
+it: set things up the way you like them in the app, then press `ctrl-s`.
+
+![The status bar confirming ctrl-s saved the changed settings to the config file](/screenshots/save-settings.png)
+
+That saves the session you already have, the theme, wrap, the sidebar and
+problems panel, the provenance rail, and the search toggles, to
+`~/.config/stet/config.jsonc`. Only the settings that differ from the file are
+written, as targeted edits that keep your comments, and the status bar names
+what changed.
+
+The file is yours to edit too, and it does more than the keys can reach:
+
+```jsonc title="~/.config/stet/config.jsonc"
+{
+  "theme": { "dark": "mocha", "light": "light" }, // follow the terminal
+  "themes": { "mocha": { "base": "dark", "syntax": "catppuccin-mocha" } },
+  "editor": "nvim +{line} {file}", // the e key
+  "ide": "code {repo} --goto {file}:{line}", // the o key
+  "keybindings": { "toggle-sidebar": "ctrl+e" },
+}
+```
+
+Themes, editors, keybindings, file associations, language servers, and JSON
+schemas all live there. The
+[configuration reference](/docs/reference/configuration) covers every key.
 
 ## Upgrade
 

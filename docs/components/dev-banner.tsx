@@ -11,7 +11,7 @@ export function DevBanner({ version }: { version?: string }) {
   return (
     <Banner id="stet-docs-next">
       <span>
-        These docs track the development version of stet, which may be ahead of the current release
+        These docs may be ahead of the current release
         {version ? ` (v${version})` : ""}.{" "}
         <Link href="/changelog" className="font-medium underline underline-offset-2">
           See the changelog

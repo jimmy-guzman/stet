@@ -17,6 +17,22 @@ The site deploys from `main` on every push while the CLI release is gated to `pa
 - MDX content lives under `content/docs/`, wired through `lib/source.ts` (`loader` over `docs.toFumadocsSource()`). Navigation order comes from `meta.json` files; every page needs `title` and `description` frontmatter.
 - Add a page by creating `content/docs/<path>.mdx` and listing its slug in the relevant `meta.json`. The URL is `/docs/<path>` (the loader `baseUrl` is `/docs`).
 - `reference/keybindings.mdx` has a `GENERATED-KEYS` region populated by `bun run gen:keys` from the TUI's `src/help/keys.ts`. Never hand-edit inside that fence; run the generator.
+- Frontmatter is YAML, so a `description` containing a colon followed by a space fails the parse (`Nested mappings are not allowed in compact mappings`). Rewrite the sentence rather than quoting it, which is what every existing description does.
+
+### Screenshots
+
+**An image earns its place by telling something the prose cannot, not by filling a section that lacks one.** That is the whole bar, and it is the one that gets skipped: a page with no image is not a gap, and an overlay that already appears on the page in another shot does not need a second near-identical one. A capture of a transient toast is rarely worth it either, because the sentence beside it already says what it says. What does earn a place: a cue with no words to describe it (the recency ramp), an arrangement a reader cannot picture (a re-docked pane), a surface whose contents the prose does not enumerate (what is actually on the context menu), and the surprising payoff of a feature (`ctrl-s` writing the config for you).
+
+Check the capture against the sentence next to it, not just against the app. A shot of the context menu on a symbol shows a full menu, so it cannot illustrate the menu omitting rows; the prose beside it has to make that claim on its own.
+
+The mechanics:
+
+- Screenshots are generated, never hand-captured: `bun run screenshots` from the repo root drives the real binary through VHS (`packages/tui/script/screenshots.ts`). Pass names to shoot a subset, e.g. `bun run screenshots find problems`. Adding one means adding an entry to that file's `screens` array; do not drop a PNG into `public/screenshots/` by hand.
+- Capture against a clean checkout, or point `STET_SCREENSHOT_REPO` at one, since uncommitted files show up in the captured tree and changed count.
+- They live in `public/screenshots/` as lowercase kebab-case PNGs named for their screen, and embed as plain markdown images. A custom component would bypass `markdownImage` in `lib/llm-image.ts` and drop the image from `/llms.txt` and the `.md` routes.
+- Alt text is sentence case, describes the state captured, and never starts with "Screenshot of". Do not quote a number the capture produces (a fold marker's line count), which the next regeneration invalidates.
+- **VHS has no F-key.** It rejects a bare `F10`, and `Shift+F10` parses as shift over the literal text "F10", which it types. It cannot send a right-click either. A shot needing one of those plants a `keybindings` rebind in the throwaway config dir (`config: true` screens); this stays honest because no overlay footer names its own opener.
+- A screen that depends on timing states the coupling in its JSDoc. Two are load-bearing today: an action notification clears after 1500ms, so its shot must capture inside that window, and recency needs a real edit made **while stet is watching**, since the activity log diffs successive git models and the first one is only a baseline.
 
 ### Editorial standards
 
@@ -44,15 +60,17 @@ Where generating the fact is too heavy for a guard, such as the language matrix'
 | Config keys, environment variables, editor / theme / schema settings | `docs/content/docs/reference/configuration.mdx`                  | `packages/tui/src/config/schema.ts`, `packages/tui/src/editor/reference.ts`                                                    |
 | Keybindings                                                          | `docs/content/docs/reference/keybindings.mdx` (`GENERATED-KEYS`) | `packages/tui/src/help/keys.ts`, `packages/tui/src/keys/actions.ts`, then `bun run gen:keys`                                   |
 | Install, usage, flags, requirements                                  | `docs/content/docs/index.mdx`                                    | `packages/tui/src/cli.ts`                                                                                                      |
+| Pane focus, resize, docking, zoom, and their minimums and defaults   | `docs/content/docs/guides/panes-and-layout.mdx`                  | `packages/tui/src/layout/regions.ts`, the pane actions in `packages/tui/src/state.ts`                                          |
 
 ### Coverage
 
 Not every gap is a page. Per the self-explaining-interface standard above, a gap can be closed in the UI instead. What exists and is maintained, and the gaps an audit found; check a box when a gap is closed in a page or in-app, and add a row when one is filled or found.
 
 - [x] Getting started (`index.mdx`)
-- [x] Guides: reading files & diffs, search & navigation, code intelligence, scopes & worktrees, themes
+- [x] Guides: panes & layout, reading files & diffs, search & navigation, code intelligence, scopes & worktrees, themes
 - [x] Reference: keybindings, configuration, languages
 - [x] The tree and diagnostics marks (change kinds `M`/`A`/`D`/`R`/`U`, badges, recency, the provenance rail): explained in-app by the `?` legend, not a page (#331)
+- [x] The panes themselves (focus, resize, docking, zoom): `guides/panes-and-layout.mdx`
 - [ ] The rest of the interface: the status bar tiers and the header (a short guide, or more in-app cues)
 - [ ] Guide: working alongside an agent (the loop, live refresh and the safety poll, the non-goals contract)
 - [ ] Reference: troubleshooting (`R` vs `r`, server downloads, gopls, Nerd Fonts, clipboard, config parse errors)

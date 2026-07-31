@@ -1,6 +1,7 @@
 {
   "title": "Guides",
   "pages": [
+    "panes-and-layout",
     "reading-files-and-diffs",
     "search-and-navigation",
     "code-intelligence",

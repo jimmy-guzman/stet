@@ -5,11 +5,14 @@
  * manual install, the way Zed and opencode auto-provision. Opt out with `STET_NO_LSP_DOWNLOAD`.
  *
  * Two channels, both pinned exactly in the registry (`servers.ts`) so the provisioned executable is
- * deterministic: `npm` installs pinned package versions (requiring `npm` on PATH),
- * integrity-checked against npm's immutable published versions; `binary` downloads a pinned GitHub
- * release asset (a gzipped single binary) and verifies its sha256 against the registry's pin before
- * anything is written, so a moved tag or tampered asset can never execute. The cache directory is
- * keyed by a digest of the exact pinned channel (`provisionKey`), so bumping a pin lands in a fresh
+ * deterministic: `npm` installs pinned package versions with `--ignore-scripts` (requiring `npm` on
+ * PATH), integrity-checked against npm's immutable published versions; `binary` downloads a pinned
+ * GitHub release asset (a gzipped single binary) and verifies its sha256 against the registry's pin
+ * before anything is written, so a moved tag or tampered asset can never execute. No provisioned
+ * server declares a lifecycle script, so `--ignore-scripts` suppresses nothing that should run, and
+ * it pins that behavior identically across npm 10, 11, and 12 (12 blocks install scripts by
+ * default) rather than inheriting whatever the user's npm defaults to. The cache directory is keyed
+ * by a digest of the exact pinned channel (`provisionKey`), so bumping a pin lands in a fresh
  * directory and re-provisions instead of the stale cached binary satisfying the existence check.
  *
  * The install is bounded (`INSTALL_TIMEOUT`): a fetch that cannot complete (offline, air-gapped,
@@ -169,7 +172,7 @@ export function makeProvisioner(
     const completions = yield* Queue.unbounded<string>();
 
     function installNpm(dir: string, packages: readonly string[]) {
-      const command = ["npm", "install", "--no-save", ...packages];
+      const command = ["npm", "install", "--no-save", "--ignore-scripts", ...packages];
       // Effect.try, not Effect.sync: a failed mkdir/write (unwritable cache, full disk) must be a
       // Typed failure that flows through onFailure below, or it dies as a defect that bypasses the
       // InFlight cleanup and completion offer, stranding the language in `installing` forever.

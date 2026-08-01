@@ -200,7 +200,14 @@ test("provisioning installs the registry's exact pinned versions", async () => {
     );
 
     expect(commands).toEqual([
-      ["npm", "install", "--no-save", "typescript-language-server@5.3.0", "typescript@6.0.3"],
+      [
+        "npm",
+        "install",
+        "--no-save",
+        "--ignore-scripts",
+        "typescript-language-server@5.3.0",
+        "typescript@6.0.3",
+      ],
     ]);
   } finally {
     rmSync(root, { force: true, recursive: true });

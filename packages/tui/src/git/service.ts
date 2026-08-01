@@ -36,6 +36,15 @@ import {
   parseFirstCommit,
   parseRevList,
 } from "./provenance";
+import {
+  classifyRepoFailure,
+  classifyRepoOutput,
+  parseRepoContext,
+  repoContextArgs,
+  repoFailureMessage,
+  verifyRefArgs,
+} from "./repo";
+import type { RepoContext } from "./repo";
 import { parseSearchOutput, searchArgs } from "./search";
 import type { SearchMatch, SearchOptions } from "./search";
 import {
@@ -125,6 +134,11 @@ export class Git extends Context.Service<
     readonly parentRef: (repoRoot: string) => Effect.Effect<string, GitError>;
     /** The most recent commits (newest first), capped at `limit`. */
     readonly recentCommits: (repoRoot: string, limit: number) => Effect.Effect<Commit[], GitError>;
+    /**
+     * The repository stet was launched in, or a `GitError` whose message is the one line to print.
+     * Runs before the renderer, so its failure never reaches the alt screen.
+     */
+    readonly repoContext: (cwd: string) => Effect.Effect<RepoContext, GitError>;
     readonly repoFiles: (
       repoRoot: string,
     ) => Effect.Effect<Pick<GitModel, "repoFiles" | "repoFilesKey">, GitError>;
@@ -134,6 +148,8 @@ export class Git extends Context.Service<
       paths: readonly string[] | undefined,
       options: SearchOptions,
     ) => Effect.Effect<SearchMatch[], GitError>;
+    /** Whether a ref resolves in this repository, so an unknown one is named rather than dumped. */
+    readonly verifyRef: (repoRoot: string, ref: string) => Effect.Effect<boolean, GitError>;
     readonly worktrees: (repoRoot: string) => Effect.Effect<Worktree[], GitError>;
     /**
      * When each of the given worktrees was last touched, by an agent or by git. A worktree that
@@ -396,6 +412,39 @@ export const GitLive = Layer.effect(
           Effect.map((result) => parseLog(result.stdout)),
           Effect.mapError(toGitError),
         ),
+      // The startup preflight: every way git can refuse to answer becomes one actionable line,
+      // Since this is the failure the user meets before stet has any UI to report it in.
+      repoContext: (cwd) =>
+        process.run(repoContextArgs(), cwd).pipe(
+          // A spawn that never reached an exit code (a vanished cwd) has no stderr, so its own
+          // Message is the only detail there is.
+          Effect.mapError(
+            (error) =>
+              new GitError({
+                message: repoFailureMessage(
+                  classifyRepoFailure(error),
+                  cwd,
+                  error.stderr || error.message,
+                ),
+              }),
+          ),
+          // A `rev-parse` that exits 0 can still answer nothing usable: a git too old for
+          // `--path-format` echoes the option instead of rejecting it.
+          Effect.flatMap((result) => {
+            const context = parseRepoContext(result.stdout);
+            return context === undefined
+              ? Effect.fail(
+                  new GitError({
+                    message: repoFailureMessage(
+                      classifyRepoOutput(result.stdout),
+                      cwd,
+                      result.stdout,
+                    ),
+                  }),
+                )
+              : Effect.succeed(context);
+          }),
+        ),
       repoFiles: (repoRoot) =>
         Effect.all(
           [
@@ -417,6 +466,13 @@ export const GitLive = Layer.effect(
           // Bytes, not the decoded stdout: the parse converts git's byte columns
           // Against the raw line, immune to replacement-char width drift.
           Effect.map((result) => parseSearchOutput(result.stdoutBytes)),
+          Effect.mapError(toGitError),
+        ),
+      // Exit 1 is the ref not resolving, which is an answer rather than a failure.
+      verifyRef: (repoRoot, ref) =>
+        process.run(verifyRefArgs(ref), repoRoot, { allowedExitCodes: [0, 1] }).pipe(
+          retryTransient,
+          Effect.map((result) => result.exitCode === 0),
           Effect.mapError(toGitError),
         ),
       // Every worktree's HEAD resolves against the one shared object database, so their commit times

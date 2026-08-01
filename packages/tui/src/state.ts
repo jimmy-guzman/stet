@@ -471,6 +471,12 @@ function createState() {
   const [scope, setScope] = tracked<DiffScope>({ kind: "all", ref: "HEAD" });
   // The CLI ref (default HEAD), the base for the all/staged scopes.
   const [cliBaseRef, setCliBaseRef] = tracked("HEAD");
+  // Whether HEAD names no commit yet, which makes `HEAD` unusable as a diff endpoint.
+  const [headUnborn, setHeadUnborn] = tracked(false);
+  // What `all` and `staged` actually diff against. A repository with no commits has no HEAD, so it
+  // Diffs against the empty tree, where every tracked file reads as added; the first commit gives
+  // HEAD a meaning again and the base returns to it. A ref the user named is never substituted.
+  const baseRef = createMemo(() => (headUnborn() ? EMPTY_TREE_SHA : cliBaseRef()));
   // The SHA HEAD pointed at when stet launched, pinned for the session scope.
   const [sessionBase, setSessionBase] = tracked("HEAD");
   const [scopeMenuOpen, setScopeMenuOpen] = tracked(false);
@@ -4094,7 +4100,7 @@ function createState() {
       return;
     }
 
-    setScope({ kind, ref: cliBaseRef() });
+    setScope({ kind, ref: baseRef() });
   }
 
   const LOG_LIMIT = 30;
@@ -4167,23 +4173,42 @@ function createState() {
   // CLI-ref kinds (all/staged/unstaged) are valid in any worktree, so they carry over.
   async function rebaselineScope(root: string) {
     const head = await runtime.runPromise(Git.use((git) => git.headRef(root)));
+    // Bornness belongs to the worktree, not the session: an orphan worktree has no HEAD to diff
+    // Against even when the one being left did.
+    const unborn = head === EMPTY_TREE_SHA;
+    const base = unborn ? EMPTY_TREE_SHA : cliBaseRef();
     const active = scope();
     if (active.kind === "session") {
-      return { scope: { kind: "session", ref: head } satisfies DiffScope, sessionBase: head };
+      return {
+        headUnborn: unborn,
+        scope: { kind: "session", ref: head } satisfies DiffScope,
+        sessionBase: head,
+      };
+    }
+    // A pinned commit SHA has no meaning in the target worktree, and neither does the newest commit
+    // Where there is none; both fall back to the default all-changes lens (the drill-down reloads
+    // Against the new history).
+    if (active.kind === "commit" || (active.kind === "last-commit" && unborn)) {
+      return {
+        headUnborn: unborn,
+        scope: { kind: "all", ref: base } satisfies DiffScope,
+        sessionBase: head,
+      };
     }
     if (active.kind === "last-commit") {
       const parent = await runtime.runPromise(Git.use((git) => git.parentRef(root)));
       return {
+        headUnborn: unborn,
         scope: { headRef: "HEAD", kind: "last-commit", ref: parent } satisfies DiffScope,
         sessionBase: head,
       };
     }
-    if (active.kind === "commit") {
-      // A pinned commit SHA has no meaning in the target worktree; fall back to the
-      // Default all-changes lens (the drill-down reloads against the new history).
-      return { scope: { kind: "all", ref: cliBaseRef() } satisfies DiffScope, sessionBase: head };
-    }
-    return { scope: active, sessionBase: head };
+    // `unstaged` ignores the ref entirely; `all`/`staged` re-point at the target worktree's base.
+    return {
+      headUnborn: unborn,
+      scope: active.kind === "unstaged" ? active : { ...active, ref: base },
+      sessionBase: head,
+    };
   }
 
   // Repoint the whole app (tree, diffs, polling, checks) at another worktree
@@ -4227,9 +4252,11 @@ function createState() {
     });
     try {
       // Re-pin session/last-commit to the target worktree's history before loading.
-      const { sessionBase: nextSessionBase, scope: nextScope } = await rebaselineScope(
-        worktree.path,
-      );
+      const {
+        headUnborn: nextHeadUnborn,
+        sessionBase: nextSessionBase,
+        scope: nextScope,
+      } = await rebaselineScope(worktree.path);
       // Load only the changed set (the same shape startup seeds, repoFiles empty),
       // So the tree repoints the instant the cheap diff commands resolve instead of
       // Blocking on `git ls-files --stage` over the whole worktree. The repoFilesPoll
@@ -4249,6 +4276,7 @@ function createState() {
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
       const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path));
       batch(() => {
+        setHeadUnborn(nextHeadUnborn);
         setSessionBase(nextSessionBase);
         setScope(nextScope);
         setCurrentWorktreeDeleted(false);
@@ -4360,6 +4388,33 @@ function createState() {
                         if (current.kind === "last-commit" && current.ref !== parent) {
                           setScope({ headRef: "HEAD", kind: "last-commit", ref: parent });
                         }
+                      }),
+                    ),
+                    Effect.ignore,
+                  )
+                : Effect.void,
+            ),
+            // The empty-tree base a commitless repository diffs against is transient: the first
+            // Commit gives HEAD a meaning and `all`/`staged` return to it. Re-resolving is gated on
+            // Still being unborn, so a repository with commits never pays for this read.
+            Effect.tap(() =>
+              headUnborn()
+                ? Git.use((git) => git.headRef(root)).pipe(
+                    Effect.tap((head) =>
+                      Effect.sync(() => {
+                        if (repoRoot() !== root || head === EMPTY_TREE_SHA) {
+                          return;
+                        }
+                        batch(() => {
+                          setHeadUnborn(false);
+                          const current = scope();
+                          if (
+                            (current.kind === "all" || current.kind === "staged") &&
+                            current.ref === EMPTY_TREE_SHA
+                          ) {
+                            setScope({ ...current, ref: cliBaseRef() });
+                          }
+                        });
                       }),
                     ),
                     Effect.ignore,
@@ -4832,6 +4887,7 @@ function createState() {
     setFocusedPane,
     setFullContentPaths,
     setGitModel,
+    setHeadUnborn,
     setHelpDialogOpen,
     setHelpView,
     setIconsEnabled,

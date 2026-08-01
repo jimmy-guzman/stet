@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { helpText, parseArgs, parseCommand, scopeKinds, scopeLabel, scopeMenuLabel } from "@/cli";
+import { EMPTY_TREE_SHA } from "@/git/model";
 import { keyHelpGroups } from "@/help/keys";
 
 describe("parseArgs", () => {
@@ -147,6 +148,13 @@ describe("scopeLabel", () => {
     expect(scopeLabel({ kind: "unstaged", ref: "HEAD" })).toBe("unstaged");
     expect(scopeLabel({ kind: "session", ref: "abc123" })).toBe("since session start");
     expect(scopeLabel({ headRef: "HEAD", kind: "last-commit", ref: "abc123" })).toBe("last commit");
+  });
+
+  // The empty-tree base is stet's own, not a ref the user named, and its 40 characters crowded the
+  // Branch off the header, which shrinks the branch before the scope.
+  test("names the empty-tree base rather than printing its sha", () => {
+    expect(scopeLabel({ kind: "all", ref: EMPTY_TREE_SHA })).toBe("uncommitted vs no commits yet");
+    expect(scopeLabel({ kind: "staged", ref: EMPTY_TREE_SHA })).toBe("staged vs no commits yet");
   });
 });
 

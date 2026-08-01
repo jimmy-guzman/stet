@@ -101,6 +101,11 @@ stet --ide    "code {repo} --goto {file}:{line}" # GUI/IDE for the o key
 The repository tree opens beside the file viewer. Changed files open as diffs.
 Diagnostics appear as language servers report them.
 
+A repository with no commits yet has no `HEAD` to compare against, so `stet`
+compares against the empty tree instead and every file reads as added. The scope
+shows `uncommitted vs no commits yet` until the first commit, after which it
+compares against `HEAD` like any other repository.
+
 <Callout title="Nerd Font icons">
   The tree shows a file-type icon next to each file. These are [Nerd
   Font](https://www.nerdfonts.com/) glyphs and only render with a Nerd Font selected in your

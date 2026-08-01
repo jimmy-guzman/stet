@@ -135,6 +135,122 @@ test("Git.headRef returns the empty tree when HEAD is unborn", async () => {
   }
 });
 
+// The unborn base in practice: with no HEAD to diff against, the empty tree is the endpoint, and a
+// Repository with no commits reads as an all-added tree instead of failing the load.
+test("Git.changedFiles against the empty tree lists a commitless repo's files", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "git-service-unborn-changed-"));
+  runGit(repo, ["init"]);
+  try {
+    writeFileSync(join(repo, "staged.txt"), "one\n");
+    writeFileSync(join(repo, "loose.txt"), "two\n");
+    runGit(repo, ["add", "staged.txt"]);
+
+    const result = await Effect.runPromise(
+      Git.pipe(
+        Effect.flatMap((git) => git.changedFiles(repo, { kind: "all", ref: EMPTY_TREE_SHA })),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
+      ),
+    );
+
+    expect(result.changed.find((entry) => entry.path === "staged.txt")?.kind).toBe("added");
+    expect(result.changed.find((entry) => entry.path === "loose.txt")?.kind).toBe("untracked");
+    expect(result.branch).not.toBeUndefined();
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("Git.loadModel against the empty tree lists a commitless repo's tracked files", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "git-service-unborn-model-"));
+  runGit(repo, ["init"]);
+  try {
+    writeFileSync(join(repo, "staged.txt"), "one\n");
+    runGit(repo, ["add", "staged.txt"]);
+
+    const model = await Effect.runPromise(
+      Git.pipe(
+        Effect.flatMap((git) => git.loadModel(repo, { kind: "all", ref: EMPTY_TREE_SHA })),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
+      ),
+    );
+
+    expect(model.repoFiles.map((file) => file.path)).toContain("staged.txt");
+    expect(model.changed.find((entry) => entry.path === "staged.txt")?.kind).toBe("added");
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("Git.repoContext resolves the repo root and main worktree", async () => {
+  const repo = createFixtureRepo("git-service-context-", { "a.txt": "one\n" });
+  try {
+    const context = await Effect.runPromise(
+      Git.pipe(
+        Effect.flatMap((git) => git.repoContext(repo)),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
+      ),
+    );
+
+    expect(context).toEqual({ mainWorktreePath: repo, repoRoot: repo });
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("Git.repoContext names the directory when it is not a repository", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "git-service-norepo-"));
+  try {
+    const failure = await Effect.runPromise(
+      Git.pipe(
+        Effect.flatMap((git) => git.repoContext(dir)),
+        Effect.flip,
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
+      ),
+    );
+
+    expect(failure.message).toBe(`not a git repository: ${dir}`);
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("Git.repoContext reports a bare repository as having no working tree", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "git-service-bare-"));
+  runGit(dir, ["init", "--bare"]);
+  try {
+    const failure = await Effect.runPromise(
+      Git.pipe(
+        Effect.flatMap((git) => git.repoContext(dir)),
+        Effect.flip,
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
+      ),
+    );
+
+    expect(failure.message).toBe(`no git working tree at ${dir}`);
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("Git.verifyRef separates a ref that resolves from one that does not", async () => {
+  const repo = createFixtureRepo("git-service-verify-", { "a.txt": "one\n" });
+  try {
+    const [known, unknown] = await Effect.runPromise(
+      Git.pipe(
+        Effect.flatMap((git) =>
+          Effect.all([git.verifyRef(repo, "HEAD"), git.verifyRef(repo, "nosuchref")]),
+        ),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
+      ),
+    );
+
+    expect(known).toBe(true);
+    expect(unknown).toBe(false);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
 // GIT_DIR overrides cwd-based repo discovery for any git invocation that inherits it, even
 // One passed an explicit, correct cwd. A git hook (e.g. lefthook's pre-push) sets GIT_DIR in
 // Its own environment so its own git commands target the right repo; a child process that

@@ -1,5 +1,6 @@
 import util from "node:util";
 
+import { EMPTY_TREE_SHA } from "@/git/model";
 import { keyHelpGroups } from "@/help/keys";
 
 export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit" | "commit";
@@ -32,6 +33,12 @@ export interface CliOptions {
   lspDownload: boolean;
   /** Long line handling: `scroll` (default) or `wrap`. */
   overflow: "scroll" | "wrap";
+  /**
+   * The git ref the user named, absent when they named none. `scope.ref` folds the default in, so
+   * this is what tells a ref worth verifying (and reporting as unknown) from the implicit `HEAD`,
+   * which resolves to the empty tree in a repository with no commits instead of failing.
+   */
+  ref: string | undefined;
   scope: DiffScope;
   version: boolean;
 }
@@ -93,6 +100,7 @@ export function parseArgs(args: string[]): CliOptions {
     ide: requireNonEmptyValue("--ide", values.ide),
     lspDownload: !values["no-lsp-download"],
     overflow: values.wrap ? "wrap" : "scroll",
+    ref: positionals[0],
     scope: { kind, ref: positionals[0] ?? "HEAD" },
     version: values.version ?? false,
   };
@@ -107,9 +115,16 @@ function requireNonEmptyValue(flag: string, value: string | undefined) {
   return value;
 }
 
+// The empty tree is the base a repository with no commits diffs against, never a ref anyone typed,
+// So it reads as the absence of a commit. Its 40-character sha in the header also crowded the
+// Branch off the line, since the width budget shrinks the branch before the scope.
+function refLabel(ref: string) {
+  return ref === EMPTY_TREE_SHA ? "no commits yet" : ref;
+}
+
 export function scopeLabel(scope: DiffScope) {
   if (scope.kind === "staged") {
-    return `staged vs ${scope.ref}`;
+    return `staged vs ${refLabel(scope.ref)}`;
   }
 
   if (scope.kind === "unstaged") {
@@ -130,7 +145,7 @@ export function scopeLabel(scope: DiffScope) {
     return `commit ${scope.headRef?.slice(0, 7) ?? ""}`;
   }
 
-  return `uncommitted vs ${scope.ref}`;
+  return `uncommitted vs ${refLabel(scope.ref)}`;
 }
 
 // Ref-agnostic row labels for the scope picker (the active scope's full,

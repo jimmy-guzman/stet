@@ -2,7 +2,7 @@
 
 import { createCliRenderer } from "@opentui/core";
 import { render } from "@opentui/solid";
-import { Effect, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { batch } from "solid-js";
 
 import packageJson from "../package.json";
@@ -16,13 +16,16 @@ import { registerServers, resolveServers } from "./diagnostics/servers";
 import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import { resolveFileSupportConfig } from "./file-support/config";
 import { registerFileSupport } from "./file-support/registry";
+import { GitError } from "./git/errors";
+import { EMPTY_TREE_SHA } from "./git/model";
 import type { GitModel } from "./git/model";
-import { Git } from "./git/service";
+import { unknownRefMessage } from "./git/repo";
+import { Git, GitLive } from "./git/service";
 import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
 import { registerKeybindings } from "./keys/registry";
 import { resolveKeybindings } from "./keys/resolve";
 import { logError } from "./log/terminal";
-import { Process } from "./process";
+import { ProcessLive } from "./process";
 import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance, setSelection } from "./theme/active";
@@ -51,34 +54,36 @@ try {
     process.exit(0);
   }
 
+  // Everything git has to answer before there is a UI to report a failure in: which repository
+  // This is, and whether a ref the user named exists. Both are O(1) reads, so they cost the first
+  // Paint nothing measurable, and their failures print on the normal terminal.
+  const preflight = (cwd: string) =>
+    Effect.gen(function* repoPreflight() {
+      const git = yield* Git;
+      const context = yield* git.repoContext(cwd);
+      if (options.ref !== undefined && !(yield* git.verifyRef(context.repoRoot, options.ref))) {
+        return yield* new GitError({ message: unknownRefMessage(options.ref) });
+      }
+      return context;
+    });
+
   // The startup model carries only the changed set (repoFiles fill in on the
   // Slow poll once mounted), the same shape the running app uses.
-  const startup = Effect.gen(function* startupModel() {
-    const subprocess = yield* Process;
-    const git = yield* Git;
-    // One rev-parse yields both the repo root and the common dir. The common dir
-    // Is <main>/.git for any worktree, so stripping /.git gives the main worktree
-    // — the recovery target if this worktree is later deleted. It lives outside a
-    // Linked worktree's tree, so it survives that deletion.
-    const lines = (yield* subprocess.run(
-      ["git", "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"],
-      process.cwd(),
-    )).stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line !== "");
-    const repoRoot = lines[0] ?? "";
-    const commonDir = lines[1] ?? "";
-    const suffix = "/.git";
-    const mainWorktreePath = commonDir.endsWith(suffix)
-      ? commonDir.slice(0, -suffix.length)
-      : repoRoot;
-    const changed = yield* git.changedFiles(repoRoot, options.scope);
-    // The SHA HEAD points at now, pinned as the base for the `session` scope so
-    // It keeps meaning "since stet launched" as the agent commits.
-    const sessionBase = yield* git.headRef(repoRoot);
-    return { changed, mainWorktreePath, repoRoot, sessionBase };
-  });
+  const startup = (repoRoot: string) =>
+    Effect.gen(function* startupModel() {
+      const git = yield* Git;
+      // The SHA HEAD points at now, pinned as the base for the `session` scope so
+      // It keeps meaning "since stet launched" as the agent commits. It is also the
+      // Empty tree on a repository with no commits, which is the whole unborn-HEAD signal.
+      const sessionBase = yield* git.headRef(repoRoot);
+      // An unborn HEAD is not a diff endpoint, and unlike every other HEAD-touching read a diff
+      // Has no degraded answer, so the base is resolved before the command is built rather than
+      // Tolerated after it fails. Against the empty tree every tracked file reads as added.
+      const unborn = sessionBase === EMPTY_TREE_SHA;
+      const scope = unborn ? { ...options.scope, ref: EMPTY_TREE_SHA } : options.scope;
+      const changed = yield* git.changedFiles(repoRoot, scope);
+      return { changed, scope, sessionBase, unborn };
+    });
 
   // Load the config on its own runtime, before the app runtime's first use warms
   // The diff highlighter: the active theme must be set before that warm-up reads
@@ -138,6 +143,16 @@ try {
     config.keybindings ?? {},
   );
   registerKeybindings(keybindings);
+
+  // Resolve the repository before the renderer enters the alt-screen, so "not a git repository"
+  // Prints on the normal terminal instead of flashing an empty shell first. On its own runtime for
+  // The same reason the config load has one: the first use of the app runtime builds DiffEngineLive,
+  // Whose highlighter warm-up must stay behind the first paint.
+  const preflightRuntime = ManagedRuntime.make(GitLive.pipe(Layer.provide(ProcessLive)));
+  const { mainWorktreePath, repoRoot } = await preflightRuntime.runPromise(
+    preflight(process.cwd()),
+  );
+  await preflightRuntime.dispose();
 
   // Create the renderer up front and detect the terminal's dark/light appearance
   // Before the first runtime use (which warms the diff highlighter), so the whole
@@ -238,8 +253,9 @@ try {
   // Empty root / undefined selection — so a large repo shows the UI at once
   // Instead of a blank alt-screen for the whole git load. The model loads in the
   // Background and seeds when it resolves, the same instant-then-fill shape a
-  // Worktree switch already uses. A load failure (not a repo) restores the
-  // Terminal before exiting, since the alt-screen is now already entered.
+  // Worktree switch already uses. The repository itself already resolved in the
+  // Preflight, so a failure here is a repository git can no longer read; it
+  // Restores the terminal before exiting, the alt-screen now being entered.
   void render(() => <App />, renderer);
 
   // Check for a newer release in the background, independent of the git load, so it neither gates
@@ -249,8 +265,8 @@ try {
   }
 
   runtime
-    .runPromise(startup)
-    .then(({ changed, mainWorktreePath, repoRoot, sessionBase }) => {
+    .runPromise(startup(repoRoot))
+    .then(({ changed, scope, sessionBase, unborn }) => {
       const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
       const initialSelectedPath = model.changed[0]?.path ?? model.repoFiles[0]?.path;
       const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));
@@ -260,6 +276,8 @@ try {
           : expandAncestorsForPath(baseExpanded, initialSelectedPath);
 
       batch(() => {
+        state.setHeadUnborn(unborn);
+        state.setScope(scope);
         state.setSessionBase(sessionBase);
         state.setGitModel(model);
         state.setRepoRoot(model.repoRoot);

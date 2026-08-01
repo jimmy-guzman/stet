@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { testRender } from "@opentui/solid";
 import { App } from "@/App";
 import { EMPTY_TREE_SHA } from "@/git/model";
 import { state } from "@/state";
+import { stripGitEnv } from "@/utils/env";
 
 import { loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
 
@@ -79,6 +81,91 @@ test("the first commit re-points the base off the empty tree", async () => {
 
       expect(frame).toContain("staged.txt");
       expect(state.scope().ref).toBe("HEAD");
+    } finally {
+      renderer.destroy();
+    }
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+// The other direction, which only a failed read can reveal: `git checkout --orphan` takes HEAD's
+// Meaning away mid-session, and `git diff HEAD` then fails on every tick. Left unrepaired the tree
+// Freezes at its pre-checkout state with no alert.
+test("a mid-session orphan checkout re-points the base onto the empty tree", async () => {
+  const repo = createUnbornRepo("unborn-orphan-");
+  try {
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    runGit(repo, ["add", "a.txt"]);
+    runGit(repo, ["commit", "-m", "first"]);
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+
+    const allScope = { kind: "all", ref: "HEAD" } as const;
+    seedState(await loadModel(repo, allScope), allScope);
+
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 24,
+      width: 100,
+    });
+    try {
+      const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+      await settleUntil("edited file", (current) => current.includes("1 changed"));
+
+      // Let the fs.watch subscription arm; the safety poll backstops within the window.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      runGit(repo, ["checkout", "--orphan", "fresh"]);
+
+      const frame = await settleUntil("orphan base", (current) =>
+        current.includes("no commits yet"),
+      );
+
+      expect(frame).toContain("a.txt");
+      expect(state.scope().ref).toBe(EMPTY_TREE_SHA);
+    } finally {
+      renderer.destroy();
+    }
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+// `last-commit` diffs its parent against the literal HEAD, so an unborn one leaves it with no side
+// To diff at all. It falls back to the default lens, the same thing a worktree switch into an
+// Orphan checkout already did.
+test("a mid-session orphan checkout drops the last-commit scope to all", async () => {
+  const repo = createUnbornRepo("unborn-orphan-last-");
+  try {
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    runGit(repo, ["add", "a.txt"]);
+    runGit(repo, ["commit", "-m", "first"]);
+    writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+    runGit(repo, ["commit", "-am", "second"]);
+
+    const parent = execFileSync("git", ["rev-parse", "HEAD~1"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: stripGitEnv(process.env),
+    }).trim();
+    const lastCommitScope = { headRef: "HEAD", kind: "last-commit", ref: parent } as const;
+    seedState(await loadModel(repo, lastCommitScope), lastCommitScope);
+    // A range scope's ref is a parent SHA, not the CLI ref `seedState` mirrors off it.
+    state.setCliBaseRef("HEAD");
+
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 24,
+      width: 100,
+    });
+    try {
+      const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+      await settleUntil("last commit", (current) => current.includes("last commit"));
+
+      // Let the fs.watch subscription arm; the safety poll backstops within the window.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      runGit(repo, ["checkout", "--orphan", "fresh"]);
+
+      await settleUntil("dropped to all", () => state.scope().kind === "all");
+
+      expect(state.scope().ref).toBe(EMPTY_TREE_SHA);
     } finally {
       renderer.destroy();
     }

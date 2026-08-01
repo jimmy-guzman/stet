@@ -434,7 +434,7 @@ export const GitLive = Layer.effect(
       // A message to quote the invocation (only `other` repeats git, and only its first stderr line).
       repoContext: (cwd) =>
         process.run(repoContextArgs(), cwd).pipe(
-          Effect.catch((error) =>
+          Effect.catchTag("CommandError", (error) =>
             (isMissingGit(error)
               ? Effect.succeed("missing-git" as const)
               : // Git's stderr is translated, so the bare-vs-absent question is asked with a second

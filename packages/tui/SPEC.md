@@ -8,7 +8,7 @@ Git output is the synchronous source of truth. The git-backed file tree renders 
 
 ## Startup
 
-**Whether stet can run at all is settled before the alt screen is entered.** The repository resolves in a preflight (`Git.repoContext`, plus a `verifyRef` when the user named a ref) that runs on its own short-lived runtime, the same reason the config load has one: the first use of the app runtime builds `DiffEngineLive`, whose highlighter warm-up must stay behind the first paint. Both are O(1) git reads, so the instant-paint shape is unchanged, and a launch outside a repository never flashes an empty shell before printing.
+**Whether stet can run at all is settled before the alt screen is entered.** The repository resolves in a preflight (`Git.repoContext`, and nothing else: a ref is never gated, see below) that runs on its own short-lived runtime, the same reason the config load has one: the first use of the app runtime builds `DiffEngineLive`, whose highlighter warm-up must stay behind the first paint. It is one O(1) git read, so the instant-paint shape is unchanged, and a launch outside a repository never flashes an empty shell before printing.
 
 **Every way git can refuse becomes one actionable line, never stet's own invocation.** The classification is pure (`src/git/repo.ts`) and covers a missing git binary, a directory that is not a repository, a bare repository or the inside of a `.git`, and a git too old for `rev-parse --path-format`; anything else quotes git's first stderr line and nothing more, since the rest is the `use '--' to separate paths` boilerplate that made the original reports unreadable.
 

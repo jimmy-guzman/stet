@@ -4375,6 +4375,14 @@ function createState() {
                   setHeadUnborn(unborn);
                   const current = scope();
                   const base = unborn ? EMPTY_TREE_SHA : cliBaseRef();
+                  // `last-commit`'s right side is the literal HEAD, so an unborn one leaves it with
+                  // No side to diff; it falls back to the default lens exactly as a worktree switch
+                  // Into an orphan checkout does. `session` and `commit` hold resolved SHAs, which
+                  // Survive the checkout, so they are left alone.
+                  if (unborn && current.kind === "last-commit") {
+                    setScope({ kind: "all", ref: base });
+                    return;
+                  }
                   if (
                     (current.kind === "all" || current.kind === "staged") &&
                     current.ref !== base

@@ -48,15 +48,17 @@ jobs:
             exit 1
           fi
 
-  publish:
+  build:
     needs: release-please
     # `!cancelled()` lets this run when release-please is skipped (dispatch); a push
     # release still requires its gate, and `released` is only ever 'true' on success.
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.release-please.outputs.released == 'true') }}
     runs-on: ubuntu-latest
+    # No id-token here on purpose: this job runs bun install, the check suite, and the
+    # build, i.e. first-party and dependency code. Keeping OIDC off it means a compromised
+    # build can never mint an npm publish grant; only the minimal publish job holds id-token.
     permissions:
       contents: write
-      id-token: write
     env:
       TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
     steps:
@@ -80,6 +82,36 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --draft=false
+      # Hand the build output to the publish job so it never rebuilds (and so no build or
+      # dependency code runs under id-token). Same-run artifact, so it needs no token, and
+      # retention is short because it exists only to cross the job boundary.
+      - name: upload build output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [release-please, build]
+    # Same gate as build, plus an explicit build-success check: `!cancelled()` alone would
+    # let this run after a failed build (the homebrew job guards on publish the same way).
+    if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release-please.outputs.released == 'true') }}
+    runs-on: ubuntu-latest
+    # The only job with id-token, and it runs npm publish and nothing else that executes
+    # code. contents: read is only for the gh release view in the verify step.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
+    steps:
+      - name: download build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
       # OIDC trusted publishing: `id-token: write` above lets npm mint a short-lived
       # token per run, so no NPM_TOKEN is needed. node 24 ships npm >= 11.5.1 (the OIDC
       # floor), and registry-url points npm at npmjs.org; publish also emits provenance
@@ -106,9 +138,11 @@ jobs:
             )
           done
       # 0.7.2 shipped a green run with nothing published; assert the artifacts actually landed.
+      # GH_REPO because this job has no checkout, so gh cannot infer the repo from a remote.
       - name: verify published channels
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           expected=$(printf '%s\n' SHA256SUMS stet-darwin-arm64.tar.gz stet-darwin-x64.tar.gz stet-linux-arm64.tar.gz stet-linux-x64.tar.gz | sort)
           actual=$(gh release view "$TAG" --json assets --jq '.assets[].name' | sort)

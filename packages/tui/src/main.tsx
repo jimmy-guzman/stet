@@ -54,19 +54,6 @@ try {
     process.exit(0);
   }
 
-  // Everything git has to answer before there is a UI to report a failure in: which repository
-  // This is, and whether a ref the user named exists. Both are O(1) reads, so they cost the first
-  // Paint nothing measurable, and their failures print on the normal terminal.
-  const preflight = (cwd: string) =>
-    Effect.gen(function* repoPreflight() {
-      const git = yield* Git;
-      const context = yield* git.repoContext(cwd);
-      if (options.ref !== undefined && !(yield* git.verifyRef(context.repoRoot, options.ref))) {
-        return yield* new GitError({ message: unknownRefMessage(options.ref) });
-      }
-      return context;
-    });
-
   // The startup model carries only the changed set (repoFiles fill in on the
   // Slow poll once mounted), the same shape the running app uses.
   const startup = (repoRoot: string) =>
@@ -79,10 +66,27 @@ try {
       // An unborn HEAD is not a diff endpoint, and unlike every other HEAD-touching read a diff
       // Has no degraded answer, so the base is resolved before the command is built rather than
       // Tolerated after it fails. Against the empty tree every tracked file reads as added.
-      const unborn = sessionBase === EMPTY_TREE_SHA;
+      // Only `HEAD` is substituted: a ref the user named still resolves on an orphan branch, where
+      // Diffing against the empty tree instead would silently show the wrong base.
+      const unborn = options.scope.ref === "HEAD" && sessionBase === EMPTY_TREE_SHA;
       const scope = unborn ? { ...options.scope, ref: EMPTY_TREE_SHA } : options.scope;
       const changed = yield* git.changedFiles(repoRoot, scope);
       return { changed, scope, sessionBase, unborn };
+    });
+
+  // A failed startup diff is the first thing that has actually exercised the user's ref, so it is
+  // Also the only honest place to name it: `rev-parse` accepts objects `git diff` rejects (a blob)
+  // And rejects arguments it takes (`main...HEAD`, an unborn `HEAD`), so gating the launch on it
+  // Both blocked working invocations and let broken ones through to a wall of git usage output.
+  const startupFailure = (repoRoot: string, error: unknown) =>
+    Effect.gen(function* explainStartup() {
+      const fallback = error instanceof Error ? error.message : String(error);
+      if (!(error instanceof GitError) || options.scope.kind === "unstaged") {
+        return fallback;
+      }
+      const git = yield* Git;
+      const diffable = yield* git.refIsDiffable(repoRoot, options.scope.ref);
+      return diffable ? fallback : unknownRefMessage(options.scope.ref);
     });
 
   // Load the config on its own runtime, before the app runtime's first use warms
@@ -150,7 +154,7 @@ try {
   // Whose highlighter warm-up must stay behind the first paint.
   const preflightRuntime = ManagedRuntime.make(GitLive.pipe(Layer.provide(ProcessLive)));
   const { mainWorktreePath, repoRoot } = await preflightRuntime.runPromise(
-    preflight(process.cwd()),
+    Git.pipe(Effect.flatMap((git) => git.repoContext(process.cwd()))),
   );
   await preflightRuntime.dispose();
 
@@ -277,7 +281,11 @@ try {
 
       batch(() => {
         state.setHeadUnborn(unborn);
-        state.setScope(scope);
+        // The shell painted before this resolved, so the user may already have picked a scope from
+        // The menu; only the untouched CLI scope is re-pointed at the resolved base.
+        if (state.scope().kind === options.scope.kind && state.scope().ref === options.scope.ref) {
+          state.setScope(scope);
+        }
         state.setSessionBase(sessionBase);
         state.setGitModel(model);
         state.setRepoRoot(model.repoRoot);
@@ -306,7 +314,16 @@ try {
         state.notify(issues[0] ?? "config has issues");
       }
     })
-    .catch(crash);
+    .catch((error: unknown) =>
+      runtime
+        .runPromise(startupFailure(repoRoot, error))
+        .catch(() => (error instanceof Error ? error.message : String(error)))
+        .then((message) => {
+          restoreTerminal();
+          logError(message);
+          process.exit(1);
+        }),
+    );
 } catch (error) {
   logError(error instanceof Error ? error.message : String(error));
   process.exit(1);

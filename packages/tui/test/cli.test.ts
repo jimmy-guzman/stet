@@ -87,6 +87,12 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["--ide", ""])).toThrow("--ide requires a non-empty value");
   });
 
+  // A blank ref would otherwise reach git as one and come back reported as an unknown ref that
+  // Names nothing, since `?? "HEAD"` only fills in a missing positional, not an empty one.
+  test("throws when the ref positional is empty", () => {
+    expect(() => parseArgs([""])).toThrow("<ref> requires a non-empty value");
+  });
+
   test("throws when --editor has no value", () => {
     expect(() => parseArgs(["--editor"])).toThrow("Option '--editor <value>' argument missing");
   });

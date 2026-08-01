@@ -232,20 +232,40 @@ test("Git.repoContext reports a bare repository as having no working tree", asyn
   }
 });
 
-test("Git.verifyRef separates a ref that resolves from one that does not", async () => {
-  const repo = createFixtureRepo("git-service-verify-", { "a.txt": "one\n" });
+// What `git diff` will and will not take as a side. A blob resolves as an object but has no tree,
+// So `rev-parse --verify` alone would call it usable and leave the diff to fail with a usage block;
+// A revision range and a reflog index git cannot evaluate are the cases that must not be rejected
+// Or raised, since this question only ever explains a diff that already failed.
+test("Git.refIsDiffable separates the sides git diff can take", async () => {
+  const repo = createFixtureRepo("git-service-diffable-", { "a.txt": "one\n" });
   try {
-    const [known, unknown] = await Effect.runPromise(
+    const blob = execFileSync("git", ["rev-parse", "HEAD:a.txt"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: stripGitEnv(process.env),
+    }).trim();
+    runGit(repo, ["branch", "other"]);
+
+    const answers = await Effect.runPromise(
       Git.pipe(
         Effect.flatMap((git) =>
-          Effect.all([git.verifyRef(repo, "HEAD"), git.verifyRef(repo, "nosuchref")]),
+          Effect.all(
+            ["HEAD", "other", "other...HEAD", "nosuchref", blob, "HEAD@{500}"].map((ref) =>
+              git.refIsDiffable(repo, ref),
+            ),
+          ),
         ),
         Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
 
-    expect(known).toBe(true);
-    expect(unknown).toBe(false);
+    // A range is a whole `git diff` takes and `rev-parse` cannot resolve, so it is exempt rather
+    // Than rejected: unsure never becomes an accusation.
+    expect(answers.slice(0, 3)).toEqual([true, true, true]);
+    // A blob resolves as an object but has no tree, and a reflog index past the end is a revision
+    // Git refuses to evaluate; `git diff` rejects both (verified: exit 129 and 128), so naming them
+    // Is right where quoting stet's own invocation would not be.
+    expect(answers.slice(3)).toEqual([false, false, false]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

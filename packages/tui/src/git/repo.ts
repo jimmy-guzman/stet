@@ -60,18 +60,33 @@ export function classifyRepoOutput(stdout: string): RepoFailure {
 }
 
 /**
- * Why a `rev-parse` failed. `Bun.spawn` throws before there is an exit code when the executable is
- * missing, which `Process` reports as exit `-1`, so that is the missing-git signal.
+ * Whether git spawned at all. `Bun.spawn` throws before there is an exit code when the executable
+ * is missing, and `Process` reports that as exit `-1` with its own (untranslated) message, so this
+ * is the one classification that can read text safely.
  */
-export function classifyRepoFailure(error: { exitCode: number; stderr: string; message: string }) {
-  if (error.exitCode === -1) {
-    return /not found|ENOENT|no such file/i.test(error.message) ? "missing-git" : "other";
-  }
-  if (/not a git repository/i.test(error.stderr)) {
-    return "not-a-repo";
-  }
-  // Also what git says from inside `.git` itself, where there is likewise no working tree to read.
-  return /must be run in a work tree/i.test(error.stderr) ? "bare-repo" : "other";
+export function isMissingGit(error: { exitCode: number; message: string }) {
+  return error.exitCode === -1 && /not found|ENOENT|no such file/i.test(error.message);
+}
+
+/**
+ * The follow-up that separates "no repository here" from "a repository with no working tree here",
+ * asked only once the context read has already failed.
+ *
+ * Git's stderr cannot answer this: it is translated, so matching `not a git repository` classifies
+ * an English user and silently drops every other one into the unclassified branch. An exit code and
+ * a `true`/`false` are the same in every locale.
+ */
+export function bareCheckArgs() {
+  return ["git", "rev-parse", "--is-bare-repository"];
+}
+
+/**
+ * Why the repository could not be read, from the bare check's outcome. Exiting non-zero means git
+ * found no repository at all; exiting cleanly means it found one whose working tree is not here,
+ * which covers both a bare repository and the inside of a `.git` directory.
+ */
+export function classifyRepoFailure(bareCheck: { exitCode: number }): RepoFailure {
+  return bareCheck.exitCode === 0 ? "bare-repo" : "not-a-repo";
 }
 
 /**
@@ -104,8 +119,25 @@ export function unknownRefMessage(ref: string) {
   return `unknown git ref: ${ref}`;
 }
 
-// --quiet drops the "Needed a single revision" noise and turns an unresolvable ref into a plain
-// Exit 1, so an unknown ref is told apart from a broken repository by the exit code alone.
-export function verifyRefArgs(ref: string) {
-  return ["git", "rev-parse", "--verify", "--quiet", "--end-of-options", ref];
+/**
+ * Whether a ref is a side `git diff` can take, asked **only to explain a diff that already
+ * failed**, never as a gate before one runs.
+ *
+ * Asked as a gate it is wrong in both directions: `rev-parse --verify` accepts any object, so a
+ * blob sha passes and the diff then dies with git's usage block, while a revision range
+ * (`main...HEAD`) and an unborn `HEAD` are rejected even though `git diff` takes them. Only the
+ * diff knows what the diff accepts, so it runs first and this names the argument afterwards.
+ * `^{tree}` is what rejects a blob; `--quiet` drops the "Needed a single revision" noise.
+ */
+export function refTreeArgs(ref: string) {
+  return ["git", "rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{tree}`];
+}
+
+/**
+ * A revision range (`a..b`, `a...b`), which `git diff` takes as a whole and `rev-parse --verify`
+ * cannot resolve. It is exempt from the tree check rather than failing it, so a range is never
+ * accused of being the reason a diff failed.
+ */
+export function isRevisionRange(ref: string) {
+  return ref.includes("..");
 }

@@ -33,12 +33,6 @@ export interface CliOptions {
   lspDownload: boolean;
   /** Long line handling: `scroll` (default) or `wrap`. */
   overflow: "scroll" | "wrap";
-  /**
-   * The git ref the user named, absent when they named none. `scope.ref` folds the default in, so
-   * this is what tells a ref worth verifying (and reporting as unknown) from the implicit `HEAD`,
-   * which resolves to the empty tree in a repository with no commits instead of failing.
-   */
-  ref: string | undefined;
   scope: DiffScope;
   version: boolean;
 }
@@ -100,17 +94,17 @@ export function parseArgs(args: string[]): CliOptions {
     ide: requireNonEmptyValue("--ide", values.ide),
     lspDownload: !values["no-lsp-download"],
     overflow: values.wrap ? "wrap" : "scroll",
-    ref: positionals[0],
-    scope: { kind, ref: positionals[0] ?? "HEAD" },
+    scope: { kind, ref: requireNonEmptyValue("<ref>", positionals[0]) ?? "HEAD" },
     version: values.version ?? false,
   };
 }
 
-// A blank command template (`--editor=`) parses to an empty string.
-// Stet rejects that as a usage error even though parseArgs accepts it.
-function requireNonEmptyValue(flag: string, value: string | undefined) {
+// A blank command template (`--editor=`) or a blank positional (`stet ""`) parses to an empty
+// String. Stet rejects that as a usage error even though parseArgs accepts it: a blank ref would
+// Otherwise reach git as one and be reported back as an unknown ref that names nothing.
+function requireNonEmptyValue(name: string, value: string | undefined) {
   if (value !== undefined && value.trim() === "") {
-    throw new Error(`${flag} requires a non-empty value`);
+    throw new Error(`${name} requires a non-empty value`);
   }
   return value;
 }

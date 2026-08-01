@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   classifyRepoFailure,
   classifyRepoOutput,
+  isMissingGit,
   parseRepoContext,
   repoFailureMessage,
   unknownRefMessage,
@@ -58,56 +59,36 @@ describe("classifyRepoOutput", () => {
   });
 });
 
-describe("classifyRepoFailure", () => {
+describe("isMissingGit", () => {
   test("reads a spawn failure with no exit code as a missing git", () => {
-    expect(
-      classifyRepoFailure({
-        exitCode: -1,
-        message: 'Executable not found in $PATH: "git"',
-        stderr: "",
-      }),
-    ).toBe("missing-git");
+    expect(isMissingGit({ exitCode: -1, message: 'Executable not found in $PATH: "git"' })).toBe(
+      true,
+    );
   });
 
   // Process reports a vanished cwd the same way, and that is not a missing binary.
-  test("keeps a non-ENOENT spawn failure unclassified", () => {
+  test("does not claim a non-ENOENT spawn failure", () => {
     expect(
-      classifyRepoFailure({
-        exitCode: -1,
-        message: "working directory no longer exists: /gone",
-        stderr: "",
-      }),
-    ).toBe("other");
+      isMissingGit({ exitCode: -1, message: "working directory no longer exists: /gone" }),
+    ).toBe(false);
   });
 
-  test("reads git's own not-a-repository line", () => {
-    expect(
-      classifyRepoFailure({
-        exitCode: 128,
-        message: "git rev-parse ... failed with exit 128",
-        stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
-      }),
-    ).toBe("not-a-repo");
+  test("does not claim a git that ran and exited non-zero", () => {
+    expect(isMissingGit({ exitCode: 128, message: "git rev-parse ... failed with exit 128" })).toBe(
+      false,
+    );
+  });
+});
+
+// The classification reads the bare check's exit code rather than git's stderr, which is translated:
+// Matching English text would classify an English user and drop every other one.
+describe("classifyRepoFailure", () => {
+  test("reads a bare check that answered as a repository with no working tree here", () => {
+    expect(classifyRepoFailure({ exitCode: 0 })).toBe("bare-repo");
   });
 
-  test("reads the work-tree line a bare repository and a .git directory both produce", () => {
-    expect(
-      classifyRepoFailure({
-        exitCode: 128,
-        message: "git rev-parse ... failed with exit 128",
-        stderr: "fatal: this operation must be run in a work tree\n",
-      }),
-    ).toBe("bare-repo");
-  });
-
-  test("leaves an unrecognized git failure unclassified", () => {
-    expect(
-      classifyRepoFailure({
-        exitCode: 128,
-        message: "git rev-parse ... failed with exit 128",
-        stderr: "fatal: bad object HEAD\n",
-      }),
-    ).toBe("other");
+  test("reads a bare check that failed as no repository at all", () => {
+    expect(classifyRepoFailure({ exitCode: 128 })).toBe("not-a-repo");
   });
 });
 

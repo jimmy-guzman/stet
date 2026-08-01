@@ -37,12 +37,15 @@ import {
   parseRevList,
 } from "./provenance";
 import {
+  bareCheckArgs,
   classifyRepoFailure,
   classifyRepoOutput,
+  isMissingGit,
+  isRevisionRange,
   parseRepoContext,
+  refTreeArgs,
   repoContextArgs,
   repoFailureMessage,
-  verifyRefArgs,
 } from "./repo";
 import type { RepoContext } from "./repo";
 import { parseSearchOutput, searchArgs } from "./search";
@@ -135,6 +138,12 @@ export class Git extends Context.Service<
     /** The most recent commits (newest first), capped at `limit`. */
     readonly recentCommits: (repoRoot: string, limit: number) => Effect.Effect<Commit[], GitError>;
     /**
+     * Whether a ref is a side `git diff` can take. Asked only to explain a diff that already failed
+     * (so an unknown ref is named rather than dumped), never as a gate before one runs; it answers
+     * `true` when it cannot tell, so it can only ever add an explanation, never withhold a launch.
+     */
+    readonly refIsDiffable: (repoRoot: string, ref: string) => Effect.Effect<boolean>;
+    /**
      * The repository stet was launched in, or a `GitError` whose message is the one line to print.
      * Runs before the renderer, so its failure never reaches the alt screen.
      */
@@ -148,8 +157,6 @@ export class Git extends Context.Service<
       paths: readonly string[] | undefined,
       options: SearchOptions,
     ) => Effect.Effect<SearchMatch[], GitError>;
-    /** Whether a ref resolves in this repository, so an unknown one is named rather than dumped. */
-    readonly verifyRef: (repoRoot: string, ref: string) => Effect.Effect<boolean, GitError>;
     readonly worktrees: (repoRoot: string) => Effect.Effect<Worktree[], GitError>;
     /**
      * When each of the given worktrees was last touched, by an agent or by git. A worktree that
@@ -412,21 +419,37 @@ export const GitLive = Layer.effect(
           Effect.map((result) => parseLog(result.stdout)),
           Effect.mapError(toGitError),
         ),
+      // Only ever asked about a diff that already failed, so every way of not resolving is one
+      // Answer: git rejects an unresolvable ref with exit 1 and a syntactically valid one it cannot
+      // Evaluate (`HEAD@{500}`) with 128, and neither is a failure of this question.
+      refIsDiffable: (repoRoot, ref) =>
+        isRevisionRange(ref)
+          ? Effect.succeed(true)
+          : process.run(refTreeArgs(ref), repoRoot, { allowedExitCodes: [0, 1, 128] }).pipe(
+              Effect.map((result) => result.exitCode === 0),
+              Effect.orElseSucceed(() => true),
+            ),
       // The startup preflight: every way git can refuse to answer becomes one actionable line,
-      // Since this is the failure the user meets before stet has any UI to report it in.
+      // Since this is the failure the user meets before stet has any UI to report it in. Never widen
+      // A message to quote the invocation (only `other` repeats git, and only its first stderr line).
       repoContext: (cwd) =>
         process.run(repoContextArgs(), cwd).pipe(
-          // A spawn that never reached an exit code (a vanished cwd) has no stderr, so its own
-          // Message is the only detail there is.
-          Effect.mapError(
-            (error) =>
-              new GitError({
-                message: repoFailureMessage(
-                  classifyRepoFailure(error),
-                  cwd,
-                  error.stderr || error.message,
+          Effect.catch((error) =>
+            (isMissingGit(error)
+              ? Effect.succeed("missing-git" as const)
+              : // Git's stderr is translated, so the bare-vs-absent question is asked with a second
+                // Command whose exit code answers it in every locale.
+                process.run(bareCheckArgs(), cwd, { allowedExitCodes: [0, 128] }).pipe(
+                  Effect.map(classifyRepoFailure),
+                  Effect.orElseSucceed(() => "other" as const),
+                )
+            ).pipe(
+              Effect.flatMap((failure) =>
+                Effect.fail(
+                  new GitError({ message: repoFailureMessage(failure, cwd, error.stderr) }),
                 ),
-              }),
+              ),
+            ),
           ),
           // A `rev-parse` that exits 0 can still answer nothing usable: a git too old for
           // `--path-format` echoes the option instead of rejecting it.
@@ -466,13 +489,6 @@ export const GitLive = Layer.effect(
           // Bytes, not the decoded stdout: the parse converts git's byte columns
           // Against the raw line, immune to replacement-char width drift.
           Effect.map((result) => parseSearchOutput(result.stdoutBytes)),
-          Effect.mapError(toGitError),
-        ),
-      // Exit 1 is the ref not resolving, which is an answer rather than a failure.
-      verifyRef: (repoRoot, ref) =>
-        process.run(verifyRefArgs(ref), repoRoot, { allowedExitCodes: [0, 1] }).pipe(
-          retryTransient,
-          Effect.map((result) => result.exitCode === 0),
           Effect.mapError(toGitError),
         ),
       // Every worktree's HEAD resolves against the one shared object database, so their commit times

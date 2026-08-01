@@ -36,6 +36,18 @@ import {
   parseFirstCommit,
   parseRevList,
 } from "./provenance";
+import {
+  bareCheckArgs,
+  classifyRepoFailure,
+  classifyRepoOutput,
+  isMissingGit,
+  isRevisionRange,
+  parseRepoContext,
+  refTreeArgs,
+  repoContextArgs,
+  repoFailureMessage,
+} from "./repo";
+import type { RepoContext } from "./repo";
 import { parseSearchOutput, searchArgs } from "./search";
 import type { SearchMatch, SearchOptions } from "./search";
 import {
@@ -125,6 +137,17 @@ export class Git extends Context.Service<
     readonly parentRef: (repoRoot: string) => Effect.Effect<string, GitError>;
     /** The most recent commits (newest first), capped at `limit`. */
     readonly recentCommits: (repoRoot: string, limit: number) => Effect.Effect<Commit[], GitError>;
+    /**
+     * Whether a ref is a side `git diff` can take. Asked only to explain a diff that already failed
+     * (so an unknown ref is named rather than dumped), never as a gate before one runs; it answers
+     * `true` when it cannot tell, so it can only ever add an explanation, never withhold a launch.
+     */
+    readonly refIsDiffable: (repoRoot: string, ref: string) => Effect.Effect<boolean>;
+    /**
+     * The repository stet was launched in, or a `GitError` whose message is the one line to print.
+     * Runs before the renderer, so its failure never reaches the alt screen.
+     */
+    readonly repoContext: (cwd: string) => Effect.Effect<RepoContext, GitError>;
     readonly repoFiles: (
       repoRoot: string,
     ) => Effect.Effect<Pick<GitModel, "repoFiles" | "repoFilesKey">, GitError>;
@@ -395,6 +418,55 @@ export const GitLive = Layer.effect(
           retryTransient,
           Effect.map((result) => parseLog(result.stdout)),
           Effect.mapError(toGitError),
+        ),
+      // Only ever asked about a diff that already failed, so every way of not resolving is one
+      // Answer: git rejects an unresolvable ref with exit 1 and a syntactically valid one it cannot
+      // Evaluate (`HEAD@{500}`) with 128, and neither is a failure of this question.
+      refIsDiffable: (repoRoot, ref) =>
+        isRevisionRange(ref)
+          ? Effect.succeed(true)
+          : process.run(refTreeArgs(ref), repoRoot, { allowedExitCodes: [0, 1, 128] }).pipe(
+              Effect.map((result) => result.exitCode === 0),
+              Effect.orElseSucceed(() => true),
+            ),
+      // The startup preflight: every way git can refuse to answer becomes one actionable line,
+      // Since this is the failure the user meets before stet has any UI to report it in. Never widen
+      // A message to quote the invocation (only `other` repeats git, and only its first stderr line).
+      repoContext: (cwd) =>
+        process.run(repoContextArgs(), cwd).pipe(
+          Effect.catchTag("CommandError", (error) =>
+            (isMissingGit(error)
+              ? Effect.succeed("missing-git" as const)
+              : // Git's stderr is translated, so the bare-vs-absent question is asked with a second
+                // Command whose exit code answers it in every locale.
+                process.run(bareCheckArgs(), cwd, { allowedExitCodes: [0, 128] }).pipe(
+                  Effect.map(classifyRepoFailure),
+                  Effect.orElseSucceed(() => "other" as const),
+                )
+            ).pipe(
+              Effect.flatMap((failure) =>
+                Effect.fail(
+                  new GitError({ message: repoFailureMessage(failure, cwd, error.stderr) }),
+                ),
+              ),
+            ),
+          ),
+          // A `rev-parse` that exits 0 can still answer nothing usable: a git too old for
+          // `--path-format` echoes the option instead of rejecting it.
+          Effect.flatMap((result) => {
+            const context = parseRepoContext(result.stdout);
+            return context === undefined
+              ? Effect.fail(
+                  new GitError({
+                    message: repoFailureMessage(
+                      classifyRepoOutput(result.stdout),
+                      cwd,
+                      result.stdout,
+                    ),
+                  }),
+                )
+              : Effect.succeed(context);
+          }),
         ),
       repoFiles: (repoRoot) =>
         Effect.all(

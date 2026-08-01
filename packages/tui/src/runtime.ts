@@ -17,9 +17,7 @@ import { WatcherLive } from "./watcher/service";
 // One long-lived Effect runtime holding the service layer. Solid signals and
 // Effects run service effects through `runtime.runPromise` / `runtime.runFork`
 // Instead of the old effect-atom registry; this is the only Effect↔Solid seam.
-// ProvideMerge keeps Process in the runtime context (not just wired into the
-// Other services) so startup effects can spawn git directly. The LSP-backed
-// Diagnostics pool sits over its own long-lived LspProcess.
+// The LSP-backed diagnostics pool sits over its own long-lived LspProcess.
 const AppLayer = Layer.mergeAll(
   DiagnosticsLive,
   IntelLive,
@@ -37,7 +35,9 @@ const AppLayer = Layer.mergeAll(
   Layer.provideMerge(ProvisionerLive),
   // Provide Git to Watcher (and re-export it to the runtime for startup/state).
   Layer.provideMerge(GitLive),
-  Layer.provideMerge(ProcessLive),
+  // Every subprocess reaches Process through its own service, so this one only wires the layers
+  // Above rather than re-exporting.
+  Layer.provide(ProcessLive),
 );
 
 export const runtime = ManagedRuntime.make(AppLayer);

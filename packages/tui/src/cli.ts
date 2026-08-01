@@ -1,5 +1,6 @@
 import util from "node:util";
 
+import { EMPTY_TREE_SHA } from "@/git/model";
 import { keyHelpGroups } from "@/help/keys";
 
 export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit" | "commit";
@@ -93,23 +94,31 @@ export function parseArgs(args: string[]): CliOptions {
     ide: requireNonEmptyValue("--ide", values.ide),
     lspDownload: !values["no-lsp-download"],
     overflow: values.wrap ? "wrap" : "scroll",
-    scope: { kind, ref: positionals[0] ?? "HEAD" },
+    scope: { kind, ref: requireNonEmptyValue("<ref>", positionals[0]) ?? "HEAD" },
     version: values.version ?? false,
   };
 }
 
-// A blank command template (`--editor=`) parses to an empty string.
-// Stet rejects that as a usage error even though parseArgs accepts it.
-function requireNonEmptyValue(flag: string, value: string | undefined) {
+// A blank command template (`--editor=`) or a blank positional (`stet ""`) parses to an empty
+// String. Stet rejects that as a usage error even though parseArgs accepts it: a blank ref would
+// Otherwise reach git as one and be reported back as an unknown ref that names nothing.
+function requireNonEmptyValue(name: string, value: string | undefined) {
   if (value !== undefined && value.trim() === "") {
-    throw new Error(`${flag} requires a non-empty value`);
+    throw new Error(`${name} requires a non-empty value`);
   }
   return value;
 }
 
+// The empty tree is the base a repository with no commits diffs against, never a ref anyone typed,
+// So it reads as the absence of a commit. Its 40-character sha in the header also crowded the
+// Branch off the line, since the width budget shrinks the branch before the scope.
+function refLabel(ref: string) {
+  return ref === EMPTY_TREE_SHA ? "no commits yet" : ref;
+}
+
 export function scopeLabel(scope: DiffScope) {
   if (scope.kind === "staged") {
-    return `staged vs ${scope.ref}`;
+    return `staged vs ${refLabel(scope.ref)}`;
   }
 
   if (scope.kind === "unstaged") {
@@ -130,7 +139,7 @@ export function scopeLabel(scope: DiffScope) {
     return `commit ${scope.headRef?.slice(0, 7) ?? ""}`;
   }
 
-  return `uncommitted vs ${scope.ref}`;
+  return `uncommitted vs ${refLabel(scope.ref)}`;
 }
 
 // Ref-agnostic row labels for the scope picker (the active scope's full,

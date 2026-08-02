@@ -1,10 +1,11 @@
-import { EMPTY_TREE_SHA } from "./model";
-
 export interface Commit {
   sha: string;
   shortSha: string;
-  /** The first parent's SHA (the diff base), or the empty tree for a root commit. */
-  parent: string;
+  /**
+   * The first parent's SHA (the diff base), or `undefined` for a root commit. The caller supplies
+   * the repository's empty tree in that case, since only it knows which one this repository uses.
+   */
+  parent: string | undefined;
   author: string;
   /** Author date in unix seconds. */
   authorTime: number;
@@ -41,7 +42,7 @@ export function parseLog(stdout: string): Commit[] {
         {
           author: author ?? "",
           authorTime: time,
-          parent: parents === undefined || parents === "" ? EMPTY_TREE_SHA : parents.split(" ")[0],
+          parent: parents === undefined || parents === "" ? undefined : parents.split(" ")[0],
           sha,
           shortSha: shortSha ?? "",
           subject: subject.join(FIELD),

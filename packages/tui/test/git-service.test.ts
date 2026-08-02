@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { Effect, Layer } from "effect";
 
-import { EMPTY_TREE_SHA } from "@/git/model";
+import { emptyTreeForFormat } from "@/git/repo";
 import { Git, GitLive } from "@/git/service";
 import { ProcessLive } from "@/process";
 import { stripGitEnv } from "@/utils/env";
@@ -61,7 +61,9 @@ test("Git.changedFiles includes an untracked file", async () => {
   }
 });
 
-test("Git.parentRef returns the empty tree on a root commit", async () => {
+// The caller substitutes this repository's empty tree; the service only reports that there is no
+// Parent, since only the caller knows which empty tree this repository uses.
+test("Git.parentRef reports no parent on a root commit", async () => {
   const repo = createFixtureRepo("git-service-rootcommit-", { "a.txt": "one\n" });
   try {
     const parent = await Effect.runPromise(
@@ -71,7 +73,7 @@ test("Git.parentRef returns the empty tree on a root commit", async () => {
       ),
     );
 
-    expect(parent).toBe(EMPTY_TREE_SHA);
+    expect(parent).toBeUndefined();
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -115,10 +117,9 @@ test("Git.headRef returns the current HEAD SHA", async () => {
   }
 });
 
-// The signal selectScope relies on to block last-commit when HEAD is unborn: a
-// Real repo never yields the empty tree from headRef, so === EMPTY_TREE_SHA means
-// "no commits yet".
-test("Git.headRef returns the empty tree when HEAD is unborn", async () => {
+// The signal selectScope relies on to block last-commit when HEAD is unborn: a real repo always
+// Resolves HEAD to a sha, so `undefined` means "no commits yet" and nothing else.
+test("Git.headRef reports no HEAD when HEAD is unborn", async () => {
   const repo = mkdtempSync(join(tmpdir(), "git-service-unborn-"));
   runGit(repo, ["init"]);
   try {
@@ -129,7 +130,7 @@ test("Git.headRef returns the empty tree when HEAD is unborn", async () => {
       ),
     );
 
-    expect(resolved).toBe(EMPTY_TREE_SHA);
+    expect(resolved).toBeUndefined();
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -147,7 +148,9 @@ test("Git.changedFiles against the empty tree lists a commitless repo's files", 
 
     const result = await Effect.runPromise(
       Git.pipe(
-        Effect.flatMap((git) => git.changedFiles(repo, { kind: "all", ref: EMPTY_TREE_SHA })),
+        Effect.flatMap((git) =>
+          git.changedFiles(repo, { kind: "all", ref: emptyTreeForFormat("sha1") }),
+        ),
         Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
@@ -169,7 +172,9 @@ test("Git.loadModel against the empty tree lists a commitless repo's tracked fil
 
     const model = await Effect.runPromise(
       Git.pipe(
-        Effect.flatMap((git) => git.loadModel(repo, { kind: "all", ref: EMPTY_TREE_SHA })),
+        Effect.flatMap((git) =>
+          git.loadModel(repo, { kind: "all", ref: emptyTreeForFormat("sha1") }),
+        ),
         Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
       ),
     );
@@ -181,7 +186,7 @@ test("Git.loadModel against the empty tree lists a commitless repo's tracked fil
   }
 });
 
-test("Git.repoContext resolves the repo root and main worktree", async () => {
+test("Git.repoContext resolves the repo root, main worktree, and empty tree", async () => {
   const repo = createFixtureRepo("git-service-context-", { "a.txt": "one\n" });
   try {
     const context = await Effect.runPromise(
@@ -191,7 +196,11 @@ test("Git.repoContext resolves the repo root and main worktree", async () => {
       ),
     );
 
-    expect(context).toEqual({ mainWorktreePath: repo, repoRoot: repo });
+    expect(context).toEqual({
+      emptyTree: emptyTreeForFormat("sha1"),
+      mainWorktreePath: repo,
+      repoRoot: repo,
+    });
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }

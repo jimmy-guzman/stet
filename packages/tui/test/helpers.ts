@@ -11,6 +11,7 @@ import type { DiffScope } from "@/cli";
 import { initialCheckerState } from "@/diagnostics/checker";
 import { File, FileLive } from "@/file/service";
 import type { ChangedFile, GitModel } from "@/git/model";
+import { emptyTreeForFormat } from "@/git/repo";
 import { Git, GitLive } from "@/git/service";
 import { defaultExpandedDirectories, expandAncestorsForPath } from "@/git/tree";
 import type { FileTreeRow } from "@/git/tree";
@@ -94,7 +95,11 @@ export function loadBinaryMeta(repoRoot: string, scope: DiffScope, changed: Chan
 // State is a global singleton, so render tests seed it fresh (and reset the UI
 // Signals that might bleed from a prior test) before rendering App. Mirrors the
 // Startup seeding in main.tsx.
-export function seedState(model: GitModel, scope: DiffScope) {
+export function seedState(
+  model: GitModel,
+  scope: DiffScope,
+  emptyTree = emptyTreeForFormat("sha1"),
+) {
   const selected = model.changed[0]?.path ?? model.repoFiles[0]?.path;
   const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));
   const expanded =
@@ -114,6 +119,8 @@ export function seedState(model: GitModel, scope: DiffScope) {
     state.setRepoRoot(model.repoRoot);
     // The fixture repo is its own main worktree, as it is at startup (the header reads it).
     state.setMainWorktreePath(model.repoRoot);
+    // Most fixture repos are a plain `git init`; a SHA-256 one passes its own.
+    state.setEmptyTree(emptyTree);
     state.setCurrentWorktreeDeleted(false);
     state.setLastChange(Date.now());
     state.seedNav(selected);
@@ -182,7 +189,20 @@ afterEach(() => {
   fixtureRepoRoots.clear();
 });
 
-export function createFixtureRepo(prefix: string, files: Record<string, string>) {
+/**
+ * A fixture repository, swept by the `afterEach` above however the test ends (a timeout or a failed
+ * assertion never reaches a test's own `finally`, which is why cleanup lives here).
+ *
+ * @param objectFormat Git's hash algorithm, for the SHA-256 cases where the empty tree is a
+ *   different object than the SHA-1 one.
+ * @param commit Whether to commit the seeded files. `false` leaves `HEAD` unborn, the state the
+ *   commitless cases need.
+ */
+export function createFixtureRepo(
+  prefix: string,
+  files: Record<string, string>,
+  { commit = true, objectFormat = "sha1" } = {},
+) {
   // Realpath, because that is what the app gets: it takes repoRoot from `git rev-parse
   // --show-toplevel`, and git resolves symlinks (on macOS /var/folders is a link to /private/var).
   // A fixture rooted at the unresolved path would not match the paths git reports back, so anything
@@ -195,9 +215,11 @@ export function createFixtureRepo(prefix: string, files: Record<string, string>)
     writeFileSync(join(repoRoot, path), content);
   }
 
-  runGit(repoRoot, ["init"]);
-  runGit(repoRoot, ["add", "."]);
-  runGit(repoRoot, ["commit", "-m", "fixture"]);
+  runGit(repoRoot, ["init", `--object-format=${objectFormat}`]);
+  if (commit) {
+    runGit(repoRoot, ["add", "."]);
+    runGit(repoRoot, ["commit", "-m", "fixture"]);
+  }
 
   return repoRoot;
 }

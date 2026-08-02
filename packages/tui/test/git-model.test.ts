@@ -6,7 +6,6 @@ import {
   changedContentAdvanced,
   changedPathsDiffer,
   diffArgs,
-  EMPTY_TREE_SHA,
   mergeModel,
   nameStatusArgs,
   numstatArgs,
@@ -18,6 +17,7 @@ import {
   untrackedDiffArgs,
 } from "@/git/model";
 import type { ChangedFile, GitModel } from "@/git/model";
+import { emptyTreeForFormat } from "@/git/repo";
 
 import {
   createFixtureRepo,
@@ -116,9 +116,10 @@ describe("scope arguments", () => {
   });
 
   test("last-commit falls back to the empty tree on a root commit", () => {
-    expect(diffArgs({ headRef: "HEAD", kind: "last-commit", ref: EMPTY_TREE_SHA })).toEqual([
+    const emptyTree = emptyTreeForFormat("sha1");
+    expect(diffArgs({ headRef: "HEAD", kind: "last-commit", ref: emptyTree })).toEqual([
       ...head,
-      EMPTY_TREE_SHA,
+      emptyTree,
       "HEAD",
     ]);
   });
@@ -391,8 +392,8 @@ describe("loadModel in a fixture repo", () => {
 
       const commits = await loadRecentCommits(repoRoot, 30);
       const middle = commits.find((commit) => commit.subject === "add b");
-      if (middle === undefined) {
-        throw new Error("middle commit missing");
+      if (middle?.parent === undefined) {
+        throw new Error("middle commit missing, or missing the parent it was committed onto");
       }
 
       const scope = { headRef: middle.sha, kind: "commit", ref: middle.parent } as const;

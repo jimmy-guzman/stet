@@ -1,6 +1,5 @@
 import util from "node:util";
 
-import { EMPTY_TREE_SHA } from "@/git/model";
 import { keyHelpGroups } from "@/help/keys";
 
 export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit" | "commit";
@@ -109,16 +108,30 @@ function requireNonEmptyValue(name: string, value: string | undefined) {
   return value;
 }
 
-// The empty tree is the base a repository with no commits diffs against, never a ref anyone typed,
-// So it reads as the absence of a commit. Its 40-character sha in the header also crowded the
-// Branch off the line, since the width budget shrinks the branch before the scope.
-function refLabel(ref: string) {
-  return ref === EMPTY_TREE_SHA ? "no commits yet" : ref;
+// A repository with no commits diffs against the empty tree, which is stet's own substitution and
+// Never a ref anyone typed, so it reads as the absence of a commit rather than as a sha (40
+// Characters in a SHA-1 repository, 64 in a SHA-256 one, either of which crowds the branch off the
+// Line, since the width budget shrinks the branch before the scope).
+//
+// The test is against **this scope's own ref**, never against `state.headUnborn`. The two can
+// Disagree: `headUnborn` describes the base `all`/`staged` would take, while a scope picked from
+// The menu during the startup load carries whatever `baseRef` held at the moment it was picked, and
+// The startup batch deliberately leaves a user-touched scope alone. Labelling off the signal there
+// Names a base git was never given.
+function refLabel(ref: string, emptyTree: string) {
+  return ref === emptyTree ? "no commits yet" : ref;
 }
 
-export function scopeLabel(scope: DiffScope) {
+/**
+ * The active scope, named for the header.
+ *
+ * @param emptyTree This repository's empty tree, so a ref holding stet's substitution reads as the
+ *   absence of a commit. Required rather than optional, because omitting it prints a bare 40- or
+ *   64-character sha into the densest row in the app.
+ */
+export function scopeLabel(scope: DiffScope, emptyTree: string) {
   if (scope.kind === "staged") {
-    return `staged vs ${refLabel(scope.ref)}`;
+    return `staged vs ${refLabel(scope.ref, emptyTree)}`;
   }
 
   if (scope.kind === "unstaged") {
@@ -139,7 +152,7 @@ export function scopeLabel(scope: DiffScope) {
     return `commit ${scope.headRef?.slice(0, 7) ?? ""}`;
   }
 
-  return `uncommitted vs ${refLabel(scope.ref)}`;
+  return `uncommitted vs ${refLabel(scope.ref, emptyTree)}`;
 }
 
 // Ref-agnostic row labels for the scope picker (the active scope's full,

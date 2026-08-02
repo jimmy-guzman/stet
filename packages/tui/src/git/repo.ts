@@ -12,21 +12,60 @@ export interface RepoContext {
    * target when one disappears mid-session.
    */
   mainWorktreePath: string;
+  /**
+   * This repository's empty tree object, the base a diff takes when there is no commit on the other
+   * side. Its value follows the repository's hash algorithm, so it is read here rather than named
+   * as a constant: handing a SHA-1 empty tree to a SHA-256 repository names an object its database
+   * does not contain, and git rejects the whole command.
+   *
+   * Resolved once for the session. Linked worktrees share one object database, so a worktree switch
+   * never changes it.
+   */
+  emptyTree: string;
 }
 
-// One rev-parse yields both paths. `--path-format=absolute` is what makes the common dir absolute;
-// `--show-toplevel` is absolute either way.
+// The empty tree for each of git's two hash algorithms. Private, because `emptyTreeForFormat` is
+// The only way anything should name one: a caller that reaches for a bare constant is a caller that
+// Has stopped asking the repository.
+const SHA1_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const SHA256_EMPTY_TREE = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+
+/**
+ * The empty tree object for a `rev-parse --show-object-format` answer.
+ *
+ * Git defines two hash algorithms and documents sha1 as the default, so an unrecognized token takes
+ * that default rather than an arbitrary pick. It is also unreachable in practice, which is why
+ * there is no third channel here: a fallback that shelled out to `git hash-object` could not be
+ * tested against any git that exists.
+ */
+export function emptyTreeForFormat(format: string) {
+  return format === "sha256" ? SHA256_EMPTY_TREE : SHA1_EMPTY_TREE;
+}
+
+// One rev-parse yields both paths and the hash algorithm, so the preflight stays a single spawn
+// Ahead of the first paint. `--path-format=absolute` is what makes the common dir absolute;
+// `--show-toplevel` is absolute either way, and `--show-object-format` is unaffected by it.
+// Folding the format in is safe at stet's git floor: `--show-object-format` landed in 2.29 and
+// `--path-format` in 2.31, so a git that accepts the latter always understands the former.
 export function repoContextArgs() {
-  return ["git", "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"];
+  return [
+    "git",
+    "rev-parse",
+    "--path-format=absolute",
+    "--show-toplevel",
+    "--git-common-dir",
+    "--show-object-format",
+  ];
 }
 
 /**
- * The repo root and main worktree, or `undefined` when the output is not two absolute paths.
+ * The repo root, main worktree, and empty tree, or `undefined` when the output is not two absolute
+ * paths followed by a hash algorithm.
  *
- * A git that predates `--path-format` does not fail on it: `rev-parse` echoes an option it does not
- * recognize back to stdout and exits 0, so an unusable answer arrives as success. Requiring two
- * absolute paths is what catches that, which is why the caller classifies `undefined` rather than
- * trusting the exit code.
+ * A git that predates an option does not fail on it: `rev-parse` echoes an option it does not
+ * recognize back to stdout and exits 0, so an unusable answer arrives as success. Requiring three
+ * lines, two of them absolute paths and none of them an option, is what catches that, which is why
+ * the caller classifies `undefined` rather than trusting the exit code.
  */
 export function parseRepoContext(stdout: string): RepoContext | undefined {
   const lines = stdout
@@ -35,15 +74,22 @@ export function parseRepoContext(stdout: string): RepoContext | undefined {
     .filter((line) => line !== "");
   const repoRoot = lines[0];
   const commonDir = lines[1];
-  if (lines.length !== 2 || repoRoot === undefined || commonDir === undefined) {
+  const objectFormat = lines[2];
+  if (
+    lines.length !== 3 ||
+    repoRoot === undefined ||
+    commonDir === undefined ||
+    objectFormat === undefined
+  ) {
     return undefined;
   }
-  if (!repoRoot.startsWith("/") || !commonDir.startsWith("/")) {
+  if (!repoRoot.startsWith("/") || !commonDir.startsWith("/") || objectFormat.startsWith("-")) {
     return undefined;
   }
 
   const suffix = "/.git";
   return {
+    emptyTree: emptyTreeForFormat(objectFormat),
     mainWorktreePath: commonDir.endsWith(suffix) ? commonDir.slice(0, -suffix.length) : repoRoot,
     repoRoot,
   };

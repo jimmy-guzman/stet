@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import { helpText, parseArgs, parseCommand, scopeKinds, scopeLabel, scopeMenuLabel } from "@/cli";
-import { EMPTY_TREE_SHA } from "@/git/model";
 import { keyHelpGroups } from "@/help/keys";
 
 describe("parseArgs", () => {
@@ -148,19 +147,48 @@ describe("scopeKinds", () => {
 });
 
 describe("scopeLabel", () => {
+  const SHA1_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+  const SHA256_EMPTY_TREE = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+
   test("labels each scope", () => {
-    expect(scopeLabel({ kind: "all", ref: "HEAD" })).toBe("uncommitted vs HEAD");
-    expect(scopeLabel({ kind: "staged", ref: "main" })).toBe("staged vs main");
-    expect(scopeLabel({ kind: "unstaged", ref: "HEAD" })).toBe("unstaged");
-    expect(scopeLabel({ kind: "session", ref: "abc123" })).toBe("since session start");
-    expect(scopeLabel({ headRef: "HEAD", kind: "last-commit", ref: "abc123" })).toBe("last commit");
+    expect(scopeLabel({ kind: "all", ref: "HEAD" }, SHA1_EMPTY_TREE)).toBe("uncommitted vs HEAD");
+    expect(scopeLabel({ kind: "staged", ref: "main" }, SHA1_EMPTY_TREE)).toBe("staged vs main");
+    expect(scopeLabel({ kind: "unstaged", ref: "HEAD" }, SHA1_EMPTY_TREE)).toBe("unstaged");
+    expect(scopeLabel({ kind: "session", ref: "abc123" }, SHA1_EMPTY_TREE)).toBe(
+      "since session start",
+    );
+    expect(
+      scopeLabel({ headRef: "HEAD", kind: "last-commit", ref: "abc123" }, SHA1_EMPTY_TREE),
+    ).toBe("last commit");
   });
 
-  // The empty-tree base is stet's own, not a ref the user named, and its 40 characters crowded the
-  // Branch off the header, which shrinks the branch before the scope.
+  // The empty-tree base is stet's own, not a ref the user named, and its sha crowded the branch off
+  // The header, which shrinks the branch before the scope.
   test("names the empty-tree base rather than printing its sha", () => {
-    expect(scopeLabel({ kind: "all", ref: EMPTY_TREE_SHA })).toBe("uncommitted vs no commits yet");
-    expect(scopeLabel({ kind: "staged", ref: EMPTY_TREE_SHA })).toBe("staged vs no commits yet");
+    expect(scopeLabel({ kind: "all", ref: SHA1_EMPTY_TREE }, SHA1_EMPTY_TREE)).toBe(
+      "uncommitted vs no commits yet",
+    );
+    expect(scopeLabel({ kind: "staged", ref: SHA256_EMPTY_TREE }, SHA256_EMPTY_TREE)).toBe(
+      "staged vs no commits yet",
+    );
+  });
+
+  // A SHA-256 repository's empty tree is a different object, so recognizing the SHA-1 one would
+  // Print 64 characters of sha into the header there.
+  test("recognizes only this repository's empty tree", () => {
+    expect(scopeLabel({ kind: "all", ref: SHA256_EMPTY_TREE }, SHA256_EMPTY_TREE)).toBe(
+      "uncommitted vs no commits yet",
+    );
+    expect(scopeLabel({ kind: "all", ref: SHA1_EMPTY_TREE }, SHA256_EMPTY_TREE)).toBe(
+      `uncommitted vs ${SHA1_EMPTY_TREE}`,
+    );
+  });
+
+  // A scope picked from the menu before the startup load resolves keeps the ref it was given, and
+  // The startup batch deliberately leaves a user-touched scope alone. The label has to follow that
+  // Ref, not the base the repository would otherwise take, or it names an endpoint git never got.
+  test("follows the scope's own ref when the base has moved on without it", () => {
+    expect(scopeLabel({ kind: "staged", ref: "HEAD" }, SHA1_EMPTY_TREE)).toBe("staged vs HEAD");
   });
 });
 

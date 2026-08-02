@@ -184,10 +184,6 @@ export function nameStatusArgs(scope: DiffScope) {
 // The command-line form wins.
 const diffFlags = ["--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"];
 
-// The empty tree object, used as last-commit's parent on a root commit (which
-// Has no HEAD~1) so the whole first commit still renders as all-added.
-export const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-
 export function diffArgs(scope: DiffScope) {
   const base = ["git", "diff", ...diffFlags];
 

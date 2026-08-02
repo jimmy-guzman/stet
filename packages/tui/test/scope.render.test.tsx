@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
+import { emptyTreeForFormat } from "@/git/repo";
 import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
@@ -188,3 +189,48 @@ describe("scope switching", () => {
     }
   }, 20_000);
 });
+
+// A root commit has no parent, so the drain's `last-commit` re-resolve gets `undefined` back on
+// Every tick. It must compare against the substituted ref (the repository's empty tree) rather than
+// The raw parent, or every tick re-sets the scope and re-keys the diff pipeline underneath the
+// Viewer, throwing away the cursor and scroll the user just placed.
+//
+// A `last-commit` changed set is fixed until HEAD moves (the range excludes untracked files), so the
+// Drain is made observable through the other thing it re-reads every tick: `git status
+// --porcelain=v1 -b` carries the branch, and `mergeChanged` publishes a new model when it moves.
+// Renaming the branch therefore lands in the header exactly when a drain completes, and the
+// `last-commit` parent re-resolve is chained onto that same read, so seeing the new name is proof
+// The guard under test ran. `repairBase` is not part of this: it is gated on `headUnborn`, which is
+// False here because the repository has a commit.
+test("a root commit holds its last-commit scope across refresh drains", async () => {
+  const repoRoot = createFixtureRepo("stet-root-commit-scope-", { "a.txt": "one\ntwo\nthree\n" });
+  // The fixture is a plain `git init`, so this is the base the drain resolves to as well.
+  const scope = { headRef: "HEAD", kind: "last-commit", ref: emptyTreeForFormat("sha1") } as const;
+  try {
+    seedState(await loadModel(repoRoot, scope), scope);
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 24,
+      width: 100,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("the root commit renders as all-added", (frame) => frame.includes("+3 -0"));
+      const before = state.scope();
+
+      // Two drains, so a scope re-set has to survive being wrong twice rather than once.
+      for (const branch of ["drain-one", "drain-two"]) {
+        runGit(repoRoot, ["branch", "-m", branch]);
+        // oxlint-disable-next-line no-await-in-loop -- each drain must land before the next rename
+        await settleUntil(`the drain that picked up ${branch}`, (frame) => frame.includes(branch));
+        // Identity, not equality: a re-set carrying the same ref is still a new object, and a new
+        // Object is what re-keys the diff pipeline.
+        expect(state.scope()).toBe(before);
+      }
+    } finally {
+      renderer.destroy();
+    }
+  } finally {
+    rmSync(repoRoot, { force: true, recursive: true });
+  }
+}, 20_000);

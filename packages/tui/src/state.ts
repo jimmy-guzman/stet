@@ -4189,9 +4189,11 @@ function createState() {
         sessionBase: headBase,
       };
     }
-    // A pinned commit SHA has no meaning in the target worktree, and neither does the newest commit
-    // Where there is none; both fall back to the default all-changes lens (the drill-down reloads
-    // Against the new history).
+    // Both fall back to the default all-changes lens (the drill-down reloads against the new
+    // History). For `commit` that is a change of inspection context, not a resolution failure:
+    // Linked worktrees share one object database, so the pinned SHA still resolves in the target,
+    // But it was picked out of the history the user just left. `last-commit` on an unborn HEAD is
+    // The genuine one, having no right side to diff at all.
     if (active.kind === "commit" || (active.kind === "last-commit" && unborn)) {
       return {
         headUnborn: unborn,

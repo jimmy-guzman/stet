@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.0...stet-v0.10.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* **diagnostics:** 🐛 run npm server provisioning with --ignore-scripts ([#350](https://github.com/jimmy-guzman/stet/issues/350)) ([1dcd83c](https://github.com/jimmy-guzman/stet/commit/1dcd83c8f2beb6c8ba042d554d5159f79390c523))
+* **git:** 🐛 support empty tree on SHA-256 repos ([#354](https://github.com/jimmy-guzman/stet/issues/354)) ([507ed3b](https://github.com/jimmy-guzman/stet/commit/507ed3bfb9ef908f021f6ca616128b6efd6a1282))
+* **git:** 🐛handle a missing git, a non-repo, and an unborn HEAD ([#348](https://github.com/jimmy-guzman/stet/issues/348)) ([f8e8a6d](https://github.com/jimmy-guzman/stet/commit/f8e8a6dcd6786f80ae49eb038df4e423bf191d40))
+
 ## [0.10.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.9.1...stet-v0.10.0) (2026-07-30)
 
 

@@ -119,11 +119,12 @@ jobs:
       # whereas pnpm's publish does the exchange. pnpm's version is pinned explicitly because
       # this repo has no packageManager field. node 24.18.1 is just the toolchain; registry-url
       # points at npmjs.org (required for the OIDC exchange); package-manager-cache is off
-      # since deps are installed with bun, not npm. Publish also emits provenance automatically,
-      # which requires the generated package.json `repository` to match.
+      # since deps are installed with bun, not npm. Provenance is requested explicitly with
+      # `--provenance` below (pnpm does not auto-enable it the way npm does under OIDC) and
+      # requires the generated package.json `repository` to match.
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
-          version: 10.34.5
+          version: 11.18.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24.18.1
@@ -144,7 +145,7 @@ jobs:
               if npm view "$name@$version" version >/dev/null 2>&1; then
                 echo "skipping $name@$version (already published)"
               else
-                pnpm publish --access public --no-git-checks --ignore-scripts
+                pnpm publish --access public --no-git-checks --ignore-scripts --provenance
               fi
             )
           done

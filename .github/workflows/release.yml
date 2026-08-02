@@ -112,29 +112,29 @@ jobs:
         with:
           name: dist
           path: dist
-      # OIDC trusted publishing: `id-token: write` above lets npm mint a short-lived token
-      # per run, so no NPM_TOKEN is needed. node-version is pinned exactly for npm >= 11.5.1
-      # (the OIDC floor): a floating `24` resolves to the runner's cached 24.x, and early
-      # 24.x shipped npm < 11.5.1. registry-url configures the target registry, which npm's
-      # OIDC needs (without it, publish fails with ENEEDAUTH). setup-node also writes a
-      # placeholder `_authToken` into that .npmrc (actions/setup-node#1551), which npm would
-      # use as a real token and then skip OIDC; the next step strips it. Publish also emits
-      # provenance automatically, which requires the generated package.json `repository` to
-      # match. package-manager-cache is off: deps are installed with bun, not npm, and this
-      # is a privileged (id-token) job, so setup-node's dependency cache has no place here.
+      # OIDC trusted publishing via pnpm: `id-token: write` above lets the registry mint a
+      # short-lived token per run, so no NPM_TOKEN is needed. We publish with pnpm, not npm:
+      # npm never performs the OIDC exchange here (it uses the placeholder `_authToken`
+      # actions/setup-node writes and fails with 404/ENEEDAUTH, actions/setup-node#1551),
+      # whereas pnpm's publish does the exchange. pnpm's version is pinned explicitly because
+      # this repo has no packageManager field. node 24.18.1 is just the toolchain; registry-url
+      # points at npmjs.org (required for the OIDC exchange); package-manager-cache is off
+      # since deps are installed with bun, not npm. Provenance is requested explicitly with
+      # `--provenance` below (pnpm does not auto-enable it the way npm does under OIDC) and
+      # requires the generated package.json `repository` to match.
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.18.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24.18.1
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      # Strip the placeholder `_authToken` setup-node wrote (see above) so npm finds the
-      # registry configured but no token, and performs the OIDC token exchange instead.
-      - name: enable OIDC (drop setup-node's placeholder npm auth line)
-        run: sed -i '/_authToken/d' "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
       # --ignore-scripts: these package.json files come from the build job's artifact, so a
       # publish lifecycle script in one would be build-influenced code running under id-token,
       # the exact vector this split closes. The generated manifests declare none, so nothing
-      # that should run is suppressed.
+      # that should run is suppressed. --no-git-checks: dist/ is not a git checkout, so skip
+      # pnpm's clean-tree/branch guards. `npm view` is an anonymous read, so it stays.
       - name: publish npm packages
         run: |
           for dir in dist/stet-*/ dist/stet/; do
@@ -145,7 +145,7 @@ jobs:
               if npm view "$name@$version" version >/dev/null 2>&1; then
                 echo "skipping $name@$version (already published)"
               else
-                npm publish --access public --ignore-scripts
+                pnpm publish --access public --no-git-checks --ignore-scripts --provenance
               fi
             )
           done

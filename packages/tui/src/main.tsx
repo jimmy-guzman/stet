@@ -17,7 +17,6 @@ import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import { resolveFileSupportConfig } from "./file-support/config";
 import { registerFileSupport } from "./file-support/registry";
 import { GitError } from "./git/errors";
-import { EMPTY_TREE_SHA } from "./git/model";
 import type { GitModel } from "./git/model";
 import { unknownRefMessage } from "./git/repo";
 import { Git, GitLive } from "./git/service";
@@ -56,22 +55,22 @@ try {
 
   // The startup model carries only the changed set (repoFiles fill in on the
   // Slow poll once mounted), the same shape the running app uses.
-  const startup = (repoRoot: string) =>
+  const startup = (repoRoot: string, emptyTree: string) =>
     Effect.gen(function* startupModel() {
       const git = yield* Git;
       // The SHA HEAD points at now, pinned as the base for the `session` scope so
-      // It keeps meaning "since stet launched" as the agent commits. It is also the
-      // Empty tree on a repository with no commits, which is the whole unborn-HEAD signal.
-      const sessionBase = yield* git.headRef(repoRoot);
+      // It keeps meaning "since stet launched" as the agent commits. Undefined on a
+      // Repository with no commits, which is the whole unborn-HEAD signal.
+      const head = yield* git.headRef(repoRoot);
       // An unborn HEAD is not a diff endpoint, and unlike every other HEAD-touching read a diff
       // Has no degraded answer, so the base is resolved before the command is built rather than
       // Tolerated after it fails. Against the empty tree every tracked file reads as added.
       // Only `HEAD` is substituted: a ref the user named still resolves on an orphan branch, where
       // Diffing against the empty tree instead would silently show the wrong base.
-      const unborn = options.scope.ref === "HEAD" && sessionBase === EMPTY_TREE_SHA;
-      const scope = unborn ? { ...options.scope, ref: EMPTY_TREE_SHA } : options.scope;
+      const unborn = options.scope.ref === "HEAD" && head === undefined;
+      const scope = unborn ? { ...options.scope, ref: emptyTree } : options.scope;
       const changed = yield* git.changedFiles(repoRoot, scope);
-      return { changed, scope, sessionBase, unborn };
+      return { changed, scope, sessionBase: head ?? emptyTree, unborn };
     });
 
   // A failed startup diff is the first thing that has actually exercised the user's ref, so it is
@@ -153,7 +152,7 @@ try {
   // The same reason the config load has one: the first use of the app runtime builds DiffEngineLive,
   // Whose highlighter warm-up must stay behind the first paint.
   const preflightRuntime = ManagedRuntime.make(GitLive.pipe(Layer.provide(ProcessLive)));
-  const { mainWorktreePath, repoRoot } = await preflightRuntime.runPromise(
+  const { emptyTree, mainWorktreePath, repoRoot } = await preflightRuntime.runPromise(
     Git.pipe(Effect.flatMap((git) => git.repoContext(process.cwd()))),
   );
   await preflightRuntime.dispose();
@@ -269,7 +268,7 @@ try {
   }
 
   runtime
-    .runPromise(startup(repoRoot))
+    .runPromise(startup(repoRoot, emptyTree))
     .then(({ changed, scope, sessionBase, unborn }) => {
       const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
       const initialSelectedPath = model.changed[0]?.path ?? model.repoFiles[0]?.path;
@@ -290,6 +289,7 @@ try {
         state.setGitModel(model);
         state.setRepoRoot(model.repoRoot);
         state.setMainWorktreePath(mainWorktreePath);
+        state.setEmptyTree(emptyTree);
         state.setLastChange(Date.now());
         state.seedNav(initialSelectedPath);
         state.setFocusedNodeId(

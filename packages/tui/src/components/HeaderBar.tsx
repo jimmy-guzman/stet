@@ -72,7 +72,9 @@ export function HeaderBar() {
     if (branch === undefined) {
       return undefined;
     }
-    const rightWidth = Bun.stringWidth(`${scopeLabel(state.scope())}${SEP}${tail()}`);
+    const rightWidth = Bun.stringWidth(
+      `${scopeLabel(state.scope(), state.emptyTree())}${SEP}${tail()}`,
+    );
     const leftFixed = glyphCells() + Bun.stringWidth(primary()) + SEP.length + glyphCells();
     const budget = available() - rightWidth - leftFixed;
     return budget < MIN_BRANCH ? undefined : truncate(branch, budget);
@@ -118,7 +120,7 @@ export function HeaderBar() {
         <text fg={theme.colors.text.secondary}>{commitSubject()}</text>
       </Show>
       <text fg={theme.colors.text.secondary}>
-        {isCommit() ? tail() : `${scopeLabel(state.scope())}${SEP}${tail()}`}
+        {isCommit() ? tail() : `${scopeLabel(state.scope(), state.emptyTree())}${SEP}${tail()}`}
       </text>
     </box>
   );

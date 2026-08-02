@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
-import { EMPTY_TREE_SHA } from "@/git/model";
+import { emptyTreeForFormat } from "@/git/repo";
 import { state } from "@/state";
 import { stripGitEnv } from "@/utils/env";
 
@@ -16,7 +16,9 @@ import { loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
 // A repository with no commits, seeded the way main.tsx does: the scope carries the resolved base
 // (the empty tree, since there is no HEAD to diff against) while `cliBaseRef` keeps the ref the
 // User named, which is what the base returns to once a commit exists.
-const unbornScope = { kind: "all", ref: EMPTY_TREE_SHA } as const;
+// Every fixture here is a plain `git init`, so sha1 is its object format.
+const emptyTree = emptyTreeForFormat("sha1");
+const unbornScope = { kind: "all", ref: emptyTree } as const;
 
 function createUnbornRepo(prefix: string) {
   const repo = mkdtempSync(join(tmpdir(), prefix));
@@ -120,7 +122,7 @@ test("a mid-session orphan checkout re-points the base onto the empty tree", asy
       );
 
       expect(frame).toContain("a.txt");
-      expect(state.scope().ref).toBe(EMPTY_TREE_SHA);
+      expect(state.scope().ref).toBe(emptyTree);
     } finally {
       renderer.destroy();
     }
@@ -165,7 +167,7 @@ test("a mid-session orphan checkout drops the last-commit scope to all", async (
 
       await settleUntil("dropped to all", () => state.scope().kind === "all");
 
-      expect(state.scope().ref).toBe(EMPTY_TREE_SHA);
+      expect(state.scope().ref).toBe(emptyTree);
     } finally {
       renderer.destroy();
     }

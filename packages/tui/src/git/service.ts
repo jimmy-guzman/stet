@@ -21,7 +21,6 @@ import {
   assembleChanged,
   assembleModel,
   diffArgs,
-  EMPTY_TREE_SHA,
   nameStatusArgs,
   numstatArgs,
   parseRepoFiles,
@@ -130,11 +129,11 @@ export class Git extends Context.Service<
       file: ChangedFile,
     ) => Effect.Effect<SideContent, GitError>;
     readonly gitDir: (repoRoot: string) => Effect.Effect<string, GitError>;
-    /** The SHA HEAD points at, or the empty tree on a commitless repo. */
-    readonly headRef: (repoRoot: string) => Effect.Effect<string, GitError>;
+    /** The SHA HEAD points at, or `undefined` on a commitless repo (an unborn HEAD). */
+    readonly headRef: (repoRoot: string) => Effect.Effect<string | undefined, GitError>;
     readonly loadModel: (repoRoot: string, scope: DiffScope) => Effect.Effect<GitModel, GitError>;
-    /** HEAD's parent SHA, or the empty tree on a root commit. */
-    readonly parentRef: (repoRoot: string) => Effect.Effect<string, GitError>;
+    /** HEAD's parent SHA, or `undefined` on a root commit. */
+    readonly parentRef: (repoRoot: string) => Effect.Effect<string | undefined, GitError>;
     /** The most recent commits (newest first), capped at `limit`. */
     readonly recentCommits: (repoRoot: string, limit: number) => Effect.Effect<Commit[], GitError>;
     /**
@@ -365,14 +364,15 @@ export const GitLive = Layer.effect(
           Effect.map((result) => result.stdout.trim()),
           Effect.mapError(toGitError),
         ),
-      // Exit 128 is a commitless repo (no HEAD); fall back to the empty tree so
-      // The session base is still a valid diff endpoint.
+      // Exit 128 is a commitless repo (no HEAD), which reports as `undefined` rather than as a
+      // Substituted base: what to diff against instead is the caller's decision, and it needs the
+      // Repository's own empty tree, which this service has no reason to know.
       headRef: (repoRoot) =>
         process
           .run(["git", "rev-parse", "--verify", "HEAD"], repoRoot, { allowedExitCodes: [0, 128] })
           .pipe(
             retryTransient,
-            Effect.map((result) => result.stdout.trim() || EMPTY_TREE_SHA),
+            Effect.map((result) => result.stdout.trim() || undefined),
             Effect.mapError(toGitError),
           ),
       loadModel: (repoRoot, scope) =>
@@ -400,14 +400,15 @@ export const GitLive = Layer.effect(
           ),
           Effect.mapError(toGitError),
         ),
-      // Exit 128 is a root commit (no HEAD~1); fall back to the empty tree so the
-      // Whole first commit renders as all-added.
+      // Exit 128 is a root commit (no HEAD~1), reported as `undefined` for the same reason an
+      // Unborn HEAD is: the empty tree that makes the first commit render as all-added is the
+      // Repository's, so the caller substitutes it.
       parentRef: (repoRoot) =>
         process
           .run(["git", "rev-parse", "--verify", "HEAD~1"], repoRoot, { allowedExitCodes: [0, 128] })
           .pipe(
             retryTransient,
-            Effect.map((result) => result.stdout.trim() || EMPTY_TREE_SHA),
+            Effect.map((result) => result.stdout.trim() || undefined),
             Effect.mapError(toGitError),
           ),
       // Exit 128 is a commitless repo (unborn HEAD): `git log` has no output, so

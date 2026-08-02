@@ -76,12 +76,7 @@ import type { BlameLine } from "./git/blame";
 import { fileDiffSides } from "./git/file-patch";
 import type { BinaryDiff } from "./git/file-patch";
 import type { Commit } from "./git/log";
-import {
-  changedContentAdvanced,
-  changedPathsDiffer,
-  EMPTY_TREE_SHA,
-  mergeChanged,
-} from "./git/model";
+import { changedContentAdvanced, changedPathsDiffer, mergeChanged } from "./git/model";
 import type { ChangedFile, GitModel } from "./git/model";
 import { classifyProvenance } from "./git/provenance";
 import type { Provenance } from "./git/provenance";
@@ -475,9 +470,14 @@ function createState() {
   // Where the base is not a diff endpoint. A ref the user named is never in this state: it still
   // Resolves on an orphan branch, and substituting it would silently show the wrong base.
   const [headUnborn, setHeadUnborn] = tracked(false);
+  // This repository's empty tree, read from its object format by the startup preflight and seeded
+  // Alongside repoRoot. Empty until then, like the other repo-identity signals, and every reader is
+  // Downstream of the same load. Never a constant: the sha follows the repository's hash algorithm,
+  // So a SHA-1 literal names an object a SHA-256 repository's database does not contain.
+  const [emptyTree, setEmptyTree] = tracked("");
   // What `all` and `staged` actually diff against: the empty tree while HEAD is unborn, where every
   // Tracked file reads as added, and the CLI ref once a commit gives HEAD a meaning.
-  const baseRef = createMemo(() => (headUnborn() ? EMPTY_TREE_SHA : cliBaseRef()));
+  const baseRef = createMemo(() => (headUnborn() ? emptyTree() : cliBaseRef()));
   // The SHA HEAD pointed at when stet launched, pinned for the session scope.
   const [sessionBase, setSessionBase] = tracked("HEAD");
   const [scopeMenuOpen, setScopeMenuOpen] = tracked(false);
@@ -4091,11 +4091,11 @@ function createState() {
           if (token !== scopeSelection) {
             return;
           }
-          if (head === EMPTY_TREE_SHA) {
+          if (head === undefined) {
             notify("no commits yet");
             return;
           }
-          setScope({ headRef: "HEAD", kind, ref: parent });
+          setScope({ headRef: "HEAD", kind, ref: parent ?? emptyTree() });
         })
         .catch(() => {});
       return;
@@ -4148,7 +4148,7 @@ function createState() {
     }
     scopeSelection += 1;
     setSelectedCommit(commit);
-    setScope({ headRef: commit.sha, kind: "commit", ref: commit.parent });
+    setScope({ headRef: commit.sha, kind: "commit", ref: commit.parent ?? emptyTree() });
     return true;
   }
 
@@ -4177,39 +4177,47 @@ function createState() {
     // Bornness belongs to the worktree, not the session: an orphan worktree has no HEAD to diff
     // Against even when the one being left did. Only the literal `HEAD` is substituted, since a ref
     // The user named resolves against the shared object database in either worktree.
-    const unborn = cliBaseRef() === "HEAD" && head === EMPTY_TREE_SHA;
-    const base = unborn ? EMPTY_TREE_SHA : cliBaseRef();
+    const unborn = cliBaseRef() === "HEAD" && head === undefined;
+    const base = unborn ? emptyTree() : cliBaseRef();
+    // The session base is a diff endpoint, so an unborn HEAD resolves to the empty tree here too.
+    const headBase = head ?? emptyTree();
     const active = scope();
     if (active.kind === "session") {
       return {
         headUnborn: unborn,
-        scope: { kind: "session", ref: head } satisfies DiffScope,
-        sessionBase: head,
+        scope: { kind: "session", ref: headBase } satisfies DiffScope,
+        sessionBase: headBase,
       };
     }
-    // A pinned commit SHA has no meaning in the target worktree, and neither does the newest commit
-    // Where there is none; both fall back to the default all-changes lens (the drill-down reloads
-    // Against the new history).
+    // Both fall back to the default all-changes lens (the drill-down reloads against the new
+    // History). For `commit` that is a change of inspection context, not a resolution failure:
+    // Linked worktrees share one object database, so the pinned SHA still resolves in the target,
+    // But it was picked out of the history the user just left. `last-commit` on an unborn HEAD is
+    // The genuine one, having no right side to diff at all.
     if (active.kind === "commit" || (active.kind === "last-commit" && unborn)) {
       return {
         headUnborn: unborn,
         scope: { kind: "all", ref: base } satisfies DiffScope,
-        sessionBase: head,
+        sessionBase: headBase,
       };
     }
     if (active.kind === "last-commit") {
       const parent = await runtime.runPromise(Git.use((git) => git.parentRef(root)));
       return {
         headUnborn: unborn,
-        scope: { headRef: "HEAD", kind: "last-commit", ref: parent } satisfies DiffScope,
-        sessionBase: head,
+        scope: {
+          headRef: "HEAD",
+          kind: "last-commit",
+          ref: parent ?? emptyTree(),
+        } satisfies DiffScope,
+        sessionBase: headBase,
       };
     }
     // `unstaged` ignores the ref entirely; `all`/`staged` re-point at the target worktree's base.
     return {
       headUnborn: unborn,
       scope: active.kind === "unstaged" ? active : { ...active, ref: base },
-      sessionBase: head,
+      sessionBase: headBase,
     };
   }
 
@@ -4367,14 +4375,14 @@ function createState() {
           const repairBase = Git.use((git) => git.headRef(root)).pipe(
             Effect.tap((head) =>
               Effect.sync(() => {
-                const unborn = cliBaseRef() === "HEAD" && head === EMPTY_TREE_SHA;
+                const unborn = cliBaseRef() === "HEAD" && head === undefined;
                 if (repoRoot() !== root || unborn === headUnborn()) {
                   return;
                 }
                 batch(() => {
                   setHeadUnborn(unborn);
                   const current = scope();
-                  const base = unborn ? EMPTY_TREE_SHA : cliBaseRef();
+                  const base = unborn ? emptyTree() : cliBaseRef();
                   // `last-commit`'s right side is the literal HEAD, so an unborn one leaves it with
                   // No side to diff; it falls back to the default lens exactly as a worktree switch
                   // Into an orphan checkout does. `session` and `commit` hold resolved SHAs, which
@@ -4424,8 +4432,13 @@ function createState() {
                     Effect.tap((parent) =>
                       Effect.sync(() => {
                         const current = scope();
-                        if (current.kind === "last-commit" && current.ref !== parent) {
-                          setScope({ headRef: "HEAD", kind: "last-commit", ref: parent });
+                        // Compare against the substituted ref, not the raw parent: on a root commit
+                        // The parent is `undefined` while the scope holds the empty tree, so testing
+                        // The raw value would differ on every tick and re-set the scope forever,
+                        // Resetting the viewer's cursor and scroll each time.
+                        const ref = parent ?? emptyTree();
+                        if (current.kind === "last-commit" && current.ref !== ref) {
+                          setScope({ headRef: "HEAD", kind: "last-commit", ref });
                         }
                       }),
                     ),
@@ -4763,6 +4776,7 @@ function createState() {
     directorySummariesByPath,
     dispatchCommandAction,
     editorTemplate,
+    emptyTree,
     expandedDirectories,
     extendSelectionTo,
     fileComboboxIndex,
@@ -4893,6 +4907,7 @@ function createState() {
     setDiagnosticsEnabled,
     setEditorFlag,
     setEditorTemplate,
+    setEmptyTree,
     setExpandedDirectories,
     setFileComboboxIndex,
     setFileComboboxOpen,

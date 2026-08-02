@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { Effect, Layer } from "effect";
 
 import { logArgs, parseLog } from "@/git/log";
-import { EMPTY_TREE_SHA } from "@/git/model";
 import { Git, GitLive } from "@/git/service";
 import { ProcessLive } from "@/process";
 
@@ -57,9 +56,11 @@ describe("parseLog", () => {
     ]);
   });
 
-  test("a root commit (no parents) bases on the empty tree", () => {
+  // A root commit has no parent to report. The caller substitutes this repository's empty tree,
+  // Which only it can name, so the parse says "none" rather than inventing one.
+  test("a root commit (no parents) has no parent", () => {
     const out = stream(["r00t", "r00", "", "Jimmy", "1699000000", "initial commit"]);
-    expect(parseLog(out)[0]?.parent).toBe(EMPTY_TREE_SHA);
+    expect(parseLog(out)[0]?.parent).toBeUndefined();
   });
 
   test("a merge commit bases on its first parent", () => {
@@ -85,7 +86,7 @@ const runRecentCommits = (repo: string, limit: number) =>
     ),
   );
 
-test("Git.recentCommits returns commits newest-first, root based on the empty tree", async () => {
+test("Git.recentCommits returns commits newest-first, the root reporting no parent", async () => {
   const repo = createFixtureRepo("git-log-repo-", { "a.txt": "one\n" });
   writeFileSync(join(repo, "b.txt"), "two\n");
   runGit(repo, ["add", "."]);
@@ -97,7 +98,7 @@ test("Git.recentCommits returns commits newest-first, root based on the empty tr
   const commits = await runRecentCommits(repo, 30);
 
   expect(commits.map((commit) => commit.subject)).toEqual(["third", "second", "fixture"]);
-  expect(commits.at(-1)?.parent).toBe(EMPTY_TREE_SHA);
+  expect(commits.at(-1)?.parent).toBeUndefined();
   expect(commits[0]?.parent).toBe(commits[1]?.sha);
 });
 

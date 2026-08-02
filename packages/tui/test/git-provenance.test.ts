@@ -40,8 +40,15 @@ const ctx = (overrides: Partial<ProvenanceContext>): ProvenanceContext => ({
 const runGitEffect = <A>(effect: Effect.Effect<A, unknown, Git>) =>
   Effect.runPromise(effect.pipe(Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))));
 
-const headRef = (repoRoot: string) =>
-  runGitEffect(Git.pipe(Effect.flatMap((git) => git.headRef(repoRoot))));
+// Every fixture below has commits, so an unborn HEAD is a broken fixture rather than a case under
+// Test; failing here keeps the callers taking a plain sha.
+const headRef = async (repoRoot: string) => {
+  const head = await runGitEffect(Git.pipe(Effect.flatMap((git) => git.headRef(repoRoot))));
+  if (head === undefined) {
+    throw new Error(`fixture repo has no commits: ${repoRoot}`);
+  }
+  return head;
+};
 
 const commitsSince = (repoRoot: string, base: string) =>
   runGitEffect(Git.pipe(Effect.flatMap((git) => git.commitsSince(repoRoot, base))));

@@ -327,8 +327,11 @@ test("handshake parses advertised providers into the capability set", async () =
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: (method) => Effect.sync(() => void notified.push(method)),
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -354,6 +357,7 @@ test("handshake parses advertised providers into the capability set", async () =
       }),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -398,8 +402,11 @@ test("performHandshake sends config notifications after initialized, in order", 
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: (method, params) => Effect.sync(() => void notified.push({ method, params })),
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -408,6 +415,7 @@ test("performHandshake sends config notifications after initialized, in order", 
     request: (method) => Effect.sync(() => (method === "initialize" ? { capabilities: {} } : null)),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -442,8 +450,11 @@ test("handshake yields an empty capability set when no providers are advertised"
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -452,6 +463,7 @@ test("handshake yields an empty capability set when no providers are advertised"
     request: () => Effect.succeed({ capabilities: {} }),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -470,8 +482,11 @@ test("handshake treats a malformed provider value as unsupported", async () => {
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -487,6 +502,7 @@ test("handshake treats a malformed provider value as unsupported", async () => {
       }),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -506,8 +522,11 @@ test("handshake advertises pull diagnostics and refresh support, and parses diag
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -524,6 +543,7 @@ test("handshake advertises pull diagnostics and refresh support, and parses diag
       }),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
 
@@ -761,8 +781,11 @@ test("the server pool preserves configured names containing spaces", async () =>
     closeDocument: () => Effect.void,
     closed: Effect.succeed(false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.succeed(new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -771,6 +794,7 @@ test("the server pool preserves configured names containing spaces", async () =>
     request: (method) => Effect.succeed(method === "initialize" ? { capabilities: {} } : null),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
   const lspProcess = Layer.succeed(LspProcess)({

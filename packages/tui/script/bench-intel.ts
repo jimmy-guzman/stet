@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { bench, run } from "mitata";
 
 import { LspProcessLive } from "@/diagnostics/lsp-process";
@@ -17,6 +17,7 @@ import {
   resolveServers,
   serversProviding,
 } from "@/diagnostics/servers";
+import { Diagnostics, DiagnosticsLive } from "@/diagnostics/service";
 import { defaultFileSupportRegistry, registerFileSupport } from "@/file-support/registry";
 import { Intel, IntelLive } from "@/intel/service";
 import { ProcessLive } from "@/process";
@@ -31,12 +32,12 @@ import { relativize } from "@/utils/path";
  *
  * `--pos` is 1-based line:column as an editor displays it.
  */
-const USAGE = `usage: bun run bench:intel <cold|references|churn|contention|gates|realpath>
+const USAGE = `usage: bun run bench:intel <cold|references|churn|contention|diagnostics|gates|realpath>
   --repo <abs-path>   repository to benchmark against (required)
-  --file <rel-path>   file to pull intel on (required except realpath)
+  --file <rel-path>   file to pull intel on (required except diagnostics/realpath)
   --pos <line:col>    1-based caret for definition/references pulls
   --runs <n>          pulls per scenario (default 5)
-  --docs <n>          held-open documents for contention (default 50)`;
+  --docs <n>          held-open or changed documents (default 50)`;
 
 function parseArgs(argv: string[]) {
   const [scenario, ...rest] = argv;
@@ -115,7 +116,7 @@ function makeRuntime() {
   registerServers(resolveServers({}).servers);
   registerFileSupport(defaultFileSupportRegistry());
   return ManagedRuntime.make(
-    IntelLive.pipe(
+    Layer.mergeAll(IntelLive, DiagnosticsLive).pipe(
       Layer.provideMerge(LanguageServersLive),
       Layer.provideMerge(LspProcessLive),
       Layer.provideMerge(ProvisionerLive),
@@ -317,6 +318,38 @@ function contentionScenario(
   );
 }
 
+/**
+ * One real diagnostics run against a cold server with N synthetic changed files (the repo is never
+ * touched: the changed set is just a file list). Reports wall clock and the resolved/pending split
+ * of the final snapshot: a run that settles into a mid-load window caps out with everything
+ * pending, and each late publish then provokes a re-run.
+ */
+function diagnosticsScenario(runtime: BenchRuntime, repo: string, docs: number) {
+  return runtime.runPromise(
+    Effect.gen(function* diagnosticsRun() {
+      const diagnostics = yield* Diagnostics;
+      const paths = yield* Effect.promise(() => listFiles(repo, ".ts", docs));
+      const files = paths.map((path) => ({
+        additions: 1,
+        binary: false,
+        deletions: 0,
+        kind: "modified" as const,
+        mtimeMs: 0,
+        path,
+        stage: "unstaged" as const,
+        warnings: [],
+      }));
+      const start = now();
+      const updates = [...(yield* Stream.runCollect(diagnostics.run(repo, files)))];
+      const statuses = [...(updates.at(-1)?.state.values() ?? [])].map((file) => file.status);
+      const counts = [...Map.groupBy(statuses, (status) => status)]
+        .map(([status, entries]) => `${status}:${entries.length}`)
+        .join(" ");
+      report(`diagnostics run (${paths.length} changed files)`, `${ms(now() - start)} (${counts})`);
+    }),
+  );
+}
+
 /** Gate snapshot cost: memo hit vs the re-evaluation a watcher batch forces today. */
 async function gatesScenario(runtime: BenchRuntime, repo: string, file: string) {
   bench("activeServersForPath (memo hit)", () =>
@@ -375,6 +408,8 @@ async function main() {
 
   if (scenario === "realpath") {
     await realpathScenario(repo);
+  } else if (scenario === "diagnostics") {
+    await diagnosticsScenario(runtime, repo, docs);
   } else {
     const { file } = args;
     if (file === undefined) {

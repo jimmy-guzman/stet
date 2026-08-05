@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { adjust, layer as testClockLayer } from "effect/testing/TestClock";
 
-import { LanguageServers, ServerUnavailable } from "@/diagnostics/servers";
+import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
 import { LspRequestError } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
@@ -32,11 +33,14 @@ function handle(
       Effect.sync(() => void log.push({ method: "textDocument/didClose", params: { uri } })),
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: (method, params) => Effect.sync(() => void log.push({ method, params })),
     openDocument: (textDocument) =>
       Effect.sync(
         () => void log.push({ method: "textDocument/didOpen", params: { textDocument } }),
       ),
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -48,6 +52,7 @@ function handle(
     },
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded,
   };
   return { capabilities: new Set(capabilities), connection };
@@ -61,6 +66,7 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         ? Effect.fail(new ServerUnavailable({ language, message: "not found" }))
         : Effect.succeed(found);
     },
+    loadingServer: () => Effect.succeed(undefined),
     notifyWatchedFiles: () => Effect.void,
     restart: () => Effect.void,
   });
@@ -386,6 +392,7 @@ test("definition never acquires a server whose static hint can't answer it", asy
           ? Effect.succeed(ts)
           : Effect.fail(new ServerUnavailable({ language, message: "not found" }));
       },
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -819,6 +826,7 @@ test("warmHold pre-loads the project then closes the doc, holding the server unt
           }),
           () => Effect.sync(() => void (released += 1)),
         ),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -859,6 +867,7 @@ test("warmHold warms a server that advertises only hover", async () => {
     const hoverOnly = handle(["hover"], () => Effect.succeed(null), log);
     const servers = Layer.succeed(LanguageServers)({
       acquire: () => Effect.succeed(hoverOnly),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -916,5 +925,63 @@ test("call hierarchy degrades a failing resolve to IntelRequestError and still c
       "callHierarchy/incomingCalls",
       "textDocument/didClose",
     ]);
+  });
+});
+
+test("an acquire failure surfaces as the pull's error, not an empty result", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    // The only definition-capable candidate is still installing; swallowing that to an empty
+    // Reply rendered as the false negative "no definition".
+    const servers = Layer.succeed(LanguageServers)({
+      acquire: (language) => Effect.fail(new ServerInstalling({ language })),
+      loadingServer: () => Effect.succeed(undefined),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
+    });
+    const message = await Effect.runPromise(
+      Intel.pipe(
+        Effect.flatMap((intel) => intel.definition(dir, "src/a.ts", { character: 0, line: 0 })),
+        Effect.map(() => "unexpected success"),
+        Effect.catchTag("IntelRequestError", (error) => Effect.succeed(error.message)),
+        Effect.provide(IntelLive.pipe(Layer.provide(servers))),
+      ),
+    );
+    expect(message).toBe("typescript server is still installing");
+  });
+});
+
+test("a request that outlives its cap fails as timed out", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const requested = await Effect.runPromise(Deferred.make<void>());
+    // The server accepts the request and never answers, standing in for one starved behind a
+    // Program update; the caret's fast tier caps at 30 virtual seconds.
+    const ts = handle(
+      ["definition"],
+      () => Deferred.succeed(requested, undefined).pipe(Effect.andThen(Effect.never)),
+      [],
+    );
+    const message = await Effect.runPromise(
+      Effect.gen(function* timedOut() {
+        const fiber = yield* Effect.forkChild(
+          Intel.pipe(
+            Effect.flatMap((intel) => intel.definition(dir, "src/a.ts", { character: 0, line: 0 })),
+            Effect.map(() => "unexpected success"),
+            Effect.catchTag("IntelRequestError", (error) => Effect.succeed(error.message)),
+          ),
+        );
+        // The request is in flight (real file IO is behind us), so the clock can now advance.
+        yield* Deferred.await(requested);
+        yield* adjust("31 seconds");
+        return yield* Fiber.join(fiber);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))),
+            testClockLayer(),
+          ),
+        ),
+      ),
+    );
+    expect(message).toBe("timed out");
   });
 });

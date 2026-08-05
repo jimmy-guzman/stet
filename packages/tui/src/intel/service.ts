@@ -48,6 +48,27 @@ export class IntelRequestError extends Data.TaggedError("IntelRequestError")<{
   readonly message: string;
 }> {}
 
+// Request ceilings by weight, not one flat number: hover/definition/outline answer from what the
+// Server already knows, while references/implementations/call-hierarchy walk the whole project
+// (measured against tsserver: 3.8-5.5k results in 0.2-3.2s warm, past 5s whenever the request
+// Lands behind a keeper didChange burst's program update). Generous caps are safe because the wait
+// Is visible (foreground progress/overlay loading states), interruptible on the next keystroke,
+// And a superseded request is cancelled on the wire (`$/cancelRequest` in the transport).
+const FAST_REQUEST_TIMEOUT = "30 seconds";
+const HEAVY_REQUEST_TIMEOUT = "2 minutes";
+const HEAVY_METHODS = new Set([
+  "textDocument/references",
+  "textDocument/implementation",
+  "callHierarchy/incomingCalls",
+  "callHierarchy/outgoingCalls",
+]);
+
+// Ceiling on waiting out a server's announced project load before a pull fails honestly. The old
+// Shape (60s, then proceed anyway) re-introduced the F12-stops-at-import wrong answer on exactly
+// The repos whose load exceeds it; measured mid-load, tsserver resolves fewer/different targets
+// Than it does once loaded, so proceeding is answering from a half-built index.
+const PROJECT_LOAD_BACKSTOP = "5 minutes";
+
 interface Position {
   line: number;
   character: number;
@@ -144,21 +165,45 @@ export const IntelLive = Layer.effect(
       );
     }
 
-    // The first server for this file that advertises the capability. `serversProviding` drops
-    // Servers whose static hint can't answer it (no wasted acquire); the handshake-advertised set
-    // Stays the gate. Acquire failures (unavailable/installing/spawn) skip that server too.
+    // The first server for this file that advertises the capability, or why none answered.
+    // `serversProviding` drops servers whose static hint can't answer it (no wasted acquire); the
+    // Handshake-advertised set stays the gate, and a server that acquires without the capability
+    // Falls through to the next candidate. An acquire *failure* is remembered and surfaced rather
+    // Than swallowed: collapsing an initialize timeout or an in-flight install to "no server"
+    // Rendered as the false negative "no definition", which reads as intel being broken.
     function firstCapableServer(repoRoot: string, path: string, capability: Capability) {
       return Effect.gen(function* select() {
         const candidates = yield* serversProviding(path, capability, repoRoot);
+        let failure: { language: string; message: string } | undefined;
         for (const language of candidates) {
-          const handle = yield* servers
-            .acquire(language, repoRoot)
-            .pipe(Effect.catch(() => Effect.void));
-          if (handle !== undefined && handle.capabilities.has(capability)) {
-            return handle;
+          const outcome = yield* servers.acquire(language, repoRoot).pipe(
+            Effect.map((handle) => ({ handle, kind: "acquired" as const })),
+            Effect.catchTag("ServerInstalling", () =>
+              Effect.succeed({
+                kind: "failed" as const,
+                message: `${language} server is still installing`,
+              }),
+            ),
+            Effect.catchTag("ServerUnavailable", (error) =>
+              Effect.succeed({ kind: "failed" as const, message: error.message }),
+            ),
+            Effect.catch((error) =>
+              Effect.succeed({
+                kind: "failed" as const,
+                message: `${language} server failed to start: ${error.message}`,
+              }),
+            ),
+          );
+          if (outcome.kind === "acquired" && outcome.handle.capabilities.has(capability)) {
+            return { handle: outcome.handle, kind: "handle" as const };
+          }
+          if (outcome.kind === "failed") {
+            failure ??= { language, message: outcome.message };
           }
         }
-        return undefined;
+        return failure === undefined
+          ? { kind: "unsupported" as const }
+          : { kind: "failed" as const, message: failure.message };
       });
     }
 
@@ -182,10 +227,23 @@ export const IntelLive = Layer.effect(
     ) {
       return Effect.scoped(
         Effect.gen(function* request() {
-          const handle = yield* firstCapableServer(repoRoot, path, capability);
-          if (handle === undefined) {
+          const selection = yield* firstCapableServer(repoRoot, path, capability);
+          // No candidate even claims the capability: the callers' pre-checks own that copy, and an
+          // Empty answer here keeps their "no X support" and "no X" paths as they were.
+          if (selection.kind === "unsupported") {
             return empty;
           }
+          if (selection.kind === "failed") {
+            return yield* new IntelRequestError({ message: selection.message, method: capability });
+          }
+          const { handle } = selection;
+          // Foreground for the whole bracket: the diagnostics run pauses its keeper sends and pull
+          // Batches between items while this is held, so the server's ordered pipe reaches the
+          // User's request without a burst queued ahead of it. Scoped, so an abort releases it.
+          yield* Effect.acquireRelease(
+            handle.connection.foregroundBegin,
+            () => handle.connection.foregroundEnd,
+          );
           const absolute = join(repoRoot, path);
           // A file deleted between the caret read and this pull can't be opened; degrade to empty.
           const text = yield* Effect.promise(() =>
@@ -213,16 +271,23 @@ export const IntelLive = Layer.effect(
           // Opening the doc triggers the project load; querying before it finishes makes tsserver
           // Resolve an import to its local binding (the F12-stops-at-import bug), so wait for the
           // Load. The wait is interruptible (the caller aborts on the next keystroke/navigation) and
-          // Resolves on connection close; the 60s backstop covers a server that never signals load.
+          // Resolves on connection close; a load that outlives even the generous backstop fails
+          // Honestly rather than proceeding into a half-built index and answering wrong.
           yield* handle.connection.whenProjectLoaded.pipe(
-            Effect.timeout("60 seconds"),
-            Effect.ignore,
+            Effect.timeout(PROJECT_LOAD_BACKSTOP),
+            Effect.catchTag("TimeoutError", () =>
+              Effect.fail(
+                new IntelRequestError({ message: "project load timed out", method: capability }),
+              ),
+            ),
           );
-          // One request with a 5s timeout, mapping transport failures to `IntelRequestError`. Shared
+          // One request per weight tier, mapping transport failures to `IntelRequestError`. Shared
           // Across a pull's single request and a hierarchy's prepare + resolve so they can't drift.
           const send = (method: string, params: Record<string, unknown>) =>
             handle.connection.request(method, params).pipe(
-              Effect.timeout("5 seconds"),
+              Effect.timeout(
+                HEAVY_METHODS.has(method) ? HEAVY_REQUEST_TIMEOUT : FAST_REQUEST_TIMEOUT,
+              ),
               Effect.catchTag("TimeoutError", () =>
                 Effect.fail(new IntelRequestError({ message: "timed out", method })),
               ),
@@ -438,18 +503,18 @@ export const IntelLive = Layer.effect(
             // Hover-only server (the JSON server has no definition/references) would otherwise never
             // Warm, so its first hover paid a cold spawn plus the one-time schema fetch. The
             // Selection order is unchanged for servers that provide both.
-            const handle = yield* firstCapableServer(repoRoot, path, "hover");
-            if (handle === undefined) {
-              // No intel server yet: it may still be installing on first launch, or a transient
-              // Acquire miss, so retry with backoff rather than parking immediately. But a genuinely
-              // Absent server (offline, `--no-lsp-download`, unsupported language) is never coming,
-              // So give up after a bounded window (~90s) and park instead of spinning all session.
-              if (attempt >= 5) {
-                return yield* Effect.never;
-              }
-              yield* Effect.sleep(3000 * 2 ** attempt);
-              return yield* hold(attempt + 1);
+            const selection = yield* firstCapableServer(repoRoot, path, "hover");
+            if (selection.kind !== "handle") {
+              // No intel server yet: still installing on first launch, a transient acquire miss, or
+              // A server that will appear later (the install finishing, a network blip passing).
+              // Retry forever at a capped backoff: the old park-after-~90s left a server that came
+              // Up a minute later cold for the whole session, so every pull re-paid the spawn and
+              // Project load the hold exists to keep warm. A genuinely absent server costs one
+              // Cheap probe per minute (the gate snapshot is memoized; discovery is a stat).
+              yield* Effect.sleep(Math.min(3000 * 2 ** attempt, 60_000));
+              return yield* hold(Math.min(attempt + 1, 10));
             }
+            const { handle } = selection;
             const absolute = join(repoRoot, path);
             const text = yield* Effect.promise(() =>
               Bun.file(absolute)
@@ -474,7 +539,7 @@ export const IntelLive = Layer.effect(
                     () => handle.connection.closeDocument(uri),
                   );
                   yield* handle.connection.whenProjectLoaded.pipe(
-                    Effect.timeout("60 seconds"),
+                    Effect.timeout(PROJECT_LOAD_BACKSTOP),
                     Effect.ignore,
                   );
                 }),

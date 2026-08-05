@@ -971,8 +971,10 @@ test("a request that outlives its cap fails as timed out", async () => {
         );
         // The request is in flight (real file IO is behind us), so the clock can now advance.
         yield* Deferred.await(requested);
-        yield* adjust("31 seconds");
-        return yield* Fiber.join(fiber);
+        yield* adjust("29 seconds");
+        const beforeCap = fiber.pollUnsafe() === undefined;
+        yield* adjust("2 seconds");
+        return { beforeCap, message: yield* Fiber.join(fiber) };
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
@@ -982,6 +984,86 @@ test("a request that outlives its cap fails as timed out", async () => {
         ),
       ),
     );
-    expect(message).toBe("timed out");
+    // Still waiting just short of the cap, so the assertion pins the 30s tier rather than merely
+    // "times out eventually" (which a shorter flat cap would satisfy too).
+    expect(message.beforeCap).toBe(true);
+    expect(message.message).toBe("timed out");
+  });
+});
+
+test("a project-wide request gets the heavy tier, not the caret cap", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const requested = await Effect.runPromise(Deferred.make<void>());
+    // References walks the whole project, so it must outlive the fast tier a hover answers in.
+    const ts = handle(
+      ["references"],
+      () => Deferred.succeed(requested, undefined).pipe(Effect.andThen(Effect.never)),
+      [],
+    );
+    const outcome = await Effect.runPromise(
+      Effect.gen(function* heavy() {
+        const fiber = yield* Effect.forkChild(
+          Intel.pipe(
+            Effect.flatMap((intel) => intel.references(dir, "src/a.ts", { character: 0, line: 0 })),
+            Effect.map(() => "unexpected success"),
+            Effect.catchTag("IntelRequestError", (error) => Effect.succeed(error.message)),
+          ),
+        );
+        yield* Deferred.await(requested);
+        // Past the fast tier: a references pull on the caret cap would already have failed here.
+        yield* adjust("31 seconds");
+        const pastFastTier = fiber.pollUnsafe() === undefined;
+        yield* adjust("90 seconds");
+        return { message: yield* Fiber.join(fiber), pastFastTier };
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))),
+            testClockLayer(),
+          ),
+        ),
+      ),
+    );
+    expect(outcome.pastFastTier).toBe(true);
+    expect(outcome.message).toBe("timed out");
+  });
+});
+
+test("the warm hold keeps retrying, so a server that appears late still warms", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    let attempts = 0;
+    // Fails more times than the old bounded window allowed before it parked forever, so a revert
+    // To that park leaves the server cold and this test fails.
+    const servers = Layer.succeed(LanguageServers)({
+      acquire: (language) => {
+        attempts += 1;
+        return attempts <= 6
+          ? Effect.fail(new ServerInstalling({ language }))
+          : Effect.succeed(handle(["hover"], () => Effect.succeed(null), log));
+      },
+      loadingServer: () => Effect.succeed(undefined),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
+    });
+    const opened = await Effect.runPromise(
+      Effect.gen(function* warm() {
+        const fiber = yield* Effect.forkChild(
+          Effect.scoped(Intel.pipe(Effect.flatMap((intel) => intel.warmHold(dir, "src/a.ts")))),
+        );
+        // Walk the capped backoff (3s, 6s, 12s, 24s, 48s, then the 60s ceiling) until the hold
+        // Has opened its seed document, yielding so the fiber runs between advances.
+        for (let tick = 0; tick < 40 && log.length === 0; tick += 1) {
+          yield* adjust("10 seconds");
+          yield* Effect.yieldNow;
+        }
+        yield* Fiber.interrupt(fiber);
+        return log.map((entry) => entry.method);
+      }).pipe(
+        Effect.provide(Layer.mergeAll(IntelLive.pipe(Layer.provide(servers)), testClockLayer())),
+      ),
+    );
+    expect(attempts).toBeGreaterThan(6);
+    expect(opened).toContain("textDocument/didOpen");
   });
 });

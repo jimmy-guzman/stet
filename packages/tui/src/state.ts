@@ -3183,7 +3183,7 @@ function createState() {
   // Missing or binary file yields no lines, so its rows show no preview. Full reads, since a
   // Reference can point past the file service's default line cap, which is why the caller windows
   // The paths to the visible slice instead of handing over every referenced file at once.
-  function readReferenceLines(root: string, paths: readonly string[]) {
+  function readReferenceLines(root: string, paths: readonly string[], signal: AbortSignal) {
     return runtime.runPromise(
       File.use((file) =>
         Effect.all(
@@ -3200,6 +3200,7 @@ function createState() {
           { concurrency: 4 },
         ),
       ),
+      { signal },
     );
   }
 
@@ -3210,10 +3211,20 @@ function createState() {
   // Place (the plain -> highlighted upgrade precedent), so scrolling fills previews with no
   // Layout shift; the token retires an open's in-flight reads the moment a new open supersedes it.
   let referenceLinesCache = new Map<string, string[]>();
-  let referencePreviewToken = 0;
-  onReset(() => {
-    referencePreviewToken += 1;
-  });
+  // Paths whose read is in flight. Scrolling re-runs the effect per keypress (the cursor-follow
+  // Writes `referencesScrollTop`), and a path only enters the cache once its read resolves, so
+  // Without this every one of those runs re-fires a full-file read for the same pending files.
+  let referenceLinesPending = new Set<string>();
+  // Retires an open's reads: the results are worthless once the overlay closed or a new pull
+  // Superseded it, and the fibers should stop rather than run to completion unobserved.
+  let referencePreviewController: AbortController | undefined;
+  function retireReferencePreviews() {
+    referencePreviewController?.abort();
+    referencePreviewController = undefined;
+    referenceLinesCache = new Map();
+    referenceLinesPending = new Set();
+  }
+  onReset(retireReferencePreviews);
   createEffect(() => {
     if (!referencesOpen()) {
       return;
@@ -3225,7 +3236,11 @@ function createState() {
     const missing = [
       ...new Set(
         slice.flatMap((row) =>
-          row.kind === "match" && !referenceLinesCache.has(row.match.path) ? [row.match.path] : [],
+          row.kind === "match" &&
+          !referenceLinesCache.has(row.match.path) &&
+          !referenceLinesPending.has(row.match.path)
+            ? [row.match.path]
+            : [],
         ),
       ),
     ];
@@ -3236,31 +3251,51 @@ function createState() {
     if (root === undefined) {
       return;
     }
-    const token = referencePreviewToken;
+    referencePreviewController ??= new AbortController();
+    const controller = referencePreviewController;
     const cache = referenceLinesCache;
-    readReferenceLines(root, missing)
+    const pending = referenceLinesPending;
+    for (const path of missing) {
+      pending.add(path);
+    }
+    readReferenceLines(root, missing, controller.signal)
       .then((entries) => {
-        if (token !== referencePreviewToken || !referencesOpen()) {
+        if (controller !== referencePreviewController) {
           return;
         }
         for (const [path, lines] of entries) {
           cache.set(path, lines);
         }
-        // Fill blanks only, never overwrite: a row that already carries its line keeps it, so a
-        // Late read of an unreadable file can't wipe text a caller supplied.
-        setReferencesResults((current) =>
-          current.map((result) =>
-            result.text !== ""
-              ? result
-              : { ...result, text: previewLine(cache.get(result.path), result.line) },
-          ),
-        );
+        // Keep row identity for every row whose text does not change: a resolve that fills
+        // Nothing visible must not mint a new results array, or the rows memo, the cursor-row
+        // Map, and the overlay's highlight cache all rebuild over the whole result set.
+        setReferencesResults((current) => {
+          let changed = false;
+          const next = current.map((result) => {
+            if (result.text !== "") {
+              return result;
+            }
+            const text = previewLine(cache.get(result.path), result.line);
+            if (text === "") {
+              return result;
+            }
+            changed = true;
+            return { ...result, text };
+          });
+          return changed ? next : current;
+        });
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        for (const path of missing) {
+          pending.delete(path);
+        }
+      });
   });
 
   function resetReferencesState() {
     hierarchyAnchor = undefined;
+    retireReferencePreviews();
     setReferencesOpen(false);
     setReferencesResults([]);
     setReferencesIndex(0);
@@ -3296,8 +3331,7 @@ function createState() {
   ) {
     referencesRoot = repoRoot();
     hierarchyAnchor = anchor;
-    referenceLinesCache = new Map();
-    referencePreviewToken += 1;
+    retireReferencePreviews();
     batch(() => {
       setReferencesLabel(label);
       setReferencesResults(results);
@@ -3771,6 +3805,10 @@ function createState() {
         ),
         { signal: controller.signal },
       );
+      // Retire the probe the moment the server answers, not in the `finally`: the syntax
+      // Highlight below is awaited, and a probe firing inside that window would relabel a card
+      // Whose answer already arrived as still waiting on the project load.
+      releaseNotice();
       if (controller.signal.aborted || repoRoot() !== requestRoot) {
         return;
       }

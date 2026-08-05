@@ -831,3 +831,89 @@ test("the server pool preserves configured names containing spaces", async () =>
     restoreServers(snapshot);
   }
 });
+
+test("loadingServer names a live server mid-load without acquiring one", async () => {
+  const snapshot = snapshotServers();
+  const refreshes = await Effect.runPromise(Queue.unbounded<string>());
+  const starts = await Effect.runPromise(Queue.unbounded<string>());
+  const completions = await Effect.runPromise(Queue.unbounded<string>());
+  let spawns = 0;
+  let loading = true;
+  const connection: LspConnection = {
+    changeDocument: () => Effect.void,
+    clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
+    closed: Effect.succeed(false),
+    endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
+    notify: () => Effect.void,
+    openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => loading),
+    published: Effect.succeed(new Map<string, unknown[]>()),
+    pullDiagnostics: () =>
+      Effect.fail(
+        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+      ),
+    request: (method) => Effect.succeed(method === "initialize" ? { capabilities: {} } : null),
+    watchedBases: Stream.empty,
+    watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
+    whenProjectLoaded: Effect.void,
+  };
+  const lspProcess = Layer.succeed(LspProcess)({
+    refreshes,
+    start: () =>
+      Effect.sync(() => {
+        spawns += 1;
+        return connection;
+      }),
+  });
+  const provisioner = Layer.succeed(Provisioner)({
+    completions,
+    ensure: () => Effect.succeed({ kind: "disabled" }),
+    starts,
+  });
+  const layer = LanguageServersLive.pipe(Layer.provide(Layer.mergeAll(lspProcess, provisioner)));
+
+  try {
+    registerServers(resolveServers({ typescript: { command: ["/bin/ls", "--stdio"] } }).servers);
+
+    const seen = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* peek() {
+          const servers = yield* LanguageServers;
+          // Nothing acquired yet: the peek must answer without bringing a server up, which is
+          // What lets a status probe run on every slow pull without pinning a process alive.
+          const beforeAcquire = yield* servers.loadingServer("src/a.ts", "/repo");
+          const spawnsBeforeAcquire = spawns;
+          yield* servers.acquire("typescript", "/repo");
+          const whileLoading = yield* servers.loadingServer("src/a.ts", "/repo");
+          loading = false;
+          const afterLoad = yield* servers.loadingServer("src/a.ts", "/repo");
+          // A file no live server claims stays silent even while that server is mid-load.
+          loading = true;
+          const otherLanguage = yield* servers.loadingServer("main.go", "/repo");
+          return {
+            afterLoad,
+            beforeAcquire,
+            otherLanguage,
+            spawnsBeforeAcquire,
+            spawnsTotal: spawns,
+            whileLoading,
+          };
+        }),
+      ).pipe(Effect.provide(layer)),
+    );
+
+    expect(seen.beforeAcquire).toBeUndefined();
+    expect(seen.spawnsBeforeAcquire).toBe(0);
+    expect(seen.whileLoading).toBe("typescript");
+    expect(seen.afterLoad).toBeUndefined();
+    expect(seen.otherLanguage).toBeUndefined();
+    // One spawn for the explicit acquire; every peek stayed a read over the live mirror.
+    expect(seen.spawnsTotal).toBe(1);
+  } finally {
+    restoreServers(snapshot);
+  }
+});

@@ -986,10 +986,14 @@ test("a push settle that caps out mid-load waits for the load and settles again"
         yield* Deferred.await(opened);
         // The settle runs out its full cap with nothing published (the load is still going).
         yield* adjust("11 seconds");
-        // The load completes and the diagnostics it was holding back land.
-        yield* Effect.sync(() => void published.set(uri, [anError]));
+        // The load completes, still with nothing published, and the grace window it would have
+        // Ended on elapses. Publishing only *after* this is what makes the retry load-bearing: a
+        // Run that waits for the load but never settles again reads the bucket here and finds it
+        // Empty, ending with the file pending.
         yield* Deferred.succeed(load, undefined);
-        // The re-settle finds the publish; the grace elapses on the same virtual clock.
+        yield* adjust("300 millis");
+        // The diagnostics the load was holding back finally land, so only a re-poll sees them.
+        yield* Effect.sync(() => void published.set(uri, [anError]));
         yield* adjust("1 second");
         return [...(yield* Fiber.join(run))];
       }).pipe(
@@ -1010,10 +1014,13 @@ test("a push settle that caps out mid-load waits for the load and settles again"
   });
 });
 
-test("keeper sends pause while a foreground pull is in flight", async () => {
+test("keeper sends wait on the foreground gate before each document", async () => {
   await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
     const gate = await Effect.runPromise(Deferred.make<void>());
-    const opens: string[] = [];
+    // Order, not timing: the send must be preceded by a gate check. Asserting "nothing sent yet"
+    // After a real sleep only catches the regression when the run happens to reach the send
+    // Inside that window, so a loaded machine would let a missing gate check pass unnoticed.
+    const events: string[] = [];
     const published = new Map<string, unknown[]>();
     const connection: LspConnection = {
       changeDocument: () => Effect.void,
@@ -1026,7 +1033,7 @@ test("keeper sends pause while a foreground pull is in flight", async () => {
       notify: () => Effect.void,
       openDocument: (textDocument) =>
         Effect.sync(() => {
-          opens.push(textDocument.uri);
+          events.push("open");
           published.set(textDocument.uri, []);
         }),
       projectLoadPending: Effect.sync(() => false),
@@ -1038,7 +1045,9 @@ test("keeper sends pause while a foreground pull is in flight", async () => {
       request: () => Effect.succeed(null),
       watchedBases: Stream.empty,
       watchedFilesChanged: () => Effect.void,
-      whenForegroundIdle: Deferred.await(gate),
+      whenForegroundIdle: Effect.sync(() => void events.push("gate")).pipe(
+        Effect.andThen(Deferred.await(gate)),
+      ),
       whenProjectLoaded: Effect.void,
     };
     const run = runDiagnostics(
@@ -1046,11 +1055,8 @@ test("keeper sends pause while a foreground pull is in flight", async () => {
       [changed("src/a.ts")],
       fakeServers({ typescript: { capabilities: new Set(), connection } }),
     );
-    // The pull is "in flight" (the gate is closed), so the keeper must not have sent the open yet.
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(opens).toEqual([]);
     await Effect.runPromise(Deferred.succeed(gate, undefined));
     await run;
-    expect(opens).toHaveLength(1);
+    expect(events).toEqual(["gate", "open"]);
   });
 });

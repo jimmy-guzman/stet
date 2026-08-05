@@ -116,7 +116,9 @@ export function ReferencesOverlay() {
       </box>
       <Show when={state.referencesStatus() === "loading"}>
         <box height={1} paddingLeft={1} paddingRight={1}>
-          <text fg={theme.colors.text.muted}>{`finding ${state.referencesLabel()}…`}</text>
+          <text fg={theme.colors.text.muted}>
+            {state.referencesNotice() ?? `finding ${state.referencesLabel()}…`}
+          </text>
         </box>
       </Show>
       <Show when={state.referencesStatus() === "empty"}>
@@ -126,9 +128,9 @@ export function ReferencesOverlay() {
       </Show>
       <Show when={state.referencesStatus() === "error"}>
         <box height={1} paddingLeft={1} paddingRight={1}>
-          <text
-            fg={levelColor(theme.colors, "error")}
-          >{`${levelGlyph("error")} language server unreachable`}</text>
+          <text fg={levelColor(theme.colors, "error")}>
+            {`${levelGlyph("error")} ${state.referencesNotice() ?? "language server unreachable"}`}
+          </text>
         </box>
       </Show>
       <Show when={state.referencesStatus() === "ready"}>

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { adjust, layer as testClockLayer } from "effect/testing/TestClock";
 
 import type { CheckerFileState } from "@/diagnostics/checker";
 import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
@@ -42,8 +43,11 @@ function pushingHandle(items: unknown[]): ServerHandle {
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: (textDocument) => Effect.sync(() => void published.set(textDocument.uri, items)),
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => published),
     pullDiagnostics: () =>
       Effect.fail(
@@ -52,6 +56,7 @@ function pushingHandle(items: unknown[]): ServerHandle {
     request: () => Effect.succeed(null),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set(), connection };
@@ -66,8 +71,11 @@ function deadHandle(): ServerHandle {
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => true),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -76,6 +84,7 @@ function deadHandle(): ServerHandle {
     request: () => Effect.succeed(null),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set(), connection };
@@ -117,6 +126,7 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         ? Effect.fail(new ServerUnavailable({ language, message: "not found" }))
         : Effect.succeed(handle);
     },
+    loadingServer: () => Effect.succeed(undefined),
     notifyWatchedFiles: () => Effect.void,
     restart: () => Effect.void,
   });
@@ -169,12 +179,15 @@ test("an interrupted run leaves the document open and the next run reconciles it
       closeDocument: (uri) => Effect.sync(() => void closes.push(uri)),
       closed: Effect.sync(() => false),
       endPublishWait: Effect.void,
+      foregroundBegin: Effect.void,
+      foregroundEnd: Effect.void,
       notify: () => Effect.void,
       openDocument: (textDocument) =>
         Effect.sync(() => void opens.push(textDocument.uri)).pipe(
           Effect.andThen(Deferred.succeed(opened, undefined)),
           Effect.asVoid,
         ),
+      projectLoadPending: Effect.sync(() => false),
       published: Effect.sync(() => published),
       pullDiagnostics: () =>
         Effect.fail(
@@ -183,6 +196,7 @@ test("an interrupted run leaves the document open and the next run reconciles it
       request: () => Effect.succeed(null),
       watchedBases: Stream.empty,
       watchedFilesChanged: () => Effect.void,
+      whenForegroundIdle: Effect.void,
       whenProjectLoaded: Effect.void,
     };
     const handle: ServerHandle = { capabilities: new Set(), connection };
@@ -284,6 +298,7 @@ test("holds a file's prior badge while a slower server is still running", async 
           ? Effect.succeed(handle).pipe(Effect.delay("30 millis"))
           : Effect.succeed(handle);
       },
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -379,6 +394,7 @@ test("leaves files pending with a message while the server is downloading", asyn
   await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
     const installing = Layer.succeed(LanguageServers)({
       acquire: () => Effect.fail(new ServerInstalling({ language: "typescript" })),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -399,6 +415,7 @@ test("degrades to unavailable when the server cannot be acquired", async () => {
             message: "not found",
           }),
         ),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -427,6 +444,8 @@ function pullingHandle(options: {
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: (textDocument) =>
       Effect.sync(() => {
@@ -434,6 +453,7 @@ function pullingHandle(options: {
           published.set(textDocument.uri, options.pushed);
         }
       }),
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => published),
     pullDiagnostics: (uri) =>
       options.rejects === undefined
@@ -447,6 +467,7 @@ function pullingHandle(options: {
     request: () => Effect.succeed(null),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set<Capability>(["pullDiagnostics"]), connection };
@@ -518,8 +539,11 @@ test("a related report's findings survive the named file's own pull failing", as
       closeDocument: () => Effect.void,
       closed: Effect.sync(() => false),
       endPublishWait: Effect.void,
+      foregroundBegin: Effect.void,
+      foregroundEnd: Effect.void,
       notify: () => Effect.void,
       openDocument: () => Effect.void,
+      projectLoadPending: Effect.sync(() => false),
       published: Effect.sync(() => new Map<string, unknown[]>()),
       pullDiagnostics: (uri) =>
         uri === configUri
@@ -530,6 +554,7 @@ test("a related report's findings survive the named file's own pull failing", as
       request: () => Effect.succeed(null),
       watchedBases: Stream.empty,
       watchedFilesChanged: () => Effect.void,
+      whenForegroundIdle: Effect.void,
       whenProjectLoaded: Effect.void,
     };
     const handle: ServerHandle = {
@@ -566,13 +591,17 @@ function keeperProbe() {
     closeDocument: (uri) => Effect.sync(() => void closes.push(uri)),
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => published),
     pullDiagnostics: () => Effect.succeed({ items: [], related: new Map<string, unknown[]>() }),
     request: () => Effect.succeed(null),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
   const handle: ServerHandle = {
@@ -727,6 +756,7 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
             ? Effect.fail(new ServerUnavailable({ language: "yaml", message: "gone" }))
             : Effect.succeed(handle);
         }),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -788,6 +818,7 @@ test("concurrent runs share one keeper instead of racing two into existence", as
         Effect.sync(() => {
           acquires += 1;
         }).pipe(Effect.andThen(Effect.sleep("50 millis")), Effect.as(probe.handle)),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -823,12 +854,15 @@ test("resetServers drops the keepers, so the next run reopens every document", a
       closeDocument: () => Effect.void,
       closed: Effect.sync(() => false),
       endPublishWait: Effect.void,
+      foregroundBegin: Effect.void,
+      foregroundEnd: Effect.void,
       notify: () => Effect.void,
       openDocument: (textDocument) =>
         Effect.sync(() => {
           opens.push(textDocument.uri);
           published.set(textDocument.uri, []);
         }),
+      projectLoadPending: Effect.sync(() => false),
       published: Effect.sync(() => published),
       pullDiagnostics: () =>
         Effect.fail(
@@ -837,6 +871,7 @@ test("resetServers drops the keepers, so the next run reopens every document", a
       request: () => Effect.succeed(null),
       watchedBases: Stream.empty,
       watchedFilesChanged: () => Effect.void,
+      whenForegroundIdle: Effect.void,
       whenProjectLoaded: Effect.void,
     };
     const servers = fakeServers({ typescript: { capabilities: new Set(), connection } });
@@ -861,5 +896,167 @@ test("resetServers drops the keepers, so the next run reopens every document", a
     );
 
     expect(opens).toHaveLength(2);
+  });
+});
+
+test("a pull-capable server mid-load is waited out before any pull is sent", async () => {
+  await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
+    const events: string[] = [];
+    const connection: LspConnection = {
+      changeDocument: () => Effect.void,
+      clearPublished: () => Effect.void,
+      closeDocument: () => Effect.void,
+      closed: Effect.sync(() => false),
+      endPublishWait: Effect.void,
+      foregroundBegin: Effect.void,
+      foregroundEnd: Effect.void,
+      notify: () => Effect.void,
+      openDocument: () => Effect.sync(() => void events.push("open")),
+      projectLoadPending: Effect.sync(() => true),
+      published: Effect.sync(() => new Map<string, unknown[]>()),
+      pullDiagnostics: () =>
+        Effect.sync(() => void events.push("pull")).pipe(
+          Effect.as({ items: [], related: new Map<string, unknown[]>() }),
+        ),
+      request: () => Effect.succeed(null),
+      watchedBases: Stream.empty,
+      watchedFilesChanged: () => Effect.void,
+      whenForegroundIdle: Effect.void,
+      whenProjectLoaded: Effect.sync(() => void events.push("project-load")),
+    };
+    const state = await runDiagnostics(
+      dir,
+      [changed("src/a.ts")],
+      fakeServers({
+        typescript: { capabilities: new Set(["pullDiagnostics"]), connection },
+      }),
+    );
+    // The load is waited out between the send and the pull: a pull into a still-loading project
+    // Only burns its timeout.
+    expect(events).toEqual(["open", "project-load", "pull"]);
+    expect(state.get("src/a.ts")?.status).toBe("clean");
+  });
+});
+
+test("a push settle that caps out mid-load waits for the load and settles again", async () => {
+  await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
+    const uri = pathToFileURL(join(dir, "src/a.ts")).href;
+    const published = new Map<string, unknown[]>();
+    const load = await Effect.runPromise(Deferred.make<void>());
+    const opened = await Effect.runPromise(Deferred.make<void>());
+    const connection: LspConnection = {
+      changeDocument: () => Effect.void,
+      clearPublished: (uris) =>
+        Effect.sync(() => {
+          for (const cleared of uris) {
+            published.delete(cleared);
+          }
+        }),
+      closeDocument: () => Effect.void,
+      closed: Effect.sync(() => false),
+      endPublishWait: Effect.void,
+      foregroundBegin: Effect.void,
+      foregroundEnd: Effect.void,
+      notify: () => Effect.void,
+      // The server is mid-load: opening a document publishes nothing, so the settle caps out.
+      openDocument: () => Deferred.succeed(opened, undefined).pipe(Effect.asVoid),
+      projectLoadPending: Deferred.isDone(load).pipe(Effect.map((done) => !done)),
+      published: Effect.sync(() => published),
+      pullDiagnostics: () =>
+        Effect.fail(
+          new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+        ),
+      request: () => Effect.succeed(null),
+      watchedBases: Stream.empty,
+      watchedFilesChanged: () => Effect.void,
+      whenForegroundIdle: Effect.void,
+      whenProjectLoaded: Deferred.await(load),
+    };
+    const updates = await Effect.runPromise(
+      Effect.gen(function* program() {
+        const run = yield* Effect.forkChild(
+          Diagnostics.pipe(
+            Effect.flatMap((diagnostics) =>
+              Stream.runCollect(diagnostics.run(dir, [changed("src/a.ts")])),
+            ),
+          ),
+        );
+        // The document send is the last real-IO step before the settle's first virtual sleep;
+        // Advancing the clock any earlier would outrun the run fiber and strand it.
+        yield* Deferred.await(opened);
+        // The settle runs out its full cap with nothing published (the load is still going).
+        yield* adjust("11 seconds");
+        // The load completes, still with nothing published, and the grace window it would have
+        // Ended on elapses. Publishing only *after* this is what makes the retry load-bearing: a
+        // Run that waits for the load but never settles again reads the bucket here and finds it
+        // Empty, ending with the file pending.
+        yield* Deferred.succeed(load, undefined);
+        yield* adjust("300 millis");
+        // The diagnostics the load was holding back finally land, so only a re-poll sees them.
+        yield* Effect.sync(() => void published.set(uri, [anError]));
+        yield* adjust("1 second");
+        return [...(yield* Fiber.join(run))];
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            DiagnosticsLive.pipe(
+              Layer.provide(fakeServers({ typescript: { capabilities: new Set(), connection } })),
+            ),
+            testClockLayer(),
+          ),
+        ),
+      ),
+    );
+    const last = updates.at(-1)?.state.get("src/a.ts");
+    // Without the second settle the run ends here with the file stranded at pending, and the late
+    // Publish then provokes a fresh full run for the whole duration of the load.
+    expect(last?.status).toBe("findings");
+  });
+});
+
+test("keeper sends wait on the foreground gate before each document", async () => {
+  await withRepo({ "src/a.ts": "const a = 1\n" }, async (dir) => {
+    const gate = await Effect.runPromise(Deferred.make<void>());
+    // Order, not timing: the send must be preceded by a gate check. Asserting "nothing sent yet"
+    // After a real sleep only catches the regression when the run happens to reach the send
+    // Inside that window, so a loaded machine would let a missing gate check pass unnoticed.
+    const events: string[] = [];
+    const published = new Map<string, unknown[]>();
+    const connection: LspConnection = {
+      changeDocument: () => Effect.void,
+      clearPublished: () => Effect.void,
+      closeDocument: () => Effect.void,
+      closed: Effect.sync(() => false),
+      endPublishWait: Effect.void,
+      foregroundBegin: Effect.void,
+      foregroundEnd: Effect.void,
+      notify: () => Effect.void,
+      openDocument: (textDocument) =>
+        Effect.sync(() => {
+          events.push("open");
+          published.set(textDocument.uri, []);
+        }),
+      projectLoadPending: Effect.sync(() => false),
+      published: Effect.sync(() => published),
+      pullDiagnostics: () =>
+        Effect.fail(
+          new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+        ),
+      request: () => Effect.succeed(null),
+      watchedBases: Stream.empty,
+      watchedFilesChanged: () => Effect.void,
+      whenForegroundIdle: Effect.sync(() => void events.push("gate")).pipe(
+        Effect.andThen(Deferred.await(gate)),
+      ),
+      whenProjectLoaded: Effect.void,
+    };
+    const run = runDiagnostics(
+      dir,
+      [changed("src/a.ts")],
+      fakeServers({ typescript: { capabilities: new Set(), connection } }),
+    );
+    await Effect.runPromise(Deferred.succeed(gate, undefined));
+    await run;
+    expect(events).toEqual(["gate", "open"]);
   });
 });

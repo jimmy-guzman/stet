@@ -5,6 +5,12 @@ import { join } from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
+import {
+  registerServers,
+  resolveServers,
+  restoreServers,
+  snapshotServers,
+} from "@/diagnostics/servers";
 import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
@@ -87,6 +93,74 @@ describe("references overlay", () => {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
       rmSync(otherRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("a failed pull names the failure instead of the generic unreachable copy", async () => {
+    const snapshot = snapshotServers();
+    const repoRoot = createFixtureRepo("stet-references-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": "const x = 1\n",
+    });
+    writeFileSync(join(repoRoot, "src/a.ts"), "const x = 1\nconst y = x\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      // A references-capable server stet cannot bring up: the acquire fails, and the point is
+      // That the overlay repeats what actually went wrong instead of the old fixed copy, which
+      // Claimed an unreachable server for every failure and read as "intel is broken".
+      const resolved = resolveServers({
+        typescript: { capabilities: ["references"], command: [join(repoRoot, "no-such-server")] },
+      });
+      expect(resolved.issues).toEqual([]);
+      registerServers(resolved.servers);
+      await settleUntil("tree loaded", (frame) => frame.includes("a.ts"));
+
+      void state.findReferences();
+      const failed = await settleUntil("failure named in the overlay", (frame) =>
+        frame.includes("no language server for typescript"),
+      );
+      expect(failed).not.toContain("language server unreachable");
+    } finally {
+      renderer.destroy();
+      restoreServers(snapshot);
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("previews fill in place for the visible window after the overlay opens", async () => {
+    const repoRoot = createFixtureRepo("stet-references-", {
+      "notes.txt": "alpha beta\n",
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+    });
+    writeFileSync(join(repoRoot, "notes.txt"), "alpha beta\ngamma delta\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
+
+      // The pull now opens the overlay with blank previews; the windowed fill owns the text. The
+      // Target is a file the diff view is not showing, so its line can only come from the fill.
+      state.openReferences("references", [{ column: 1, line: 1, path: "package.json", text: "" }]);
+      await settleUntil("overlay open", (frame) => frame.includes("↑↓ navigate"));
+      await settleUntil("preview filled from disk", (frame) => frame.includes('{"scripts"'));
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 

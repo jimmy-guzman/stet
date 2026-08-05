@@ -99,7 +99,12 @@ import {
 } from "./git/worktree";
 import type { Worktree, WorktreeSummary } from "./git/worktree";
 import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./intel/protocol";
-import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from "./intel/references";
+import {
+  attachReferencePreviews,
+  buildReferenceRows,
+  byReferenceOrder,
+  previewLine,
+} from "./intel/references";
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import type { IntelRequestError } from "./intel/service";
@@ -277,6 +282,10 @@ const DIFF_MAX_LINES = 1600;
 // Bounds the search result list so a broad query in a large repo can't flood the
 // Pane; hitting the cap sets `searchTruncated`, surfaced as a trailing "+".
 const SEARCH_RESULT_CAP = 500;
+
+// How long an intel pull runs before its status names a pending project load as the reason: short
+// Enough that a genuinely slow wait is explained early, long enough that a warm pull never flashes.
+const LOAD_NOTICE_DELAY_MS = 1500;
 
 // Lines of surrounding context shown on each side of a search match.
 const SEARCH_CONTEXT_LINES = 2;
@@ -617,6 +626,10 @@ function createState() {
   const [referencesLabel, setReferencesLabel] = tracked<
     "references" | "definitions" | "implementations" | "incoming calls" | "outgoing calls"
   >("references");
+  // Detail line under the overlay's loading/error status: the load-wait explanation while loading
+  // ("waiting for typescript to load the project…"), the pull's own failure text on error.
+  // `undefined` keeps each status's default copy.
+  const [referencesNotice, setReferencesNotice] = tracked<string | undefined>(undefined);
   const [symbolsOpen, setSymbolsOpen] = tracked(false);
   const [symbolsStatus, setSymbolsStatus] = tracked<
     "loading" | "ready" | "empty" | "error" | "unsupported"
@@ -624,6 +637,8 @@ function createState() {
   const [symbolsResults, setSymbolsResults] = tracked<NormalizedSymbol[]>([]);
   const [symbolsIndex, setSymbolsIndex] = tracked(0);
   const [symbolsScrollTop, setSymbolsScrollTop] = tracked(0);
+  // Same shape as `referencesNotice`, for the symbols overlay's loading/error rows.
+  const [symbolsNotice, setSymbolsNotice] = tracked<string | undefined>(undefined);
   const [findOpen, setFindOpen] = tracked(false);
   const [findActive, setFindActive] = tracked(false);
   const [findQuery, setFindQuery] = tracked("");
@@ -935,13 +950,18 @@ function createState() {
   const referencesViewport = createMemo(() =>
     Math.min(REFERENCES_MAX_ROWS, Math.max(1, referencesRows().length)),
   );
-  const referencesCursorRow = createMemo(() => {
-    const target = referencesIndex();
-    const row = referencesRows().findIndex(
-      (entry) => entry.kind === "match" && entry.index === target,
-    );
-    return row === -1 ? 0 : row;
+  // One pass per rows change instead of a linear scan per arrow keypress: a hot-symbol references
+  // Reply lists thousands of rows, and the scan ran on every cursor move through them.
+  const referencesRowByIndex = createMemo(() => {
+    const byIndex = new Map<number, number>();
+    for (const [row, entry] of referencesRows().entries()) {
+      if (entry.kind === "match") {
+        byIndex.set(entry.index, row);
+      }
+    }
+    return byIndex;
   });
+  const referencesCursorRow = createMemo(() => referencesRowByIndex().get(referencesIndex()) ?? 0);
   followListWindow({
     active: referencesOpen,
     cursor: referencesCursorRow,
@@ -2976,6 +2996,35 @@ function createState() {
     );
   }
 
+  // "timed out" comes back bare so each surface names its own action; every other intel failure is
+  // Already a full sentence naming the server and phase (installing, failed to start, project load
+  // Timed out), which the old fixed "language server unreachable" copy actively contradicted.
+  function intelFailureCopy(action: string, message: string) {
+    return message === "timed out" ? `${action} timed out` : message;
+  }
+
+  // After a pull has been in flight briefly, name the real reason when it is the server still
+  // Loading its project: without this the wait reads as a dead keypress or a slow request, and the
+  // Honest generous request caps only make that window longer. A peek, never an acquire, so the
+  // Probe can't spawn a server or hold one alive; the returned cancel runs in the pull's finally.
+  function armLoadNotice(root: string, path: string, apply: (notice: string) => void) {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      runtime
+        .runPromise(LanguageServers.use((pool) => pool.loadingServer(path, root)))
+        .then((name) => {
+          if (!cancelled && name !== undefined) {
+            apply(`waiting for ${name} to load the project…`);
+          }
+        })
+        .catch(() => undefined);
+    }, LOAD_NOTICE_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }
+
   // The jump-or-list pull shared by go-to-definition and find-implementations: both resolve the
   // Caret to locations, then a single in-repo target jumps while several open the references
   // Overlay to pick from. They differ only in the LSP method, the in-flight status, the overlay
@@ -2992,11 +3041,30 @@ function createState() {
     pull: () => Effect.Effect<NormalizedLocation[], IntelRequestError, Intel>,
   ) {
     setIntelStatus(statusText);
+    const action = label === "definitions" ? "definition" : "implementations";
+    const releaseNotice = armLoadNotice(requestRoot, request.path, (loadNotice) => {
+      if (intelController === controller) {
+        setIntelStatus(loadNotice);
+      }
+    });
     try {
-      const locations = await runtime.runPromise(pull(), { signal: controller.signal });
+      const outcome = await runtime.runPromise(
+        pull().pipe(
+          Effect.map((locations) => ({ kind: "ok" as const, locations })),
+          Effect.catchTag("IntelRequestError", (error) =>
+            Effect.succeed({ kind: "failed" as const, message: error.message }),
+          ),
+        ),
+        { signal: controller.signal },
+      );
       if (!caretIntelRequestIsCurrent(controller, requestRoot, request)) {
         return;
       }
+      if (outcome.kind === "failed") {
+        notify(intelFailureCopy(action, outcome.message), "error");
+        return;
+      }
+      const { locations } = outcome;
       if (locations.length === 0) {
         notify(notices.none);
         return;
@@ -3012,13 +3080,10 @@ function createState() {
         return;
       }
       // More than one result (an overloaded symbol, or an interface with several implementors) is a
-      // Pick, not a jump: read each target's source line and hand the set to the references overlay.
+      // Pick, not a jump: hand the set to the references overlay at once; the preview effect fills
+      // The visible rows' source lines as they load.
       if (inRepo.length > 1) {
-        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-        if (!caretIntelRequestIsCurrent(controller, requestRoot, request)) {
-          return;
-        }
-        openReferences(label, attachReferencePreviews(inRepo, linesByPath));
+        openReferences(label, attachReferencePreviews(inRepo, new Map()));
         return;
       }
       batch(() => {
@@ -3030,6 +3095,7 @@ function createState() {
         notify("language server unreachable", "error");
       }
     } finally {
+      releaseNotice();
       // A superseding request installs its own controller and indicator, so only the latest
       // Invocation clears the busy state; the aborted one leaves it alone.
       if (intelController === controller) {
@@ -3112,15 +3178,12 @@ function createState() {
     );
   }
 
-  // Read each referenced file's lines once (keyed by path) so the overlay can show a
-  // Source-line preview beside `path:line:col`. Local reads (the LSP resolves against
-  // On-disk files); a missing or binary file yields no lines, so its rows show no preview.
-  function readReferenceLines(
-    root: string,
-    locations: readonly NormalizedLocation[],
-    signal: AbortSignal,
-  ) {
-    const paths = [...new Set(locations.map((location) => location.path))];
+  // Read the given referenced files' lines (keyed by path) so the overlay can show a source-line
+  // Preview beside `path:line:col`. Local reads (the LSP resolves against on-disk files); a
+  // Missing or binary file yields no lines, so its rows show no preview. Full reads, since a
+  // Reference can point past the file service's default line cap, which is why the caller windows
+  // The paths to the visible slice instead of handing over every referenced file at once.
+  function readReferenceLines(root: string, paths: readonly string[], signal: AbortSignal) {
     return runtime.runPromise(
       File.use((file) =>
         Effect.all(
@@ -3134,15 +3197,105 @@ function createState() {
               ),
             ),
           ),
-          { concurrency: "unbounded" },
+          { concurrency: 4 },
         ),
-      ).pipe(Effect.map((entries) => new Map(entries))),
+      ),
       { signal },
     );
   }
 
+  // Previews resolve for the visible window plus one viewport of overscan, never the whole result
+  // Set: a hot-symbol references reply lists thousands of rows across hundreds of files (measured
+  // 5.5k against vscode), and reading every file in full up front blocked overlay readiness for
+  // Seconds to paint fourteen rows. Reads land into a per-open cache and the rows re-attach in
+  // Place (the plain -> highlighted upgrade precedent), so scrolling fills previews with no
+  // Layout shift; the token retires an open's in-flight reads the moment a new open supersedes it.
+  let referenceLinesCache = new Map<string, string[]>();
+  // Paths whose read is in flight. Scrolling re-runs the effect per keypress (the cursor-follow
+  // Writes `referencesScrollTop`), and a path only enters the cache once its read resolves, so
+  // Without this every one of those runs re-fires a full-file read for the same pending files.
+  let referenceLinesPending = new Set<string>();
+  // Retires an open's reads: the results are worthless once the overlay closed or a new pull
+  // Superseded it, and the fibers should stop rather than run to completion unobserved.
+  let referencePreviewController: AbortController | undefined;
+  function retireReferencePreviews() {
+    referencePreviewController?.abort();
+    referencePreviewController = undefined;
+    referenceLinesCache = new Map();
+    referenceLinesPending = new Set();
+  }
+  onReset(retireReferencePreviews);
+  createEffect(() => {
+    if (!referencesOpen()) {
+      return;
+    }
+    const rows = referencesRows();
+    const top = referencesScrollTop();
+    const viewport = referencesViewport();
+    const slice = rows.slice(Math.max(0, top - viewport), top + viewport * 2);
+    const missing = [
+      ...new Set(
+        slice.flatMap((row) =>
+          row.kind === "match" &&
+          !referenceLinesCache.has(row.match.path) &&
+          !referenceLinesPending.has(row.match.path)
+            ? [row.match.path]
+            : [],
+        ),
+      ),
+    ];
+    if (missing.length === 0) {
+      return;
+    }
+    const root = referencesRoot;
+    if (root === undefined) {
+      return;
+    }
+    referencePreviewController ??= new AbortController();
+    const controller = referencePreviewController;
+    const cache = referenceLinesCache;
+    const pending = referenceLinesPending;
+    for (const path of missing) {
+      pending.add(path);
+    }
+    readReferenceLines(root, missing, controller.signal)
+      .then((entries) => {
+        if (controller !== referencePreviewController) {
+          return;
+        }
+        for (const [path, lines] of entries) {
+          cache.set(path, lines);
+        }
+        // Keep row identity for every row whose text does not change: a resolve that fills
+        // Nothing visible must not mint a new results array, or the rows memo, the cursor-row
+        // Map, and the overlay's highlight cache all rebuild over the whole result set.
+        setReferencesResults((current) => {
+          let changed = false;
+          const next = current.map((result) => {
+            if (result.text !== "") {
+              return result;
+            }
+            const text = previewLine(cache.get(result.path), result.line);
+            if (text === "") {
+              return result;
+            }
+            changed = true;
+            return { ...result, text };
+          });
+          return changed ? next : current;
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        for (const path of missing) {
+          pending.delete(path);
+        }
+      });
+  });
+
   function resetReferencesState() {
     hierarchyAnchor = undefined;
+    retireReferencePreviews();
     setReferencesOpen(false);
     setReferencesResults([]);
     setReferencesIndex(0);
@@ -3178,6 +3331,7 @@ function createState() {
   ) {
     referencesRoot = repoRoot();
     hierarchyAnchor = anchor;
+    retireReferencePreviews();
     batch(() => {
       setReferencesLabel(label);
       setReferencesResults(results);
@@ -3196,6 +3350,7 @@ function createState() {
   async function openReferencesPull(
     controller: AbortController,
     requestRoot: string,
+    pullPath: string,
     label: ReturnType<typeof referencesLabel>,
     anchor: HierarchyAnchor | undefined,
     pull: () => Effect.Effect<NormalizedLocation[], IntelRequestError, Intel>,
@@ -3208,32 +3363,54 @@ function createState() {
       setReferencesLabel(label);
       setReferencesResults([]);
       setReferencesIndex(0);
+      setReferencesNotice(undefined);
       setReferencesStatus("loading");
       setReferencesOpen(true);
     });
+    const releaseNotice = armLoadNotice(requestRoot, pullPath, (loadNotice) => {
+      if (intelController === controller && referencesStatus() === "loading") {
+        setReferencesNotice(loadNotice);
+      }
+    });
     try {
-      const locations = await runtime.runPromise(pull(), { signal: controller.signal });
+      const outcome = await runtime.runPromise(
+        pull().pipe(
+          Effect.map((locations) => ({ kind: "ok" as const, locations })),
+          Effect.catchTag("IntelRequestError", (error) =>
+            Effect.succeed({ kind: "failed" as const, message: error.message }),
+          ),
+        ),
+        { signal: controller.signal },
+      );
       // A superseding request or a worktree switch drops this result: the newer request
       // Owns the overlay, and a stale root would resolve previews against the wrong repo.
       if (intelController !== controller || repoRoot() !== requestRoot) {
         return;
       }
-      const inRepo = locations
+      if (outcome.kind === "failed") {
+        batch(() => {
+          setReferencesNotice(intelFailureCopy(label, outcome.message));
+          setReferencesStatus("error");
+        });
+        return;
+      }
+      const inRepo = outcome.locations
         .filter((location) => !isAbsolute(location.path))
         .toSorted(byReferenceOrder);
       if (inRepo.length === 0) {
         setReferencesStatus("empty");
         return;
       }
-      const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-      if (intelController !== controller || repoRoot() !== requestRoot) {
-        return;
-      }
-      openReferences(label, attachReferencePreviews(inRepo, linesByPath), anchor);
+      openReferences(label, attachReferencePreviews(inRepo, new Map()), anchor);
     } catch {
       if (intelController === controller) {
-        setReferencesStatus("error");
+        batch(() => {
+          setReferencesNotice(undefined);
+          setReferencesStatus("error");
+        });
       }
+    } finally {
+      releaseNotice();
     }
   }
 
@@ -3255,7 +3432,7 @@ function createState() {
     intelController = controller;
     const requestRoot = repoRoot();
     // A plain references pull has no direction, so its undefined anchor clears any a prior open left.
-    await openReferencesPull(controller, requestRoot, "references", undefined, () =>
+    await openReferencesPull(controller, requestRoot, path, "references", undefined, () =>
       Intel.use((intel) =>
         intel.references(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
       ),
@@ -3304,10 +3481,16 @@ function createState() {
     intelController?.abort();
     const controller = new AbortController();
     intelController = controller;
-    await openReferencesPull(controller, anchor.root, hierarchyLabel(anchor), anchor, () =>
-      Intel.use((intel) =>
-        intel.callHierarchy(anchor.root, anchor.path, anchor.position, anchor.direction),
-      ),
+    await openReferencesPull(
+      controller,
+      anchor.root,
+      anchor.path,
+      hierarchyLabel(anchor),
+      anchor,
+      () =>
+        Intel.use((intel) =>
+          intel.callHierarchy(anchor.root, anchor.path, anchor.position, anchor.direction),
+        ),
     );
   }
 
@@ -3435,6 +3618,7 @@ function createState() {
       setSymbolsResults([]);
       setSymbolsIndex(0);
       setSymbolsScrollTop(0);
+      setSymbolsNotice(undefined);
       setSymbolsStatus("loading");
       setSymbolsOpen(true);
     });
@@ -3461,9 +3645,19 @@ function createState() {
       setSymbolsStatus("unsupported");
       return;
     }
+    const releaseNotice = armLoadNotice(requestRoot, path, (loadNotice) => {
+      if (symbolsController === controller && symbolsStatus() === "loading") {
+        setSymbolsNotice(loadNotice);
+      }
+    });
     try {
-      const symbols = await runtime.runPromise(
-        Intel.use((intel) => intel.symbols(requestRoot, path)),
+      const outcome = await runtime.runPromise(
+        Intel.use((intel) => intel.symbols(requestRoot, path)).pipe(
+          Effect.map((symbols) => ({ kind: "ok" as const, symbols })),
+          Effect.catchTag("IntelRequestError", (error) =>
+            Effect.succeed({ kind: "failed" as const, message: error.message }),
+          ),
+        ),
         { signal: controller.signal },
       );
       // A superseding request, a worktree switch, or a same-repo file switch drops this result: the
@@ -3478,6 +3672,14 @@ function createState() {
       ) {
         return;
       }
+      if (outcome.kind === "failed") {
+        batch(() => {
+          setSymbolsNotice(intelFailureCopy("symbols", outcome.message));
+          setSymbolsStatus("error");
+        });
+        return;
+      }
+      const { symbols } = outcome;
       if (symbols.length === 0) {
         setSymbolsStatus("empty");
         return;
@@ -3485,8 +3687,13 @@ function createState() {
       openSymbols(symbols);
     } catch {
       if (symbolsController === controller) {
-        setSymbolsStatus("error");
+        batch(() => {
+          setSymbolsNotice(undefined);
+          setSymbolsStatus("error");
+        });
       }
+    } finally {
+      releaseNotice();
     }
   }
 
@@ -3581,16 +3788,38 @@ function createState() {
     hoverController = controller;
     const requestRoot = repoRoot();
     openViewerDecoration({ lines: noticeLines("resolving…"), status: "loading" });
+    const releaseNotice = armLoadNotice(requestRoot, path, (loadNotice) => {
+      if (hoverController === controller) {
+        resolveViewerDecoration({ lines: noticeLines(loadNotice), status: "loading" });
+      }
+    });
     try {
-      const segments = await runtime.runPromise(
+      const outcome = await runtime.runPromise(
         Intel.use((intel) =>
           intel.hover(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
+        ).pipe(
+          Effect.map((segments) => ({ kind: "ok" as const, segments })),
+          Effect.catchTag("IntelRequestError", (error) =>
+            Effect.succeed({ kind: "failed" as const, message: error.message }),
+          ),
         ),
         { signal: controller.signal },
       );
+      // Retire the probe the moment the server answers, not in the `finally`: the syntax
+      // Highlight below is awaited, and a probe firing inside that window would relabel a card
+      // Whose answer already arrived as still waiting on the project load.
+      releaseNotice();
       if (controller.signal.aborted || repoRoot() !== requestRoot) {
         return;
       }
+      if (outcome.kind === "failed") {
+        resolveViewerDecoration({
+          lines: noticeLines(intelFailureCopy("hover", outcome.message)),
+          status: "error",
+        });
+        return;
+      }
+      const { segments } = outcome;
       if (segments.length === 0) {
         resolveViewerDecoration({ lines: noticeLines("no hover info"), status: "empty" });
         return;
@@ -3620,6 +3849,8 @@ function createState() {
           status: "error",
         });
       }
+    } finally {
+      releaseNotice();
     }
   }
 
@@ -4851,6 +5082,7 @@ function createState() {
     recencyByPath,
     referencesIndex,
     referencesLabel,
+    referencesNotice,
     referencesOpen,
     referencesResults,
     referencesRows,
@@ -4988,6 +5220,7 @@ function createState() {
     statusBarModel,
     switchWorktree,
     symbolsIndex,
+    symbolsNotice,
     symbolsOpen,
     symbolsResults,
     symbolsScrollTop,

@@ -90,6 +90,10 @@ function settle(connection: LspConnection, uris: string[], attempt = 0): Effect.
 // Server that needs longer to index (rust-analyzer on a big crate) converges without wedging a run.
 const PULL_TIMEOUT = "10 seconds";
 const PULL_CONCURRENCY = 8;
+// Ceiling on waiting out a server's project load before settling or pulling: generous because the
+// Run is background work and every file honestly reads pending meanwhile, bounded so a server that
+// Announced a load and wedged degrades to pending rather than pinning `running diagnostics…`.
+const PROJECT_LOAD_WAIT = "5 minutes";
 
 interface Collected {
   diagnostics: Diagnostic[];
@@ -112,8 +116,8 @@ function pullDiagnostics(handle: ServerHandle, opened: { file: ChangedFile; uri:
     const outcomes = yield* Effect.forEach(
       opened,
       ({ file, uri }) =>
-        handle.connection.pullDiagnostics(uri).pipe(
-          Effect.timeout(PULL_TIMEOUT),
+        handle.connection.whenForegroundIdle.pipe(
+          Effect.andThen(handle.connection.pullDiagnostics(uri).pipe(Effect.timeout(PULL_TIMEOUT))),
           Effect.map((answer) => ({ answer, file, kind: "resolved" as const, uri })),
           Effect.catchTag("TimeoutError", () => Effect.succeed({ file, kind: "pending" as const })),
           Effect.catchTag("LspRequestError", (error) =>
@@ -195,6 +199,9 @@ function syncDocuments(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
       const send = keeper.sent.has(uri)
         ? connection.changeDocument(uri, text)
         : connection.openDocument({ languageId: lspLanguageId(file.path), text, uri, version: 1 });
+      // Between sends, not around the batch: the server drains its pipe in order, so every send
+      // Written while a user pull is in flight queues ahead of the user's answer.
+      yield* connection.whenForegroundIdle;
       yield* Effect.uninterruptible(
         connection
           .clearPublished([uri])
@@ -207,6 +214,7 @@ function syncDocuments(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
     }
     for (const uri of keeper.sent.keys()) {
       if (!current.has(uri)) {
+        yield* connection.whenForegroundIdle;
         yield* Effect.uninterruptible(
           connection
             .closeDocument(uri)
@@ -249,7 +257,16 @@ function collectOnce(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
     // A server that advertises pull answers request/response, no settle heuristics. Every tracked
     // File is pulled, not just dirty ones: an untouched file answers `unchanged` cheaply, and an
     // Edit elsewhere in the open set can change its result even when its own text didn't move.
+    // A pull sent into a still-loading project only burns its timeout (rust-analyzer indexing a
+    // Big crate answers nothing for minutes), so a load in flight is waited out first: free when
+    // No load is pending, and cheaper than N timed-out pulls plus a retry run when one is.
     if (handle.capabilities.has("pullDiagnostics")) {
+      if (yield* handle.connection.projectLoadPending) {
+        yield* handle.connection.whenProjectLoaded.pipe(
+          Effect.timeout(PROJECT_LOAD_WAIT),
+          Effect.ignore,
+        );
+      }
       const collected = yield* pullDiagnostics(handle, tracked);
       return { ...collected, pending: [...pending, ...collected.pending] } satisfies Collected;
     }
@@ -262,6 +279,23 @@ function collectOnce(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
       ...held.filter((entry) => !alreadyPublished.has(entry.uri)).map((entry) => entry.uri),
     ];
     yield* settle(handle.connection, waitUris);
+    // A settle that capped out while the server was still loading its project measured the load,
+    // Not the files: ending the run here left everything pending, and each late publish then
+    // Nudged a fresh full run for the whole duration of the load (the self-sustaining feedback
+    // Loop). Waiting only after a cap-out keeps the settled path exactly as fast as before
+    // (measured 868ms vs 2.2s for a wait-first version against vscode), and one retry terminates
+    // By construction: a connection's project loads once.
+    const settled = yield* handle.connection.published;
+    if (
+      waitUris.some((uri) => !settled.has(uri)) &&
+      (yield* handle.connection.projectLoadPending)
+    ) {
+      yield* handle.connection.whenProjectLoaded.pipe(
+        Effect.timeout(PROJECT_LOAD_WAIT),
+        Effect.ignore,
+      );
+      yield* settle(handle.connection, waitUris);
+    }
     if (waitUris.length > 0) {
       yield* Effect.sleep(SETTLE_GRACE);
     }

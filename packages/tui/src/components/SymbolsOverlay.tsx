@@ -55,7 +55,7 @@ export function SymbolsOverlay() {
       </box>
       <Show when={state.symbolsStatus() === "loading"}>
         <box height={1} paddingLeft={1} paddingRight={1}>
-          <text fg={theme.colors.text.muted}>finding symbols…</text>
+          <text fg={theme.colors.text.muted}>{state.symbolsNotice() ?? "finding symbols…"}</text>
         </box>
       </Show>
       <Show when={state.symbolsStatus() === "empty"}>
@@ -70,9 +70,9 @@ export function SymbolsOverlay() {
       </Show>
       <Show when={state.symbolsStatus() === "error"}>
         <box height={1} paddingLeft={1} paddingRight={1}>
-          <text
-            fg={levelColor(theme.colors, "error")}
-          >{`${levelGlyph("error")} language server unreachable`}</text>
+          <text fg={levelColor(theme.colors, "error")}>
+            {`${levelGlyph("error")} ${state.symbolsNotice() ?? "language server unreachable"}`}
+          </text>
         </box>
       </Show>
       <Show when={state.symbolsStatus() === "ready"}>

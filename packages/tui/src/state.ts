@@ -99,7 +99,12 @@ import {
 } from "./git/worktree";
 import type { Worktree, WorktreeSummary } from "./git/worktree";
 import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./intel/protocol";
-import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from "./intel/references";
+import {
+  attachReferencePreviews,
+  buildReferenceRows,
+  byReferenceOrder,
+  previewLine,
+} from "./intel/references";
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import type { IntelRequestError } from "./intel/service";
@@ -945,13 +950,18 @@ function createState() {
   const referencesViewport = createMemo(() =>
     Math.min(REFERENCES_MAX_ROWS, Math.max(1, referencesRows().length)),
   );
-  const referencesCursorRow = createMemo(() => {
-    const target = referencesIndex();
-    const row = referencesRows().findIndex(
-      (entry) => entry.kind === "match" && entry.index === target,
-    );
-    return row === -1 ? 0 : row;
+  // One pass per rows change instead of a linear scan per arrow keypress: a hot-symbol references
+  // Reply lists thousands of rows, and the scan ran on every cursor move through them.
+  const referencesRowByIndex = createMemo(() => {
+    const byIndex = new Map<number, number>();
+    for (const [row, entry] of referencesRows().entries()) {
+      if (entry.kind === "match") {
+        byIndex.set(entry.index, row);
+      }
+    }
+    return byIndex;
   });
+  const referencesCursorRow = createMemo(() => referencesRowByIndex().get(referencesIndex()) ?? 0);
   followListWindow({
     active: referencesOpen,
     cursor: referencesCursorRow,
@@ -3070,13 +3080,10 @@ function createState() {
         return;
       }
       // More than one result (an overloaded symbol, or an interface with several implementors) is a
-      // Pick, not a jump: read each target's source line and hand the set to the references overlay.
+      // Pick, not a jump: hand the set to the references overlay at once; the preview effect fills
+      // The visible rows' source lines as they load.
       if (inRepo.length > 1) {
-        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-        if (!caretIntelRequestIsCurrent(controller, requestRoot, request)) {
-          return;
-        }
-        openReferences(label, attachReferencePreviews(inRepo, linesByPath));
+        openReferences(label, attachReferencePreviews(inRepo, new Map()));
         return;
       }
       batch(() => {
@@ -3171,15 +3178,12 @@ function createState() {
     );
   }
 
-  // Read each referenced file's lines once (keyed by path) so the overlay can show a
-  // Source-line preview beside `path:line:col`. Local reads (the LSP resolves against
-  // On-disk files); a missing or binary file yields no lines, so its rows show no preview.
-  function readReferenceLines(
-    root: string,
-    locations: readonly NormalizedLocation[],
-    signal: AbortSignal,
-  ) {
-    const paths = [...new Set(locations.map((location) => location.path))];
+  // Read the given referenced files' lines (keyed by path) so the overlay can show a source-line
+  // Preview beside `path:line:col`. Local reads (the LSP resolves against on-disk files); a
+  // Missing or binary file yields no lines, so its rows show no preview. Full reads, since a
+  // Reference can point past the file service's default line cap, which is why the caller windows
+  // The paths to the visible slice instead of handing over every referenced file at once.
+  function readReferenceLines(root: string, paths: readonly string[]) {
     return runtime.runPromise(
       File.use((file) =>
         Effect.all(
@@ -3193,12 +3197,67 @@ function createState() {
               ),
             ),
           ),
-          { concurrency: "unbounded" },
+          { concurrency: 4 },
         ),
-      ).pipe(Effect.map((entries) => new Map(entries))),
-      { signal },
+      ),
     );
   }
+
+  // Previews resolve for the visible window plus one viewport of overscan, never the whole result
+  // Set: a hot-symbol references reply lists thousands of rows across hundreds of files (measured
+  // 5.5k against vscode), and reading every file in full up front blocked overlay readiness for
+  // Seconds to paint fourteen rows. Reads land into a per-open cache and the rows re-attach in
+  // Place (the plain -> highlighted upgrade precedent), so scrolling fills previews with no
+  // Layout shift; the token retires an open's in-flight reads the moment a new open supersedes it.
+  let referenceLinesCache = new Map<string, string[]>();
+  let referencePreviewToken = 0;
+  onReset(() => {
+    referencePreviewToken += 1;
+  });
+  createEffect(() => {
+    if (!referencesOpen()) {
+      return;
+    }
+    const rows = referencesRows();
+    const top = referencesScrollTop();
+    const viewport = referencesViewport();
+    const slice = rows.slice(Math.max(0, top - viewport), top + viewport * 2);
+    const missing = [
+      ...new Set(
+        slice.flatMap((row) =>
+          row.kind === "match" && !referenceLinesCache.has(row.match.path) ? [row.match.path] : [],
+        ),
+      ),
+    ];
+    if (missing.length === 0) {
+      return;
+    }
+    const root = referencesRoot;
+    if (root === undefined) {
+      return;
+    }
+    const token = referencePreviewToken;
+    const cache = referenceLinesCache;
+    readReferenceLines(root, missing)
+      .then((entries) => {
+        if (token !== referencePreviewToken || !referencesOpen()) {
+          return;
+        }
+        for (const [path, lines] of entries) {
+          cache.set(path, lines);
+        }
+        // Fill blanks only, never overwrite: a row that already carries its line keeps it, so a
+        // Late read of an unreadable file can't wipe text a caller supplied.
+        setReferencesResults((current) =>
+          current.map((result) =>
+            result.text !== ""
+              ? result
+              : { ...result, text: previewLine(cache.get(result.path), result.line) },
+          ),
+        );
+      })
+      .catch(() => undefined);
+  });
 
   function resetReferencesState() {
     hierarchyAnchor = undefined;
@@ -3237,6 +3296,8 @@ function createState() {
   ) {
     referencesRoot = repoRoot();
     hierarchyAnchor = anchor;
+    referenceLinesCache = new Map();
+    referencePreviewToken += 1;
     batch(() => {
       setReferencesLabel(label);
       setReferencesResults(results);
@@ -3306,11 +3367,7 @@ function createState() {
         setReferencesStatus("empty");
         return;
       }
-      const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-      if (intelController !== controller || repoRoot() !== requestRoot) {
-        return;
-      }
-      openReferences(label, attachReferencePreviews(inRepo, linesByPath), anchor);
+      openReferences(label, attachReferencePreviews(inRepo, new Map()), anchor);
     } catch {
       if (intelController === controller) {
         batch(() => {

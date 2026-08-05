@@ -7,7 +7,7 @@
  * open document. The seam the diagnostics push flow lacks; #130/#131.
  */
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Context, Data, Effect, Layer } from "effect";
@@ -350,19 +350,45 @@ export const IntelLive = Layer.effect(
     }
 
     // A location reply's paths are absolute; relativize each to a repo path (a target outside the
-    // Repo, e.g. node_modules, stays absolute so the caller can detect and skip it). Both sides are
-    // Canonicalized so a symlinked root (macOS /var ↔ /private/var) still matches an in-repo target
-    // The server resolved to its realpath. Hover carries no paths, so it skips this entirely.
+    // Repo, e.g. node_modules, stays absolute so the caller can detect and skip it). A symlinked
+    // Root (macOS /var ↔ /private/var) still matches, because both the raw and canonical root are
+    // Tried as prefixes first; only a path matching neither pays a `realpathSync`, memoized per
+    // Directory. Per-location realpath was a sync syscall storm on the render thread: 8.6µs per
+    // Call vs 29ns per prefix test (measured over vscode's tree), which on a 5.5k-result
+    // References reply is ~45ms of blocked frames canonicalizing paths that change nothing.
+    // Hover carries no paths, so it skips this entirely.
     function relativizeLocations(
       repoRoot: string,
       normalize: (reply: unknown) => NormalizedLocation[],
     ) {
       const canonicalRoot = realpathOr(repoRoot);
+      const canonicalDirs = new Map<string, string>();
+      const canonicalize = (path: string) => {
+        const dir = dirname(path);
+        const known = canonicalDirs.get(dir);
+        if (known !== undefined) {
+          return join(known, basename(path));
+        }
+        const resolved = realpathOr(path);
+        canonicalDirs.set(dir, dirname(resolved));
+        return resolved;
+      };
+      const toRepoPath = (path: string) => {
+        const direct = relativize(path, repoRoot);
+        if (direct !== path) {
+          return direct;
+        }
+        const viaCanonicalRoot = relativize(path, canonicalRoot);
+        if (viaCanonicalRoot !== path) {
+          return viaCanonicalRoot;
+        }
+        return relativize(canonicalize(path), canonicalRoot);
+      };
       return (reply: unknown) =>
         normalize(reply).map((location) => ({
           column: location.column,
           line: location.line,
-          path: relativize(realpathOr(location.path), canonicalRoot),
+          path: toRepoPath(location.path),
         }));
     }
 

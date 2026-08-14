@@ -86,7 +86,15 @@ export function ReferencesOverlay() {
     onCleanup(() => {
       cancelled.current = true;
     });
-    results().forEach((match, index) => {
+    // Only the rows on screen, the same window `<Index>` mounts. Previews now arrive in batches
+    // As the window scrolls, and each batch re-mints the results array, so highlighting the whole
+    // Set would re-run for every result on every batch (thousands of snippets per scroll step on
+    // A hot symbol). A row still without text has nothing to highlight yet.
+    for (const row of visibleRows()) {
+      if (row.kind !== "match" || row.match.text === "") {
+        continue;
+      }
+      const { index, match } = row;
       void highlightSnippet(match.text, languageForPath(match.path)).then((lines) => {
         if (!cancelled.current) {
           setSpanCache((previous) =>
@@ -94,7 +102,7 @@ export function ReferencesOverlay() {
           );
         }
       });
-    });
+    }
   });
   const rowSpans = (index: number, text: string): RenderSpan[] =>
     spanCache().get(index) ?? [{ text }];

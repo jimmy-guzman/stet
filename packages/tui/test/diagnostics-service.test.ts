@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
-import { adjust, layer as testClockLayer } from "effect/testing/TestClock";
+import { adjust, layer } from "effect/testing/TestClock";
 
 import type { CheckerFileState } from "@/diagnostics/checker";
 import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
@@ -1002,7 +1002,7 @@ test("a push settle that caps out mid-load waits for the load and settles again"
             DiagnosticsLive.pipe(
               Layer.provide(fakeServers({ typescript: { capabilities: new Set(), connection } })),
             ),
-            testClockLayer(),
+            layer(),
           ),
         ),
       ),

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
-import { adjust, layer as testClockLayer } from "effect/testing/TestClock";
+import { adjust, layer } from "effect/testing/TestClock";
 
 import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
@@ -287,6 +287,52 @@ test("definition relativizes an in-repo target when the repo root is a symlink",
         expect(result).toEqual([{ column: 3, line: 5, path: "src/b.ts" }]);
       } finally {
         rmSync(link, { force: true });
+      }
+    },
+  );
+});
+
+test("a symlinked file does not mis-resolve its siblings in the same directory", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/c.ts": "export const z = 2\n" },
+    async (dir) => {
+      // The directory a location sits in is canonicalized once and reused for its siblings. Deriving
+      // That directory from the first location's own realpath breaks when the first location is a
+      // Symlinked file: it resolves out of the directory, and every later sibling is then rewritten
+      // Onto the link target's directory, where it does not exist.
+      const outside = mkdtempSync(join(tmpdir(), "intel-outside-"));
+      const alias = `${dir}-alias`;
+      writeFileSync(join(outside, "real.ts"), "export const linked = 1\n");
+      symlinkSync(join(outside, "real.ts"), join(dir, "src/b.ts"));
+      symlinkSync(realpathSync(dir), alias);
+      try {
+        // Both reach the service through the alias, so neither matches the repo root as a prefix and
+        // Both take the canonicalizing path. The symlinked file comes first, seeding the directory.
+        const ts = handle(
+          ["references"],
+          () =>
+            Effect.succeed([
+              { range: definitionRange, uri: pathToFileURL(join(alias, "src/b.ts")).href },
+              { range: definitionRange, uri: pathToFileURL(join(alias, "src/c.ts")).href },
+            ]),
+          [],
+        );
+
+        const result = await Effect.runPromise(
+          Intel.pipe(
+            Effect.flatMap((intel) => intel.references(dir, "src/a.ts", { character: 6, line: 0 })),
+            Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+          ),
+        );
+
+        // The sibling stays in the repo; only the symlinked file leaves it.
+        expect(result.map((location) => location.path)).toEqual([
+          realpathSync(join(outside, "real.ts")),
+          "src/c.ts",
+        ]);
+      } finally {
+        rmSync(alias, { force: true });
+        rmSync(outside, { force: true, recursive: true });
       }
     },
   );
@@ -977,10 +1023,7 @@ test("a request that outlives its cap fails as timed out", async () => {
         return { beforeCap, message: yield* Fiber.join(fiber) };
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))),
-            testClockLayer(),
-          ),
+          Layer.mergeAll(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))), layer()),
         ),
       ),
     );
@@ -1017,10 +1060,7 @@ test("a project-wide request gets the heavy tier, not the caret cap", async () =
         return { message: yield* Fiber.join(fiber), pastFastTier };
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))),
-            testClockLayer(),
-          ),
+          Layer.mergeAll(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))), layer()),
         ),
       ),
     );
@@ -1059,9 +1099,7 @@ test("the warm hold keeps retrying, so a server that appears late still warms", 
         }
         yield* Fiber.interrupt(fiber);
         return log.map((entry) => entry.method);
-      }).pipe(
-        Effect.provide(Layer.mergeAll(IntelLive.pipe(Layer.provide(servers)), testClockLayer())),
-      ),
+      }).pipe(Effect.provide(Layer.mergeAll(IntelLive.pipe(Layer.provide(servers)), layer()))),
     );
     expect(attempts).toBeGreaterThan(6);
     expect(opened).toContain("textDocument/didOpen");

@@ -187,12 +187,20 @@ export const IntelLive = Layer.effect(
             Effect.catchTag("ServerUnavailable", (error) =>
               Effect.succeed({ kind: "failed" as const, message: error.message }),
             ),
-            Effect.catch((error) =>
-              Effect.succeed({
-                kind: "failed" as const,
-                message: `${language} server failed to start: ${error.message}`,
-              }),
-            ),
+            // Tagged rather than a blanket catch, so a future acquire failure surfaces as a type
+            // Error here instead of being silently folded into "failed to start".
+            Effect.catchTags({
+              LspRequestError: (error) =>
+                Effect.succeed({
+                  kind: "failed" as const,
+                  message: `${language} server failed to start: ${error.message}`,
+                }),
+              LspSpawnError: (error) =>
+                Effect.succeed({
+                  kind: "failed" as const,
+                  message: `${language} server failed to start: ${error.message}`,
+                }),
+            }),
           );
           if (outcome.kind === "acquired" && outcome.handle.capabilities.has(capability)) {
             return { handle: outcome.handle, kind: "handle" as const };
@@ -369,9 +377,12 @@ export const IntelLive = Layer.effect(
         if (known !== undefined) {
           return join(known, basename(path));
         }
-        const resolved = realpathOr(path);
-        canonicalDirs.set(dir, dirname(resolved));
-        return resolved;
+        // Resolve the directory in its own right. Deriving it from the leaf's realpath instead
+        // Would follow a symlinked *file* out of its directory (a link to `/elsewhere/real.ts`
+        // Would memoize this directory as `/elsewhere`) and then rewrite every later sibling in
+        // The same directory to a path that does not exist.
+        canonicalDirs.set(dir, realpathOr(dir));
+        return realpathOr(path);
       };
       const toRepoPath = (path: string) => {
         const direct = relativize(path, repoRoot);

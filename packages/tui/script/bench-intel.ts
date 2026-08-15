@@ -461,12 +461,23 @@ function contentionRunScenario(
         const originals = yield* Effect.promise(() =>
           Promise.all(paths.map((path) => Bun.file(join(repo, path)).text())),
         );
-        yield* Effect.promise(() =>
-          Promise.all(
-            paths.map((path, index) =>
-              Bun.write(join(repo, path), `${originals[index] ?? ""}\n// bench-touch\n`),
+        // The edit is a resource, not a step: a failed pull, an interrupt, or a ctrl-c between
+        // Here and the end of the scenario would otherwise leave the checkout dirty, and this
+        // Writes to whatever `--repo` names.
+        yield* Effect.acquireRelease(
+          Effect.promise(() =>
+            Promise.all(
+              paths.map((path, index) =>
+                Bun.write(join(repo, path), `${originals[index] ?? ""}\n// bench-touch\n`),
+              ),
             ),
           ),
+          () =>
+            Effect.promise(() =>
+              Promise.all(
+                paths.map((path, index) => Bun.write(join(repo, path), originals[index] ?? "")),
+              ),
+            ),
         );
         const changeFiber = yield* Effect.forkChild(Stream.runDrain(diagnostics.run(repo, files)));
         yield* intel.invalidate(repo, []);
@@ -476,11 +487,6 @@ function contentionRunScenario(
         );
         report("run still in flight", String(changeFiber.pollUnsafe() === undefined));
         yield* Fiber.interrupt(changeFiber);
-        yield* Effect.promise(() =>
-          Promise.all(
-            paths.map((path, index) => Bun.write(join(repo, path), originals[index] ?? "")),
-          ),
-        );
       }),
     ),
   );

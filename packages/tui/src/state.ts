@@ -3211,20 +3211,65 @@ function createState() {
   // Place (the plain -> highlighted upgrade precedent), so scrolling fills previews with no
   // Layout shift; the token retires an open's in-flight reads the moment a new open supersedes it.
   let referenceLinesCache = new Map<string, string[]>();
-  // Paths whose read is in flight. Scrolling re-runs the effect per keypress (the cursor-follow
-  // Writes `referencesScrollTop`), and a path only enters the cache once its read resolves, so
-  // Without this every one of those runs re-fires a full-file read for the same pending files.
+  // Paths queued or in flight. Scrolling re-runs the effect per keypress (the cursor-follow writes
+  // `referencesScrollTop`), and a path only enters the cache once its read resolves, so without
+  // This every one of those runs would re-request the same files.
   let referenceLinesPending = new Set<string>();
   // Retires an open's reads: the results are worthless once the overlay closed or a new pull
   // Superseded it, and the fibers should stop rather than run to completion unobserved.
   let referencePreviewController: AbortController | undefined;
+  let referencePreviewDraining = false;
   function retireReferencePreviews() {
     referencePreviewController?.abort();
     referencePreviewController = undefined;
     referenceLinesCache = new Map();
     referenceLinesPending = new Set();
+    referencePreviewDraining = false;
   }
   onReset(retireReferencePreviews);
+
+  /**
+   * Read queued preview paths one batch at a time, taking whatever scrolling added while the
+   * previous batch ran. Firing a batch per scroll step instead would put a fresh set of whole-file
+   * reads in flight for every keypress, most of them for rows already scrolled past.
+   */
+  async function drainReferencePreviews(root: string, controller: AbortController): Promise<void> {
+    const requested = [...referenceLinesPending];
+    if (requested.length === 0 || controller !== referencePreviewController) {
+      return;
+    }
+    const entries = await readReferenceLines(root, requested, controller.signal).catch(() => []);
+    if (controller !== referencePreviewController) {
+      return;
+    }
+    for (const [path, lines] of entries) {
+      referenceLinesCache.set(path, lines);
+    }
+    for (const path of requested) {
+      referenceLinesPending.delete(path);
+    }
+    // Keep row identity for every row whose text does not change: a resolve that fills nothing
+    // Visible must not mint a new results array, or the rows memo, the cursor-row map, and the
+    // Overlay's highlight cache all rebuild over the whole result set.
+    setReferencesResults((current) => {
+      let changed = false;
+      const next = current.map((result) => {
+        if (result.text !== "") {
+          return result;
+        }
+        const text = previewLine(referenceLinesCache.get(result.path), result.line);
+        if (text === "") {
+          return result;
+        }
+        changed = true;
+        return { ...result, text };
+      });
+      return changed ? next : current;
+    });
+    // Whatever scrolling queued while this batch ran goes out as the next one.
+    return drainReferencePreviews(root, controller);
+  }
+
   createEffect(() => {
     if (!referencesOpen()) {
       return;
@@ -3232,65 +3277,32 @@ function createState() {
     const rows = referencesRows();
     const top = referencesScrollTop();
     const viewport = referencesViewport();
-    const slice = rows.slice(Math.max(0, top - viewport), top + viewport * 2);
-    const missing = [
-      ...new Set(
-        slice.flatMap((row) =>
-          row.kind === "match" &&
-          !referenceLinesCache.has(row.match.path) &&
-          !referenceLinesPending.has(row.match.path)
-            ? [row.match.path]
-            : [],
-        ),
-      ),
-    ];
-    if (missing.length === 0) {
-      return;
-    }
     const root = referencesRoot;
     if (root === undefined) {
       return;
     }
-    referencePreviewController ??= new AbortController();
-    const controller = referencePreviewController;
-    const cache = referenceLinesCache;
-    const pending = referenceLinesPending;
-    for (const path of missing) {
-      pending.add(path);
+    let queued = false;
+    for (const row of rows.slice(Math.max(0, top - viewport), top + viewport * 2)) {
+      if (
+        row.kind === "match" &&
+        !referenceLinesCache.has(row.match.path) &&
+        !referenceLinesPending.has(row.match.path)
+      ) {
+        referenceLinesPending.add(row.match.path);
+        queued = true;
+      }
     }
-    readReferenceLines(root, missing, controller.signal)
-      .then((entries) => {
-        if (controller !== referencePreviewController) {
-          return;
-        }
-        for (const [path, lines] of entries) {
-          cache.set(path, lines);
-        }
-        // Keep row identity for every row whose text does not change: a resolve that fills
-        // Nothing visible must not mint a new results array, or the rows memo, the cursor-row
-        // Map, and the overlay's highlight cache all rebuild over the whole result set.
-        setReferencesResults((current) => {
-          let changed = false;
-          const next = current.map((result) => {
-            if (result.text !== "") {
-              return result;
-            }
-            const text = previewLine(cache.get(result.path), result.line);
-            if (text === "") {
-              return result;
-            }
-            changed = true;
-            return { ...result, text };
-          });
-          return changed ? next : current;
-        });
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        for (const path of missing) {
-          pending.delete(path);
-        }
-      });
+    if (!queued) {
+      return;
+    }
+    referencePreviewController ??= new AbortController();
+    if (referencePreviewDraining) {
+      return;
+    }
+    referencePreviewDraining = true;
+    void drainReferencePreviews(root, referencePreviewController).finally(() => {
+      referencePreviewDraining = false;
+    });
   });
 
   function resetReferencesState() {

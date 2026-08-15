@@ -4,7 +4,7 @@
  * requests get a minimal reply so the server never blocks, notifications are logged. Decoupled from
  * the process so it can be driven by a fake in-process peer in tests.
  */
-import { Data, Deferred, Effect, Queue, Stream } from "effect";
+import { Data, Deferred, Effect, Latch, Queue, Stream } from "effect";
 import type { Cause } from "effect";
 
 import { isJsonRpcNotification, isJsonRpcRequest, isJsonRpcResponse } from "./jsonrpc";
@@ -135,6 +135,28 @@ export interface LspConnection {
    * of hanging on a signal that never comes, so a pull on those never pays the request timeout.
    */
   readonly whenProjectLoaded: Effect.Effect<void>;
+  /**
+   * True while the server has announced a project-load window (`window/workDoneProgress/create` or
+   * a `$/progress` "begin") that has not ended yet. A sync peek, so callers can decide whether a
+   * wait is warranted (the diagnostics run after a capped-out settle, the status bar naming why a
+   * pull is slow) without arming the silent-server grace that `whenProjectLoaded` carries.
+   */
+  readonly projectLoadPending: Effect.Effect<boolean>;
+  /**
+   * Marks a user-provoked intel pull in flight on this connection. The server processes its pipe in
+   * order and its update work is effectively single-threaded, so a keeper batch written while the
+   * user waits queues ahead of their answer (measured: a 50-document `didChange` burst starved a
+   * definition pull past its 5s timeout while the same pull took 27ms on a quiet pipe). Counted, so
+   * overlapping pulls compose; pair begin/end via `Effect.acquireRelease`.
+   */
+  readonly foregroundBegin: Effect.Effect<void>;
+  readonly foregroundEnd: Effect.Effect<void>;
+  /**
+   * Suspends while any foreground pull is in flight, resolving the moment the last one ends. The
+   * diagnostics run checks this between keeper sends and pull requests; the check sits in the run,
+   * never inside the transport's own send, so a pull's teardown can never gate itself.
+   */
+  readonly whenForegroundIdle: Effect.Effect<void>;
 }
 
 interface Pending {
@@ -220,6 +242,10 @@ export function makeTransport(
     });
     let nextId = 0;
     let closed = false;
+    // A user pull outranks background decoration on the shared connection. Open means idle; a
+    // Count backs the latch so overlapping pulls (hover while references resolves) compose.
+    let foregroundCount = 0;
+    const foregroundIdle = Latch.makeUnsafe(true);
     // Resolved on the first project-load `$/progress` "end" (or on close); `whenProjectLoaded`
     // Gates intel pulls so a request never lands during the load window with a premature reply.
     let loaded = false;
@@ -363,23 +389,31 @@ export function makeTransport(
     );
     yield* Effect.forkScoped(router);
 
+    const notify = (method: string, params?: unknown) =>
+      channel.send({ jsonrpc: "2.0", method, params });
+
     const request = (method: string, params?: unknown) =>
       Deferred.make<unknown, LspRequestError>().pipe(
         Effect.flatMap((deferred) => {
           const id = nextId;
           nextId += 1;
           pending.set(id, { deferred, method });
-          return channel
-            .send({ id, jsonrpc: "2.0", method, params })
-            .pipe(
-              Effect.andThen(Deferred.await(deferred)),
-              Effect.ensuring(Effect.sync(() => pending.delete(id))),
-            );
+          return channel.send({ id, jsonrpc: "2.0", method, params }).pipe(
+            Effect.andThen(Deferred.await(deferred)),
+            Effect.ensuring(
+              // An id still pending here means the caller gave up (an interrupt on the next
+              // Keystroke, or its timeout) before the server answered. Without `$/cancelRequest`
+              // The server keeps computing the abandoned reply, and the *next* request queues
+              // Behind that dead work; a server that ignores the notification is no worse off.
+              Effect.suspend(() =>
+                pending.delete(id) && !closed
+                  ? notify("$/cancelRequest", { id }).pipe(Effect.ignore)
+                  : Effect.void,
+              ),
+            ),
+          );
         }),
       );
-
-    const notify = (method: string, params?: unknown) =>
-      channel.send({ jsonrpc: "2.0", method, params });
 
     // The pull bucket: per uri, the last full report's items and the resultId to echo back. Only
     // Documents this client pulls enter it, so it stays bounded by the changed set. Commits need no
@@ -471,8 +505,17 @@ export function makeTransport(
       closeDocument,
       closed: Effect.sync(() => closed),
       endPublishWait: Effect.sync(() => awaiting.clear()),
+      foregroundBegin: Effect.suspend(() => {
+        foregroundCount += 1;
+        return foregroundIdle.close.pipe(Effect.asVoid);
+      }),
+      foregroundEnd: Effect.suspend(() => {
+        foregroundCount = Math.max(0, foregroundCount - 1);
+        return foregroundCount === 0 ? foregroundIdle.open.pipe(Effect.asVoid) : Effect.void;
+      }),
       notify,
       openDocument,
+      projectLoadPending: Effect.sync(() => progressAnnounced && !loaded),
       published: Effect.sync(() => published),
       pullDiagnostics,
       request,
@@ -515,6 +558,7 @@ export function makeTransport(
             }),
           );
         }),
+      whenForegroundIdle: foregroundIdle.await,
       whenProjectLoaded: Effect.suspend(() => {
         if (loaded) {
           return Effect.void;

@@ -757,3 +757,84 @@ test("a publish no run is waiting for is news, clean or not", async () => {
   );
   expect(late).toBe(1);
 });
+
+test("an abandoned request sends $/cancelRequest so the server can stop computing", async () => {
+  const cancels = await withPeer(({ connection, sent }) =>
+    Effect.gen(function* abandon() {
+      const fiber = yield* Effect.forkChild(connection.request("textDocument/references", {}));
+      // The request is on the wire; the caller now gives up before any response arrives.
+      const outgoing = yield* Queue.take(sent);
+      const requestId = idOf(outgoing);
+      yield* Fiber.interrupt(fiber);
+      const messages = yield* Queue.takeAll(sent);
+      return { requestId, sent: messages.filter(isJsonRpcNotification) };
+    }),
+  );
+  expect(cancels.sent).toMatchObject([
+    { method: "$/cancelRequest", params: { id: cancels.requestId } },
+  ]);
+});
+
+test("an answered request sends no cancellation", async () => {
+  const notifications = await withPeer(({ connection, reply, sent }) =>
+    Effect.all(
+      [
+        connection.request("textDocument/hover", {}),
+        Effect.gen(function* respond() {
+          const outgoing = yield* Queue.take(sent);
+          yield* reply({ id: idOf(outgoing), jsonrpc: "2.0", result: null });
+        }),
+      ],
+      { concurrency: "unbounded" },
+      // `takeAll` suspends on an empty queue, and an empty queue is exactly the expectation here,
+      // So drain without suspending.
+    ).pipe(Effect.andThen(Queue.clear(sent))),
+  );
+  expect(notifications).toEqual([]);
+});
+
+test("whenForegroundIdle passes immediately when no pull is in flight", async () => {
+  const outcome = await withPeer(({ connection }) =>
+    connection.whenForegroundIdle.pipe(Effect.as("idle" as const)),
+  );
+  expect(outcome).toBe("idle");
+});
+
+test("whenForegroundIdle suspends until the foreground pull ends", async () => {
+  const { outcome, stillHeld } = await withPeer(({ connection }) =>
+    Effect.gen(function* gate() {
+      yield* connection.foregroundBegin;
+      const waiter = yield* Effect.forkChild(
+        connection.whenForegroundIdle.pipe(Effect.as("released" as const)),
+      );
+      yield* Effect.yieldNow;
+      const heldEarly = waiter.pollUnsafe() === undefined;
+      yield* connection.foregroundEnd;
+      const joined = yield* Fiber.join(waiter);
+      return { outcome: joined, stillHeld: heldEarly };
+    }),
+  );
+  expect(stillHeld).toBe(true);
+  expect(outcome).toBe("released");
+});
+
+test("overlapping foreground pulls keep the gate closed until the last one ends", async () => {
+  const { afterFirstEnd, outcome } = await withPeer(({ connection }) =>
+    Effect.gen(function* gate() {
+      yield* connection.foregroundBegin;
+      yield* connection.foregroundBegin;
+      const waiter = yield* Effect.forkChild(
+        connection.whenForegroundIdle.pipe(Effect.as("released" as const)),
+      );
+      yield* Effect.yieldNow;
+      yield* connection.foregroundEnd;
+      yield* Effect.yieldNow;
+      const heldMidway = waiter.pollUnsafe() === undefined;
+      yield* connection.foregroundEnd;
+      const joined = yield* Fiber.join(waiter);
+      return { afterFirstEnd: heldMidway, outcome: joined };
+    }),
+  );
+  expect(afterFirstEnd).toBe(true);
+  expect(outcome).toBe("released");
+});

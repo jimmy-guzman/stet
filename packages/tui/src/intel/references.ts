@@ -44,7 +44,8 @@ export function byReferenceOrder(a: NormalizedLocation, b: NormalizedLocation) {
 
 // A location whose file was unreadable (absent from `linesByPath`) or whose 1-based line
 // Is out of range still gets a row, just with an empty preview, rather than being dropped.
-function previewLine(lines: string[] | undefined, line: number): string {
+// Exported for the windowed preview fill, so the row text rule lives once.
+export function previewLine(lines: string[] | undefined, line: number): string {
   return lines?.[line - 1]?.trimStart() ?? "";
 }
 

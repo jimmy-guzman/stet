@@ -1077,6 +1077,12 @@ export class LanguageServers extends Context.Service<
      * references keep the old children alive.
      */
     readonly restart: (repoRoot: string) => Effect.Effect<void>;
+    /**
+     * The name of a live server for this path whose announced project load has not finished yet, or
+     * `undefined` when none is loading. A peek over the live mirror that acquires and spawns
+     * nothing, so a status surface can say _why_ a pull is slow without becoming a holder.
+     */
+    readonly loadingServer: (path: string, repoRoot: string) => Effect.Effect<string | undefined>;
   }
 >()("stet/LanguageServers") {}
 
@@ -1211,6 +1217,17 @@ export const LanguageServersLive = Layer.effect(
         );
       });
 
-    return { acquire, notifyWatchedFiles, restart };
+    const loadingServer = (path: string, repoRoot: string) =>
+      Effect.gen(function* peek() {
+        for (const language of serversForPath(path)) {
+          const handle = live.get(serverRepoKey(language, repoRoot));
+          if (handle !== undefined && (yield* handle.connection.projectLoadPending)) {
+            return language;
+          }
+        }
+        return undefined;
+      });
+
+    return { acquire, loadingServer, notifyWatchedFiles, restart };
   }),
 );

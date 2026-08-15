@@ -32,13 +32,17 @@ function fakeConnection() {
     closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: () => Effect.void,
     openDocument: () => Effect.void,
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () => Effect.die("unused"),
     request: () => Effect.succeed({ capabilities: {} }),
     watchedBases: Stream.empty,
     watchedFilesChanged: (_root, changes) => Effect.sync(() => void received.push(...changes)),
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded: Effect.void,
   };
   return { connection, received };

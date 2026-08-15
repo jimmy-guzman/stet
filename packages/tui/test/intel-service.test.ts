@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { adjust, layer } from "effect/testing/TestClock";
 
-import { LanguageServers, ServerUnavailable } from "@/diagnostics/servers";
+import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
 import { LspRequestError } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
@@ -32,11 +33,14 @@ function handle(
       Effect.sync(() => void log.push({ method: "textDocument/didClose", params: { uri } })),
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
+    foregroundBegin: Effect.void,
+    foregroundEnd: Effect.void,
     notify: (method, params) => Effect.sync(() => void log.push({ method, params })),
     openDocument: (textDocument) =>
       Effect.sync(
         () => void log.push({ method: "textDocument/didOpen", params: { textDocument } }),
       ),
+    projectLoadPending: Effect.sync(() => false),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -48,6 +52,7 @@ function handle(
     },
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
+    whenForegroundIdle: Effect.void,
     whenProjectLoaded,
   };
   return { capabilities: new Set(capabilities), connection };
@@ -61,6 +66,7 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         ? Effect.fail(new ServerUnavailable({ language, message: "not found" }))
         : Effect.succeed(found);
     },
+    loadingServer: () => Effect.succeed(undefined),
     notifyWatchedFiles: () => Effect.void,
     restart: () => Effect.void,
   });
@@ -286,6 +292,52 @@ test("definition relativizes an in-repo target when the repo root is a symlink",
   );
 });
 
+test("a symlinked file does not mis-resolve its siblings in the same directory", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/c.ts": "export const z = 2\n" },
+    async (dir) => {
+      // The directory a location sits in is canonicalized once and reused for its siblings. Deriving
+      // That directory from the first location's own realpath breaks when the first location is a
+      // Symlinked file: it resolves out of the directory, and every later sibling is then rewritten
+      // Onto the link target's directory, where it does not exist.
+      const outside = mkdtempSync(join(tmpdir(), "intel-outside-"));
+      const alias = `${dir}-alias`;
+      writeFileSync(join(outside, "real.ts"), "export const linked = 1\n");
+      symlinkSync(join(outside, "real.ts"), join(dir, "src/b.ts"));
+      symlinkSync(realpathSync(dir), alias);
+      try {
+        // Both reach the service through the alias, so neither matches the repo root as a prefix and
+        // Both take the canonicalizing path. The symlinked file comes first, seeding the directory.
+        const ts = handle(
+          ["references"],
+          () =>
+            Effect.succeed([
+              { range: definitionRange, uri: pathToFileURL(join(alias, "src/b.ts")).href },
+              { range: definitionRange, uri: pathToFileURL(join(alias, "src/c.ts")).href },
+            ]),
+          [],
+        );
+
+        const result = await Effect.runPromise(
+          Intel.pipe(
+            Effect.flatMap((intel) => intel.references(dir, "src/a.ts", { character: 6, line: 0 })),
+            Effect.provide(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts })))),
+          ),
+        );
+
+        // The sibling stays in the repo; only the symlinked file leaves it.
+        expect(result.map((location) => location.path)).toEqual([
+          realpathSync(join(outside, "real.ts")),
+          "src/c.ts",
+        ]);
+      } finally {
+        rmSync(alias, { force: true });
+        rmSync(outside, { force: true, recursive: true });
+      }
+    },
+  );
+});
+
 test("definition leaves an out-of-repo target absolute so the caller can skip it", async () => {
   await withRepo({ "src/a.ts": "import { x } from 'lib'\n" }, async (dir) => {
     // A definition in a global stdlib resolves outside the repo root; it can't be relativized.
@@ -386,6 +438,7 @@ test("definition never acquires a server whose static hint can't answer it", asy
           ? Effect.succeed(ts)
           : Effect.fail(new ServerUnavailable({ language, message: "not found" }));
       },
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -819,6 +872,7 @@ test("warmHold pre-loads the project then closes the doc, holding the server unt
           }),
           () => Effect.sync(() => void (released += 1)),
         ),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -859,6 +913,7 @@ test("warmHold warms a server that advertises only hover", async () => {
     const hoverOnly = handle(["hover"], () => Effect.succeed(null), log);
     const servers = Layer.succeed(LanguageServers)({
       acquire: () => Effect.succeed(hoverOnly),
+      loadingServer: () => Effect.succeed(undefined),
       notifyWatchedFiles: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -916,5 +971,137 @@ test("call hierarchy degrades a failing resolve to IntelRequestError and still c
       "callHierarchy/incomingCalls",
       "textDocument/didClose",
     ]);
+  });
+});
+
+test("an acquire failure surfaces as the pull's error, not an empty result", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    // The only definition-capable candidate is still installing; swallowing that to an empty
+    // Reply rendered as the false negative "no definition".
+    const servers = Layer.succeed(LanguageServers)({
+      acquire: (language) => Effect.fail(new ServerInstalling({ language })),
+      loadingServer: () => Effect.succeed(undefined),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
+    });
+    const message = await Effect.runPromise(
+      Intel.pipe(
+        Effect.flatMap((intel) => intel.definition(dir, "src/a.ts", { character: 0, line: 0 })),
+        Effect.map(() => "unexpected success"),
+        Effect.catchTag("IntelRequestError", (error) => Effect.succeed(error.message)),
+        Effect.provide(IntelLive.pipe(Layer.provide(servers))),
+      ),
+    );
+    expect(message).toBe("typescript server is still installing");
+  });
+});
+
+test("a request that outlives its cap fails as timed out", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const requested = await Effect.runPromise(Deferred.make<void>());
+    // The server accepts the request and never answers, standing in for one starved behind a
+    // Program update; the caret's fast tier caps at 30 virtual seconds.
+    const ts = handle(
+      ["definition"],
+      () => Deferred.succeed(requested, undefined).pipe(Effect.andThen(Effect.never)),
+      [],
+    );
+    const message = await Effect.runPromise(
+      Effect.gen(function* timedOut() {
+        const fiber = yield* Effect.forkChild(
+          Intel.pipe(
+            Effect.flatMap((intel) => intel.definition(dir, "src/a.ts", { character: 0, line: 0 })),
+            Effect.map(() => "unexpected success"),
+            Effect.catchTag("IntelRequestError", (error) => Effect.succeed(error.message)),
+          ),
+        );
+        // The request is in flight (real file IO is behind us), so the clock can now advance.
+        yield* Deferred.await(requested);
+        yield* adjust("29 seconds");
+        const beforeCap = fiber.pollUnsafe() === undefined;
+        yield* adjust("2 seconds");
+        return { beforeCap, message: yield* Fiber.join(fiber) };
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))), layer()),
+        ),
+      ),
+    );
+    // Still waiting just short of the cap, so the assertion pins the 30s tier rather than merely
+    // "times out eventually" (which a shorter flat cap would satisfy too).
+    expect(message.beforeCap).toBe(true);
+    expect(message.message).toBe("timed out");
+  });
+});
+
+test("a project-wide request gets the heavy tier, not the caret cap", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const requested = await Effect.runPromise(Deferred.make<void>());
+    // References walks the whole project, so it must outlive the fast tier a hover answers in.
+    const ts = handle(
+      ["references"],
+      () => Deferred.succeed(requested, undefined).pipe(Effect.andThen(Effect.never)),
+      [],
+    );
+    const outcome = await Effect.runPromise(
+      Effect.gen(function* heavy() {
+        const fiber = yield* Effect.forkChild(
+          Intel.pipe(
+            Effect.flatMap((intel) => intel.references(dir, "src/a.ts", { character: 0, line: 0 })),
+            Effect.map(() => "unexpected success"),
+            Effect.catchTag("IntelRequestError", (error) => Effect.succeed(error.message)),
+          ),
+        );
+        yield* Deferred.await(requested);
+        // Past the fast tier: a references pull on the caret cap would already have failed here.
+        yield* adjust("31 seconds");
+        const pastFastTier = fiber.pollUnsafe() === undefined;
+        yield* adjust("90 seconds");
+        return { message: yield* Fiber.join(fiber), pastFastTier };
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IntelLive.pipe(Layer.provide(fakeServers({ typescript: ts }))), layer()),
+        ),
+      ),
+    );
+    expect(outcome.pastFastTier).toBe(true);
+    expect(outcome.message).toBe("timed out");
+  });
+});
+
+test("the warm hold keeps retrying, so a server that appears late still warms", async () => {
+  await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
+    let attempts = 0;
+    // Fails more times than the old bounded window allowed before it parked forever, so a revert
+    // To that park leaves the server cold and this test fails.
+    const servers = Layer.succeed(LanguageServers)({
+      acquire: (language) => {
+        attempts += 1;
+        return attempts <= 6
+          ? Effect.fail(new ServerInstalling({ language }))
+          : Effect.succeed(handle(["hover"], () => Effect.succeed(null), log));
+      },
+      loadingServer: () => Effect.succeed(undefined),
+      notifyWatchedFiles: () => Effect.void,
+      restart: () => Effect.void,
+    });
+    const opened = await Effect.runPromise(
+      Effect.gen(function* warm() {
+        const fiber = yield* Effect.forkChild(
+          Effect.scoped(Intel.pipe(Effect.flatMap((intel) => intel.warmHold(dir, "src/a.ts")))),
+        );
+        // Walk the capped backoff (3s, 6s, 12s, 24s, 48s, then the 60s ceiling) until the hold
+        // Has opened its seed document, yielding so the fiber runs between advances.
+        for (let tick = 0; tick < 40 && log.length === 0; tick += 1) {
+          yield* adjust("10 seconds");
+          yield* Effect.yieldNow;
+        }
+        yield* Fiber.interrupt(fiber);
+        return log.map((entry) => entry.method);
+      }).pipe(Effect.provide(Layer.mergeAll(IntelLive.pipe(Layer.provide(servers)), layer()))),
+    );
+    expect(attempts).toBeGreaterThan(6);
+    expect(opened).toContain("textDocument/didOpen");
   });
 });

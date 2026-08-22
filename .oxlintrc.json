@@ -23,6 +23,8 @@
     "no-continue": "off",
     "max-params": "off",
     "id-length": "off",
+    "one-var": "off",
+    "no-multi-assign": "off",
     "func-style": ["error", "declaration", { "allowArrowFunctions": true }],
     "unicorn/consistent-function-scoping": "off",
     "new-cap": [

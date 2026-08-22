@@ -352,13 +352,11 @@ function loadDiffView(src: {
       File.use((file) =>
         file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec }),
       ).pipe(
-        Effect.map(
-          (content): DiffBase => ({
-            diff: content.kind === "text" ? contentToContextPatch(src.path, content.content) : "",
-            fileContent: content,
-            showFileContent: true,
-          }),
-        ),
+        Effect.map((content): DiffBase => ({
+          diff: content.kind === "text" ? contentToContextPatch(src.path, content.content) : "",
+          fileContent: content,
+          showFileContent: true,
+        })),
       ),
     );
   }
@@ -375,14 +373,12 @@ function loadDiffView(src: {
   if (file.binary) {
     return toView(
       Git.use((git) => git.binaryMeta(src.model.repoRoot, src.scope, file)).pipe(
-        Effect.map(
-          (binary): DiffBase => ({
-            binary,
-            diff: "",
-            fileContent: undefined,
-            showFileContent: false,
-          }),
-        ),
+        Effect.map((binary): DiffBase => ({
+          binary,
+          diff: "",
+          fileContent: undefined,
+          showFileContent: false,
+        })),
         // A `git show` failure still shows the designed binary surface (metadata just
         // Absent), never a blank pane, so a changed binary always reads as one. Scoped
         // To GitError so an unexpected defect still propagates.

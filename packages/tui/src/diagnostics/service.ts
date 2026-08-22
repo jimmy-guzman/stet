@@ -424,11 +424,10 @@ export const DiagnosticsLive = Layer.effect(
 
     function runLanguage(repoRoot: string, language: string, files: ChangedFile[]) {
       return acquireKeeper(language, repoRoot).pipe(
-        Effect.flatMap(
-          (keeper): Effect.Effect<LanguageOutcome> =>
-            collectDiagnostics(keeper, repoRoot, files).pipe(
-              Effect.map((collected) => ({ collected, kind: "diagnostics" })),
-            ),
+        Effect.flatMap((keeper): Effect.Effect<LanguageOutcome> =>
+          collectDiagnostics(keeper, repoRoot, files).pipe(
+            Effect.map((collected) => ({ collected, kind: "diagnostics" })),
+          ),
         ),
         Effect.catchTag("ServerUnavailable", (error) =>
           Effect.succeed<LanguageOutcome>({

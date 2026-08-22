@@ -84,18 +84,15 @@ describe("list scrollbar", () => {
       diagnostics: stateForResolvedChecker(
         "diagnostics",
         model.changed,
-        Array.from(
-          { length: 60 },
-          (_, index): Diagnostic => ({
-            checker: "diagnostics",
-            column: 1,
-            line: 1 + index,
-            message: `synthetic finding ${String(index).padStart(2, "0")}`,
-            path: `${repoRoot}/src/file${index % 10}.ts`,
-            severity: "warning",
-            source: "probe",
-          }),
-        ),
+        Array.from({ length: 60 }, (_, index): Diagnostic => ({
+          checker: "diagnostics",
+          column: 1,
+          line: 1 + index,
+          message: `synthetic finding ${String(index).padStart(2, "0")}`,
+          path: `${repoRoot}/src/file${index % 10}.ts`,
+          severity: "warning",
+          source: "probe",
+        })),
         repoRoot,
       ),
     });

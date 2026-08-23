@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.1...stet-v0.10.2) (2026-08-23)
+
+
+### Bug Fixes
+
+* 🐛 bump deps ([#363](https://github.com/jimmy-guzman/stet/issues/363)) ([9ba9f6f](https://github.com/jimmy-guzman/stet/commit/9ba9f6fd8bb8d76bb0cc409399a9554d1c7a7a94))
+
 ## [0.10.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.0...stet-v0.10.1) (2026-08-02)
 
 

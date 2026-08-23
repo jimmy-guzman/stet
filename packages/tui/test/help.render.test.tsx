@@ -27,6 +27,11 @@ describe("help overlay", () => {
       expect(initial).toContain("? help · q quit");
 
       mockInput.pressKey("?");
+      // The wait is deliberately loose, and must stay that way: it stops on the first frame that
+      // Carries any row, and every assertion below reads the whole list off that one frame. That
+      // Is the guard for #363, where a scrollbox came up one row shorter than the box around it
+      // And clipped the last entry for a frame. Waiting for the last row instead would settle a
+      // Frame later and sail straight past it.
       const help = await settleUntil("help overlay", (frame) =>
         frame.includes("switch to another git worktree"),
       );

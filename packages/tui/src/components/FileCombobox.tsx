@@ -81,6 +81,7 @@ export function FileCombobox() {
             foregroundColor: theme.colors.scrollbar.thumb,
           },
         }}
+        horizontalScrollbarOptions={{ visible: false }}
       >
         <Show
           when={state.fileComboboxResults().length > 0}

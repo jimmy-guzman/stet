@@ -37,6 +37,7 @@ export function ScopeMenu() {
       foregroundColor: theme.colors.scrollbar.thumb,
     },
   };
+  const horizontalScrollbarOptions = { visible: false };
   // Non-selectable section labels; the cursor (scopeMenuIndex) never lands on them,
   // So they carry no id or handler and outdent left of the marker-prefixed rows.
   const groupHeader = (label: string) => (
@@ -69,6 +70,7 @@ export function ScopeMenu() {
           scrollY
           viewportCulling
           scrollbarOptions={scrollbarOptions}
+          horizontalScrollbarOptions={horizontalScrollbarOptions}
         >
           {/* Id-by-index is required: reordering must never change a live renderable's id.
               The "changes"/"history" section labels are interleaved off the grouped
@@ -152,6 +154,7 @@ export function ScopeMenu() {
             scrollY
             viewportCulling
             scrollbarOptions={scrollbarOptions}
+            horizontalScrollbarOptions={horizontalScrollbarOptions}
           >
             <Index each={state.commits()}>
               {(commit, index) => {

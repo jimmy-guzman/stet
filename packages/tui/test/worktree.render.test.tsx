@@ -91,10 +91,16 @@ describe("worktree picker", () => {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
 
       mockInput.pressKey("w");
+      // Loose on purpose, and load-bearing: this stops on the first frame carrying a row, and both
+      // Rows are one update with the scrollbox's height, so a frame with one and not the other
+      // Means the viewport came up a row short of its box. That is #363, and waiting for the
+      // Second row here would settle a frame later and never see it.
       const picker = await settleUntil(
         "worktree summaries",
         (frame) => frame.includes("busy-branch") && frame.includes("now"),
       );
+      // Asserted against the frame first so a regression prints it, not just a row count.
+      expect(picker).toMatch(/● (?:main|master)/);
 
       // Every worktree carries an age, and the one just written in sorts to the top. `relativeTime`
       // Calls anything under a minute "now", and the fixture just committed, so both read "now".

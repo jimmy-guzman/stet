@@ -135,6 +135,7 @@ export function HelpDialog() {
             foregroundColor: theme.colors.scrollbar.thumb,
           },
         }}
+        horizontalScrollbarOptions={{ visible: false }}
       >
         <For each={groups()}>
           {(group, index) => (

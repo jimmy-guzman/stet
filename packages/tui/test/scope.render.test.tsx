@@ -11,6 +11,39 @@ import { state } from "@/state";
 import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
 
 describe("scope switching", () => {
+  test("the kinds list is whole on the frame it opens, down to the commits row", async () => {
+    const repoRoot = createFixtureRepo("stet-scope-height-", { "src/a.ts": "const a = 1\n" });
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 34,
+      width: 120,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
+
+      mockInput.pressKey("s");
+      // This menu's scrollbox is sized to exactly its rows (`scopeKinds.length + 3`), so it has no
+      // Slack to absorb a viewport that comes up a row short: `commits`, the last row and the only
+      // Way into a commit scope, is what drops. Settling on a row above it and reading the last one
+      // Off that same frame is the guard (#363); settling on `commits` itself, or on the title row
+      // Outside the box, would wait past the clip. Neither existing scope test covers it, and the
+      // Drill-down one reaches the commits view by counting `j` presses, which move `scopeMenuIndex`
+      // Whether or not the row was ever painted.
+      const menu = await settleUntil("scope kinds", (frame) =>
+        frame.includes("since session start"),
+      );
+      expect(menu).toContain("last commit");
+      expect(menu).toContain("commits");
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
   test("re-runs checks for the new scope's changed set", async () => {
     const repoRoot = createFixtureRepo("stet-scope-", {
       "package.json": `${JSON.stringify({ name: "scope-fixture" })}\n`,

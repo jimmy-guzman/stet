@@ -58,7 +58,7 @@ See the repo-root `README.md` for what stet does, its keys, and its non-goals; s
 
 ## State and Effect conventions
 
-Reactive state is SolidJS-native (signals/memos); async IO is Effect v4 (beta). `effect` is pinned to an exact beta version; `effect/unstable/*` can break on minor bumps. The two layers meet only at one seam: the long-lived `ManagedRuntime` in `src/runtime.ts`.
+Reactive state is SolidJS-native (signals/memos); async IO is Effect v4, currently a release candidate. `effect` is pinned to an exact prerelease version, so a bump is an explicit edit and its fallout lands in one reviewable change. The two layers meet only at one seam: the long-lived `ManagedRuntime` in `src/runtime.ts`.
 
 - Wrap existing pure functions in services; do not rewrite the pure logic, so its tests stay intact.
 - Define services with `Context.Service` plus a `Layer` (there is no `Effect.Service` in v4); define errors with `Data.TaggedError`, one tag per distinct failure. Code is organized by domain folder under `src/` (`git/`, `file/`, `diagnostics/`, `diff/`, `clipboard/`, `watcher/`): each colocates its pure modules with the Effect service that wraps them in a `service.ts`. The service `Layer`s are still assembled once into `ManagedRuntime.make(AppLayer)` in `src/runtime.ts` (the single assembly point); run service effects through `runtime.runPromise`/`runtime.runFork`, never with a fresh `Effect.runPromise` + `Layer.provide` per call.

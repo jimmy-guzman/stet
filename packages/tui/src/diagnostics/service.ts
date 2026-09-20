@@ -582,7 +582,7 @@ export const DiagnosticsLive = Layer.effect(
 
         const merged = Stream.mergeAll(perLanguage, { concurrency: "unbounded" }).pipe(
           Stream.scan(
-            { done: new Set<string>(), maps: [] as Map<string, CheckerFileState>[] },
+            () => ({ done: new Set<string>(), maps: [] as Map<string, CheckerFileState>[] }),
             (accumulator, next) => ({
               done: new Set(accumulator.done).add(next.language),
               maps: [...accumulator.maps, next.map],

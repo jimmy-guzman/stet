@@ -19,18 +19,18 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@opentui/core": "0.5.11",
-    "@opentui/solid": "0.5.11",
-    "@pierre/diffs": "1.4.3",
+    "@opentui/core": "0.5.14",
+    "@opentui/solid": "0.5.14",
+    "@pierre/diffs": "1.5.2",
     "diff": "9.0.0",
-    "effect": "4.0.0-rc.116",
+    "effect": "4.0.1",
     "jsonc-parser": "3.3.1",
-    "shiki": "4.4.3",
+    "shiki": "4.5.0",
     "solid-js": "1.9.15"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
-    "@types/node": "26.6.2",
+    "@types/node": "26.6.4",
     "typescript": "6.0.3"
   }
 }

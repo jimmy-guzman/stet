@@ -3,7 +3,7 @@ import { applyEdits, createScanner, modify, SyntaxKind } from "jsonc-parser";
 
 import type { Dock } from "@/layout/regions";
 
-import { loadConfigText } from "./load";
+import { isEmptyJsonc, loadConfigText } from "./load";
 import { configDefaults } from "./schema";
 
 /**
@@ -148,7 +148,7 @@ export function updateSettingsText(
   text: string,
   snapshot: SettingsSnapshot,
 ): Result.Result<{ text: string; saved: string[] }, string> {
-  const source = text.trim() === "" ? "{}" : text;
+  const source = isEmptyJsonc(text) ? "{}" : text;
   const issue = parseIssue(source);
   if (issue !== undefined) {
     return Result.fail(issue);

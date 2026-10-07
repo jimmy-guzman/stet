@@ -220,6 +220,14 @@ describe("updateSettingsText", () => {
     expect(Bun.JSONC.parse(text)).toEqual({ theme: "dark" });
   });
 
+  test("a comment-only document seeds a fresh object", () => {
+    const { text } = unwrap(
+      updateSettingsText(`// "theme": "light"\n`, snapshot({ theme: "dark" })),
+    );
+
+    expect(Bun.JSONC.parse(text)).toEqual({ theme: "dark" });
+  });
+
   test("malformed text fails without producing output", () => {
     expect(Result.isFailure(updateSettingsText(`{ "theme": `, snapshot({ theme: "dark" })))).toBe(
       true,

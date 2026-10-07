@@ -28,11 +28,11 @@
     "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
-    "@effect/language-service": "0.87.2",
-    "knip": "6.37.0",
-    "lefthook": "2.1.14",
-    "oxfmt": "0.68.0",
-    "oxlint": "1.83.0",
-    "oxlint-tsgolint": "7.0.2002"
+    "@effect/language-service": "0.87.3",
+    "knip": "6.39.0",
+    "lefthook": "2.1.17",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003"
   }
 }

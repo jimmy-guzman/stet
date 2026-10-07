@@ -1,4 +1,5 @@
 import { Result, Schema } from "effect";
+import { createScanner, ScanError, SyntaxKind } from "jsonc-parser";
 
 import { emptyConfig, UserConfigSchema } from "./schema";
 import type { UserConfig } from "./schema";
@@ -19,11 +20,36 @@ const knownKeys = new Set(Object.keys(UserConfigSchema.fields));
 const movedKeys = new Map([["servers", `"servers" moved to "diagnostics.servers"`]]);
 const movedSectionKeys = new Map([["icons", `glyph overrides moved to "icons.glyphs"`]]);
 
-// Bun.JSONC.parse throws; a Result lets the parse and decode failures compose.
-// The annotation unifies the two branches' Result types for the pipe below.
+const trivia = new Set([
+  SyntaxKind.Trivia,
+  SyntaxKind.LineBreakTrivia,
+  SyntaxKind.LineCommentTrivia,
+  SyntaxKind.BlockCommentTrivia,
+]);
+
+/**
+ * Whether a JSONC document holds no value at all: empty, whitespace, or comments only. Such a file
+ * means defaults on load and a fresh object on save, where `Bun.JSONC.parse` rejects it instead.
+ * Trivia is walked rather than skipped because the scanner drops an unterminated block comment's
+ * error on its way to EOF, and that document is malformed, not empty.
+ */
+export function isEmptyJsonc(text: string) {
+  const scanner = createScanner(text, false);
+  for (let kind = scanner.scan(); kind !== SyntaxKind.EOF; kind = scanner.scan()) {
+    if (!trivia.has(kind) || scanner.getTokenError() !== ScanError.None) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Parses as a `Result` so the parse and decode failures compose in the pipe below; the annotation
+ * unifies the two branches' Result types.
+ */
 function parseJsonc(text: string): Result.Result<unknown, string> {
   try {
-    return Result.succeed(Bun.JSONC.parse(text));
+    return Result.succeed(isEmptyJsonc(text) ? {} : Bun.JSONC.parse(text));
   } catch (error) {
     return Result.fail(
       `config is not valid JSONC: ${error instanceof Error ? error.message : String(error)}`,

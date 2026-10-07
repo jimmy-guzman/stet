@@ -32,6 +32,20 @@ describe("loadConfigText", () => {
     expect(loadConfigText("{}")).toEqual({ config: {}, issues: [] });
   });
 
+  test("a document with no value means defaults", () => {
+    expect(loadConfigText("")).toEqual({ config: {}, issues: [] });
+    expect(loadConfigText("\n")).toEqual({ config: {}, issues: [] });
+    expect(loadConfigText(`// "theme": "dark"`)).toEqual({ config: {}, issues: [] });
+  });
+
+  test("an unterminated comment is malformed, not empty", () => {
+    const { config, issues } = loadConfigText("/* open");
+
+    expect(config).toEqual({});
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("not valid JSONC");
+  });
+
   test("malformed JSONC falls back to defaults with an issue", () => {
     const { config, issues } = loadConfigText(`{ "theme": `);
 

@@ -139,7 +139,8 @@ function stripDanglingCommas(text: string) {
  * Rewrites `text` so the config's settings match the snapshot, as minimal jsonc-parser edits that
  * keep the user's comments and values. Only keys whose effective file value differs from the
  * snapshot are edited (jsonc-parser may re-lay-out lines adjacent to an insertion, but their values
- * and comments survive). Fails (writing nothing) when the document cannot be parsed.
+ * and comments survive). A document with no value (empty, or comments only) gets the object
+ * inserted ahead of its comments. Fails (writing nothing) when the document cannot be parsed.
  *
  * @returns The updated text plus the deduped feature labels that changed; an empty `saved` means
  *   the file already matches and needs no write.
@@ -148,12 +149,11 @@ export function updateSettingsText(
   text: string,
   snapshot: SettingsSnapshot,
 ): Result.Result<{ text: string; saved: string[] }, string> {
-  const source = isEmptyJsonc(text) ? "{}" : text;
-  const issue = parseIssue(source);
+  const issue = isEmptyJsonc(text) ? undefined : parseIssue(text);
   if (issue !== undefined) {
     return Result.fail(issue);
   }
-  const { config } = loadConfigText(source);
+  const { config } = loadConfigText(text);
 
   const edits: SettingEdit[] = [
     ...(themeEquals(snapshot.theme, config.theme) ? [] : [themeEdit(snapshot, config.theme)]),
@@ -243,7 +243,7 @@ export function updateSettingsText(
   const updated = edits.reduce(
     (current, edit) =>
       applyEdits(current, modify(current, edit.path, edit.value, { formattingOptions })),
-    source,
+    text,
   );
   // Removing the only property leaves jsonc-parser's edit dangling the property's
   // JSONC trailing comma (`{ , }`, measured against jsonc-parser 3.3.1), so a

@@ -5,6 +5,7 @@
  * reference drops, so a worktree switch transparently swaps to a fresh server for the new root.
  */
 import { existsSync, watch } from "node:fs";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Context, Data, Effect, Layer, Queue, RcMap, Stream } from "effect";
@@ -17,7 +18,7 @@ import { resolveBinary } from "./checker";
 import type { BinaryDiscovery } from "./checker";
 import { LspProcess } from "./lsp-process";
 import type { LspSpawnError } from "./lsp-process";
-import { cachedBinaryPath, Provisioner } from "./provision";
+import { cachedBinaryPath, cachedPluginLocation, Provisioner } from "./provision";
 import type { ProvisionChannel, ProvisionSpec } from "./provision";
 import { builtinSchemas } from "./schemas";
 import { LspRequestError } from "./transport";
@@ -64,9 +65,30 @@ export type Capability =
   | "implementation"
   | "pullDiagnostics";
 
+/**
+ * A TypeScript language service plugin tsserver loads for the repos `when` admits. The three SFC
+ * frameworks all ship one (Vue's is what type-checks `.vue` at all; Astro's and Svelte's resolve
+ * `.ts` imports of their components), so each is one of these: `languages` only when the plugin
+ * adds a languageId tsserver must accept (Vue), `packages` only when stet may provision it
+ * (Svelte's must live in the project to find its `svelte`, so it is discovery-only, the gopls
+ * rule).
+ */
+export interface TsPlugin {
+  readonly name: string;
+  readonly languages?: readonly string[];
+  readonly packages?: readonly string[];
+  readonly when: When;
+}
+
 export interface ServerSpec {
   readonly binary: string;
   readonly args: readonly string[];
+  /**
+   * Plugins for tsserver's `initializationOptions.plugins`, the one plugin host among built-ins. A
+   * plugin is resolved repo-local first, then from stet's cache, and provisioned on its own: it
+   * must exist whatever tier found the server, so it never rides on the server's channel.
+   */
+  readonly plugins?: readonly TsPlugin[];
   /** Optional repository-environment strategy used before the standard local/PATH lookup. */
   readonly discovery?: BinaryDiscovery;
   /**
@@ -115,7 +137,27 @@ export interface ServerSpec {
 // Distribution. Pinning also lets npm verify the tarball against its immutable published version.
 // Bumping a pin is an explicit reviewable edit; the cache is keyed by the pinned set (`provisionKey`)
 // So a bump re-provisions. The oxlint/typescript pins deliberately track this repo's own devDeps but
-// Are independent (stet's build toolchain vs. the LSP server it downloads into arbitrary repos).
+// Are independent (stet's build toolchain vs. the LSP server it downloads into arbitrary repos). A
+// Plugin's `packages` pin the same way and key its own cache dir.
+
+/**
+ * Where an installed package can sit under a repo: the hoisted `node_modules` (npm, yarn, bun, and
+ * a monorepo whose root manifest never names the package) and pnpm's default hoist dir, which is
+ * where a pnpm workspace keeps every package. A repo gate on a package and the probe for a plugin
+ * the repo installed itself read the same two places.
+ */
+const installedPackageDirs = ["node_modules", "node_modules/.pnpm/node_modules"];
+
+/**
+ * A repository that uses Vue, so tsserver loads the Vue plugin there. The manifest keys cover a
+ * not-yet-installed repo and yarn PnP, which has no `node_modules` at all.
+ */
+const vueRepo: When = [
+  ...installedPackageDirs.map((dir) => `${dir}/vue`),
+  { file: "package.json", key: ["dependencies", "vue"] },
+  { file: "package.json", key: ["devDependencies", "vue"] },
+];
+
 const builtinRegistry: Record<string, ServerSpec> = {
   // The basedpyright fork reinstates the read-only providers pyright gates behind its VS Code
   // Extension; the npm package ships `basedpyright-langserver`. It type-checks Python and answers
@@ -332,6 +374,18 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "typescript": {
     args: ["--stdio"],
     binary: "typescript-language-server",
+    // Vue's hybrid mode puts the type-checking of `.vue` inside tsserver: with this plugin loaded
+    // The server reports script and template type errors mapped back to the `.vue` file, resolves
+    // `.vue` imports from `.ts`, and answers the intel pulls there. `languages` is what makes it
+    // Accept a `didOpen` with languageId `vue` at all.
+    plugins: [
+      {
+        languages: ["vue"],
+        name: "@vue/typescript-plugin",
+        packages: ["@vue/typescript-plugin@3.3.12"],
+        when: vueRepo,
+      },
+    ],
     provides: [
       "definition",
       "references",
@@ -392,6 +446,7 @@ function substitutePlaceholders(value: unknown, repoRoot: string): unknown {
 export function handshakeConfigFor(
   spec: Pick<ServerSpec, "handshake" | "initializationOptions" | "schemaAssociations" | "settings">,
   repoRoot: string,
+  plugins: readonly ResolvedPlugin[] = [],
 ): HandshakeConfig | undefined {
   if (spec.handshake !== undefined) {
     return spec.handshake(repoRoot);
@@ -399,16 +454,27 @@ export function handshakeConfigFor(
   if (
     spec.initializationOptions === undefined &&
     spec.settings === undefined &&
-    spec.schemaAssociations === undefined
+    spec.schemaAssociations === undefined &&
+    plugins.length === 0
   ) {
     return undefined;
   }
   const settings =
     spec.settings === undefined ? undefined : substitutePlaceholders(spec.settings, repoRoot);
+  const options =
+    spec.initializationOptions === undefined
+      ? undefined
+      : substitutePlaceholders(spec.initializationOptions, repoRoot);
+  // Plugins are one key of tsserver's options object, appended to any the options already carry
+  // (a user-configured plugin keeps loading beside the registry's); a server with plugins and no
+  // Options of its own gets just that key.
+  const own = isObject(options) && !Array.isArray(options) ? options : {};
+  const initializationOptions =
+    plugins.length === 0
+      ? options
+      : { ...own, plugins: [...(Array.isArray(own.plugins) ? own.plugins : []), ...plugins] };
   return {
-    ...(spec.initializationOptions === undefined
-      ? {}
-      : { initializationOptions: substitutePlaceholders(spec.initializationOptions, repoRoot) }),
+    ...(initializationOptions === undefined ? {} : { initializationOptions }),
     ...(settings === undefined
       ? {}
       : {
@@ -561,6 +627,7 @@ export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
         ? { provision: base.provision }
         : {}),
       ...(base?.handshake === undefined ? {} : { handshake: base.handshake }),
+      ...(base?.plugins === undefined ? {} : { plugins: base.plugins }),
       ...(entry.initializationOptions === undefined
         ? base?.initializationOptions === undefined
           ? {}
@@ -599,12 +666,19 @@ export function serversForPath(path: string): string[] {
 
 export interface ServerGates {
   readonly accepted: ReadonlyMap<string, boolean>;
+  /**
+   * The admitted plugins the repo has on hand right now, name to the directory tsserver probes for
+   * it (repo-local or provisioned). Read fresh on every snapshot, not cached with `accepted`: an
+   * install lands outside the repo, where no watcher reports it, and this is the one fact that must
+   * track it.
+   */
+  readonly located: ReadonlyMap<string, string>;
 }
 
 const whenKey = (when: When) => JSON.stringify(when);
 const serverGateCache = new Map<
   string,
-  { readonly gates: ServerGates; readonly generation: number }
+  { readonly accepted: ReadonlyMap<string, boolean>; readonly generation: number }
 >();
 const serverGateGenerations = new Map<string, number>();
 
@@ -617,6 +691,7 @@ const evaluateServerGates = Effect.fn("LanguageServers.evaluateServerGates")(fun
 ) {
   const whens = [
     ...Object.values(registry).flatMap((spec) => (spec.when === undefined ? [] : [spec.when])),
+    ...Object.values(registry).flatMap((spec) => (spec.plugins ?? []).map((plugin) => plugin.when)),
     ...[...registeredLanguageProfiles()].flatMap((profile) =>
       profile.servers.flatMap((entry) =>
         entryCandidates(entry).flatMap((candidate) =>
@@ -637,8 +712,21 @@ const evaluateServerGates = Effect.fn("LanguageServers.evaluateServerGates")(fun
       { concurrency: "unbounded" },
     ),
   );
-  return { accepted };
+  return accepted;
 });
+
+function locatePlugins(repoRoot: string, accepted: ReadonlyMap<string, boolean>) {
+  return new Map(
+    Object.entries(registry).flatMap(([server, spec]) =>
+      (spec.plugins ?? []).flatMap((plugin) => {
+        const location = accepted.get(whenKey(plugin.when))
+          ? pluginLocation(server, plugin, repoRoot)
+          : undefined;
+        return location === undefined ? [] : [[plugin.name, location] as const];
+      }),
+    ),
+  );
+}
 
 function invalidateServerGates(repoRoot: string) {
   return Effect.sync(() => {
@@ -647,39 +735,53 @@ function invalidateServerGates(repoRoot: string) {
   });
 }
 
-/** Memoize one completed gate snapshot per repository until its watcher reports a change. */
+/**
+ * One gate snapshot per repository, the `accepted` half memoized until its watcher reports a change
+ * and the `located` half read on every call.
+ */
 export const activeServerGates = Effect.fn("LanguageServers.activeServerGates")(
   function* activeGates(repoRoot: string) {
     const generation = serverGateGenerations.get(repoRoot) ?? 0;
     serverGateGenerations.set(repoRoot, generation);
     const cached = serverGateCache.get(repoRoot);
-    if (cached?.generation === generation) {
-      return cached.gates;
-    }
-
-    const gates = yield* evaluateServerGates(repoRoot);
+    const accepted =
+      cached?.generation === generation ? cached.accepted : yield* evaluateServerGates(repoRoot);
     yield* Effect.sync(() => {
       if ((serverGateGenerations.get(repoRoot) ?? 0) === generation) {
-        serverGateCache.set(repoRoot, { gates, generation });
+        serverGateCache.set(repoRoot, { accepted, generation });
       }
     });
-    return gates;
+    return { accepted, located: locatePlugins(repoRoot, accepted) } satisfies ServerGates;
   },
 );
 
-/** Apply server defaults, entry overrides, and first-of groups to one file. */
+/**
+ * Apply server defaults, entry overrides, and first-of groups to one file. A languageId a server
+ * takes only through a plugin (`vue` on tsserver) selects that server only while such a plugin is
+ * loaded: a plugin-less tsserver refuses the open, publishes nothing, and the file would read
+ * falsely clean, so the file is simply not routed to it until the plugin is on hand.
+ */
 export function activeServers(path: string, gates: ServerGates): string[] {
+  const language = fileSupportForPath(path).language;
   const passes = (when: When | undefined) =>
     when === undefined ? true : (gates.accepted.get(whenKey(when)) ?? false);
+  const opensLanguage = (spec: ServerSpec) => {
+    const through = (spec.plugins ?? []).filter(
+      (plugin) => language !== undefined && (plugin.languages ?? []).includes(language.languageId),
+    );
+    return through.length === 0 || through.some((plugin) => gates.located.has(plugin.name));
+  };
   const candidateActive = (candidate: ServerCandidate) => {
     const server = typeof candidate === "string" ? candidate : candidate.server;
     const spec = registry[server];
     if (spec === undefined) {
       return false;
     }
-    return passes(typeof candidate === "string" ? spec.when : candidate.when);
+    return (
+      passes(typeof candidate === "string" ? spec.when : candidate.when) && opensLanguage(spec)
+    );
   };
-  const selected = (fileSupportForPath(path).language?.servers ?? []).flatMap((entry) => {
+  const selected = (language?.servers ?? []).flatMap((entry) => {
     if (typeof entry !== "string" && "firstOf" in entry) {
       const winner = entry.firstOf.find(candidateActive);
       return winner === undefined ? [] : entryServers(winner);
@@ -687,6 +789,38 @@ export function activeServers(path: string, gates: ServerGates): string[] {
     return candidateActive(entry) ? entryServers(entry) : [];
   });
   return [...new Set(selected)];
+}
+
+/** The server's plugins the same gate snapshot admits for this repo. */
+export function activePlugins(spec: Pick<ServerSpec, "plugins">, gates: ServerGates) {
+  return (spec.plugins ?? []).filter((plugin) => gates.accepted.get(whenKey(plugin.when)) ?? false);
+}
+
+/** The admitted plugins the repo has on hand, each with its probe dir: what a spawn now would load. */
+export function loadedPlugins(spec: Pick<ServerSpec, "plugins">, gates: ServerGates) {
+  return activePlugins(spec, gates).flatMap((plugin) => {
+    const location = gates.located.get(plugin.name);
+    return location === undefined ? [] : [{ location, plugin }];
+  });
+}
+
+/**
+ * Where tsserver probes for a plugin: the repo when it installed the package itself (a repo with
+ * `@vue/language-server` has the plugin hoisted beside it), else stet's cache when the plugin has a
+ * channel and has landed there, else nowhere. tsserver resolves the name from that directory with
+ * Node's own resolution, so the value is the directory holding the `node_modules` the package sits
+ * in, never the package dir.
+ */
+export function pluginLocation(server: string, plugin: TsPlugin, repoRoot: string) {
+  const local = installedPackageDirs
+    .map((dir) => join(repoRoot, dir))
+    .find((dir) => existsSync(join(dir, plugin.name, "package.json")));
+  if (local !== undefined) {
+    return dirname(local);
+  }
+  return plugin.packages === undefined
+    ? undefined
+    : cachedPluginLocation(server, { name: plugin.name, packages: plugin.packages });
 }
 
 export const activeServersForPath = Effect.fn("LanguageServers.activeServersForPath")(
@@ -775,6 +909,14 @@ export interface ServerHandle {
   readonly connection: LspConnection;
   /** Which read-only intents this server advertised; drives data-driven server selection. */
   readonly capabilities: ReadonlySet<Capability>;
+  /** The plugins this process was spawned with, by name; tsserver takes them at `initialize` only. */
+  readonly plugins: ReadonlySet<string>;
+  /**
+   * Dead, or spawned with a plugin set the repo has since outgrown (the plugin landed, or the repo
+   * became one that needs it). A holder rebuilds on it exactly as it does on a crash, so nothing
+   * keeps sending a `vue` document to a process that refuses it.
+   */
+  readonly stale: Effect.Effect<boolean>;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -814,7 +956,8 @@ function parseCapabilities(initializeResult: unknown): Set<Capability> {
  *
  * @param repoRoot - The repository root used for workspace initialization
  * @param config - Optional initialization options, workspace capabilities, and request handler
- * @returns The initialized server handle with its advertised capabilities
+ * @returns The initialized server handle with its advertised capabilities, plugin-less and stale
+ *   only once dead; `lookupServer` layers a spawn's plugins and drift check over it
  */
 export function performHandshake(
   connection: LspConnection,
@@ -893,6 +1036,8 @@ export function performHandshake(
     return {
       capabilities: parseCapabilities(result),
       connection,
+      plugins: new Set<string>(),
+      stale: connection.closed,
     } satisfies ServerHandle;
   });
 }
@@ -1026,6 +1171,13 @@ function serverRepoFromKey(key: string) {
   return { repoRoot: key.slice(repoStart), server: key.slice(serverStart, repoStart) };
 }
 
+/** A plugin as tsserver's `initializationOptions.plugins` carries it, located for one repo. */
+interface ResolvedPlugin {
+  readonly languages: readonly string[] | undefined;
+  readonly location: string;
+  readonly name: string;
+}
+
 function lookupServer(
   key: string,
 ): Effect.Effect<
@@ -1033,19 +1185,58 @@ function lookupServer(
   ServerUnavailable | LspSpawnError | LspRequestError,
   LspProcess | Scope.Scope
 > {
-  const { repoRoot, server: language } = serverRepoFromKey(key);
-  const command = resolveServerCommand(language, repoRoot);
-  if (command === undefined) {
-    return Effect.fail(
-      new ServerUnavailable({ language, message: `no language server for ${language}` }),
+  return Effect.gen(function* lookup() {
+    const { repoRoot, server: language } = serverRepoFromKey(key);
+    const command = resolveServerCommand(language, repoRoot);
+    if (command === undefined) {
+      return yield* new ServerUnavailable({
+        language,
+        message: `no language server for ${language}`,
+      });
+    }
+    const spec = registry[language];
+    if (spec === undefined) {
+      return yield* connectServer(command, repoRoot);
+    }
+    // Tsserver takes its plugins at `initialize`, so the set is fixed at spawn from what the repo
+    // Has on hand now. The handle then reads as stale once that set no longer matches what a spawn
+    // Would load (the plugin landed, moved from the cache into the repo, or the repo became one that
+    // Needs it), and its holders rebuild. Location counts: tsserver resolved the plugin from the dir
+    // It was given, so a plugin now living elsewhere is a different load.
+    const loadedLocations = (gates: ServerGates) =>
+      new Map(loadedPlugins(spec, gates).map(({ location, plugin }) => [plugin.name, location]));
+    const gates = yield* activeServerGates(repoRoot);
+    const plugins = loadedPlugins(spec, gates).map(({ location, plugin }) => ({
+      languages: plugin.languages,
+      location,
+      name: plugin.name,
+    }));
+    const spawnedWith = loadedLocations(gates);
+    const handle = yield* connectServer(
+      command,
+      repoRoot,
+      handshakeConfigFor(spec, repoRoot, plugins),
     );
-  }
-  const spec = registry[language];
-  return connectServer(
-    command,
-    repoRoot,
-    spec === undefined ? undefined : handshakeConfigFor(spec, repoRoot),
-  );
+    return {
+      ...handle,
+      plugins: new Set(spawnedWith.keys()),
+      stale: handle.stale.pipe(
+        Effect.flatMap((isClosed) =>
+          isClosed
+            ? Effect.succeed(true)
+            : activeServerGates(repoRoot).pipe(
+                Effect.map((now) => {
+                  const current = loadedLocations(now);
+                  return (
+                    current.size !== spawnedWith.size ||
+                    [...current].some(([name, location]) => spawnedWith.get(name) !== location)
+                  );
+                }),
+              ),
+        ),
+      ),
+    };
+  });
 }
 
 export class LanguageServers extends Context.Service<
@@ -1070,6 +1261,16 @@ export class LanguageServers extends Context.Service<
       changes: readonly WatchedPathChange[],
       isTracked: (path: string) => boolean,
     ) => Effect.Effect<void>;
+    /**
+     * Send every plugin this repo admits but has nowhere yet to provisioning (one with a channel; a
+     * discovery-only plugin is simply absent). Called per diagnostics run, not from `acquire`: a
+     * language that opens only through a plugin is not routed to the server until the plugin is on
+     * hand (`activeServers`), so a run over `.vue` files alone would otherwise never acquire
+     * tsserver and nothing would ever start the download. The server keeps spawning meanwhile with
+     * whatever is on hand, so a `.ts` file never waits on a `.vue` plugin; once it lands, the
+     * pooled process reads as stale and is rebuilt with it.
+     */
+    readonly provisionPlugins: (repoRoot: string) => Effect.Effect<void>;
     /**
      * Evict this repo's pooled servers so the next run brings up fresh ones. The escape hatch
      * behind `R`, for a server that cannot be told about a change (a linter that reads its config
@@ -1157,14 +1358,15 @@ export const LanguageServersLive = Layer.effect(
       });
 
     // Connect through the warm pool; if the pooled server died (its stdout closed), evict it and
-    // Bring up a fresh one, so a crash mid-session recovers on the next run.
+    // Bring up a fresh one, so a crash mid-session recovers on the next run. A handle whose plugin
+    // Set the repo has outgrown is replaced the same way.
     const fromPool = (language: string, repoRoot: string) => {
       const key = serverRepoKey(language, repoRoot);
       return RcMap.get(pool, key).pipe(
         Effect.flatMap((handle) =>
-          handle.connection.closed.pipe(
-            Effect.flatMap((isClosed) =>
-              isClosed
+          handle.stale.pipe(
+            Effect.flatMap((isStale) =>
+              isStale
                 ? RcMap.invalidate(pool, key).pipe(Effect.andThen(RcMap.get(pool, key)))
                 : Effect.succeed(handle),
             ),
@@ -1172,6 +1374,23 @@ export const LanguageServersLive = Layer.effect(
         ),
       );
     };
+
+    const provisionPlugins = (repoRoot: string) =>
+      Effect.gen(function* plugins() {
+        const gates = yield* activeServerGates(repoRoot);
+        const missing = Object.entries(registry).flatMap(([server, spec]) =>
+          activePlugins(spec, gates).flatMap((plugin) =>
+            plugin.packages === undefined || gates.located.get(plugin.name) !== undefined
+              ? []
+              : [{ plugin: { name: plugin.name, packages: plugin.packages }, server }],
+          ),
+        );
+        yield* Effect.forEach(
+          missing,
+          ({ plugin, server }) => provisioner.ensurePlugin(server, plugin),
+          { discard: true },
+        );
+      });
 
     const acquire = (
       language: string,
@@ -1211,6 +1430,6 @@ export const LanguageServersLive = Layer.effect(
         );
       });
 
-    return { acquire, notifyWatchedFiles, restart };
+    return { acquire, notifyWatchedFiles, provisionPlugins, restart };
   }),
 );

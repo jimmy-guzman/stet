@@ -143,3 +143,16 @@ test("parseWhen validates every condition shape", () => {
     "a when file must not contain a null byte",
   );
 });
+
+test("a when path is a file or a directory", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "stet-when-"));
+  // An installed package is a directory: `node_modules/vue` is how a hoisted install says the repo
+  // Uses Vue, whatever its own manifest names.
+  mkdirSync(join(repo, "node_modules", "vue"), { recursive: true });
+  try {
+    expect(await Effect.runPromise(evaluateWhen("node_modules/vue", repo))).toBe(true);
+    expect(await Effect.runPromise(evaluateWhen("node_modules/svelte", repo))).toBe(false);
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});

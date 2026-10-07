@@ -53,6 +53,7 @@ export const lightTheme: Theme = {
     tsconfig: "#1e66f5",
     typescript: "#1e66f5",
     video: "#007890",
+    vue: "#287c42",
     yaml: "#d20f39",
   },
   kind: {

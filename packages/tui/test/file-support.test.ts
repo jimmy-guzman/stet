@@ -119,6 +119,12 @@ test("built-in extension and glob matching ignores case across facets", async ()
     const tsx = fileSupportForPath("src/Component.TSX");
     expect(tsx.icon).toBe("react");
     expect(tsx.language?.languageId).toBe("typescriptreact");
+    // A Vue single-file component resolves every facet: the vue icon and profile, and the vue
+    // Grammar through filename inference (no syntax association is needed for it).
+    const vue = fileSupportForPath("src/App.vue");
+    expect(vue.icon).toBe("vue");
+    expect(vue.language?.languageId).toBe("vue");
+    expect(vue.syntax).toBe("vue");
     // A glob built-in is case-insensitive too: `*.gradle` still resolves groovy syntax.
     expect(fileSupportForPath("build.GRADLE").syntax).toBe("groovy");
   });

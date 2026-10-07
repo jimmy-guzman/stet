@@ -50,7 +50,12 @@ function handle(
     watchedFilesChanged: () => Effect.void,
     whenProjectLoaded,
   };
-  return { capabilities: new Set(capabilities), connection };
+  return {
+    capabilities: new Set(capabilities),
+    connection,
+    plugins: new Set<string>(),
+    stale: connection.closed,
+  };
 }
 
 function fakeServers(byLanguage: Record<string, ServerHandle>) {
@@ -62,6 +67,7 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         : Effect.succeed(found);
     },
     notifyWatchedFiles: () => Effect.void,
+    provisionPlugins: () => Effect.void,
     restart: () => Effect.void,
   });
 }
@@ -387,6 +393,7 @@ test("definition never acquires a server whose static hint can't answer it", asy
           : Effect.fail(new ServerUnavailable({ language, message: "not found" }));
       },
       notifyWatchedFiles: () => Effect.void,
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
 
@@ -820,6 +827,7 @@ test("warmHold pre-loads the project then closes the doc, holding the server unt
           () => Effect.sync(() => void (released += 1)),
         ),
       notifyWatchedFiles: () => Effect.void,
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
 
@@ -860,6 +868,7 @@ test("warmHold warms a server that advertises only hover", async () => {
     const servers = Layer.succeed(LanguageServers)({
       acquire: () => Effect.succeed(hoverOnly),
       notifyWatchedFiles: () => Effect.void,
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
 

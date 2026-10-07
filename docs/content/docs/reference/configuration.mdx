@@ -275,9 +275,10 @@ built-in that answers no code intel keeps answering none. The hint only routes c
 never gates diagnostics, which run for any server its language profile selects, and the server's
 initialize reply decides whether it answers pull diagnostics or only pushes.
 
-`when` is declarative data, never a shell command. It accepts a repo-relative path, a manifest key,
-or a Python dependency declaration. Relative paths may include parent-directory segments; absolute
-paths are rejected. An array means any condition may match:
+`when` is declarative data, never a shell command. It accepts a repo-relative path (a file or a
+directory, such as `node_modules/vue`), a manifest key, or a Python dependency declaration. Relative
+paths may include parent-directory segments; absolute paths are rejected. An array means any
+condition may match:
 
 ```jsonc
 "when": [

@@ -353,14 +353,15 @@ export const DiagnosticsLive = Layer.effect(
     };
 
     // One keeper per (server, repo): reused warm across runs, rebuilt (documents reopened fresh by
-    // The next sync, since `sent` starts empty) when the pooled server died in between.
+    // The next sync, since `sent` starts empty) when the pooled server died in between or was
+    // Spawned with a plugin set the repo has since outgrown.
     const acquireKeeper = (language: string, repoRoot: string) => {
       const key = serverRepoKey(language, repoRoot);
       return Effect.gen(function* acquire() {
         const existing = keepers.get(key);
         if (existing !== undefined) {
-          const isClosed = yield* existing.handle.connection.closed;
-          if (!isClosed) {
+          const isStale = yield* existing.handle.stale;
+          if (!isStale) {
             return existing;
           }
           yield* closeKeeper(key, existing);
@@ -611,7 +612,13 @@ export const DiagnosticsLive = Layer.effect(
           Stream.flatMap(() => merged),
         );
       };
-      return Stream.unwrap(activeServerGates(repoRoot).pipe(Effect.map(runWithGates)));
+      // Plugins the repo admits but has nowhere yet start downloading here, before routing: a run
+      // Over files that open only through a plugin never acquires the server they would load into.
+      return Stream.unwrap(
+        servers
+          .provisionPlugins(repoRoot)
+          .pipe(Effect.andThen(activeServerGates(repoRoot)), Effect.map(runWithGates)),
+      );
     }
 
     return { resetServers, run };

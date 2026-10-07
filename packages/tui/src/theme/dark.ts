@@ -53,6 +53,7 @@ export const darkTheme: Theme = {
     tsconfig: "#8aadf4",
     typescript: "#8aadf4",
     video: "#7dc4e4",
+    vue: "#a6da95",
     yaml: "#ed8796",
   },
   kind: {

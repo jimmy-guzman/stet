@@ -92,8 +92,9 @@ describe("fileIcon", () => {
     expect(fileIcon("LICENSE.md")).not.toBe(fileIcon("readme.md"));
   });
 
-  test("matches astro, pdf, and video files by extension", () => {
+  test("matches astro, vue, pdf, and video files by extension", () => {
     expect(fileIcon("index.astro")).toBe("\u{e6b3}");
+    expect(fileIcon("App.vue")).toBe("\u{e6a0}");
     expect(fileIcon("report.pdf")).toBe("\u{f1c1}");
     expect(fileIcon("clip.mp4")).toBe("\u{f1c8}");
     expect(fileIcon("clip.mkv")).toBe(fileIcon("clip.mp4"));

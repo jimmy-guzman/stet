@@ -21,6 +21,7 @@ export const builtinIcons = new Map<string, string>([
   ["html", "\u{e736}"],
   ["http", "\u{f1d8}"],
   ["astro", "\u{e6b3}"],
+  ["vue", "\u{e6a0}"],
   ["template", "\u{f505}"],
   ["pdf", "\u{f1c1}"],
   ["rust", "\u{e7a8}"],
@@ -76,6 +77,9 @@ export const builtinLanguages = new Map<string, LanguageProfile>([
   ["javascriptreact", { languageId: "javascriptreact", servers: typescriptServers }],
   ["typescript", { languageId: "typescript", servers: typescriptServers }],
   ["typescriptreact", { languageId: "typescriptreact", servers: typescriptServers }],
+  // The same family: tsserver opens a `vue` document only through its Vue plugin, and `activeServers`
+  // Routes a plugin-declared languageId to the server only while that plugin is loaded.
+  ["vue", { languageId: "vue", servers: typescriptServers }],
   ["yaml", { languageId: "yaml", servers: ["yaml"] }],
 ]);
 
@@ -100,6 +104,7 @@ export const builtinFiles = new Map<string, FileAssociation>([
   ["language-javascriptreact", { extensions: ["jsx"], language: "javascriptreact" }],
   ["language-typescript", { extensions: ["ts", "mts", "cts"], language: "typescript" }],
   ["language-typescriptreact", { extensions: ["tsx"], language: "typescriptreact" }],
+  ["language-vue", { extensions: ["vue"], language: "vue" }],
   ["language-yaml", { extensions: ["yaml", "yml"], language: "yaml" }],
 
   ["syntax-env", { filenames: [".env"], syntax: "dotenv" }],
@@ -122,6 +127,7 @@ export const builtinFiles = new Map<string, FileAssociation>([
   iconExtensions("icon-html", "html", ["html"]),
   iconExtensions("icon-http", "http", ["http"]),
   iconExtensions("icon-astro", "astro", ["astro"]),
+  iconExtensions("icon-vue", "vue", ["vue"]),
   iconExtensions("icon-template", "template", ["mako"]),
   iconExtensions("icon-pdf", "pdf", ["pdf"]),
   iconExtensions("icon-rust", "rust", ["rs"]),

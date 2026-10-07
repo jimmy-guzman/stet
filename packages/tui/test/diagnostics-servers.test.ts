@@ -820,6 +820,11 @@ test("a Vue single-file component routes to the TS family and opens as vue", () 
 });
 
 test("a .vue file reaches tsserver only once its plugin is on hand", async () => {
+  // An empty cache for the test, or a developer whose real cache holds the pinned plugin would see
+  // The bare repo locate it and route `.vue` to tsserver.
+  const cache = mkdtempSync(join(tmpdir(), "stet-vue-cache-"));
+  const previousCache = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = cache;
   const bare = mkdtempSync(join(tmpdir(), "stet-vue-"));
   const local = mkdtempSync(join(tmpdir(), "stet-vue-"));
   const pnpm = mkdtempSync(join(tmpdir(), "stet-vue-"));
@@ -872,8 +877,13 @@ test("a .vue file reaches tsserver only once its plugin is on hand", async () =>
     expect(activePlugins(registry.typescript ?? {}, plainGates)).toEqual([]);
     expect(await Effect.runPromise(activeServersForPath("src/App.vue", plain))).toEqual(["oxlint"]);
   } finally {
-    for (const repo of [bare, local, pnpm, plain]) {
-      rmSync(repo, { force: true, recursive: true });
+    if (previousCache === undefined) {
+      delete process.env.XDG_CACHE_HOME;
+    } else {
+      process.env.XDG_CACHE_HOME = previousCache;
+    }
+    for (const dir of [bare, local, pnpm, plain, cache]) {
+      rmSync(dir, { force: true, recursive: true });
     }
   }
 });

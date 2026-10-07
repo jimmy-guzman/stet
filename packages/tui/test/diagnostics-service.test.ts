@@ -7,7 +7,12 @@ import { pathToFileURL } from "node:url";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 
 import type { CheckerFileState } from "@/diagnostics/checker";
-import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
+import {
+  LanguageServers,
+  ServerInstalling,
+  serversProviding,
+  ServerUnavailable,
+} from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
 import { Diagnostics, DiagnosticsLive } from "@/diagnostics/service";
 import { LspRequestError } from "@/diagnostics/transport";
@@ -128,6 +133,7 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         : Effect.succeed(handle);
     },
     notifyWatchedFiles: () => Effect.void,
+    providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
     provisionPlugins: () => Effect.void,
     restart: () => Effect.void,
   });
@@ -301,6 +307,7 @@ test("holds a file's prior badge while a slower server is still running", async 
           : Effect.succeed(handle);
       },
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -397,6 +404,7 @@ test("leaves files pending with a message while the server is downloading", asyn
     const installing = Layer.succeed(LanguageServers)({
       acquire: () => Effect.fail(new ServerInstalling({ language: "typescript" })),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -418,6 +426,7 @@ test("degrades to unavailable when the server cannot be acquired", async () => {
           }),
         ),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -761,6 +770,7 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
             : Effect.succeed(handle);
         }),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -823,6 +833,7 @@ test("concurrent runs share one keeper instead of racing two into existence", as
           acquires += 1;
         }).pipe(Effect.andThen(Effect.sleep("50 millis")), Effect.as(probe.handle)),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });

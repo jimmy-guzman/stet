@@ -1263,14 +1263,25 @@ export class LanguageServers extends Context.Service<
     ) => Effect.Effect<void>;
     /**
      * Send every plugin this repo admits but has nowhere yet to provisioning (one with a channel; a
-     * discovery-only plugin is simply absent). Called per diagnostics run, not from `acquire`: a
-     * language that opens only through a plugin is not routed to the server until the plugin is on
-     * hand (`activeServers`), so a run over `.vue` files alone would otherwise never acquire
-     * tsserver and nothing would ever start the download. The server keeps spawning meanwhile with
-     * whatever is on hand, so a `.ts` file never waits on a `.vue` plugin; once it lands, the
-     * pooled process reads as stale and is rebuilt with it.
+     * discovery-only plugin is simply absent). Called per diagnostics run and ahead of every intel
+     * provider lookup (`providers`), not from `acquire`: a language that opens only through a
+     * plugin is not routed to the server until the plugin is on hand (`activeServers`), so a run
+     * over `.vue` files alone, or an intel pull with diagnostics switched off, would otherwise
+     * never acquire tsserver and nothing would ever start the download. The server keeps spawning
+     * meanwhile with whatever is on hand, so a `.ts` file never waits on a `.vue` plugin; once it
+     * lands, the pooled process reads as stale and is rebuilt with it.
      */
     readonly provisionPlugins: (repoRoot: string) => Effect.Effect<void>;
+    /**
+     * `serversProviding` with the provisioning pass ahead of it, for intel: diagnostics and intel
+     * are independent switches, so with diagnostics off this is the only path that would ever start
+     * a plugin download for a plugin-only language.
+     */
+    readonly providers: (
+      path: string,
+      capability: Capability,
+      repoRoot: string,
+    ) => Effect.Effect<string[]>;
     /**
      * Evict this repo's pooled servers so the next run brings up fresh ones. The escape hatch
      * behind `R`, for a server that cannot be told about a change (a linter that reads its config
@@ -1430,6 +1441,11 @@ export const LanguageServersLive = Layer.effect(
         );
       });
 
-    return { acquire, notifyWatchedFiles, provisionPlugins, restart };
+    const providers = (path: string, capability: Capability, repoRoot: string) =>
+      provisionPlugins(repoRoot).pipe(
+        Effect.andThen(() => serversProviding(path, capability, repoRoot)),
+      );
+
+    return { acquire, notifyWatchedFiles, providers, provisionPlugins, restart };
   }),
 );

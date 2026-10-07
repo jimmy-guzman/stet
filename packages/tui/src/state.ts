@@ -38,12 +38,7 @@ import {
   problemsEmptyState,
 } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import {
-  hasCapabilityServer,
-  hasIntelServer,
-  LanguageServers,
-  serversProviding,
-} from "./diagnostics/servers";
+import { hasCapabilityServer, hasIntelServer, LanguageServers } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -3086,9 +3081,14 @@ function createState() {
       position: { character: cursorColumn(), line: line - 1 },
     };
     const providers = await runtime
-      .runPromise(serversProviding(request.path, "implementation", requestRoot), {
-        signal: controller.signal,
-      })
+      .runPromise(
+        LanguageServers.use((servers) =>
+          servers.providers(request.path, "implementation", requestRoot),
+        ),
+        {
+          signal: controller.signal,
+        },
+      )
       .catch(() => undefined);
     if (providers === undefined || !caretIntelRequestIsCurrent(controller, requestRoot, request)) {
       return;
@@ -3438,9 +3438,12 @@ function createState() {
     // Would return `[]` and read as "no symbols" (a false claim). Confirm the gated-off case here and
     // Short-circuit to the unsupported state without issuing a request.
     const providers = await runtime
-      .runPromise(serversProviding(path, "documentSymbol", requestRoot), {
-        signal: controller.signal,
-      })
+      .runPromise(
+        LanguageServers.use((servers) => servers.providers(path, "documentSymbol", requestRoot)),
+        {
+          signal: controller.signal,
+        },
+      )
       .catch(() => undefined);
     if (
       providers === undefined ||

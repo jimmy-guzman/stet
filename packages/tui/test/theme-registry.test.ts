@@ -68,6 +68,7 @@ describe("built-in icon colors", () => {
       "tsconfig",
       "typescript",
       "video",
+      "vue",
       "yaml",
     ];
 

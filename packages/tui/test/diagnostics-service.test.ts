@@ -7,7 +7,12 @@ import { pathToFileURL } from "node:url";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 
 import type { CheckerFileState } from "@/diagnostics/checker";
-import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
+import {
+  LanguageServers,
+  ServerInstalling,
+  serversProviding,
+  ServerUnavailable,
+} from "@/diagnostics/servers";
 import type { Capability, ServerHandle } from "@/diagnostics/servers";
 import { Diagnostics, DiagnosticsLive } from "@/diagnostics/service";
 import { LspRequestError } from "@/diagnostics/transport";
@@ -54,7 +59,12 @@ function pushingHandle(items: unknown[]): ServerHandle {
     watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
-  return { capabilities: new Set(), connection };
+  return {
+    capabilities: new Set(),
+    connection,
+    plugins: new Set<string>(),
+    stale: connection.closed,
+  };
 }
 
 // A server whose stdout has closed (it died): it never publishes and reports closed, so the settle
@@ -78,7 +88,12 @@ function deadHandle(): ServerHandle {
     watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
-  return { capabilities: new Set(), connection };
+  return {
+    capabilities: new Set(),
+    connection,
+    plugins: new Set<string>(),
+    stale: connection.closed,
+  };
 }
 
 function collectUpdates(
@@ -118,6 +133,8 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         : Effect.succeed(handle);
     },
     notifyWatchedFiles: () => Effect.void,
+    providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
+    provisionPlugins: () => Effect.void,
     restart: () => Effect.void,
   });
 }
@@ -185,7 +202,12 @@ test("an interrupted run leaves the document open and the next run reconciles it
       watchedFilesChanged: () => Effect.void,
       whenProjectLoaded: Effect.void,
     };
-    const handle: ServerHandle = { capabilities: new Set(), connection };
+    const handle: ServerHandle = {
+      capabilities: new Set(),
+      connection,
+      plugins: new Set<string>(),
+      stale: connection.closed,
+    };
 
     const state = await Effect.runPromise(
       Diagnostics.pipe(
@@ -285,6 +307,8 @@ test("holds a file's prior badge while a slower server is still running", async 
           : Effect.succeed(handle);
       },
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
     const prior = new Map<string, CheckerFileState>([
@@ -380,6 +404,8 @@ test("leaves files pending with a message while the server is downloading", asyn
     const installing = Layer.succeed(LanguageServers)({
       acquire: () => Effect.fail(new ServerInstalling({ language: "typescript" })),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
     const state = await runDiagnostics(dir, [changed("src/a.ts")], installing);
@@ -400,6 +426,8 @@ test("degrades to unavailable when the server cannot be acquired", async () => {
           }),
         ),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
     const state = await runDiagnostics(dir, [changed("src/a.ts")], failing);
@@ -449,7 +477,12 @@ function pullingHandle(options: {
     watchedFilesChanged: () => Effect.void,
     whenProjectLoaded: Effect.void,
   };
-  return { capabilities: new Set<Capability>(["pullDiagnostics"]), connection };
+  return {
+    capabilities: new Set<Capability>(["pullDiagnostics"]),
+    connection,
+    plugins: new Set<string>(),
+    stale: connection.closed,
+  };
 }
 
 test("a pull-capable server resolves findings from the pull answer, no publish needed", async () => {
@@ -535,6 +568,8 @@ test("a related report's findings survive the named file's own pull failing", as
     const handle: ServerHandle = {
       capabilities: new Set<Capability>(["pullDiagnostics"]),
       connection,
+      plugins: new Set<string>(),
+      stale: connection.closed,
     };
 
     const state = await runDiagnostics(
@@ -578,6 +613,8 @@ function keeperProbe() {
   const handle: ServerHandle = {
     capabilities: new Set<Capability>(["pullDiagnostics"]),
     connection,
+    plugins: new Set<string>(),
+    stale: connection.closed,
   };
   return { changes, closes, handle, opens };
 }
@@ -714,7 +751,12 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
     };
     const second = keeperProbe();
     const handles = [
-      { capabilities: first.handle.capabilities, connection: dyingConnection },
+      {
+        capabilities: first.handle.capabilities,
+        connection: dyingConnection,
+        plugins: first.handle.plugins,
+        stale: dyingConnection.closed,
+      },
       second.handle,
     ];
     let acquires = 0;
@@ -728,6 +770,8 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
             : Effect.succeed(handle);
         }),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
 
@@ -789,6 +833,8 @@ test("concurrent runs share one keeper instead of racing two into existence", as
           acquires += 1;
         }).pipe(Effect.andThen(Effect.sleep("50 millis")), Effect.as(probe.handle)),
       notifyWatchedFiles: () => Effect.void,
+      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
+      provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
 
@@ -839,7 +885,14 @@ test("resetServers drops the keepers, so the next run reopens every document", a
       watchedFilesChanged: () => Effect.void,
       whenProjectLoaded: Effect.void,
     };
-    const servers = fakeServers({ typescript: { capabilities: new Set(), connection } });
+    const servers = fakeServers({
+      typescript: {
+        capabilities: new Set(),
+        connection,
+        plugins: new Set<string>(),
+        stale: connection.closed,
+      },
+    });
 
     await Effect.runPromise(
       Diagnostics.pipe(

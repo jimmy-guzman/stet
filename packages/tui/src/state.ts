@@ -38,12 +38,7 @@ import {
   problemsEmptyState,
 } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import {
-  hasCapabilityServer,
-  hasIntelServer,
-  LanguageServers,
-  serversProviding,
-} from "./diagnostics/servers";
+import { hasCapabilityServer, hasIntelServer, LanguageServers } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -2785,8 +2780,14 @@ function createState() {
               next.delete(language);
               return next;
             });
-            void runChecks(gitModel());
-          }),
+          }).pipe(
+            // A landed install changes which server answers a file (a plugin-less tsserver is about
+            // To be rebuilt with its plugin, a second server now outranks the one that answered), so
+            // Replies cached from the old selection must not outlive it. Only non-empty replies are
+            // Ever cached, and those are exactly the ones a lesser server could have given.
+            Effect.andThen(Intel.use((intel) => intel.invalidate(gitModel().repoRoot, []))),
+            Effect.andThen(Effect.sync(() => void runChecks(gitModel()))),
+          ),
         ),
         Effect.forever,
       ),
@@ -3086,9 +3087,14 @@ function createState() {
       position: { character: cursorColumn(), line: line - 1 },
     };
     const providers = await runtime
-      .runPromise(serversProviding(request.path, "implementation", requestRoot), {
-        signal: controller.signal,
-      })
+      .runPromise(
+        LanguageServers.use((servers) =>
+          servers.providers(request.path, "implementation", requestRoot),
+        ),
+        {
+          signal: controller.signal,
+        },
+      )
       .catch(() => undefined);
     if (providers === undefined || !caretIntelRequestIsCurrent(controller, requestRoot, request)) {
       return;
@@ -3438,9 +3444,12 @@ function createState() {
     // Would return `[]` and read as "no symbols" (a false claim). Confirm the gated-off case here and
     // Short-circuit to the unsupported state without issuing a request.
     const providers = await runtime
-      .runPromise(serversProviding(path, "documentSymbol", requestRoot), {
-        signal: controller.signal,
-      })
+      .runPromise(
+        LanguageServers.use((servers) => servers.providers(path, "documentSymbol", requestRoot)),
+        {
+          signal: controller.signal,
+        },
+      )
       .catch(() => undefined);
     if (
       providers === undefined ||

@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 
 import { Cache, Effect, Option } from "effect";
@@ -101,7 +102,9 @@ function evaluateCondition(condition: WhenCondition, repoRoot: string, manifests
     if (path === undefined) {
       return Effect.succeed(false);
     }
-    return Effect.tryPromise(() => Bun.file(path).exists()).pipe(
+    // A path condition is a file or a directory (`node_modules/vue`), so this is an `access`, not
+    // `Bun.file(path).exists()`, which answers false for a directory.
+    return Effect.tryPromise(() => access(path).then(() => true)).pipe(
       Effect.catchTag("UnknownError", () => Effect.succeed(false)),
     );
   }

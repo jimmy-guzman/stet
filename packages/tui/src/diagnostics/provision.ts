@@ -13,7 +13,10 @@
  * it pins that behavior identically across npm 10, 11, and 12 (12 blocks install scripts by
  * default) rather than inheriting whatever the user's npm defaults to. The cache directory is keyed
  * by a digest of the exact pinned channel (`provisionKey`), so bumping a pin lands in a fresh
- * directory and re-provisions instead of the stale cached binary satisfying the existence check.
+ * directory and re-provisions instead of the stale cached binary satisfying the existence check. A
+ * server's tsserver plugins (`ServerSpec.plugins`) come through the npm channel the same way, each
+ * under its server's `plugins/` subdir with its own key, because a plugin must exist whatever tier
+ * found the server (repo-local, PATH, or this cache).
  *
  * The install is bounded (`INSTALL_TIMEOUT`): a fetch that cannot complete (offline, air-gapped,
  * proxied, locked-down CI) is interrupted and recorded as a failure, so the file degrades to
@@ -28,6 +31,7 @@ import { join } from "node:path";
 import { Context, Data, Duration, Effect, Layer, Queue } from "effect";
 
 import { Process } from "@/process";
+import type { CommandError } from "@/process";
 import { extractTarEntry } from "@/utils/untar";
 
 class ProvisionError extends Data.TaggedError("ProvisionError")<{ readonly message: string }> {}
@@ -67,6 +71,21 @@ export type ProvisionState =
   | { readonly kind: "installing" }
   | { readonly kind: "failed"; readonly message: string }
   | { readonly kind: "disabled" };
+
+type NotReady = Exclude<ProvisionState, { kind: "ready" }>;
+
+/**
+ * A package provisioned beside a server rather than as one (a tsserver plugin): pinned npm
+ * packages, ready once the named package is installed. It is provisioned on its own because it must
+ * exist whatever tier found the server, so it can never ride on the server's channel.
+ */
+export interface PluginPackages {
+  readonly name: string;
+  readonly packages: readonly string[];
+}
+
+/** A plugin has no command; `cachedPluginLocation` is where a ready one is read from. */
+type PluginState = NotReady | { readonly kind: "ready" };
 
 function defaultCacheRoot(): string {
   return process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache");
@@ -112,6 +131,28 @@ export function cachedBinaryPath(language: string, spec: ProvisionSpec): string 
   return installedBinaryPath(defaultCacheRoot(), language, spec);
 }
 
+/**
+ * A plugin nests under its server's cache entry (`<server>/plugins/<key>`), keyed by its own pins
+ * so a plugin bump re-provisions the plugin alone.
+ */
+function pluginDir(root: string, server: string, plugin: PluginPackages): string {
+  return join(
+    serverDir(root, server, "plugins"),
+    provisionKey({ kind: "npm", packages: plugin.packages }),
+  );
+}
+
+/**
+ * Where a provisioned plugin lives in the default cache, once it is there, for the handshake. The
+ * `.installed` marker is written only after `npm install` exits 0; the package's own `package.json`
+ * is not the marker, since npm extracts it before the plugin's dependencies and an install cut off
+ * by the timeout would read as ready and fail to load, for every later session too.
+ */
+export function cachedPluginLocation(server: string, plugin: PluginPackages): string | undefined {
+  const dir = pluginDir(defaultCacheRoot(), server, plugin);
+  return existsSync(join(dir, ".installed")) ? dir : undefined;
+}
+
 function downloadsDisabled(): boolean {
   const value = process.env.STET_NO_LSP_DOWNLOAD;
   return value !== undefined && value !== "" && value !== "0" && value !== "false";
@@ -121,6 +162,12 @@ export class Provisioner extends Context.Service<
   Provisioner,
   {
     readonly ensure: (language: string, spec: ProvisionSpec) => Effect.Effect<ProvisionState>;
+    /**
+     * A plugin's install publishes its _server's_ name to `starts`/`completions`: the status it
+     * drives ("installing typescript server…") is true, since that server is not usable for the
+     * repo until the plugin lands, and the completion re-check is the same one.
+     */
+    readonly ensurePlugin: (server: string, plugin: PluginPackages) => Effect.Effect<PluginState>;
     /** Languages whose download just began; drains to surface a live "installing…" status. */
     readonly starts: Queue.Dequeue<string>;
     /** Languages whose install just finished (succeeded or failed); drains to trigger a re-check. */
@@ -240,28 +287,48 @@ export function makeProvisioner(
       );
     }
 
-    function install(language: string, spec: ProvisionSpec) {
-      const dir = serverDir(root, language, provisionKey(spec.channel));
-      const perform =
-        spec.channel.kind === "npm"
-          ? installNpm(dir, spec.channel.packages)
-          : installBinary(dir, spec, spec.channel);
+    /**
+     * The not-ready outcomes a server and a plugin share: downloads off, a sticky earlier failure,
+     * an install already running, or the one forked here. The forked install is bounded, recorded
+     * under `key` on failure, and always offers a completion for `published` (which is what drives
+     * the re-check), whatever the outcome.
+     */
+    function provision(
+      key: string,
+      label: string,
+      published: string,
+      perform: Effect.Effect<unknown, CommandError | ProvisionError>,
+    ): Effect.Effect<NotReady> {
+      if (downloadsDisabled()) {
+        return Effect.succeed<NotReady>({ kind: "disabled" });
+      }
+      const failure = failures.get(key);
+      if (failure !== undefined) {
+        return Effect.succeed<NotReady>({ kind: "failed", message: failure });
+      }
+      if (inFlight.has(key)) {
+        return Effect.succeed<NotReady>({ kind: "installing" });
+      }
+      inFlight.add(key);
       return perform.pipe(
         Effect.timeoutOrElse({
           duration: installTimeout,
           orElse: () =>
             Effect.fail(
               new ProvisionError({
-                message: `${language} language server download timed out after ${Duration.toSeconds(installTimeout)}s`,
+                message: `${label} download timed out after ${Duration.toSeconds(installTimeout)}s`,
               }),
             ),
         }),
         Effect.matchEffect({
-          onFailure: (error) => Effect.sync(() => void failures.set(language, error.message)),
+          onFailure: (error) => Effect.sync(() => void failures.set(key, error.message)),
           onSuccess: () => Effect.void,
         }),
-        Effect.andThen(Effect.sync(() => void inFlight.delete(language))),
-        Effect.andThen(Queue.offer(completions, language)),
+        Effect.andThen(Effect.sync(() => void inFlight.delete(key))),
+        Effect.andThen(Queue.offer(completions, published)),
+        Effect.forkIn(scope),
+        Effect.andThen(Queue.offer(starts, published)),
+        Effect.as<NotReady>({ kind: "installing" }),
       );
     }
 
@@ -271,26 +338,45 @@ export function makeProvisioner(
         if (existsSync(bin)) {
           return Effect.succeed<ProvisionState>({ command: [bin, ...spec.args], kind: "ready" });
         }
-        if (downloadsDisabled()) {
-          return Effect.succeed<ProvisionState>({ kind: "disabled" });
-        }
-        const failure = failures.get(language);
-        if (failure !== undefined) {
-          return Effect.succeed<ProvisionState>({ kind: "failed", message: failure });
-        }
-        if (inFlight.has(language)) {
-          return Effect.succeed<ProvisionState>({ kind: "installing" });
-        }
-        inFlight.add(language);
-        return install(language, spec).pipe(
-          Effect.forkIn(scope),
-          Effect.andThen(Queue.offer(starts, language)),
-          Effect.as<ProvisionState>({ kind: "installing" }),
+        const dir = serverDir(root, language, provisionKey(spec.channel));
+        return provision(
+          language,
+          `${language} language server`,
+          language,
+          spec.channel.kind === "npm"
+            ? installNpm(dir, spec.channel.packages)
+            : installBinary(dir, spec, spec.channel),
         );
       });
     }
 
-    return { completions, ensure, starts } as const;
+    function ensurePlugin(server: string, plugin: PluginPackages): Effect.Effect<PluginState> {
+      return Effect.suspend(() => {
+        const dir = pluginDir(root, server, plugin);
+        const marker = join(dir, ".installed");
+        if (existsSync(marker)) {
+          return Effect.succeed<PluginState>({ kind: "ready" });
+        }
+        return provision(
+          `${server}/${plugin.name}`,
+          plugin.name,
+          server,
+          installNpm(dir, plugin.packages).pipe(
+            Effect.andThen(
+              Effect.try({
+                catch: (cause) =>
+                  new ProvisionError({
+                    message: cause instanceof Error ? cause.message : String(cause),
+                  }),
+                try: () => writeFileSync(marker, ""),
+              }),
+            ),
+          ),
+        );
+      });
+    }
+
+    return { completions, ensure, ensurePlugin, starts } as const;
   });
 }
 

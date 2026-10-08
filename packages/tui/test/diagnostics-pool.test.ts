@@ -84,6 +84,7 @@ test("a server evicted while still referenced does not retract its replacement",
       return {
         completions,
         ensure: () => Effect.succeed({ command: ["bun"], kind: "ready" as const }),
+        ensurePlugin: () => Effect.die("unused"),
         starts,
       };
     }),

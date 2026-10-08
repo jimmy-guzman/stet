@@ -14,6 +14,7 @@ through [your config](/docs/reference/configuration#file-support).
 | Language                | Highlighting | Folding    | Diagnostics   | Code intelligence          |
 | ----------------------- | ------------ | ---------- | ------------- | -------------------------- |
 | TypeScript & JavaScript | yes          | indent     | types + lint  | yes                        |
+| Vue                     | yes          | indent     | types + lint  | yes                        |
 | Rust                    | yes          | indent     | types + cargo | yes                        |
 | Python                  | yes          | indent     | types + lint  | yes                        |
 | Go                      | yes          | indent     | types + vet   | yes                        |
@@ -71,6 +72,27 @@ unconditional `{ "server": "name" }` or its own `when`.
 through three servers: `typescript-language-server` reports type errors (label
 `tsc`), oxlint reports lint findings (label `oxc`), and Biome joins them (label
 `biome`) when the repo has a `biome.json` or `biome.jsonc`.
+
+### Vue
+
+`.vue` single-file components get type errors for both the `<script>` block and
+template expressions from `typescript-language-server` (label `tsc`), oxlint's
+lint of the script block (label `oxc`), and Biome where configured. tsserver
+cannot read a `.vue` file on its own: stet loads the Vue TypeScript plugin
+(`@vue/typescript-plugin`) into it, which is also what makes a `.vue` import
+resolve from a `.ts` file and what answers code intelligence inside a component.
+
+The plugin loads in a Vue repo: one with `vue` among its `package.json`
+dependencies or devDependencies, or installed under `node_modules` (pnpm's hoist
+directory included, so a pnpm workspace whose root manifest never names vue
+still counts). Outside one, and until the plugin is on hand, `.vue` files get
+oxlint only, never a plugin-less tsserver that would read them as clean; `.ts`
+files never wait on the plugin. The plugin is pinned and downloads from npm the
+first time a Vue repo needs it, even when the server itself was found in the
+repo or on your `PATH`; a repo that installed `@vue/language-server` or the
+plugin itself (under `node_modules`, or pnpm's hoist directory) is used as is.
+Once the plugin lands, or a repo becomes a Vue repo mid-session, tsserver
+restarts with it on its own.
 
 ### Rust
 
@@ -150,8 +172,9 @@ show as unavailable rather than falsely clean.
 ## Code intelligence
 
 Go to definition, find references, implementations, call hierarchy, hover,
-and the symbol outline work for the TypeScript & JavaScript family, for Rust,
-for Python, and for Go, through the same servers that produce their diagnostics
+and the symbol outline work for the TypeScript & JavaScript family (Vue
+components included), for Rust, for Python, and for Go, through the same
+servers that produce their diagnostics
 (a ty repo has everything but go to implementation, which ty does not yet
 answer). JSON and YAML get hover and the symbol outline (YAML also go to
 definition); ruff adds hover on Python. See
@@ -170,9 +193,12 @@ use or provisioning. User-defined servers are never provisioned. The cache is
 `~/.cache/stet/lsp` otherwise. If a provisionable built-in remains missing,
 stet downloads it into that cache: packages distributed through `npm` (this
 path needs `npm` on your `PATH`), or a SHA-256-verified GitHub release binary
-for the servers it doesn't (`rust-analyzer`, `ruff`, `ty`). Set
-`"diagnostics": { "download": false }` in your config to turn downloads off, or
-pass `--no-lsp-download` (or set `STET_NO_LSP_DOWNLOAD`) for one run.
+for the servers it doesn't (`rust-analyzer`, `ruff`, `ty`). A server's tsserver
+plugin (`@vue/typescript-plugin` for Vue) is pinned and downloaded the same way,
+into a `plugins/` subdirectory of the server's cache entry, whatever tier found
+the server itself; a plugin the repo already installed is used from the repo.
+Set `"diagnostics": { "download": false }` in your config to turn downloads off,
+or pass `--no-lsp-download` (or set `STET_NO_LSP_DOWNLOAD`) for one run.
 
 `gopls` is the exception among built-ins: it ships no prebuilt binaries and stet
 never builds from source, so stet never downloads it. Install it yourself

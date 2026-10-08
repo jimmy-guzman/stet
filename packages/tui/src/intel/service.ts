@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url";
 import { Context, Data, Effect, Layer } from "effect";
 import type { Scope } from "effect";
 
-import { LanguageServers, lspLanguageId, serversProviding } from "@/diagnostics/servers";
+import { LanguageServers, lspLanguageId } from "@/diagnostics/servers";
 import type { Capability } from "@/diagnostics/servers";
 import { relativize } from "@/utils/path";
 
@@ -149,7 +149,7 @@ export const IntelLive = Layer.effect(
     // Stays the gate. Acquire failures (unavailable/installing/spawn) skip that server too.
     function firstCapableServer(repoRoot: string, path: string, capability: Capability) {
       return Effect.gen(function* select() {
-        const candidates = yield* serversProviding(path, capability, repoRoot);
+        const candidates = yield* servers.providers(path, capability, repoRoot);
         for (const language of candidates) {
           const handle = yield* servers
             .acquire(language, repoRoot)

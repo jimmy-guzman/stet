@@ -223,6 +223,11 @@ test("every provisioned server pins exactly, never a floating version or checksu
         expect(pkg, `${language} pins ${pkg}`).toMatch(/@\d/);
       }
     }
+    for (const plugin of serverSpec.plugins ?? []) {
+      for (const pkg of plugin.packages ?? []) {
+        expect(pkg, `${language} plugin ${plugin.name} pins ${pkg}`).toMatch(/@\d/);
+      }
+    }
     if (channel?.kind === "binary") {
       expect(channel.tag, `${language} pins a release tag`).not.toBe("");
       // Both shipped platforms are covered, each integrity-pinned to a full sha256.
@@ -542,6 +547,84 @@ test("a tar.gz that lacks the named binary fails the install rather than writing
     if (state.kind === "failed") {
       expect(state.message).toContain("ruff not found");
     }
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+const vuePlugin = {
+  name: "@vue/typescript-plugin",
+  packages: ["@vue/typescript-plugin@3.3.12"],
+};
+
+test("ensurePlugin installs the pinned plugin under its server's cache and reports where", async () => {
+  process.env.STET_NO_LSP_DOWNLOAD = "";
+  const root = tempRoot();
+  const commands: string[][] = [];
+  const cwds: string[] = [];
+  // An npm install of a plugin lands the package, not a `.bin` entry, so that is the ready marker.
+  const installer = Layer.succeed(Process)({
+    run: (command, cwd) =>
+      Effect.sync(() => {
+        commands.push([...command]);
+        cwds.push(cwd);
+        const pkg = join(cwd, "node_modules", "@vue", "typescript-plugin");
+        mkdirSync(pkg, { recursive: true });
+        writeFileSync(join(pkg, "package.json"), "{}");
+        return { exitCode: 0, stderr: "", stdout: "", stdoutBytes: new Uint8Array() };
+      }),
+  });
+  try {
+    const result = await withProvisioner(
+      root,
+      installer,
+      Effect.gen(function* scenario() {
+        const provisioner = yield* Provisioner;
+        const first = yield* provisioner.ensurePlugin("typescript", vuePlugin);
+        const started = yield* Queue.take(provisioner.starts);
+        const finished = yield* Queue.take(provisioner.completions);
+        const second = yield* provisioner.ensurePlugin("typescript", vuePlugin);
+        return { finished, first, second, started };
+      }),
+    );
+
+    const dir = join(
+      root,
+      "stet",
+      "lsp",
+      "typescript",
+      "plugins",
+      provisionKey({ kind: "npm", packages: vuePlugin.packages }),
+    );
+    expect(result.first).toEqual({ kind: "installing" });
+    // The plugin's download is reported as its server's: that is the status the user sees
+    // ("installing typescript server…") and the re-check it triggers.
+    expect(result.started).toBe("typescript");
+    expect(result.finished).toBe("typescript");
+    expect(commands).toEqual([
+      ["npm", "install", "--no-save", "--ignore-scripts", "@vue/typescript-plugin@3.3.12"],
+    ]);
+    expect(cwds).toEqual([dir]);
+    expect(result.second).toEqual({ kind: "ready" });
+    // The marker is written only after the install exits 0, so a cut-off install never reads as ready.
+    expect(existsSync(join(dir, ".installed"))).toBe(true);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("ensurePlugin declines when downloads are turned off", async () => {
+  process.env.STET_NO_LSP_DOWNLOAD = "1";
+  const root = tempRoot();
+  try {
+    const state = await withProvisioner(
+      root,
+      fakeInstaller(),
+      Provisioner.pipe(
+        Effect.flatMap((provisioner) => provisioner.ensurePlugin("typescript", vuePlugin)),
+      ),
+    );
+    expect(state).toEqual({ kind: "disabled" });
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

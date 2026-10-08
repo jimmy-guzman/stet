@@ -4,18 +4,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Layer, Queue, Stream } from "effect";
+import { Effect, Exit, Layer, Queue, Stream } from "effect";
 
 import { LspProcess } from "@/diagnostics/lsp-process";
-import { Provisioner } from "@/diagnostics/provision";
+import { Provisioner, provisionKey } from "@/diagnostics/provision";
 import { builtinSchemas } from "@/diagnostics/schemas";
 import {
+  activePlugins,
+  activeServerGates,
   activeServersForPath,
   handshakeConfigFor,
   LanguageServers,
   LanguageServersLive,
+  loadedPlugins,
   lspLanguageId,
   performHandshake,
+  pluginLocation,
   registry,
   registerServers,
   resolveServerCommand,
@@ -154,6 +158,7 @@ test("watched changes refresh the shared server gates for a repository", async (
         Layer.succeed(Provisioner)({
           completions,
           ensure: () => Effect.die("unused"),
+          ensurePlugin: () => Effect.die("unused"),
           starts,
         }),
       ),
@@ -784,6 +789,7 @@ test("the server pool preserves configured names containing spaces", async () =>
   const provisioner = Layer.succeed(Provisioner)({
     completions,
     ensure: () => Effect.succeed({ kind: "disabled" }),
+    ensurePlugin: () => Effect.die("unused"),
     starts,
   });
   const layer = LanguageServersLive.pipe(Layer.provide(Layer.mergeAll(lspProcess, provisioner)));
@@ -805,5 +811,295 @@ test("the server pool preserves configured names containing spaces", async () =>
     expect(startedCommand).toEqual(["/bin/ls", "--stdio"]);
   } finally {
     restoreServers(snapshot);
+  }
+});
+
+test("a Vue single-file component routes to the TS family and opens as vue", () => {
+  expect(serversForPath("src/App.vue")).toEqual(["typescript", "oxlint", "biome"]);
+  expect(lspLanguageId("src/App.vue")).toBe("vue");
+});
+
+test("a .vue file reaches tsserver only once its plugin is on hand", async () => {
+  // An empty cache for the test, or a developer whose real cache holds the pinned plugin would see
+  // The bare repo locate it and route `.vue` to tsserver.
+  const cache = mkdtempSync(join(tmpdir(), "stet-vue-cache-"));
+  const previousCache = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = cache;
+  const bare = mkdtempSync(join(tmpdir(), "stet-vue-"));
+  const local = mkdtempSync(join(tmpdir(), "stet-vue-"));
+  const pnpm = mkdtempSync(join(tmpdir(), "stet-vue-"));
+  const plain = mkdtempSync(join(tmpdir(), "stet-vue-"));
+  writeFileSync(join(bare, "package.json"), JSON.stringify({ devDependencies: { vue: "^3.5.0" } }));
+  writeFileSync(join(local, "package.json"), JSON.stringify({ dependencies: { vue: "^3.5.0" } }));
+  mkdirSync(join(local, "node_modules", "@vue", "typescript-plugin"), { recursive: true });
+  writeFileSync(join(local, "node_modules", "@vue", "typescript-plugin", "package.json"), "{}");
+  // Pnpm's default hoist dir: a pnpm workspace whose root manifest never names vue.
+  const hoist = join(pnpm, "node_modules", ".pnpm", "node_modules");
+  mkdirSync(join(hoist, "vue"), { recursive: true });
+  mkdirSync(join(hoist, "@vue", "typescript-plugin"), { recursive: true });
+  writeFileSync(join(hoist, "@vue", "typescript-plugin", "package.json"), "{}");
+
+  try {
+    // A Vue repo that has the plugin (hoisted by npm, or into pnpm's hoist dir) routes `.vue` to
+    // Tsserver, which loads the plugin.
+    const routed = await Promise.all(
+      [local, pnpm].map((repo) => Effect.runPromise(activeServersForPath("src/App.vue", repo))),
+    );
+    expect(routed).toEqual([
+      ["typescript", "oxlint"],
+      ["typescript", "oxlint"],
+    ]);
+    const loaded = await Promise.all(
+      [local, pnpm].map((repo) =>
+        Effect.runPromise(activeServerGates(repo)).then((gates) =>
+          loadedPlugins(registry.typescript ?? {}, gates).map(({ plugin }) => plugin.name),
+        ),
+      ),
+    );
+    expect(loaded).toEqual([["@vue/typescript-plugin"], ["@vue/typescript-plugin"]]);
+
+    // A Vue repo without it admits the plugin (so acquiring tsserver provisions it) but keeps
+    // `.vue` off the plugin-less tsserver, which would refuse the open and read the file as clean;
+    // Its `.ts` files are untouched.
+    const gates = await Effect.runPromise(activeServerGates(bare));
+    expect(activePlugins(registry.typescript ?? {}, gates).map((plugin) => plugin.name)).toEqual([
+      "@vue/typescript-plugin",
+    ]);
+    expect(loadedPlugins(registry.typescript ?? {}, gates)).toEqual([]);
+    expect(await Effect.runPromise(activeServersForPath("src/App.vue", bare))).toEqual(["oxlint"]);
+    expect(await Effect.runPromise(activeServersForPath("src/a.ts", bare))).toEqual([
+      "typescript",
+      "oxlint",
+    ]);
+
+    // Outside a Vue repo nothing admits the plugin, so a stray `.vue` gets its linter only.
+    const plainGates = await Effect.runPromise(activeServerGates(plain));
+    expect(activePlugins(registry.typescript ?? {}, plainGates)).toEqual([]);
+    expect(await Effect.runPromise(activeServersForPath("src/App.vue", plain))).toEqual(["oxlint"]);
+  } finally {
+    if (previousCache === undefined) {
+      delete process.env.XDG_CACHE_HOME;
+    } else {
+      process.env.XDG_CACHE_HOME = previousCache;
+    }
+    for (const dir of [bare, local, pnpm, plain, cache]) {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  }
+});
+
+test("a plugin is located where the repo installed it, otherwise only once provisioned", () => {
+  const repo = mkdtempSync(join(tmpdir(), "stet-vue-plugin-"));
+  // A pin no cache on this machine can hold, so the cache tier answers nothing here.
+  const plugin = {
+    name: "@vue/typescript-plugin",
+    packages: ["@vue/typescript-plugin@0.0.0-never"],
+    when: "package.json",
+  };
+  try {
+    expect(pluginLocation("typescript", plugin, repo)).toBeUndefined();
+    // Under pnpm's hoist dir the probe is the dir holding that `node_modules`, where Node resolution
+    // Starts, never the package dir itself.
+    const hoist = join(repo, "node_modules", ".pnpm", "node_modules");
+    mkdirSync(join(hoist, "@vue", "typescript-plugin"), { recursive: true });
+    writeFileSync(join(hoist, "@vue", "typescript-plugin", "package.json"), "{}");
+    expect(pluginLocation("typescript", plugin, repo)).toBe(join(repo, "node_modules", ".pnpm"));
+    // Hoisted beside `@vue/language-server` by npm: the repo root.
+    mkdirSync(join(repo, "node_modules", "@vue", "typescript-plugin"), { recursive: true });
+    writeFileSync(join(repo, "node_modules", "@vue", "typescript-plugin", "package.json"), "{}");
+    expect(pluginLocation("typescript", plugin, repo)).toBe(repo);
+    // A discovery-only plugin (no channel) is the repo's or nobody's.
+    expect(
+      pluginLocation(
+        "typescript",
+        { name: "typescript-svelte-plugin", when: "package.json" },
+        repo,
+      ),
+    ).toBeUndefined();
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
+});
+
+test("located plugins join tsserver's initialization options", () => {
+  const plugins = [{ languages: ["vue"], location: "/repo", name: "@vue/typescript-plugin" }];
+  // A server with no options of its own gets just the plugins key.
+  expect(handshakeConfigFor({}, "/repo", plugins)).toEqual({ initializationOptions: { plugins } });
+  // One with options keeps them, substituted, beside the plugins.
+  expect(
+    handshakeConfigFor(
+      { initializationOptions: { preferences: { quotePreference: "single" }, root: "{repoRoot}" } },
+      "/repo",
+      plugins,
+    ),
+  ).toEqual({
+    initializationOptions: { plugins, preferences: { quotePreference: "single" }, root: "/repo" },
+  });
+  // A user-configured plugin keeps loading beside the registry's rather than being replaced.
+  const styled = { location: "/x", name: "typescript-styled-plugin" };
+  expect(
+    handshakeConfigFor({ initializationOptions: { plugins: [styled] } }, "/repo", plugins),
+  ).toEqual({ initializationOptions: { plugins: [styled, ...plugins] } });
+  // No located plugin leaves the typescript handshake exactly as it was.
+  expect(handshakeConfigFor(registry.typescript ?? {}, "/repo")).toBeUndefined();
+});
+
+test("the pool spawns tsserver with the plugins on hand and rebuilds it once the set moves", async () => {
+  const vueRepo = mkdtempSync(join(tmpdir(), "stet-vue-pool-"));
+  const bareVueRepo = mkdtempSync(join(tmpdir(), "stet-vue-pool-"));
+  const plainRepo = mkdtempSync(join(tmpdir(), "stet-vue-pool-"));
+  // Stet's cache for the test, so a plugin planted there is found by the real cache tier.
+  const cache = mkdtempSync(join(tmpdir(), "stet-vue-cache-"));
+  const previousCache = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = cache;
+  for (const repo of [vueRepo, bareVueRepo]) {
+    writeFileSync(join(repo, "package.json"), JSON.stringify({ dependencies: { vue: "3.5.0" } }));
+  }
+  // A repo-local typescript-language-server, so discovery resolves it and nothing is spawned for
+  // Real (the LspProcess below is a fake peer).
+  for (const repo of [vueRepo, bareVueRepo, plainRepo]) {
+    mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(repo, "node_modules", ".bin", "typescript-language-server"), "");
+  }
+  mkdirSync(join(vueRepo, "node_modules", "@vue", "typescript-plugin"), { recursive: true });
+  writeFileSync(join(vueRepo, "node_modules", "@vue", "typescript-plugin", "package.json"), "{}");
+
+  const initializations: { repoRoot: string; params: unknown }[] = [];
+  const ensured: { server: string; plugin: unknown }[] = [];
+  const refreshes = await Effect.runPromise(Queue.unbounded<string>());
+  const starts = await Effect.runPromise(Queue.unbounded<string>());
+  const completions = await Effect.runPromise(Queue.unbounded<string>());
+  const lspProcess = Layer.succeed(LspProcess)({
+    refreshes,
+    start: (_command, repoRoot) =>
+      Effect.succeed<LspConnection>({
+        changeDocument: () => Effect.void,
+        clearPublished: () => Effect.void,
+        closeDocument: () => Effect.void,
+        closed: Effect.succeed(false),
+        endPublishWait: Effect.void,
+        notify: () => Effect.void,
+        openDocument: () => Effect.void,
+        published: Effect.succeed(new Map<string, unknown[]>()),
+        pullDiagnostics: () =>
+          Effect.fail(
+            new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+          ),
+        request: (method, params) =>
+          Effect.sync(() => {
+            if (method === "initialize") {
+              initializations.push({ params, repoRoot });
+            }
+            return method === "initialize" ? { capabilities: {} } : null;
+          }),
+        watchedBases: Stream.empty,
+        watchedFilesChanged: () => Effect.void,
+        whenProjectLoaded: Effect.void,
+      }),
+  });
+  const provisioner = Layer.succeed(Provisioner)({
+    completions,
+    ensure: () => Effect.die("the server is repo-local"),
+    ensurePlugin: (server, plugin) =>
+      Effect.sync(() => {
+        ensured.push({ plugin, server });
+        return { kind: "installing" as const };
+      }),
+    starts,
+  });
+  const layer = LanguageServersLive.pipe(Layer.provide(Layer.mergeAll(lspProcess, provisioner)));
+  const withPlugins = (location: string) =>
+    expect.objectContaining({
+      initializationOptions: {
+        plugins: [{ languages: ["vue"], location, name: "@vue/typescript-plugin" }],
+      },
+    });
+  const pinned = { name: "@vue/typescript-plugin", packages: ["@vue/typescript-plugin@3.3.12"] };
+  const landed = join(
+    cache,
+    "stet",
+    "lsp",
+    "typescript",
+    "plugins",
+    provisionKey({ kind: "npm", packages: pinned.packages }),
+  );
+
+  try {
+    // One pool for the whole scenario, since what is under test is the pooled process surviving
+    // Or not across acquires; each acquire releases its own reference.
+    await Effect.runPromise(
+      Effect.gen(function* scenario() {
+        const servers = yield* LanguageServers;
+        const acquire = (repo: string) =>
+          Effect.scoped(servers.acquire("typescript", repo)).pipe(Effect.exit);
+
+        // The repo installed the plugin itself: tsserver is told to probe the repo for it.
+        yield* acquire(vueRepo);
+        expect(initializations).toEqual([{ params: withPlugins(vueRepo), repoRoot: vueRepo }]);
+        expect(ensured).toEqual([]);
+
+        // A Vue repo without it: the run's provisioning pass sends the plugin to download (acquire
+        // Itself never does, since a run over `.vue` files alone acquires no tsserver), and tsserver
+        // Spawns meanwhile without it, so the repo's `.ts` files never wait on a `.vue` plugin.
+        yield* servers.provisionPlugins(bareVueRepo);
+        expect(ensured).toEqual([{ plugin: pinned, server: "typescript" }]);
+        expect(Exit.isSuccess(yield* acquire(bareVueRepo))).toBe(true);
+        expect(initializations[1]).toEqual({
+          params: expect.objectContaining({ initializationOptions: undefined }),
+          repoRoot: bareVueRepo,
+        });
+        // Still installing: the pooled process stands, and the next run's pass asks provisioning
+        // Again (the idempotent status read) rather than spawning a second process.
+        yield* servers.provisionPlugins(bareVueRepo);
+        yield* acquire(bareVueRepo);
+        expect(initializations).toHaveLength(2);
+        expect(ensured).toHaveLength(2);
+
+        // The install lands in the cache (the marker is what says so): the pooled process is
+        // Stale, the next acquire rebuilds it with the plugin, and nothing asks the provisioner.
+        mkdirSync(landed, { recursive: true });
+        writeFileSync(join(landed, ".installed"), "");
+        yield* servers.provisionPlugins(bareVueRepo);
+        expect(Exit.isSuccess(yield* acquire(bareVueRepo))).toBe(true);
+        expect(initializations[2]).toEqual({ params: withPlugins(landed), repoRoot: bareVueRepo });
+        expect(ensured).toHaveLength(2);
+        // And that process is kept while the set holds.
+        yield* acquire(bareVueRepo);
+        expect(initializations).toHaveLength(3);
+
+        // The repo then installs the plugin itself: same name, different probe dir, so the process
+        // Spawned against the cache copy is stale too and is rebuilt against the repo's.
+        mkdirSync(join(bareVueRepo, "node_modules", "@vue", "typescript-plugin"), {
+          recursive: true,
+        });
+        writeFileSync(
+          join(bareVueRepo, "node_modules", "@vue", "typescript-plugin", "package.json"),
+          "{}",
+        );
+        expect(Exit.isSuccess(yield* acquire(bareVueRepo))).toBe(true);
+        expect(initializations[3]).toEqual({
+          params: withPlugins(bareVueRepo),
+          repoRoot: bareVueRepo,
+        });
+
+        // A repo that is not a Vue repo loads no plugin and keeps the bare typescript handshake.
+        yield* servers.provisionPlugins(plainRepo);
+        yield* acquire(plainRepo);
+        expect(initializations[4]).toEqual({
+          params: expect.objectContaining({ initializationOptions: undefined }),
+          repoRoot: plainRepo,
+        });
+        expect(ensured).toHaveLength(2);
+      }).pipe(Effect.provide(layer)),
+    );
+  } finally {
+    if (previousCache === undefined) {
+      delete process.env.XDG_CACHE_HOME;
+    } else {
+      process.env.XDG_CACHE_HOME = previousCache;
+    }
+    for (const dir of [vueRepo, bareVueRepo, plainRepo, cache]) {
+      rmSync(dir, { force: true, recursive: true });
+    }
   }
 });

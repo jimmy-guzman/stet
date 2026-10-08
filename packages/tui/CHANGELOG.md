@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.1...stet-v0.10.2) (2026-10-08)
+
+
+### Features
+
+* **vue:** ✨ type-check .vue files through the tsserver Vue plugin ([#369](https://github.com/jimmy-guzman/stet/issues/369)) ([c8dda26](https://github.com/jimmy-guzman/stet/commit/c8dda2696a71cd79cfd170f926fbc9ce4ff35bf5))
+
+
+### Bug Fixes
+
+* 🐛 bump deps ([#363](https://github.com/jimmy-guzman/stet/issues/363)) ([9ba9f6f](https://github.com/jimmy-guzman/stet/commit/9ba9f6fd8bb8d76bb0cc409399a9554d1c7a7a94))
+* **deps:** 🐛 bump deps and bun 1.4 ([#367](https://github.com/jimmy-guzman/stet/issues/367)) ([3975489](https://github.com/jimmy-guzman/stet/commit/39754895d21517274a1039b1023ab622dc44f50e))
+* **deps:** 🐛 bump deps, follow the effect & fumadocs api changes ([#366](https://github.com/jimmy-guzman/stet/issues/366)) ([fd176b0](https://github.com/jimmy-guzman/stet/commit/fd176b01f2e7b025db75fd84fa0f7230c0733023))
+
 ## [0.10.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.0...stet-v0.10.1) (2026-08-02)
 
 

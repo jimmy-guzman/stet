@@ -2780,8 +2780,14 @@ function createState() {
               next.delete(language);
               return next;
             });
-            void runChecks(gitModel());
-          }),
+          }).pipe(
+            // A landed install changes which server answers a file (a plugin-less tsserver is about
+            // To be rebuilt with its plugin, a second server now outranks the one that answered), so
+            // Replies cached from the old selection must not outlive it. Only non-empty replies are
+            // Ever cached, and those are exactly the ones a lesser server could have given.
+            Effect.andThen(Intel.use((intel) => intel.invalidate(gitModel().repoRoot, []))),
+            Effect.andThen(Effect.sync(() => void runChecks(gitModel()))),
+          ),
         ),
         Effect.forever,
       ),

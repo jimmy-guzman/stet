@@ -36,7 +36,7 @@ function handle(
     openDocument: (textDocument) =>
       Effect.sync(
         () => void log.push({ method: "textDocument/didOpen", params: { textDocument } }),
-      ),
+      ).pipe(Effect.as(true)),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(

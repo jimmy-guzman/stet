@@ -10,7 +10,7 @@ import type { Cause, Scope } from "effect";
 import { createFrameDecoder, encodeMessage } from "./jsonrpc";
 import type { JsonRpcMessage } from "./jsonrpc";
 import { makeTransport } from "./transport";
-import type { LspConnection, LspTransportChannel } from "./transport";
+import type { LspConnection, LspTransportChannel, NotificationHandler } from "./transport";
 
 export class LspSpawnError extends Data.TaggedError("LspSpawnError")<{
   readonly command: readonly string[];
@@ -115,14 +115,16 @@ export class LspProcess extends Context.Service<
       command: readonly string[],
       cwd: string,
       onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
+      onNotification?: NotificationHandler,
     ) => Effect.Effect<LspConnection, LspSpawnError, Scope.Scope>;
     /**
      * Repo roots whose server has news a run is not already waiting for; drains to re-run checks,
-     * the way the provisioner's `completions` drives a re-check after a download. Two triggers: an
-     * explicit `workspace/diagnostic/refresh` request (rust-analyzer after a cargo check), and a
+     * the way the provisioner's `completions` drives a re-check after a download. Three triggers:
+     * an explicit `workspace/diagnostic/refresh` request (rust-analyzer after a cargo check), a
      * server correcting its own published diagnostics outside a run's awaited window (pyright
-     * re-analyzing once a dependency install lands). Without the second, that correction would sit
-     * unread in the transport's bucket, since nothing else re-renders it.
+     * re-analyzing once a dependency install lands), and a bridged server's forwarded request being
+     * answered (vue-language-server, whose pull for that file has often timed out by then). Without
+     * the last two, the news would sit unread, since nothing else re-renders it.
      */
     readonly refreshes: Queue.Dequeue<string>;
   }
@@ -134,11 +136,17 @@ export const LspProcessLive = Layer.effect(
     const refreshes = yield* Queue.unbounded<string>();
     return {
       refreshes,
-      start: (command, cwd, onRequest) =>
+      start: (command, cwd, onRequest, onNotification) =>
         acquireChild(command, cwd).pipe(
           Effect.flatMap(createByteChannel),
           Effect.flatMap((channel) =>
-            makeTransport(channel, cwd, onRequest, Queue.offer(refreshes, cwd).pipe(Effect.asVoid)),
+            makeTransport(
+              channel,
+              cwd,
+              onRequest,
+              Queue.offer(refreshes, cwd).pipe(Effect.asVoid),
+              onNotification,
+            ),
           ),
         ),
     };

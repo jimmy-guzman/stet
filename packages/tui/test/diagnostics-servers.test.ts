@@ -333,7 +333,7 @@ test("handshake parses advertised providers into the capability set", async () =
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: (method) => Effect.sync(() => void notified.push(method)),
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -404,7 +404,7 @@ test("performHandshake sends config notifications after initialized, in order", 
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: (method, params) => Effect.sync(() => void notified.push({ method, params })),
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -448,7 +448,7 @@ test("handshake yields an empty capability set when no providers are advertised"
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -476,7 +476,7 @@ test("handshake treats a malformed provider value as unsupported", async () => {
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -512,7 +512,7 @@ test("handshake advertises pull diagnostics and refresh support, and parses diag
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -767,7 +767,7 @@ test("the server pool preserves configured names containing spaces", async () =>
     closed: Effect.succeed(false),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.succeed(new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -814,8 +814,8 @@ test("the server pool preserves configured names containing spaces", async () =>
   }
 });
 
-test("a Vue single-file component routes to the TS family and opens as vue", () => {
-  expect(serversForPath("src/App.vue")).toEqual(["typescript", "oxlint", "biome"]);
+test("a Vue single-file component routes to the TS family plus Vue's server and opens as vue", () => {
+  expect(serversForPath("src/App.vue")).toEqual(["typescript", "oxlint", "biome", "vue"]);
   expect(lspLanguageId("src/App.vue")).toBe("vue");
 });
 
@@ -840,14 +840,16 @@ test("a .vue file reaches tsserver only once its plugin is on hand", async () =>
   writeFileSync(join(hoist, "@vue", "typescript-plugin", "package.json"), "{}");
 
   try {
-    // A Vue repo that has the plugin (hoisted by npm, or into pnpm's hoist dir) routes `.vue` to
-    // Tsserver, which loads the plugin.
+    /**
+     * A Vue repo that has the plugin (hoisted by npm, or into pnpm's hoist dir) routes `.vue` to
+     * tsserver, which loads the plugin, and to Vue's own server.
+     */
     const routed = await Promise.all(
       [local, pnpm].map((repo) => Effect.runPromise(activeServersForPath("src/App.vue", repo))),
     );
     expect(routed).toEqual([
-      ["typescript", "oxlint"],
-      ["typescript", "oxlint"],
+      ["typescript", "oxlint", "vue"],
+      ["typescript", "oxlint", "vue"],
     ]);
     const loaded = await Promise.all(
       [local, pnpm].map((repo) =>
@@ -858,21 +860,37 @@ test("a .vue file reaches tsserver only once its plugin is on hand", async () =>
     );
     expect(loaded).toEqual([["@vue/typescript-plugin"], ["@vue/typescript-plugin"]]);
 
-    // A Vue repo without it admits the plugin (so acquiring tsserver provisions it) but keeps
-    // `.vue` off the plugin-less tsserver, which would refuse the open and read the file as clean;
-    // Its `.ts` files are untouched.
+    /**
+     * A Vue repo without it admits the plugin (so acquiring tsserver provisions it) but keeps
+     * `.vue` off the plugin-less tsserver, which would refuse the open and read the file as clean;
+     * its `.ts` files are untouched. Vue's own server needs no plugin of its own to open the file.
+     */
     const gates = await Effect.runPromise(activeServerGates(bare));
     expect(activePlugins(registry.typescript ?? {}, gates).map((plugin) => plugin.name)).toEqual([
       "@vue/typescript-plugin",
     ]);
     expect(loadedPlugins(registry.typescript ?? {}, gates)).toEqual([]);
-    expect(await Effect.runPromise(activeServersForPath("src/App.vue", bare))).toEqual(["oxlint"]);
+    expect(await Effect.runPromise(activeServersForPath("src/App.vue", bare))).toEqual([
+      "oxlint",
+      "vue",
+    ]);
+    /**
+     * Vue's server answers diagnostics only: in this window it would meet a script position with
+     * nothing, so intel reports no support rather than a false "none found".
+     */
+    expect(await Effect.runPromise(serversProviding("src/App.vue", "hover", bare))).toEqual([]);
+    expect(await Effect.runPromise(serversProviding("src/App.vue", "definition", local))).toEqual([
+      "typescript",
+    ]);
     expect(await Effect.runPromise(activeServersForPath("src/a.ts", bare))).toEqual([
       "typescript",
       "oxlint",
     ]);
 
-    // Outside a Vue repo nothing admits the plugin, so a stray `.vue` gets its linter only.
+    /**
+     * Outside a Vue repo neither the plugin nor Vue's server is admitted, so a stray `.vue` gets
+     * its linter only.
+     */
     const plainGates = await Effect.runPromise(activeServerGates(plain));
     expect(activePlugins(registry.typescript ?? {}, plainGates)).toEqual([]);
     expect(await Effect.runPromise(activeServersForPath("src/App.vue", plain))).toEqual(["oxlint"]);
@@ -979,7 +997,7 @@ test("the pool spawns tsserver with the plugins on hand and rebuilds it once the
         closed: Effect.succeed(false),
         endPublishWait: Effect.void,
         notify: () => Effect.void,
-        openDocument: () => Effect.void,
+        openDocument: () => Effect.succeed(true),
         published: Effect.succeed(new Map<string, unknown[]>()),
         pullDiagnostics: () =>
           Effect.fail(

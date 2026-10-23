@@ -2793,11 +2793,14 @@ function createState() {
       ),
     ),
   );
-  // A server with news no run is waiting for: an explicit `workspace/diagnostic/refresh` nudge
-  // (rust-analyzer after a cargo-check cycle), or a server that re-published on its own once it
-  // Changed its mind (pyright re-analyzing after a dependency install invalidated its imports).
-  // Both re-run checks, exactly like a finished download. A nudge from another repo's pooled server
-  // (a just-switched-away worktree) is ignored rather than churning the current one.
+  /**
+   * A server with news no run is waiting for: an explicit `workspace/diagnostic/refresh` nudge
+   * (rust-analyzer after a cargo-check cycle), a server that re-published on its own once it
+   * changed its mind (pyright re-analyzing after a dependency install invalidated its imports), or
+   * a tsserver answer the bridge forwarded to vue-language-server. Each re-runs checks, exactly
+   * like a finished download. A nudge from another repo's pooled server (a just-switched-away
+   * worktree) is ignored rather than churning the current one.
+   */
   runtime.runFork(
     LspProcess.use((lsp) =>
       Queue.take(lsp.refreshes).pipe(

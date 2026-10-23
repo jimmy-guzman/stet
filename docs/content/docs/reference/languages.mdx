@@ -11,19 +11,19 @@ file-type icon, and structural folding; language servers add diagnostics and
 code intelligence for the profiles the table marks. You can change any layer
 through [your config](/docs/reference/configuration#file-support).
 
-| Language                | Highlighting | Folding    | Diagnostics   | Code intelligence          |
-| ----------------------- | ------------ | ---------- | ------------- | -------------------------- |
-| TypeScript & JavaScript | yes          | indent     | types + lint  | yes                        |
-| Vue                     | yes          | indent     | types + lint  | yes                        |
-| Rust                    | yes          | indent     | types + cargo | yes                        |
-| Python                  | yes          | indent     | types + lint  | yes                        |
-| Go                      | yes          | indent     | types + vet   | yes                        |
-| JSON & JSONC            | yes          | indent     | schema + lint | hover, outline             |
-| YAML                    | yes          | indent     | schema        | hover, outline, definition |
-| CSS                     | yes          | indent     | lint          |                            |
-| GraphQL                 | yes          | indent     | lint          |                            |
-| Markdown                | yes          | by heading |               |                            |
-| 200+ others             | yes          | indent     | via config    |                            |
+| Language                | Highlighting | Folding    | Diagnostics             | Code intelligence          |
+| ----------------------- | ------------ | ---------- | ----------------------- | -------------------------- |
+| TypeScript & JavaScript | yes          | indent     | types + lint            | yes                        |
+| Vue                     | yes          | indent     | types + lint + template | yes                        |
+| Rust                    | yes          | indent     | types + cargo           | yes                        |
+| Python                  | yes          | indent     | types + lint            | yes                        |
+| Go                      | yes          | indent     | types + vet             | yes                        |
+| JSON & JSONC            | yes          | indent     | schema + lint           | hover, outline             |
+| YAML                    | yes          | indent     | schema                  | hover, outline, definition |
+| CSS                     | yes          | indent     | lint                    |                            |
+| GraphQL                 | yes          | indent     | lint                    |                            |
+| Markdown                | yes          | by heading |                         |                            |
+| 200+ others             | yes          | indent     | via config              |                            |
 
 ## Syntax highlighting
 
@@ -85,14 +85,26 @@ resolve from a `.ts` file and what answers code intelligence inside a component.
 The plugin loads in a Vue repo: one with `vue` among its `package.json`
 dependencies or devDependencies, or installed under `node_modules` (pnpm's hoist
 directory included, so a pnpm workspace whose root manifest never names vue
-still counts). Outside one, and until the plugin is on hand, `.vue` files get
-oxlint only, never a plugin-less tsserver that would read them as clean; `.ts`
-files never wait on the plugin. The plugin is pinned and downloads from npm the
+still counts). Outside one, `.vue` files get oxlint only. Until the plugin is on
+hand they never reach a plugin-less tsserver, which would read them as clean;
+`.ts` files never wait on the plugin. The plugin is pinned and downloads from npm the
 first time a Vue repo needs it, even when the server itself was found in the
 repo or on your `PATH`; a repo that installed `@vue/language-server` or the
 plugin itself (under `node_modules`, or pnpm's hoist directory) is used as is.
 Once the plugin lands, or a repo becomes a Vue repo mid-session, tsserver
 restarts with it on its own.
+
+In a Vue repo, `vue-language-server` (`@vue/language-server`) also runs and
+reports what the template compiler and the SFC parser catch: an unclosed tag,
+an invalid `v-for`, a malformed block (label `vue`), plus CSS errors and lint
+warnings in `<style>`, labeled by the block's language (`css`, `scss`, or
+`less`). Its findings don't overlap with tsserver's. It reads
+the component's project, and with it the tsconfig's `vueCompilerOptions`, from
+tsserver: stet forwards those requests to the running `typescript-language-server`.
+Until tsserver has the plugin, the server uses its defaults and ignores
+`vueCompilerOptions`; it restarts with your project's settings once the plugin
+lands. Like the plugin, the server is pinned and downloads from npm when neither
+the repo nor your `PATH` has it.
 
 ### Rust
 

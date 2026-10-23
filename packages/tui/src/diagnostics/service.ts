@@ -192,9 +192,22 @@ function syncDocuments(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
         held.push({ file, uri });
         continue;
       }
+      /**
+       * An open another holder already made (an intel pull, the tsserver bridge) sends nothing, and
+       * the server answered that holder's open before `clearPublished` dropped it, so this run
+       * would wait on a publish that never comes. A full-text change in its place provokes one for
+       * a file with findings; typescript-language-server publishes nothing for a file that stays
+       * clean, which leaves that case pending, as any clean-to-clean change does (#371).
+       */
       const send = keeper.sent.has(uri)
         ? connection.changeDocument(uri, text)
-        : connection.openDocument({ languageId: lspLanguageId(file.path), text, uri, version: 1 });
+        : connection
+            .openDocument({ languageId: lspLanguageId(file.path), text, uri, version: 1 })
+            .pipe(
+              Effect.flatMap((opened) =>
+                opened ? Effect.void : connection.changeDocument(uri, text),
+              ),
+            );
       yield* Effect.uninterruptible(
         connection
           .clearPublished([uri])

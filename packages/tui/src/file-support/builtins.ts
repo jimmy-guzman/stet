@@ -77,9 +77,13 @@ export const builtinLanguages = new Map<string, LanguageProfile>([
   ["javascriptreact", { languageId: "javascriptreact", servers: typescriptServers }],
   ["typescript", { languageId: "typescript", servers: typescriptServers }],
   ["typescriptreact", { languageId: "typescriptreact", servers: typescriptServers }],
-  // The same family: tsserver opens a `vue` document only through its Vue plugin, and `activeServers`
-  // Routes a plugin-declared languageId to the server only while that plugin is loaded.
-  ["vue", { languageId: "vue", servers: typescriptServers }],
+  /**
+   * The same family plus Vue's own server: tsserver opens a `vue` document only through its Vue
+   * plugin, and `activeServers` routes a plugin-declared languageId to the server only while that
+   * plugin is loaded. `vue-language-server` adds the template compiler, SFC, and `<style>`
+   * findings.
+   */
+  ["vue", { languageId: "vue", servers: [...typescriptServers, "vue"] }],
   ["yaml", { languageId: "yaml", servers: ["yaml"] }],
 ]);
 

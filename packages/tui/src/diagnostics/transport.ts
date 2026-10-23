@@ -39,6 +39,22 @@ export class LspRequestError extends Data.TaggedError("LspRequestError")<{
   readonly message: string;
 }> {}
 
+/**
+ * Handles a server notification the transport does not model itself. The handler is built before
+ * the connection exists, so the connection hands it what it may answer with: `notify` sends on the
+ * same connection, which a protocol that pairs notifications rather than using a request needs
+ * (Vue's `tsserver/request` is answered by a `tsserver/response`), and `recheck` reports that this
+ * server has news no run is waiting for, the signal `workspace/diagnostic/refresh` raises.
+ */
+export type NotificationHandler = (
+  method: string,
+  params: unknown,
+  connection: {
+    readonly notify: (method: string, params?: unknown) => Effect.Effect<void>;
+    readonly recheck: Effect.Effect<void>;
+  },
+) => Effect.Effect<void>;
+
 export interface LspTransportChannel {
   readonly inbound: Queue.Dequeue<unknown, Cause.Done>;
   readonly send: (message: JsonRpcMessage) => Effect.Effect<void>;
@@ -70,11 +86,14 @@ export interface LspConnection {
   readonly pullDiagnostics: (uri: string) => Effect.Effect<PulledDiagnostics, LspRequestError>;
   /**
    * Refcounted `textDocument/didOpen`: sent only on the first holder of a uri (count 0→1); a later
-   * holder reuses the already-open doc. Intel pulls and the diagnostics run share one connection,
-   * so this keeps a second open from resetting the server's view of a doc another holder still
-   * needs.
+   * holder reuses the already-open doc. Intel pulls, the diagnostics run, and the tsserver bridge
+   * share one connection, so this keeps a second open from resetting the server's view of a doc
+   * another holder still needs.
+   *
+   * @returns Whether a `didOpen` was actually sent. A holder that expects the server to answer its
+   *   open (a diagnostics run awaiting a publish) must provoke one some other way when it was not.
    */
-  readonly openDocument: (textDocument: TextDocument) => Effect.Effect<void>;
+  readonly openDocument: (textDocument: TextDocument) => Effect.Effect<boolean>;
   /**
    * Full-text `textDocument/didChange` for an already-open document, versioned by a per-uri counter
    * the transport owns (seeded from the open's version, bumped per change), so callers never
@@ -184,16 +203,23 @@ function parseDiagnosticReport(value: unknown): ParsedReport | undefined {
  * @param channel - The inbound and outbound JSON-RPC message transport
  * @param repoRoot - The repository root used to resolve watched-file registrations
  * @param onRequest - Handles server-to-client requests that are not handled internally
- * @param onRecheck - Runs when the server requests refreshed diagnostics
+ * @param onRecheck - Runs when this server has news no run is waiting for: a refresh request, a
+ *   publish outside the awaited window, or a notification handler raising it
+ * @param onNotification - Handles server notifications that are not handled internally. Forked into
+ *   the connection's scope, never run inline: a handler may wait on another server (the Vue bridge
+ *   waits on tsserver), and holding the router meanwhile would stall every reply this server
+ *   sends.
  * @returns The LSP connection API
  */
 export function makeTransport(
   channel: LspTransportChannel,
   repoRoot: string,
   onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>,
-  onRecheck?: Effect.Effect<void>,
+  onRecheck: Effect.Effect<void> = Effect.void,
+  onNotification?: NotificationHandler,
 ) {
   return Effect.gen(function* makeTransportScope() {
+    const scope = yield* Effect.scope;
     // Default answer for a server-to-client request: a null result, so a server that asks for
     // Something we do not model (typescript) never stalls. oxlint supplies a real handler.
     const respond = onRequest ?? (() => Effect.succeed(null));
@@ -237,6 +263,9 @@ export function makeTransport(
       return Deferred.succeed(projectLoaded, undefined).pipe(Effect.asVoid);
     });
 
+    const notify = (method: string, params?: unknown) =>
+      channel.send({ jsonrpc: "2.0", method, params });
+
     function dispatch(message: unknown) {
       if (isJsonRpcResponse(message)) {
         if (typeof message.id !== "number") {
@@ -259,9 +288,7 @@ export function makeTransport(
         // A server nudging "re-pull your diagnostics" (rust-analyzer after a cargo check cycle):
         // Answer immediately so it never stalls, then surface the nudge so the app re-runs checks.
         if (message.method === "workspace/diagnostic/refresh") {
-          return channel
-            .send({ id, jsonrpc: "2.0", result: null })
-            .pipe(Effect.andThen(onRecheck ?? Effect.void));
+          return channel.send({ id, jsonrpc: "2.0", result: null }).pipe(Effect.andThen(onRecheck));
         }
         // The server declaring which on-disk paths it needs to hear about. Honoring this is the
         // Whole point: basedpyright does no filesystem watching of its own, so these globs are the
@@ -318,7 +345,7 @@ export function makeTransport(
           if (awaiting.has(uri) || unchanged) {
             return Effect.void;
           }
-          return onRecheck ?? Effect.void;
+          return onRecheck;
         }
         // A workDoneProgress "end" marks the project load complete; before it, intel replies are
         // Resolved from the local import binding rather than cross-file (the F12-stops-at-import bug).
@@ -331,7 +358,12 @@ export function makeTransport(
           }
           return isObject(value) && value.kind === "end" ? markLoaded : Effect.void;
         }
-        return Effect.logDebug(`lsp notification ${message.method}`);
+        return onNotification === undefined
+          ? Effect.logDebug(`lsp notification ${message.method}`)
+          : onNotification(message.method, message.params, { notify, recheck: onRecheck }).pipe(
+              Effect.forkIn(scope),
+              Effect.asVoid,
+            );
       }
       return Effect.void;
     }
@@ -342,14 +374,19 @@ export function makeTransport(
       Effect.flatMap(dispatch),
       Effect.forever,
       Effect.catchCause(() =>
+        /**
+         * `closed` and the snapshot of what to fail are one step: a request that runs between them
+         * would otherwise pass the `closed` check yet miss the snapshot, and wait forever.
+         */
         Effect.sync(() => {
           closed = true;
+          return [...pending.values()];
         }).pipe(
           // Release any pull awaiting project load so it fails fast instead of hanging past death.
-          Effect.andThen(markLoaded),
-          Effect.andThen(
+          Effect.tap(() => markLoaded),
+          Effect.flatMap((stranded) =>
             Effect.forEach(
-              [...pending.values()],
+              stranded,
               (entry) =>
                 Deferred.fail(
                   entry.deferred,
@@ -366,6 +403,13 @@ export function makeTransport(
     const request = (method: string, params?: unknown) =>
       Deferred.make<unknown, LspRequestError>().pipe(
         Effect.flatMap((deferred) => {
+          /**
+           * The router fails every request pending when the connection closed, and a write to a
+           * dead child's stdin does not fail, so a request made after that would wait forever.
+           */
+          if (closed) {
+            return Effect.fail(new LspRequestError({ message: "connection closed", method }));
+          }
           const id = nextId;
           nextId += 1;
           pending.set(id, { deferred, method });
@@ -377,9 +421,6 @@ export function makeTransport(
             );
         }),
       );
-
-    const notify = (method: string, params?: unknown) =>
-      channel.send({ jsonrpc: "2.0", method, params });
 
     // The pull bucket: per uri, the last full report's items and the resultId to echo back. Only
     // Documents this client pulls enter it, so it stays bounded by the changed set. Commits need no
@@ -429,11 +470,13 @@ export function makeTransport(
         const count = openCounts.get(textDocument.uri) ?? 0;
         openCounts.set(textDocument.uri, count + 1);
         if (count > 0) {
-          return Effect.void;
+          return Effect.succeed(false);
         }
         const version = Math.max(textDocument.version, (versions.get(textDocument.uri) ?? 0) + 1);
         versions.set(textDocument.uri, version);
-        return notify("textDocument/didOpen", { textDocument: { ...textDocument, version } });
+        return notify("textDocument/didOpen", { textDocument: { ...textDocument, version } }).pipe(
+          Effect.as(true),
+        );
       });
 
     const changeDocument = (uri: string, text: string) =>

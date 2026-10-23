@@ -48,7 +48,8 @@ function pushingHandle(items: unknown[]): ServerHandle {
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: (textDocument) => Effect.sync(() => void published.set(textDocument.uri, items)),
+    openDocument: (textDocument) =>
+      Effect.sync(() => void published.set(textDocument.uri, items)).pipe(Effect.as(true)),
     published: Effect.sync(() => published),
     pullDiagnostics: () =>
       Effect.fail(
@@ -77,7 +78,7 @@ function deadHandle(): ServerHandle {
     closed: Effect.sync(() => true),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () =>
       Effect.fail(
@@ -190,7 +191,7 @@ test("an interrupted run leaves the document open and the next run reconciles it
       openDocument: (textDocument) =>
         Effect.sync(() => void opens.push(textDocument.uri)).pipe(
           Effect.andThen(Deferred.succeed(opened, undefined)),
-          Effect.asVoid,
+          Effect.as(true),
         ),
       published: Effect.sync(() => published),
       pullDiagnostics: () =>
@@ -461,6 +462,7 @@ function pullingHandle(options: {
         if (options.pushed !== undefined) {
           published.set(textDocument.uri, options.pushed);
         }
+        return true;
       }),
     published: Effect.sync(() => published),
     pullDiagnostics: (uri) =>
@@ -552,7 +554,7 @@ test("a related report's findings survive the named file's own pull failing", as
       closed: Effect.sync(() => false),
       endPublishWait: Effect.void,
       notify: () => Effect.void,
-      openDocument: () => Effect.void,
+      openDocument: () => Effect.succeed(true),
       published: Effect.sync(() => new Map<string, unknown[]>()),
       pullDiagnostics: (uri) =>
         uri === configUri
@@ -602,7 +604,8 @@ function keeperProbe() {
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
+    openDocument: (textDocument) =>
+      Effect.sync(() => void opens.push(textDocument.uri)).pipe(Effect.as(true)),
     published: Effect.sync(() => published),
     pullDiagnostics: () => Effect.succeed({ items: [], related: new Map<string, unknown[]>() }),
     request: () => Effect.succeed(null),
@@ -874,6 +877,7 @@ test("resetServers drops the keepers, so the next run reopens every document", a
         Effect.sync(() => {
           opens.push(textDocument.uri);
           published.set(textDocument.uri, []);
+          return true;
         }),
       published: Effect.sync(() => published),
       pullDiagnostics: () =>
@@ -914,5 +918,54 @@ test("resetServers drops the keepers, so the next run reopens every document", a
     );
 
     expect(opens).toHaveLength(2);
+  });
+});
+
+test("an open another holder already made is followed by a change, so the server publishes for this run", async () => {
+  await withRepo({ "config.yaml": "a: 1\n" }, async (dir) => {
+    const uri = pathToFileURL(join(dir, "config.yaml")).href;
+    const published = new Map<string, unknown[]>();
+    const changes: string[] = [];
+    /**
+     * An intel pull or the tsserver bridge holds the document already: this open sends nothing, and
+     * the publish answering the earlier open was dropped by the run's `clearPublished`.
+     */
+    const connection: LspConnection = {
+      changeDocument: (changedUri) =>
+        Effect.sync(() => {
+          changes.push(changedUri);
+          published.set(changedUri, [anError]);
+        }),
+      clearPublished: (uris) =>
+        Effect.sync(() => {
+          for (const cleared of uris) {
+            published.delete(cleared);
+          }
+        }),
+      closeDocument: () => Effect.void,
+      closed: Effect.sync(() => false),
+      endPublishWait: Effect.void,
+      notify: () => Effect.void,
+      openDocument: () => Effect.succeed(false),
+      published: Effect.sync(() => published),
+      pullDiagnostics: () =>
+        Effect.fail(
+          new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
+        ),
+      request: () => Effect.succeed(null),
+      watchedBases: Stream.empty,
+      watchedFilesChanged: () => Effect.void,
+      whenProjectLoaded: Effect.void,
+    };
+    const state = await runDiagnostics(
+      dir,
+      [changed("config.yaml")],
+      fakeServers({
+        yaml: { capabilities: new Set(), connection, plugins: new Set(), stale: connection.closed },
+      }),
+    );
+
+    expect(changes).toEqual([uri]);
+    expect(state.get("config.yaml")).toMatchObject({ count: 1, status: "findings" });
   });
 });

@@ -33,7 +33,7 @@ function fakeConnection() {
     closed: Effect.sync(() => false),
     endPublishWait: Effect.void,
     notify: () => Effect.void,
-    openDocument: () => Effect.void,
+    openDocument: () => Effect.succeed(true),
     published: Effect.sync(() => new Map<string, unknown[]>()),
     pullDiagnostics: () => Effect.die("unused"),
     request: () => Effect.succeed({ capabilities: {} }),

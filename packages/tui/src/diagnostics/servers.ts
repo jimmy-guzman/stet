@@ -8,7 +8,7 @@ import { existsSync, watch } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Context, Data, Effect, Layer, Queue, RcMap, Stream } from "effect";
+import { Context, Data, Effect, Layer, Queue, RcMap, Schedule, Stream } from "effect";
 import type { Scope } from "effect";
 
 import type { ServerCandidate, ServerEntry } from "@/file-support/model";
@@ -22,7 +22,13 @@ import { cachedBinaryPath, cachedPluginLocation, Provisioner } from "./provision
 import type { ProvisionChannel, ProvisionSpec } from "./provision";
 import { builtinSchemas } from "./schemas";
 import { LspRequestError } from "./transport";
-import type { LspConnection } from "./transport";
+import type { LspConnection, NotificationHandler } from "./transport";
+import {
+  parseTsserverRequest,
+  tsserverRequestFile,
+  tsserverRequestParams,
+  tsserverResponseBody,
+} from "./tsserver-bridge";
 import type { WatchedPathChange } from "./watched-files";
 import { evaluateWhen, makeManifestCache, parseWhen } from "./when";
 import type { When } from "./when";
@@ -47,6 +53,7 @@ interface HandshakeConfig {
   readonly workspaceCapabilities?: Record<string, unknown>;
   readonly initializationOptions?: unknown;
   readonly onRequest?: (method: string, params: unknown) => Effect.Effect<unknown>;
+  readonly onNotification?: NotificationHandler;
   /**
    * Notifications to send once, right after `initialized`. The JSON server takes its schema
    * associations only this way: it never pulls `workspace/configuration`, so the `settings` channel
@@ -123,6 +130,12 @@ export interface ServerSpec {
    * replaces the data-derived handshake entirely. No built-in uses it today.
    */
   readonly handshake?: (repoRoot: string) => HandshakeConfig;
+  /**
+   * Forward this server's `tsserver/request` notifications to the tsserver inside `server`, which
+   * must have `plugin` loaded for the forwarded commands to exist. Vue's language server reads its
+   * project and component facts only this way, and answers no diagnostics until it hears back.
+   */
+  readonly tsserverBridge?: { readonly server: string; readonly plugin: string };
   readonly when?: When;
 }
 
@@ -396,6 +409,26 @@ const builtinRegistry: Record<string, ServerSpec> = {
     ],
     provision: { kind: "npm", packages: ["typescript-language-server@5.3.0", "typescript@6.0.3"] },
   },
+  /**
+   * Vue's template compiler, SFC block, and `<style>` findings; the type errors come from tsserver
+   * with the Vue plugin above, and so does this server's project, over `tsserverBridge`. The
+   * `typescript` pin is what the server's own `require('typescript')` resolves: left to the peer
+   * range it lands on TS 7, which has no `ts.server`, and the server crashes on its first file.
+   *
+   * Under stet's client capabilities the pinned binary advertises `diagnosticProvider`, so it is
+   * pulled. It also advertises `definition`, `references`, `hover`, and `documentSymbol`, and none
+   * is declared: while tsserver has the plugin it sits first in the profile and answers every one
+   * of them, and while it does not, this server answers a script position with nothing, which would
+   * read as a false "none found" where the honest answer is no support.
+   */
+  "vue": {
+    args: ["--stdio"],
+    binary: "vue-language-server",
+    provides: ["pullDiagnostics"],
+    provision: { kind: "npm", packages: ["@vue/language-server@3.3.12", "typescript@6.0.3"] },
+    tsserverBridge: { plugin: "@vue/typescript-plugin", server: "typescript" },
+    when: vueRepo,
+  },
   "yaml": {
     args: ["--stdio"],
     binary: "yaml-language-server",
@@ -628,6 +661,7 @@ export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
         : {}),
       ...(base?.handshake === undefined ? {} : { handshake: base.handshake }),
       ...(base?.plugins === undefined ? {} : { plugins: base.plugins }),
+      ...(base?.tsserverBridge === undefined ? {} : { tsserverBridge: base.tsserverBridge }),
       ...(entry.initializationOptions === undefined
         ? base?.initializationOptions === undefined
           ? {}
@@ -1128,7 +1162,12 @@ function baseChanges(base: string) {
 function connectServer(command: readonly string[], repoRoot: string, config?: HandshakeConfig) {
   return Effect.gen(function* connect() {
     const lsp = yield* LspProcess;
-    const connection = yield* lsp.start(command, repoRoot, config?.onRequest);
+    const connection = yield* lsp.start(
+      command,
+      repoRoot,
+      config?.onRequest,
+      config?.onNotification,
+    );
     const handle = yield* performHandshake(connection, repoRoot, config);
     // Watch the bases the server registers outside the worktree, re-keying whenever its registrations
     // Change (`switchMap` tears down the previous set, so an unregister stops its watch). The fiber
@@ -1180,6 +1219,10 @@ interface ResolvedPlugin {
 
 function lookupServer(
   key: string,
+  forwardTsserver: (
+    bridge: NonNullable<ServerSpec["tsserverBridge"]>,
+    repoRoot: string,
+  ) => NotificationHandler,
 ): Effect.Effect<
   ServerHandle,
   ServerUnavailable | LspSpawnError | LspRequestError,
@@ -1198,13 +1241,24 @@ function lookupServer(
     if (spec === undefined) {
       return yield* connectServer(command, repoRoot);
     }
-    // Tsserver takes its plugins at `initialize`, so the set is fixed at spawn from what the repo
-    // Has on hand now. The handle then reads as stale once that set no longer matches what a spawn
-    // Would load (the plugin landed, moved from the cache into the repo, or the repo became one that
-    // Needs it), and its holders rebuild. Location counts: tsserver resolved the plugin from the dir
-    // It was given, so a plugin now living elsewhere is a different load.
+    /**
+     * The plugin set is fixed at spawn from what the repo has on hand now, since tsserver takes its
+     * plugins at `initialize`. The handle then reads as stale once that set no longer matches what
+     * a spawn would load (the plugin landed, moved from the cache into the repo, or the repo became
+     * one that needs it), and its holders rebuild. Location counts: tsserver resolved the plugin
+     * from the dir it was given, so a plugin now living elsewhere is a different load. A bridged
+     * server is keyed to its bridge plugin the same way: it caches the answers it got while the
+     * plugin was missing, so only a fresh process picks up the project once the plugin lands.
+     */
     const loadedLocations = (gates: ServerGates) =>
-      new Map(loadedPlugins(spec, gates).map(({ location, plugin }) => [plugin.name, location]));
+      new Map([
+        ...loadedPlugins(spec, gates).map(
+          ({ location, plugin }) => [plugin.name, location] as const,
+        ),
+        ...(spec.tsserverBridge === undefined
+          ? []
+          : [[spec.tsserverBridge.plugin, gates.located.get(spec.tsserverBridge.plugin)] as const]),
+      ]);
     const gates = yield* activeServerGates(repoRoot);
     const plugins = loadedPlugins(spec, gates).map(({ location, plugin }) => ({
       languages: plugin.languages,
@@ -1212,14 +1266,17 @@ function lookupServer(
       name: plugin.name,
     }));
     const spawnedWith = loadedLocations(gates);
+    const config = handshakeConfigFor(spec, repoRoot, plugins);
     const handle = yield* connectServer(
       command,
       repoRoot,
-      handshakeConfigFor(spec, repoRoot, plugins),
+      spec.tsserverBridge === undefined
+        ? config
+        : { ...config, onNotification: forwardTsserver(spec.tsserverBridge, repoRoot) },
     );
     return {
       ...handle,
-      plugins: new Set(spawnedWith.keys()),
+      plugins: new Set(plugins.map((plugin) => plugin.name)),
       stale: handle.stale.pipe(
         Effect.flatMap((isClosed) =>
           isClosed
@@ -1294,6 +1351,22 @@ export class LanguageServers extends Context.Service<
 
 type AcquireError = ServerUnavailable | ServerInstalling | LspSpawnError | LspRequestError;
 
+/**
+ * How long a bridged tsserver request may wait for its answer before it is answered `null`: past
+ * the tsserver's own install, bounded by the provisioner's `INSTALL_TIMEOUT`, plus its project
+ * load. Waiting is cheap (every answer raises a re-check, so a pull that gave up meanwhile is sent
+ * again), while an early `null` is cached by the bridged server until it is rebuilt.
+ */
+const BRIDGE_TIMEOUT = "5 minutes";
+
+/**
+ * The bridge's tsserver died mid-forward. Retried rather than answered `null`, because the pool
+ * rebuilds a closed tsserver on the next acquire and the bridged server would otherwise cache the
+ * `null` for that file with nothing to make it ask again. The retry is capped, so a tsserver that
+ * dies on every request is rebuilt a few times, not for the whole `BRIDGE_TIMEOUT`.
+ */
+class BridgeTargetClosed extends Data.TaggedError("BridgeTargetClosed") {}
+
 export const LanguageServersLive = Layer.effect(
   LanguageServers,
   Effect.gen(function* languageServers() {
@@ -1303,10 +1376,95 @@ export const LanguageServersLive = Layer.effect(
     // Finalizer runs on the pool entry's own scope, so an idled-out or evicted server drops out of
     // The mirror by construction.
     const live = new Map<string, ServerHandle>();
+
+    /**
+     * Run one `tsserver/request` in the sibling tsserver and answer it with `tsserver/response`.
+     *
+     * A file is answered only once tsserver has the document open and its project loaded, so each
+     * attempt opens the file there (refcounted, a no-op when a diagnostics run already holds it)
+     * and waits out the load, retrying while the tsserver is still installing or after it died. A
+     * tsserver without the bridge plugin is answered `null` at once: the bridged server then uses
+     * its defaults, and `lookupServer` keys its handle to the plugin's location, so it is rebuilt
+     * with the real project once the plugin lands.
+     *
+     * The bridged server computes nothing for a file until it hears back, so its answer often lands
+     * after the run's pull gave up (`PULL_TIMEOUT`), and nothing else would re-run checks for it.
+     * Every answer therefore raises a re-check. That ends: the bridged server caches the answer per
+     * file, so the re-run's pull is fast and forwards nothing. The cost is one extra run per file
+     * the server sees for the first time, coalesced while a run is in flight.
+     */
+    const forwardTsserver =
+      (bridge: NonNullable<ServerSpec["tsserverBridge"]>, repoRoot: string): NotificationHandler =>
+      (method, params, { notify, recheck }) => {
+        const request = method === "tsserver/request" ? parseTsserverRequest(params) : undefined;
+        if (request === undefined) {
+          return Effect.logDebug(`lsp notification ${method}`);
+        }
+        return Effect.scoped(
+          Effect.gen(function* forward() {
+            const handle = yield* acquire(bridge.server, repoRoot);
+            if (!handle.plugins.has(bridge.plugin)) {
+              return null;
+            }
+            const file = tsserverRequestFile(request.args);
+            const text =
+              file === undefined
+                ? undefined
+                : yield* Effect.promise(() =>
+                    Bun.file(file)
+                      .text()
+                      .catch(() => undefined),
+                  );
+            if (file !== undefined && text !== undefined) {
+              const uri = pathToFileURL(file).href;
+              yield* Effect.acquireRelease(
+                handle.connection.openDocument({
+                  languageId: lspLanguageId(file),
+                  text,
+                  uri,
+                  version: 1,
+                }),
+                () => handle.connection.closeDocument(uri),
+              );
+            }
+            yield* handle.connection.whenProjectLoaded;
+            const result = yield* handle.connection
+              .request(
+                "workspace/executeCommand",
+                tsserverRequestParams(request.command, request.args),
+              )
+              .pipe(
+                Effect.catchTag("LspRequestError", (error) =>
+                  handle.connection.closed.pipe(
+                    Effect.flatMap((isClosed) =>
+                      Effect.fail(isClosed ? new BridgeTargetClosed() : error),
+                    ),
+                  ),
+                ),
+              );
+            return tsserverResponseBody(result);
+          }),
+        ).pipe(
+          Effect.retry({
+            schedule: Schedule.spaced("1 second"),
+            times: 3,
+            while: (error) => error instanceof BridgeTargetClosed,
+          }),
+          Effect.retry({
+            schedule: Schedule.spaced("1 second"),
+            while: (error) => error instanceof ServerInstalling,
+          }),
+          Effect.timeout(BRIDGE_TIMEOUT),
+          Effect.orElseSucceed(() => null),
+          Effect.flatMap((body) => notify("tsserver/response", [[request.id, body]])),
+          Effect.andThen(recheck),
+        );
+      };
+
     const pool = yield* RcMap.make({
       idleTimeToLive: "30 seconds",
       lookup: (key: string) =>
-        lookupServer(key).pipe(
+        lookupServer(key, forwardTsserver).pipe(
           Effect.tap((handle) =>
             Effect.sync(() => live.set(key, handle)).pipe(
               Effect.andThen(

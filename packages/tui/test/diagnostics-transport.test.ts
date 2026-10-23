@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { Effect, Exit, Fiber, Option, Queue, Ref, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Option, Queue, Ref, Stream } from "effect";
 import type { Cause } from "effect";
+import { MaxOpsBeforeYield } from "effect/Scheduler";
 import { adjust, layer as testClockLayer } from "effect/testing/TestClock";
 
 import { isJsonRpcNotification, isJsonRpcRequest, isJsonRpcResponse } from "@/diagnostics/jsonrpc";
@@ -365,6 +366,57 @@ test("a closed connection fails an in-flight request instead of hanging", async 
     ).pipe(Effect.map(([result]) => result)),
   );
   expect(Exit.isFailure(exit)).toBe(true);
+});
+
+test("a request made after the connection closed fails at once instead of hanging", async () => {
+  const outcome = await withPeer(({ close, connection }) =>
+    close.pipe(
+      Effect.andThen(connection.whenProjectLoaded),
+      Effect.andThen(connection.request("workspace/executeCommand")),
+      Effect.as("answered"),
+      Effect.timeout("1 second"),
+      Effect.catchTag("TimeoutError", () => Effect.succeed("hung")),
+      Effect.catchTag("LspRequestError", (error) => Effect.succeed(error.message)),
+    ),
+  );
+  expect(outcome).toBe("connection closed");
+});
+
+test("no request slips between the connection closing and its pending requests failing", async () => {
+  /**
+   * A small run-loop budget makes the router yield every few operations, so the request lands at
+   * each point of the close path in turn; one landing between `closed` and the snapshot would
+   * hang.
+   */
+  const cases = Array.from({ length: 30 }, (_, index) => index + 3).flatMap((budget) =>
+    Array.from({ length: 8 }, (_, yields) => ({ budget, yields })),
+  );
+  const hung = await Effect.runPromise(
+    Effect.all(
+      cases.map(({ budget, yields }) =>
+        Effect.scoped(
+          Effect.gen(function* closeRace() {
+            const inbound = yield* Queue.make<unknown, Cause.Done>();
+            const connection = yield* makeTransport({ inbound, send: () => Effect.void }, REPO);
+            yield* Queue.end(inbound);
+            /** A plain loop on purpose: each yield is one step, and the sweep relies on that count. */
+            for (const _ of Array.from({ length: yields })) {
+              yield* Effect.yieldNow;
+            }
+            return yield* connection.request("workspace/executeCommand").pipe(
+              Effect.as(undefined),
+              Effect.timeout("200 millis"),
+              Effect.catchTag("TimeoutError", () =>
+                Effect.succeed(`budget ${budget}, ${yields} yields`),
+              ),
+              Effect.catchTag("LspRequestError", () => Effect.succeed(undefined)),
+            );
+          }),
+        ).pipe(Effect.provideService(MaxOpsBeforeYield, budget)),
+      ),
+    ),
+  );
+  expect(hung.filter((label) => label !== undefined)).toEqual([]);
 });
 
 test("pullDiagnostics echoes the stored resultId and reuses cached items on unchanged", async () => {
@@ -756,4 +808,39 @@ test("a publish no run is waiting for is news, clean or not", async () => {
     }),
   );
   expect(late).toBe(1);
+});
+
+test("an unmodeled notification reaches its handler, which answers on the same connection without holding the router", async () => {
+  const outcome = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* bridgedPeer() {
+        const inbound = yield* Queue.make<unknown, Cause.Done>();
+        const sent = yield* Queue.make<JsonRpcMessage, Cause.Done>();
+        const release = yield* Deferred.make<void>();
+        const connection = yield* makeTransport(
+          { inbound, send: (message) => Queue.offer(sent, message).pipe(Effect.asVoid) },
+          REPO,
+          undefined,
+          undefined,
+          (method, params, { notify }) =>
+            Deferred.await(release).pipe(Effect.andThen(notify(`${method}/answer`, params))),
+        );
+        yield* Queue.offer(inbound, { jsonrpc: "2.0", method: "custom/ask", params: [[1, "x"]] });
+        /** The handler is still blocked here, yet a request sent after the notification resolves. */
+        const pending = yield* Effect.forkChild(connection.request("textDocument/hover", {}));
+        const request = yield* Queue.take(sent);
+        yield* Queue.offer(inbound, { id: idOf(request), jsonrpc: "2.0", result: "answered" });
+        const result = yield* Fiber.join(pending);
+        yield* Deferred.succeed(release, undefined);
+        const answer = yield* Queue.take(sent);
+        return { answer, result };
+      }),
+    ),
+  );
+  expect(outcome.result).toBe("answered");
+  expect(outcome.answer).toEqual({
+    jsonrpc: "2.0",
+    method: "custom/ask/answer",
+    params: [[1, "x"]],
+  });
 });

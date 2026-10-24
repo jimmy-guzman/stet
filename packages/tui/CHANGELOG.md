@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.3](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.2...stet-v0.10.3) (2026-10-24)
+
+
+### Features
+
+* **vue:** ✨ report template, SFC, and style findings ([#373](https://github.com/jimmy-guzman/stet/issues/373)) ([52d409c](https://github.com/jimmy-guzman/stet/commit/52d409c5af8956ee38f983cd939fafedbc1a5f2f))
+
 ## [0.10.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.1...stet-v0.10.2) (2026-10-08)
 
 

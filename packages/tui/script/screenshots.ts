@@ -250,11 +250,8 @@ const screens = [
   },
   {
     /**
-     * Put the caret on a symbol (same `v` + `/` + word-hop approach as the hover tape, since the
-     * intel rows only appear for a symbol) and open the context menu, which the prose beside it
-     * does not enumerate. Note it cannot also show the menu _omitting_ rows: a symbol is exactly
-     * the case where every row applies. `Ctrl+N` is the planted rebind; see the config's
-     * `keybindings` note for why.
+     * Open the context menu on a file, which the prose beside it does not enumerate. `Ctrl+N` is
+     * the planted rebind; see the config's `keybindings` note for why.
      */
     config: true,
     launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
@@ -267,16 +264,6 @@ const screens = [
       "Sleep 1500ms",
       'Type "v"',
       "Sleep 600ms",
-      'Type "/"',
-      "Sleep 300ms",
-      'Type "function highlightSnippet"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 500ms",
-      "Escape",
-      "Sleep 300ms",
-      'Type "lll"',
-      "Sleep 400ms",
       "Ctrl+N",
       "Sleep 1200ms",
     ].join("\n"),
@@ -385,123 +372,6 @@ const screens = [
       "Sleep 500ms",
       "Escape",
       "Sleep 1500ms",
-    ].join("\n"),
-  },
-  {
-    /**
-     * Open a real source file, switch to full-file view (`v`) so the target is navigable even when
-     * it is unchanged in the diff window (`highlightSnippet` is elided in diff mode once it leaves
-     * the changed set, which lands the caret on the wrong symbol), jump the caret onto the JSDoc'd
-     * exported function with `/`, hop to its name, and press `K`. The hover card shows the
-     * syntax-highlighted signature above the plain doc text, anchored at the caret. The long final
-     * sleep waits out tsserver's project load before it answers the first hover (same order as the
-     * problems shot). `Type "K"` sends the shift+K the keymap matches.
-     */
-    name: "hover",
-    steps: [
-      "Ctrl+P",
-      'Type "diff/engine"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 1500ms",
-      'Type "v"',
-      "Sleep 600ms",
-      'Type "/"',
-      "Sleep 300ms",
-      'Type "function highlightSnippet"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 500ms",
-      "Escape",
-      "Sleep 300ms",
-      'Type "lll"',
-      "Sleep 400ms",
-      'Type "K"',
-      "Sleep 16s",
-    ].join("\n"),
-  },
-  {
-    /**
-     * Open the file that declares a widely-implemented interface, jump the caret to its declaration
-     * with `/`, then hop two words (`ll` is word-forward: export → interface → LspConnection) onto
-     * the interface name, since implementation resolves the symbol under the caret. Press Shift+I:
-     * the overlay lists every concrete implementor grouped by file with each source line. The long
-     * sleep waits out tsserver's project load before implementation answers (same order as the
-     * hover/call-hierarchy shots). `Type "I"` sends the shift+I the keymap matches.
-     */
-    name: "find-implementations",
-    steps: [
-      "Ctrl+P",
-      'Type "diagnostics/transport"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 1500ms",
-      'Type "/"',
-      "Sleep 300ms",
-      'Type "interface LspConnection"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 500ms",
-      "Escape",
-      "Sleep 300ms",
-      'Type "ll"',
-      "Sleep 400ms",
-      'Type "I"',
-      "Sleep 16s",
-    ].join("\n"),
-  },
-  {
-    /**
-     * Open the file that defines a widely-called function, switch to full-file view (`v`) so the
-     * target is navigable even when it is unchanged in the diff window (`highlightSnippet` is
-     * elided in diff mode once it leaves the changed set), jump the caret to its line with `/`,
-     * then hop three words (`lll` is word-forward: export → async → function → highlightSnippet)
-     * onto the name, since prepareCallHierarchy needs the identifier itself. Press Shift+H: the
-     * overlay lists the callers grouped by file with the `⇥ direction` hint in the footer. The long
-     * sleep waits out tsserver's project load before prepare/resolve answers (same order as the
-     * hover/find-symbols shots). `Type "H"` sends the shift+H the keymap matches.
-     */
-    name: "call-hierarchy",
-    steps: [
-      "Ctrl+P",
-      'Type "diff/engine"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 1500ms",
-      'Type "v"',
-      "Sleep 600ms",
-      'Type "/"',
-      "Sleep 300ms",
-      'Type "function highlightSnippet"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 500ms",
-      "Escape",
-      "Sleep 300ms",
-      'Type "lll"',
-      "Sleep 400ms",
-      'Type "H"',
-      "Sleep 16s",
-    ].join("\n"),
-  },
-  {
-    /**
-     * Open a symbol-rich source file, then press S to open the outline overlay. Arrow down a few
-     * rows so the shot shows the selection tint mid-list alongside the kind icons, nesting indent,
-     * and line:col column. The long sleep waits out tsserver's project load before documentSymbol
-     * answers (same order as the hover/problems shots).
-     */
-    name: "find-symbols",
-    steps: [
-      "Ctrl+P",
-      'Type "src/state"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 1500ms",
-      'Type "S"',
-      "Sleep 16s",
-      "Down@250ms 5",
-      "Sleep 1200ms",
     ].join("\n"),
   },
   {

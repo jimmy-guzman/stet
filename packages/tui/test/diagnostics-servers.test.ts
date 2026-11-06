@@ -12,7 +12,7 @@ import { builtinSchemas } from "@/diagnostics/schemas";
 import {
   activePlugins,
   activeServerGates,
-  activeServersForPath,
+  activeServers,
   handshakeConfigFor,
   LanguageServers,
   LanguageServersLive,
@@ -26,32 +26,49 @@ import {
   resolveServers,
   restoreServers,
   serverRepoKey,
-  serversForPath,
-  serversProviding,
   snapshotServers,
 } from "@/diagnostics/servers";
 import { LspRequestError } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
+import { fileSupportForPath } from "@/file-support/registry";
+
+/** The servers a path runs in this repo, read the way a diagnostics run reads them. */
+const activeServersForPath = (path: string, repoRoot: string) =>
+  activeServerGates(repoRoot).pipe(Effect.map((gates) => activeServers(path, gates)));
 
 test("resolves a source file to its language's servers in declared order", () => {
   // The JS/TS family lists its canonical server first, then the linters that overlap it.
-  expect(serversForPath("src/a.tsx")).toEqual(["typescript", "oxlint", "biome"]);
-  expect(serversForPath("src/a.mjs")).toEqual(["typescript", "oxlint", "biome"]);
+  expect(fileSupportForPath("src/a.tsx").language?.servers).toEqual([
+    "typescript",
+    "oxlint",
+    "biome",
+  ]);
+  expect(fileSupportForPath("src/a.mjs").language?.servers).toEqual([
+    "typescript",
+    "oxlint",
+    "biome",
+  ]);
   // Only biome claims css/graphql; the language matcher includes it regardless of repo gating.
-  expect(serversForPath("src/a.css")).toEqual(["biome"]);
+  expect(fileSupportForPath("src/a.css").language?.servers).toEqual(["biome"]);
   // Json overlaps biome (biome only in a biome repo, the json server everywhere); yaml is disjoint.
-  expect(serversForPath("package.json")).toEqual(["json", "biome"]);
-  expect(serversForPath("config.yaml")).toEqual(["yaml"]);
-  expect(serversForPath("config.yml")).toEqual(["yaml"]);
-  expect(serversForPath("README.md")).toEqual([]);
-  expect(serversForPath("Makefile")).toEqual([]);
+  expect(fileSupportForPath("package.json").language?.servers).toEqual(["json", "biome"]);
+  expect(fileSupportForPath("config.yaml").language?.servers).toEqual(["yaml"]);
+  expect(fileSupportForPath("config.yml").language?.servers).toEqual(["yaml"]);
+  expect(fileSupportForPath("README.md").language?.servers).toBeUndefined();
+  expect(fileSupportForPath("Makefile").language?.servers).toBeUndefined();
 });
 
 test("plain Python repos select basedpyright while retaining ty as a possible server", async () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-python-"));
   try {
-    expect(serversForPath("src/main.py")).toEqual(["ty", "basedpyright", "ruff"]);
-    expect(serversForPath("stubs/typed.pyi")).toEqual(["ty", "basedpyright", "ruff"]);
+    expect(fileSupportForPath("src/main.py").language?.servers).toEqual([
+      { firstOf: ["ty", "basedpyright"] },
+      "ruff",
+    ]);
+    expect(fileSupportForPath("stubs/typed.pyi").language?.servers).toEqual([
+      { firstOf: ["ty", "basedpyright"] },
+      "ruff",
+    ]);
     expect(await Effect.runPromise(activeServersForPath("src/main.py", repo))).toEqual([
       "basedpyright",
       "ruff",
@@ -62,17 +79,6 @@ test("plain Python repos select basedpyright while retaining ty as a possible se
     ]);
     expect(lspLanguageId("src/main.py")).toBe("python");
     expect(lspLanguageId("stubs/typed.pyi")).toBe("python");
-    // Ruff answers hover too, so both surface for a hover pull; references stays basedpyright's.
-    expect(await Effect.runPromise(serversProviding("src/main.py", "hover", repo))).toEqual([
-      "basedpyright",
-      "ruff",
-    ]);
-    expect(await Effect.runPromise(serversProviding("src/main.py", "references", repo))).toEqual([
-      "basedpyright",
-    ]);
-    expect(
-      await Effect.runPromise(serversProviding("src/main.py", "implementation", repo)),
-    ).toEqual(["basedpyright"]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -97,13 +103,6 @@ test("every built-in ty signal selects ty instead of basedpyright", async () => 
           "ty",
           "ruff",
         ]);
-        expect(await Effect.runPromise(serversProviding("src/main.py", "hover", repo))).toEqual([
-          "ty",
-          "ruff",
-        ]);
-        expect(
-          await Effect.runPromise(serversProviding("src/main.py", "implementation", repo)),
-        ).toEqual([]);
       }),
     );
   } finally {
@@ -182,35 +181,6 @@ test("watched changes refresh the shared server gates for a repository", async (
   }
 });
 
-test("only the intel-capable server answers a code-intel pull for a file", async () => {
-  const repo = mkdtempSync(join(tmpdir(), "stet-intel-"));
-  try {
-    // TypeScript is the only registered server that provides code-intel, so a JS/TS-family file
-    // Resolves to it regardless of the other extension-matching servers (oxlint, biome).
-    expect(await Effect.runPromise(serversProviding("src/a.ts", "hover", repo))).toEqual([
-      "typescript",
-    ]);
-    expect(await Effect.runPromise(serversProviding("src/a.tsx", "hover", repo))).toEqual([
-      "typescript",
-    ]);
-    expect(await Effect.runPromise(serversProviding("src/a.mjs", "hover", repo))).toEqual([
-      "typescript",
-    ]);
-    // CSS matches only intel-less biome (gated off here) and an extensionless file matches none.
-    expect(await Effect.runPromise(serversProviding("src/a.css", "hover", repo))).toEqual([]);
-    expect(await Effect.runPromise(serversProviding("Makefile", "hover", repo))).toEqual([]);
-    // JSON and YAML answer hover (measured from their initialize replies), so they warm too.
-    expect(await Effect.runPromise(serversProviding("package.json", "hover", repo))).toEqual([
-      "json",
-    ]);
-    expect(await Effect.runPromise(serversProviding("config.yaml", "hover", repo))).toEqual([
-      "yaml",
-    ]);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
-});
-
 test("lspLanguageId maps non-JS/TS file types to their LSP language ids", () => {
   expect(lspLanguageId("a.json")).toBe("json");
   expect(lspLanguageId("a.jsonc")).toBe("jsonc");
@@ -220,34 +190,6 @@ test("lspLanguageId maps non-JS/TS file types to their LSP language ids", () => 
   expect(lspLanguageId("a.yml")).toBe("yaml");
 });
 
-test("serversProviding keeps only servers whose static hint can answer the intent", async () => {
-  const repo = mkdtempSync(join(tmpdir(), "stet-capabilities-"));
-  try {
-    // Only typescript declares definition/references; oxlint pushes diagnostics and declares neither,
-    // So intel never acquires it for a code-intel pull.
-    expect(await Effect.runPromise(serversProviding("src/a.ts", "definition", repo))).toEqual([
-      "typescript",
-    ]);
-    expect(await Effect.runPromise(serversProviding("src/a.tsx", "references", repo))).toEqual([
-      "typescript",
-    ]);
-    expect(await Effect.runPromise(serversProviding("src/a.ts", "implementation", repo))).toEqual([
-      "typescript",
-    ]);
-    // Json answers hover and documentSymbol but not definition; yaml answers definition too. A
-    // Capability the matched server does not declare still filters out.
-    expect(await Effect.runPromise(serversProviding("package.json", "definition", repo))).toEqual(
-      [],
-    );
-    expect(await Effect.runPromise(serversProviding("config.yaml", "definition", repo))).toEqual([
-      "yaml",
-    ]);
-    expect(await Effect.runPromise(serversProviding("README.md", "definition", repo))).toEqual([]);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
-});
-
 test("resolveServerCommand returns undefined for a language with no registered server", () => {
   expect(resolveServerCommand("ruby", "/repo")).toBeUndefined();
 });
@@ -255,23 +197,15 @@ test("resolveServerCommand returns undefined for a language with no registered s
 test("Go source and module files route to gopls", async () => {
   const repo = mkdtempSync(join(tmpdir(), "stet-go-"));
   try {
-    expect(serversForPath("main.go")).toEqual(["gopls"]);
-    expect(serversForPath("go.mod")).toEqual(["gopls"]);
-    expect(serversForPath("go.work")).toEqual(["gopls"]);
+    expect(fileSupportForPath("main.go").language?.servers).toEqual(["gopls"]);
+    expect(fileSupportForPath("go.mod").language?.servers).toEqual(["gopls"]);
+    expect(fileSupportForPath("go.work").language?.servers).toEqual(["gopls"]);
     // Always-on (no gate), so gopls stays selected in any repo.
     expect(await Effect.runPromise(activeServersForPath("main.go", repo))).toEqual(["gopls"]);
     // Each Go file type opens under its own LSP languageId; one pooled gopls serves all three.
     expect(lspLanguageId("main.go")).toBe("go");
     expect(lspLanguageId("go.mod")).toBe("go.mod");
     expect(lspLanguageId("go.work")).toBe("go.work");
-    // Every code-intel pull stet makes resolves to gopls, implementation included.
-    expect(await Effect.runPromise(serversProviding("main.go", "hover", repo))).toEqual(["gopls"]);
-    expect(await Effect.runPromise(serversProviding("main.go", "definition", repo))).toEqual([
-      "gopls",
-    ]);
-    expect(await Effect.runPromise(serversProviding("main.go", "implementation", repo))).toEqual([
-      "gopls",
-    ]);
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -322,7 +256,7 @@ test("built-in Python servers resolve from the repository virtualenv", () => {
   }
 });
 
-test("handshake parses advertised providers into the capability set", async () => {
+test("handshake opts into progress and watched files, leaving a push-only server unpulled", async () => {
   const requested: string[] = [];
   const notified: string[] = [];
   let initializeParams: unknown;
@@ -343,19 +277,8 @@ test("handshake parses advertised providers into the capability set", async () =
       Effect.sync(() => {
         requested.push(method);
         initializeParams = method === "initialize" ? params : initializeParams;
-        // A typescript-language-server-shaped reply: definition/references/hover as options
-        // Objects, no diagnosticProvider (it pushes diagnostics instead).
-        return method === "initialize"
-          ? {
-              capabilities: {
-                definitionProvider: true,
-                documentSymbolProvider: { label: "TypeScript" },
-                hoverProvider: true,
-                implementationProvider: true,
-                referencesProvider: true,
-              },
-            }
-          : null;
+        // A typescript-language-server-shaped reply: no diagnosticProvider, it pushes instead.
+        return method === "initialize" ? { capabilities: {} } : null;
       }),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
@@ -364,24 +287,12 @@ test("handshake parses advertised providers into the capability set", async () =
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
 
-  expect(handle.capabilities.has("definition")).toBe(true);
-  expect(handle.capabilities.has("references")).toBe(true);
-  expect(handle.capabilities.has("hover")).toBe(true);
-  expect(handle.capabilities.has("documentSymbol")).toBe(true);
-  expect(handle.capabilities.has("implementation")).toBe(true);
-  expect(handle.capabilities.has("pullDiagnostics")).toBe(false);
+  expect(handle.pullDiagnostics).toBe(false);
   expect(requested).toEqual(["initialize"]);
   expect(notified).toEqual(["initialized"]);
   // Opting into workDoneProgress is what makes tsserver report project-load begin/end; without it
-  // The intel readiness gate never opens.
+  // The tsserver bridge's readiness gate never opens.
   expect(initializeParams).toMatchObject({ capabilities: { window: { workDoneProgress: true } } });
-  // The hierarchicalDocumentSymbolSupport flag is what makes a server return the nested
-  // `DocumentSymbol[]`; without it the outline downgrades to a flat `SymbolInformation[]`.
-  expect(initializeParams).toMatchObject({
-    capabilities: {
-      textDocument: { documentSymbol: { hierarchicalDocumentSymbolSupport: true } },
-    },
-  });
   // Basedpyright does no filesystem watching of its own and installs its watch feature only when the
   // Client advertises `dynamicRegistration`, so without this it never learns a dependency was
   // Installed. `relativePatternSupport` is what makes it register its Python search paths, which is
@@ -439,34 +350,6 @@ test("rust-analyzer keeps watching its own files rather than depending on ours",
   });
 });
 
-test("handshake yields an empty capability set when no providers are advertised", async () => {
-  // An oxlint-shaped reply: it lints via push and advertises none of the code-intel providers.
-  const connection: LspConnection = {
-    changeDocument: () => Effect.void,
-    clearPublished: () => Effect.void,
-    closeDocument: () => Effect.void,
-    closed: Effect.sync(() => false),
-    endPublishWait: Effect.void,
-    notify: () => Effect.void,
-    openDocument: () => Effect.succeed(true),
-    published: Effect.sync(() => new Map<string, unknown[]>()),
-    pullDiagnostics: () =>
-      Effect.fail(
-        new LspRequestError({ message: "unsupported", method: "textDocument/diagnostic" }),
-      ),
-    request: () => Effect.succeed({ capabilities: {} }),
-    watchedBases: Stream.empty,
-    watchedFilesChanged: () => Effect.void,
-    whenProjectLoaded: Effect.void,
-  };
-
-  const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
-
-  expect(handle.capabilities.has("definition")).toBe(false);
-  expect(handle.capabilities.has("pullDiagnostics")).toBe(false);
-  expect(handle.capabilities.size).toBe(0);
-});
-
 test("handshake treats a malformed provider value as unsupported", async () => {
   // Only `true` or an options object advertises support; a non-conformant `null`/`0` must not count.
   const connection: LspConnection = {
@@ -484,11 +367,7 @@ test("handshake treats a malformed provider value as unsupported", async () => {
       ),
     request: () =>
       Effect.succeed({
-        capabilities: {
-          definitionProvider: null,
-          implementationProvider: 0,
-          referencesProvider: 0,
-        },
+        capabilities: { diagnosticProvider: 0 },
       }),
     watchedBases: Stream.empty,
     watchedFilesChanged: () => Effect.void,
@@ -497,9 +376,7 @@ test("handshake treats a malformed provider value as unsupported", async () => {
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
 
-  expect(handle.capabilities.has("definition")).toBe(false);
-  expect(handle.capabilities.has("implementation")).toBe(false);
-  expect(handle.capabilities.has("references")).toBe(false);
+  expect(handle.pullDiagnostics).toBe(false);
 });
 
 test("handshake advertises pull diagnostics and refresh support, and parses diagnosticProvider", async () => {
@@ -534,7 +411,7 @@ test("handshake advertises pull diagnostics and refresh support, and parses diag
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
 
-  expect(handle.capabilities.has("pullDiagnostics")).toBe(true);
+  expect(handle.pullDiagnostics).toBe(true);
   // Servers only answer `textDocument/diagnostic` (and only send refresh nudges) when the client
   // Declares the matching caps in `initialize`.
   expect(initializeParams).toMatchObject({
@@ -643,7 +520,7 @@ test("substitution never rescans text a placeholder inserted", () => {
   });
 });
 
-test("resolveServers adds a named user server with optimistic capability hints", () => {
+test("resolveServers adds a named user server", () => {
   const { issues, servers } = resolveServers({
     elixir: {
       command: ["elixir-ls", "--stdio"],
@@ -657,8 +534,16 @@ test("resolveServers adds a named user server with optimistic capability hints",
     binary: "elixir-ls",
     settings: { elixirLS: { dialyzerEnabled: false } },
   });
-  expect(servers.elixir?.provides).toContain("definition");
   expect(servers.elixir?.provision).toBeUndefined();
+});
+
+test("a server still carrying the removed capabilities hint keeps its entry", () => {
+  const { issues, servers } = resolveServers({
+    lua: { capabilities: ["definition", "hover"], command: ["lua-language-server"] },
+  });
+
+  expect(issues).toEqual(['server "lua": "capabilities" was removed']);
+  expect(servers.lua?.binary).toBe("lua-language-server");
 });
 
 test("a user server can opt into Python virtualenv discovery", () => {
@@ -696,7 +581,6 @@ test("a command override drops trusted provisioning while other fields inherit",
   expect(issues).toEqual([]);
   expect(servers.typescript?.binary).toBe("/bin/ls");
   expect(servers.typescript?.args).toEqual(["--stdio"]);
-  expect(servers.typescript?.provides).toContain("hover");
   expect(servers.typescript?.provision).toBeUndefined();
 });
 
@@ -815,7 +699,12 @@ test("the server pool preserves configured names containing spaces", async () =>
 });
 
 test("a Vue single-file component routes to the TS family plus Vue's server and opens as vue", () => {
-  expect(serversForPath("src/App.vue")).toEqual(["typescript", "oxlint", "biome", "vue"]);
+  expect(fileSupportForPath("src/App.vue").language?.servers).toEqual([
+    "typescript",
+    "oxlint",
+    "biome",
+    "vue",
+  ]);
   expect(lspLanguageId("src/App.vue")).toBe("vue");
 });
 
@@ -873,14 +762,6 @@ test("a .vue file reaches tsserver only once its plugin is on hand", async () =>
     expect(await Effect.runPromise(activeServersForPath("src/App.vue", bare))).toEqual([
       "oxlint",
       "vue",
-    ]);
-    /**
-     * Vue's server answers diagnostics only: in this window it would meet a script position with
-     * nothing, so intel reports no support rather than a false "none found".
-     */
-    expect(await Effect.runPromise(serversProviding("src/App.vue", "hover", bare))).toEqual([]);
-    expect(await Effect.runPromise(serversProviding("src/App.vue", "definition", local))).toEqual([
-      "typescript",
     ]);
     expect(await Effect.runPromise(activeServersForPath("src/a.ts", bare))).toEqual([
       "typescript",

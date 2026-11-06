@@ -62,16 +62,6 @@ interface HandshakeConfig {
   readonly notifications?: readonly { readonly method: string; readonly params: unknown }[];
 }
 
-/** The read-only LSP intents stet uses, keyed off each server's advertised `*Provider`. */
-export type Capability =
-  | "definition"
-  | "references"
-  | "hover"
-  | "documentSymbol"
-  | "callHierarchy"
-  | "implementation"
-  | "pullDiagnostics";
-
 /**
  * A TypeScript language service plugin tsserver loads for the repos `when` admits. The three SFC
  * frameworks all ship one (Vue's is what type-checks `.vue` at all; Astro's and Svelte's resolve
@@ -98,12 +88,6 @@ export interface ServerSpec {
   readonly plugins?: readonly TsPlugin[];
   /** Optional repository-environment strategy used before the standard local/PATH lookup. */
   readonly discovery?: BinaryDiscovery;
-  /**
-   * The intents this server can answer, declared statically so intel skips a non-provider without
-   * acquiring it. A pre-acquire filter only; the handshake-advertised set on `ServerHandle` stays
-   * the authoritative gate, so this must not under-declare what the server actually provides.
-   */
-  readonly provides: readonly Capability[];
   /** How stet installs the server into its cache when it is found neither in repo nor on PATH. */
   readonly provision?: ProvisionChannel;
   /**
@@ -172,9 +156,8 @@ const vueRepo: When = [
 ];
 
 const builtinRegistry: Record<string, ServerSpec> = {
-  // The basedpyright fork reinstates the read-only providers pyright gates behind its VS Code
-  // Extension; the npm package ships `basedpyright-langserver`. It type-checks Python and answers
-  // The code-intel pulls, the typescript-language-server analog. Zero-config: it reads
+  // The npm package ships `basedpyright-langserver`. It type-checks Python, the
+  // Typescript-language-server analog. Zero-config: it reads
   // Pyrightconfig/pyproject on its own and pulls `python.*` settings the transport's null default
   // Answers, so it needs no handshake extras. It is the ungated fallback in Python's `firstOf`
   // Group, running only where ty's gate does not claim the repository.
@@ -182,40 +165,21 @@ const builtinRegistry: Record<string, ServerSpec> = {
     args: ["--stdio"],
     binary: "basedpyright-langserver",
     discovery: "python",
-    // Verified against its `initialize` result: it advertises every intel provider stet uses,
-    // Implementation included.
-    provides: [
-      "definition",
-      "references",
-      "hover",
-      "documentSymbol",
-      "callHierarchy",
-      "implementation",
-    ],
     provision: { kind: "npm", packages: ["basedpyright@1.39.9"] },
   },
   "biome": {
     args: ["lsp-proxy"],
     binary: "biome",
-    provides: [],
     provision: { kind: "npm", packages: ["@biomejs/biome@2.5.2"] },
     when: ["biome.json", "biome.jsonc"],
   },
-  // Go's official language server (bare `gopls` serves LSP over stdio). It answers every intel pull
-  // And pushes its type/vet diagnostics. Discovery-only: gopls ships no prebuilt release binaries and
+  // Go's official language server (bare `gopls` serves LSP over stdio). It pushes its type/vet
+  // Diagnostics. Discovery-only: gopls ships no prebuilt release binaries and
   // Stet never builds from source, so it has no `provision` channel and is used only when found
   // Repo-local or on PATH (`go install golang.org/x/tools/gopls@latest`), never downloaded.
   "gopls": {
     args: [],
     binary: "gopls",
-    provides: [
-      "definition",
-      "references",
-      "hover",
-      "documentSymbol",
-      "callHierarchy",
-      "implementation",
-    ],
   },
   "json": {
     // Always-on (no `when`) so JSON gets schema validation in every repo. It overlaps Biome's
@@ -225,8 +189,6 @@ const builtinRegistry: Record<string, ServerSpec> = {
     // The associations reach it only through `schemaAssociations` (the `settings` channel cannot).
     args: ["--stdio"],
     binary: "vscode-json-language-server",
-    // Measured from the pinned binary's initialize reply: hover, documentSymbol, pullDiagnostics.
-    provides: ["hover", "documentSymbol", "pullDiagnostics"],
     provision: { kind: "npm", packages: ["vscode-langservers-extracted@4.10.0"] },
     schemaAssociations: builtinSchemas,
   },
@@ -239,19 +201,17 @@ const builtinRegistry: Record<string, ServerSpec> = {
     initializationOptions: [
       { options: { configPath: null, run: "onType" }, workspaceUri: "{repoUri}" },
     ],
-    provides: [],
     provision: { kind: "npm", packages: ["oxlint@1.72.0"] },
     settings: { configPath: null, run: "onType" },
   },
   // Ruff is the always-on Python linter (the oxlint analog), run over its LSP (`ruff server`). It is
   // Not on npm, so it comes through the binary channel as a `tar.gz` cargo-dist archive (the binary
   // Nested one directory in), sha256-verified per platform against the release's `.sha256` companion
-  // Before the extractor pulls it out. Lint plus hover (measured from the pinned binary's initialize).
+  // Before the extractor pulls it out.
   "ruff": {
     args: ["server"],
     binary: "ruff",
     discovery: "python",
-    provides: ["hover"],
     provision: {
       archive: "tar.gz",
       assets: [
@@ -297,14 +257,6 @@ const builtinRegistry: Record<string, ServerSpec> = {
     // Over: pinning `server` keeps it self-watching, so the watched-files channel is a no-op for
     // Rust. Helix ships the same pin for the same reason.
     initializationOptions: { files: { watcher: "server" } },
-    provides: [
-      "definition",
-      "references",
-      "hover",
-      "documentSymbol",
-      "callHierarchy",
-      "implementation",
-    ],
     provision: {
       assets: [
         {
@@ -338,13 +290,11 @@ const builtinRegistry: Record<string, ServerSpec> = {
     },
   },
   // Astral's Python type checker is an alternative to basedpyright, not an additional checker.
-  // Python's `firstOf` profile selects it only where the repository opted into ty. Its initialize
-  // Result advertises every intel provider stet uses except `implementation`.
+  // Python's `firstOf` profile selects it only where the repository opted into ty.
   "ty": {
     args: ["server"],
     binary: "ty",
     discovery: "python",
-    provides: ["definition", "references", "hover", "documentSymbol", "callHierarchy"],
     provision: {
       archive: "tar.gz",
       assets: [
@@ -388,9 +338,9 @@ const builtinRegistry: Record<string, ServerSpec> = {
     args: ["--stdio"],
     binary: "typescript-language-server",
     // Vue's hybrid mode puts the type-checking of `.vue` inside tsserver: with this plugin loaded
-    // The server reports script and template type errors mapped back to the `.vue` file, resolves
-    // `.vue` imports from `.ts`, and answers the intel pulls there. `languages` is what makes it
-    // Accept a `didOpen` with languageId `vue` at all.
+    // The server reports script and template type errors mapped back to the `.vue` file, and
+    // Resolves `.vue` imports from `.ts`. `languages` is what makes it accept a `didOpen` with
+    // LanguageId `vue` at all.
     plugins: [
       {
         languages: ["vue"],
@@ -398,14 +348,6 @@ const builtinRegistry: Record<string, ServerSpec> = {
         packages: ["@vue/typescript-plugin@3.3.12"],
         when: vueRepo,
       },
-    ],
-    provides: [
-      "definition",
-      "references",
-      "hover",
-      "documentSymbol",
-      "callHierarchy",
-      "implementation",
     ],
     provision: { kind: "npm", packages: ["typescript-language-server@5.3.0", "typescript@6.0.3"] },
   },
@@ -416,15 +358,11 @@ const builtinRegistry: Record<string, ServerSpec> = {
    * range it lands on TS 7, which has no `ts.server`, and the server crashes on its first file.
    *
    * Under stet's client capabilities the pinned binary advertises `diagnosticProvider`, so it is
-   * pulled. It also advertises `definition`, `references`, `hover`, and `documentSymbol`, and none
-   * is declared: while tsserver has the plugin it sits first in the profile and answers every one
-   * of them, and while it does not, this server answers a script position with nothing, which would
-   * read as a false "none found" where the honest answer is no support.
+   * pulled.
    */
   "vue": {
     args: ["--stdio"],
     binary: "vue-language-server",
-    provides: ["pullDiagnostics"],
     provision: { kind: "npm", packages: ["@vue/language-server@3.3.12", "typescript@6.0.3"] },
     tsserverBridge: { plugin: "@vue/typescript-plugin", server: "typescript" },
     when: vueRepo,
@@ -432,8 +370,6 @@ const builtinRegistry: Record<string, ServerSpec> = {
   "yaml": {
     args: ["--stdio"],
     binary: "yaml-language-server",
-    // Measured from the pinned binary's initialize reply: definition, hover, documentSymbol.
-    provides: ["definition", "hover", "documentSymbol"],
     provision: { kind: "npm", packages: ["yaml-language-server@1.23.0"] },
     // The server pulls `workspace/configuration` and fetches the SchemaStore catalog itself once
     // `schemaStore.enable` is on, so it validates well-known YAML (GitHub workflows, and so on)
@@ -558,20 +494,6 @@ export interface ResolvedServers {
   issues: string[];
 }
 
-const capabilityNames = [
-  "definition",
-  "references",
-  "hover",
-  "documentSymbol",
-  "callHierarchy",
-  "implementation",
-  "pullDiagnostics",
-] as const satisfies readonly Capability[];
-
-function isCapability(value: unknown): value is Capability {
-  return typeof value === "string" && capabilityNames.some((capability) => capability === value);
-}
-
 /** Resolve named server overrides. An invalid override leaves its built-in unchanged. */
 export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
   const issues: string[] = [];
@@ -598,6 +520,10 @@ export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
     if (unknown.length > 0) {
       issues.push(...unknown.map((field) => `server "${name}": unknown field "${field}"`));
       continue;
+    }
+    /** A hint nothing reads any more, so a config still carrying it must keep its server entry. */
+    if ("capabilities" in entry) {
+      issues.push(`server "${name}": "capabilities" was removed`);
     }
     const base = servers[name];
     const command = entry.command;
@@ -626,20 +552,6 @@ export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
       continue;
     }
     const discovery = rawDiscovery === false ? undefined : (rawDiscovery ?? base?.discovery);
-    const capabilities = entry.capabilities;
-    const provides =
-      capabilities === undefined
-        ? (base?.provides ?? [...intelCapabilities])
-        : Array.isArray(capabilities)
-          ? capabilities.filter(isCapability)
-          : [];
-    if (
-      capabilities !== undefined &&
-      (!Array.isArray(capabilities) || provides.length !== capabilities.length)
-    ) {
-      issues.push(`server "${name}": capabilities contains an unknown capability`);
-      continue;
-    }
     let when = base?.when;
     if (entry.when === false) {
       when = undefined;
@@ -655,7 +567,6 @@ export function resolveServers(raw: Record<string, unknown>): ResolvedServers {
       args: command === undefined ? (base?.args ?? []) : args,
       binary: command === undefined ? (base?.binary ?? "") : (binary ?? ""),
       ...(discovery === undefined ? {} : { discovery }),
-      provides,
       ...(command === undefined && base?.provision !== undefined
         ? { provision: base.provision }
         : {}),
@@ -685,17 +596,6 @@ function entryServers(entry: ServerEntry): string[] {
     return [entry];
   }
   return "firstOf" in entry ? entry.firstOf.flatMap(entryServers) : [entry.server];
-}
-
-/** Every possible server for this path, with gates and first-of selection ignored. */
-export function serversForPath(path: string): string[] {
-  return [
-    ...new Set(
-      (fileSupportForPath(path).language?.servers ?? [])
-        .flatMap(entryServers)
-        .filter((server) => registry[server] !== undefined),
-    ),
-  ];
 }
 
 export interface ServerGates {
@@ -857,48 +757,6 @@ export function pluginLocation(server: string, plugin: TsPlugin, repoRoot: strin
     : cachedPluginLocation(server, { name: plugin.name, packages: plugin.packages });
 }
 
-export const activeServersForPath = Effect.fn("LanguageServers.activeServersForPath")(
-  function* serversForActivePath(path: string, repoRoot: string) {
-    return activeServers(path, yield* activeServerGates(repoRoot));
-  },
-);
-
-export const serversProviding = Effect.fn("LanguageServers.serversProviding")(function* providing(
-  path: string,
-  capability: Capability,
-  repoRoot: string,
-) {
-  const servers = yield* activeServersForPath(path, repoRoot);
-  return servers.filter((server) => registry[server]?.provides.includes(capability));
-});
-
-const intelCapabilities = new Set<Capability>([
-  "definition",
-  "references",
-  "hover",
-  "documentSymbol",
-  "callHierarchy",
-  "implementation",
-]);
-
-/** Whether this path has any possible code-intel server before repository gates are evaluated. */
-export function hasIntelServer(path: string) {
-  return serversForPath(path).some((server) =>
-    (registry[server]?.provides ?? []).some((capability) => intelCapabilities.has(capability)),
-  );
-}
-
-/**
- * Whether any possible server for this path statically declares `capability`, before repository
- * gates. A sync over-approximation (gates ignored) that lets a caller skip the async gate pull for
- * a file type no server could ever answer, the same shortcut `hasIntelServer` gives the warm-hold.
- */
-export function hasCapabilityServer(path: string, capability: Capability) {
-  return serversForPath(path).some((server) =>
-    (registry[server]?.provides ?? []).includes(capability),
-  );
-}
-
 /**
  * The LSP `languageId` for `didOpen`, from the owning language's file-type map; `plaintext` when no
  * language claims the file (a server never analyzes a `plaintext` document).
@@ -941,8 +799,8 @@ function provisionSpecFor(language: string): ProvisionSpec | undefined {
 
 export interface ServerHandle {
   readonly connection: LspConnection;
-  /** Which read-only intents this server advertised; drives data-driven server selection. */
-  readonly capabilities: ReadonlySet<Capability>;
+  /** Whether this server advertised `diagnosticProvider`, so a run pulls it as well as hears it. */
+  readonly pullDiagnostics: boolean;
   /** The plugins this process was spawned with, by name; tsserver takes them at `initialize` only. */
   readonly plugins: ReadonlySet<string>;
   /**
@@ -958,40 +816,20 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 // LSP advertises a provider as `true` or an options object when supported, `undefined`/`false` when not.
-const capabilityProviders = [
-  ["definition", "definitionProvider"],
-  ["references", "referencesProvider"],
-  ["hover", "hoverProvider"],
-  ["documentSymbol", "documentSymbolProvider"],
-  ["callHierarchy", "callHierarchyProvider"],
-  ["implementation", "implementationProvider"],
-  ["pullDiagnostics", "diagnosticProvider"],
-] as const satisfies readonly (readonly [Capability, string])[];
-
-function parseCapabilities(initializeResult: unknown): Set<Capability> {
+function advertisesPullDiagnostics(initializeResult: unknown) {
   const capabilities = isObject(initializeResult) ? initializeResult.capabilities : undefined;
-  if (!isObject(capabilities)) {
-    return new Set();
-  }
-  return new Set(
-    capabilityProviders
-      .filter(([, provider]) => {
-        const advertised = capabilities[provider];
-        return advertised === true || isObject(advertised);
-      })
-      .map(([capability]) => capability),
-  );
+  const provider = isObject(capabilities) ? capabilities.diagnosticProvider : undefined;
+  return provider === true || isObject(provider);
 }
 
 /**
  * The LSP lifecycle handshake for a read-only client: `initialize` advertising only read-only
- * capabilities (diagnostics plus the code-intel pulls; no edit/format/rename), then `initialized`.
- * The server's advertised `*Provider`s decide which intents `capabilities` carries.
+ * capabilities (diagnostics only; no edit/format/rename), then `initialized`.
  *
  * @param repoRoot - The repository root used for workspace initialization
  * @param config - Optional initialization options, workspace capabilities, and request handler
- * @returns The initialized server handle with its advertised capabilities, plugin-less and stale
- *   only once dead; `lookupServer` layers a spawn's plugins and drift check over it
+ * @returns The initialized server handle, plugin-less and stale only once dead; `lookupServer`
+ *   layers a spawn's plugins and drift check over it
  */
 export function performHandshake(
   connection: LspConnection,
@@ -1003,31 +841,19 @@ export function performHandshake(
       .request("initialize", {
         capabilities: {
           // Push diagnostics require advertising publishDiagnostics + synchronization, or servers
-          // (E.g. typescript-language-server) stay silent. The definition/references/hover/symbol
-          // Caps are the read-only code-intel pulls, all `textDocument/*` requests. No
-          // Edit/format/rename: read-only. linkSupport lets definition reply with `LocationLink`s,
-          // Which carry the symbol's name range. hierarchicalDocumentSymbolSupport is what makes a
-          // Server return the nested `DocumentSymbol[]` (with `children`); without it it downgrades
-          // To a flat `SymbolInformation[]` and the outline loses all nesting. A server only
-          // Advertises `callHierarchyProvider` when the client advertises the matching client cap,
-          // So it is declared here or the two-step prepare/resolve pull stays unavailable.
+          // (E.g. typescript-language-server) stay silent. No edit/format/rename: read-only.
           textDocument: {
-            callHierarchy: { dynamicRegistration: false },
-            definition: { dynamicRegistration: false, linkSupport: true },
             // Pull diagnostics: a server that advertises `diagnosticProvider` only answers
             // `textDocument/diagnostic` when the client declares this cap. Push stays advertised
             // Alongside (publishDiagnostics below): the two are concurrent channels, and a hybrid
             // Server (rust-analyzer) pulls its native findings while pushing its cargo-check ones.
             diagnostic: { dynamicRegistration: false, relatedDocumentSupport: true },
-            documentSymbol: { dynamicRegistration: false, hierarchicalDocumentSymbolSupport: true },
-            hover: { dynamicRegistration: false },
-            implementation: { dynamicRegistration: false, linkSupport: true },
             publishDiagnostics: { relatedInformation: true, versionSupport: false },
-            references: { dynamicRegistration: false },
             synchronization: { didSave: false, dynamicRegistration: false },
           },
-          // Opt into server-driven progress so tsserver reports project-load begin/end; intel pulls
-          // Gate on the "end" (see `whenProjectLoaded`), and without this it sends no progress at all.
+          // Opt into server-driven progress so tsserver reports project-load begin/end; the
+          // Tsserver bridge gates on the "end" (see `whenProjectLoaded`), and without this it
+          // Sends no progress.
           window: { workDoneProgress: true },
           // `diagnostics.refreshSupport` tells the server it may nudge a re-pull via
           // `workspace/diagnostic/refresh`; a server that pulls its settings (oxlint) adds its
@@ -1068,9 +894,9 @@ export function performHandshake(
       { discard: true },
     );
     return {
-      capabilities: parseCapabilities(result),
       connection,
       plugins: new Set<string>(),
+      pullDiagnostics: advertisesPullDiagnostics(result),
       stale: connection.closed,
     } satisfies ServerHandle;
   });
@@ -1309,9 +1135,9 @@ export class LanguageServers extends Context.Service<
     >;
     /**
      * Tell every live server for this repo about on-disk changes, each filtered against its own
-     * registered globs. Broadcast from the pool rather than from a keeper, so a server held only by
-     * the intel warm-hold hears about them too. The batch stays **raw** all the way down: typing a
-     * path costs a stat, and only the server's own globs know whether any path is worth one.
+     * registered globs. Broadcast from the pool rather than from a keeper, so a server a keeper has
+     * just released hears about them too. The batch stays **raw** all the way down: typing a path
+     * costs a stat, and only the server's own globs know whether any path is worth one.
      */
     readonly notifyWatchedFiles: (
       repoRoot: string,
@@ -1320,25 +1146,14 @@ export class LanguageServers extends Context.Service<
     ) => Effect.Effect<void>;
     /**
      * Send every plugin this repo admits but has nowhere yet to provisioning (one with a channel; a
-     * discovery-only plugin is simply absent). Called per diagnostics run and ahead of every intel
-     * provider lookup (`providers`), not from `acquire`: a language that opens only through a
-     * plugin is not routed to the server until the plugin is on hand (`activeServers`), so a run
-     * over `.vue` files alone, or an intel pull with diagnostics switched off, would otherwise
-     * never acquire tsserver and nothing would ever start the download. The server keeps spawning
-     * meanwhile with whatever is on hand, so a `.ts` file never waits on a `.vue` plugin; once it
-     * lands, the pooled process reads as stale and is rebuilt with it.
+     * discovery-only plugin is simply absent). Called per diagnostics run, not from `acquire`: a
+     * language that opens only through a plugin is not routed to the server until the plugin is on
+     * hand (`activeServers`), so a run over `.vue` files alone would otherwise never acquire
+     * tsserver and nothing would ever start the download. The server keeps spawning meanwhile with
+     * whatever is on hand, so a `.ts` file never waits on a `.vue` plugin; once it lands, the
+     * pooled process reads as stale and is rebuilt with it.
      */
     readonly provisionPlugins: (repoRoot: string) => Effect.Effect<void>;
-    /**
-     * `serversProviding` with the provisioning pass ahead of it, for intel: diagnostics and intel
-     * are independent switches, so with diagnostics off this is the only path that would ever start
-     * a plugin download for a plugin-only language.
-     */
-    readonly providers: (
-      path: string,
-      capability: Capability,
-      repoRoot: string,
-    ) => Effect.Effect<string[]>;
     /**
      * Evict this repo's pooled servers so the next run brings up fresh ones. The escape hatch
      * behind `R`, for a server that cannot be told about a change (a linter that reads its config
@@ -1471,11 +1286,11 @@ export const LanguageServersLive = Layer.effect(
                 Effect.addFinalizer(() =>
                   Effect.sync(() => {
                     // Retract only the handle this entry installed. `RcMap.invalidate` drops a
-                    // Still-referenced key from the pool *without* closing its scope (the intel
-                    // Warm-hold keeps a reference for the whole session), so a replacement server
-                    // Can be spawned and registered here long before the old entry's finalizer
-                    // Finally runs. A blind `delete(key)` would then retract the live server, and
-                    // The watched-files channel would go silently dead for the rest of the session.
+                    // Still-referenced key from the pool *without* closing its scope, so a
+                    // Replacement server can be spawned and registered here long before the old
+                    // Entry's finalizer finally runs. A blind `delete(key)` would then retract the
+                    // Live server, and the watched-files channel would go silently dead for the
+                    // Rest of the session.
                     if (live.get(key) === handle) {
                       live.delete(key);
                     }
@@ -1599,11 +1414,6 @@ export const LanguageServersLive = Layer.effect(
         );
       });
 
-    const providers = (path: string, capability: Capability, repoRoot: string) =>
-      provisionPlugins(repoRoot).pipe(
-        Effect.andThen(() => serversProviding(path, capability, repoRoot)),
-      );
-
-    return { acquire, notifyWatchedFiles, providers, provisionPlugins, restart };
+    return { acquire, notifyWatchedFiles, provisionPlugins, restart };
   }),
 );

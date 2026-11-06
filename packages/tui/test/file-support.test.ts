@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { Effect } from "effect";
 
-import { activeServersForPath, resolveServers } from "@/diagnostics/servers";
+import { activeServerGates, activeServers, resolveServers } from "@/diagnostics/servers";
 import { resolveFileSupportConfig } from "@/file-support/config";
 import {
   fileIconForPath,
@@ -14,6 +14,10 @@ import {
   restoreFileSupport,
   snapshotFileSupport,
 } from "@/file-support/registry";
+
+/** The servers a path runs in this repo, read the way a diagnostics run reads them. */
+const activeServersForPath = (path: string, repoRoot: string) =>
+  activeServerGates(repoRoot).pipe(Effect.map((gates) => activeServers(path, gates)));
 
 const serverNames = new Set(Object.keys(resolveServers({}).servers));
 
@@ -115,7 +119,7 @@ test("built-in extension and glob matching ignores case across facets", async ()
     expect(issues).toEqual([]);
     // An uppercase extension (a Windows-authored or unconventionally cased file) resolves the same as
     // Lowercase: the icon and the LSP language profile agree, instead of the icon matching while the
-    // Profile misses and silently drops diagnostics and code intelligence.
+    // Profile misses and silently drops diagnostics.
     const tsx = fileSupportForPath("src/Component.TSX");
     expect(tsx.icon).toBe("react");
     expect(tsx.language?.languageId).toBe("typescriptreact");

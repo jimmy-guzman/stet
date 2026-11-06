@@ -1,7 +1,6 @@
-// Pure placement math for a caret-anchored viewer decoration (the hover card,
-// And later peek/gutter overlays): map the caret to its on-screen cell inside the
-// Viewer content area, then place a fixed-size card next to it, clamped to the
-// Viewport and flipped above the caret near the bottom edge. Kept free of
+// Pure placement math for the viewer's caret-anchored context menu: map the caret to its
+// On-screen cell inside the viewer content area, then place a fixed-size card next to it,
+// Clamped to the viewport and flipped above the caret near the bottom edge. Kept free of
 // Solid/OpenTUI so the geometry is unit-tested directly, the way `diff/follow.ts`
 // Is, rather than only through the render harness.
 

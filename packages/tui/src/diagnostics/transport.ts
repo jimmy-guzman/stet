@@ -30,7 +30,7 @@ const MATERIALIZE_CHUNK = 256;
  * within this window (typescript-language-server creates its token 25-42ms after `didOpen` across
  * measured runs, rust-analyzer 24ms after `initialized`), so 2 seconds is ~50x that latency with
  * ample slack for a busy machine. Paid at most once per connection: a silent server latches
- * "loaded" after it, and a warm hold pays it in the background before the first user pull.
+ * "loaded" after it.
  */
 const PROJECT_LOAD_GRACE = "2 seconds";
 
@@ -86,9 +86,9 @@ export interface LspConnection {
   readonly pullDiagnostics: (uri: string) => Effect.Effect<PulledDiagnostics, LspRequestError>;
   /**
    * Refcounted `textDocument/didOpen`: sent only on the first holder of a uri (count 0→1); a later
-   * holder reuses the already-open doc. Intel pulls, the diagnostics run, and the tsserver bridge
-   * share one connection, so this keeps a second open from resetting the server's view of a doc
-   * another holder still needs.
+   * holder reuses the already-open doc. The diagnostics run and the tsserver bridge share one
+   * connection, so this keeps a second open from resetting the server's view of a doc another
+   * holder still needs.
    *
    * @returns Whether a `didOpen` was actually sent. A holder that expects the server to answer its
    *   open (a diagnostics run awaiting a publish) must provoke one some other way when it was not.
@@ -143,15 +143,14 @@ export interface LspConnection {
   readonly closed: Effect.Effect<boolean>;
   /**
    * Resolves once the server has finished loading its project (the first `$/progress` "end" after
-   * `initialize`), or immediately when already loaded. Until then a server like
-   * typescript-language-server answers `textDocument/definition` from the local import binding
-   * instead of resolving cross-file, so intel pulls await this before requesting. Also resolves on
-   * connection close so a pull never hangs past server death.
+   * `initialize`), or immediately when already loaded. The tsserver bridge awaits this so a
+   * forwarded request never lands during the load window. Also resolves on connection close so a
+   * wait never hangs past server death.
    *
    * A load window is only waited on when the server signals one exists (a `window/workDoneProgress/
    * create` request or a `$/progress` "begin"). A server with no project-load phase (the JSON,
    * YAML, basedpyright, and ruff binaries announce nothing) resolves after a bounded grace instead
-   * of hanging on a signal that never comes, so a pull on those never pays the request timeout.
+   * of hanging on a signal that never comes.
    */
   readonly whenProjectLoaded: Effect.Effect<void>;
 }
@@ -247,7 +246,8 @@ export function makeTransport(
     let nextId = 0;
     let closed = false;
     // Resolved on the first project-load `$/progress` "end" (or on close); `whenProjectLoaded`
-    // Gates intel pulls so a request never lands during the load window with a premature reply.
+    // Gates the tsserver bridge so a request never lands during the load window with a premature
+    // Reply.
     let loaded = false;
     // True once the server signals it will report work-done progress (a `window/workDoneProgress/
     // Create` request, or a `$/progress` "begin"): the evidence a load window exists to wait for.
@@ -347,9 +347,8 @@ export function makeTransport(
           }
           return onRecheck;
         }
-        // A workDoneProgress "end" marks the project load complete; before it, intel replies are
-        // Resolved from the local import binding rather than cross-file (the F12-stops-at-import bug).
-        // A "begin" counts as the load-window announcement too, for a server that skips the
+        // A workDoneProgress "end" marks the project load complete. A "begin" counts as the
+        // Load-window announcement too, for a server that skips the
         // `window/workDoneProgress/create` request and opens progress directly.
         if (message.method === "$/progress" && isObject(message.params)) {
           const { value } = message.params;
@@ -569,7 +568,7 @@ export function makeTransport(
         // All. Wait on the real signal, but only for a bounded grace, so a close or a late "end"
         // Inside the window still resolves at once. If the grace elapses first, re-decide: announced
         // Mid-grace -> keep waiting on the real signal; still silent -> latch "loaded" so this
-        // Negative result sticks and no later pull re-pays the grace.
+        // Negative result sticks and no later wait re-pays the grace.
         return Deferred.await(projectLoaded).pipe(
           Effect.timeout(PROJECT_LOAD_GRACE),
           Effect.catchTag("TimeoutError", () =>

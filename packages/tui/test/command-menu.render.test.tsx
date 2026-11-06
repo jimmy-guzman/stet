@@ -57,7 +57,7 @@ describe("context command menu", () => {
     }
   }, 20_000);
 
-  test("the viewer menu omits the intel actions when the caret has no symbol", async () => {
+  test("the viewer menu opens at a line-level caret", async () => {
     const repoRoot = createFixtureRepo("stet-cmd-viewer-", {
       "package.json": `${JSON.stringify({ name: "cmd-fixture" })}\n`,
       "src/a.ts": "const alpha = 1\n",
@@ -77,8 +77,7 @@ describe("context command menu", () => {
     try {
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
       mockInput.pressTab();
-      // A line-level caret (as a gutter click leaves) has no symbol, so the intel
-      // Actions are omitted; only the line-scoped actions show.
+      // A line-level caret, as a gutter click leaves.
       state.setCaretLineLevel(true);
       state.openCommandMenu("viewer");
 
@@ -86,7 +85,6 @@ describe("context command menu", () => {
         current.includes("Copy reference"),
       );
 
-      expect(frame).not.toContain("Go to definition");
       expect(frame).toContain("Copy reference");
       // The fixture file is small, so it is not truncated: no "Show full content".
       expect(frame).not.toContain("Show full content");

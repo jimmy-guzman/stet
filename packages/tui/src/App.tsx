@@ -11,11 +11,9 @@ import { HeaderBar } from "./components/HeaderBar";
 import { HelpDialog } from "./components/HelpDialog";
 import { ProblemsPanel } from "./components/ProblemsPanel";
 import { QuitConfirm } from "./components/QuitConfirm";
-import { ReferencesOverlay } from "./components/ReferencesOverlay";
 import { ScopeMenu } from "./components/ScopeMenu";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
-import { SymbolsOverlay } from "./components/SymbolsOverlay";
 import { ThemeCombobox } from "./components/ThemeCombobox";
 import { Viewer } from "./components/Viewer";
 import { WorktreeCombobox } from "./components/WorktreeCombobox";
@@ -215,12 +213,6 @@ export function App() {
       </box>
       <Show when={state.fileComboboxOpen()}>
         <FileCombobox />
-      </Show>
-      <Show when={state.referencesOpen()}>
-        <ReferencesOverlay />
-      </Show>
-      <Show when={state.symbolsOpen()}>
-        <SymbolsOverlay />
       </Show>
       <Show when={state.worktreeComboboxOpen()}>
         <WorktreeCombobox />

@@ -30,7 +30,6 @@ import { caretCell } from "@/viewer/anchor";
 import { CommandMenu } from "../CommandMenu";
 import { isRightClick } from "../mouse";
 import { provenanceGlyph } from "../provenance";
-import { CaretCard } from "./CaretCard";
 import { createLineMeasurer } from "./line-measure";
 
 // The caret word's display-column range on the cursor line, [from, to). Undefined
@@ -410,7 +409,7 @@ export function DiffView() {
   });
 
   // The cursor row's cumulative top, the same sum the vertical-follow effect uses,
-  // Lifted to a memo so the caret-anchored card reads it without recomputing.
+  // Lifted to a memo so the context menu's anchor reads it without recomputing.
   const cursorTop = createMemo(() => {
     const cursorRow = lineRowIndices()[state.cursorIndex()];
     if (cursorRow === undefined) {
@@ -419,12 +418,12 @@ export function DiffView() {
     return rowEnds()[cursorRow - 1] ?? 0;
   });
   // The viewer interior width (gutter + content, inside the border), the coordinate
-  // Space the card's absolute left/clamp live in.
+  // Space the context menu's absolute left/clamp live in.
   const innerWidth = () => contentWidth() + gutterWidth();
 
-  // The caret's on-screen cell, in viewer-content coordinates, for the context menu
-  // (the same geometry the CaretCard anchors against). A line-level caret (a gutter
-  // Click, no word) has no `caretRange`, so fall back to the line start rather than
+  // The caret's on-screen cell, in viewer-content coordinates, for the context menu.
+  // A line-level caret (a gutter click, no word) has no `caretRange`, so fall back to
+  // The line start rather than
   // Leaving the open menu unanchored and invisible. Undefined only when there is no
   // Cursor line or it is scrolled out of view, which hides the menu.
   const commandAnchor = createMemo(() => {
@@ -814,12 +813,6 @@ export function DiffView() {
         }}
         onMouseDragEnd={finishDrag}
         onMouseUp={finishDrag}
-      />
-      <CaretCard
-        cursorTop={cursorTop}
-        caretFrom={() => caretRange()?.from}
-        contentLeft={() => gutterWidth()}
-        innerWidth={innerWidth}
       />
       <Show when={state.commandMenuOpen() && state.commandMenuContext() === "viewer"}>
         <CommandMenu

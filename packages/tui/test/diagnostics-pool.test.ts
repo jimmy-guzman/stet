@@ -50,7 +50,7 @@ test("a server evicted while still referenced does not retract its replacement",
   const repo = mkdtempSync(join(tmpdir(), "pool-"));
   // `bun` is on PATH, so the command resolves and the pool takes the normal (non-provisioning) path;
   // The fake LspProcess below means nothing is ever actually spawned.
-  registerServers({ fakelsp: { args: [], binary: "bun", provides: [] } });
+  registerServers({ fakelsp: { args: [], binary: "bun" } });
   const fileSupport = snapshotFileSupport();
   fileSupport.files.set("fake", { extensions: ["fake"], language: "fake" });
   fileSupport.languages.set("fake", { languageId: "fake", servers: ["fakelsp"] });
@@ -96,12 +96,12 @@ test("a server evicted while still referenced does not retract its replacement",
         Effect.gen(function* scenario() {
           const servers = yield* LanguageServers;
 
-          // The intel warm-hold: it acquires the server and holds it for the whole session, so the
-          // Pool's refcount for this key never drops to zero while a file of that language is open.
-          const warmHold = yield* Scope.make();
-          yield* servers.acquire("fakelsp", repo).pipe(Scope.provide(warmHold));
+          // A holder that outlives the eviction, so the pool's refcount for this key never drops
+          // To zero during the restart.
+          const holder = yield* Scope.make();
+          yield* servers.acquire("fakelsp", repo).pipe(Scope.provide(holder));
 
-          // `R`: evict the repo's servers. The warm-hold still holds a reference, so `RcMap` drops
+          // `R`: evict the repo's servers. The holder still has a reference, so `RcMap` drops
           // The key from the pool WITHOUT closing the old entry's scope.
           yield* servers.restart(repo);
 
@@ -110,9 +110,9 @@ test("a server evicted while still referenced does not retract its replacement",
           yield* servers.acquire("fakelsp", repo).pipe(Scope.provide(run));
           expect(spawned).toHaveLength(2);
 
-          // The warm-hold finally lets go (a worktree switch, a file of another language). Only now
-          // Does the OLD entry's scope close and its finalizer run.
-          yield* Scope.close(warmHold, Exit.void);
+          // The holder finally lets go. Only now does the OLD entry's scope close and its finalizer
+          // Run.
+          yield* Scope.close(holder, Exit.void);
 
           // The old entry is now unreferenced but its key belongs to the replacement, so it does not
           // Close at once: it parks on the pool's 30s idle timer. The corruption lands when that

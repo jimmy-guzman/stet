@@ -10,7 +10,7 @@ import packageJson from "../../package.json";
 // Minimum width of the left column box (the key combo or, on the marks view, the glyph); the
 // Description wraps in whatever remains of the row. A reserved-width box (not string padding) keeps
 // The right column aligned even on rows whose description wraps to a second line. It widens to the
-// Longest rendered left cell (a rebind can exceed `Shift+F12`), or that cell wraps and the height
+// Longest rendered left cell (a rebind can exceed `Shift+F10`), or that cell wraps and the height
 // Calc (which counts only description wraps) undercounts and clips a row.
 const COMBO_WIDTH = 11;
 
@@ -61,7 +61,7 @@ export function HelpDialog() {
           heading: group.heading,
         })),
   );
-  // A glyph needs only a few cells; a combo column holds `Shift+F12` and wider rebinds.
+  // A glyph needs only a few cells; a combo column holds `Shift+F10` and wider rebinds.
   const leftWidth = createMemo(() =>
     Math.max(
       state.helpView() === "keys" ? COMBO_WIDTH : 3,

@@ -40,38 +40,33 @@ here is optional and shown with its default:
   "problems": { "open": false, "position": "bottom" }, // sizes default to the layout
   "provenance": { "enabled": false }, // the per-line provenance rail
   "diagnostics": { "enabled": true, "download": true }, // LSP diagnostics
-  "intel": { "enabled": true }, // language-server code intelligence
   "update": { "check": true }, // background release check at launch
   "search": { "regex": false, "caseSensitive": false, "scope": "changed" },
 }
 ```
 
-| Key                    | Default     | Effect                                                                                                                     |
-| ---------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                                       |
-| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there)                                      |
-| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                                           |
-| `sidebar.position`     | `"left"`    | which edge the file tree docks to: `left`, `top`, `right`, or `bottom` (`d` cycles clockwise)                              |
-| `sidebar.width`        | responsive  | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets)                     |
-| `sidebar.height`       | `10`        | tree height in rows while docked top or bottom; each axis keeps its own size                                               |
-| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                                            |
-| `problems.open`        | `false`     | show the problems panel at startup (`p` toggles; unlike `p`, this does not take focus)                                     |
-| `problems.position`    | `"bottom"`  | which edge the problems panel docks to (`d` cycles clockwise while it is focused)                                          |
-| `problems.height`      | `10`        | panel height in rows while docked top or bottom, clamped to the terminal (`[` / `]` resize it while focused, `\` resets)   |
-| `problems.width`       | responsive  | panel width in cells while docked left or right; each axis keeps its own size                                              |
-| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                                           |
-| `diagnostics.enabled`  | `true`      | `false` runs no language servers for checks; the problems panel reads `diagnostics disabled`                               |
-| `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run)                 |
-| `intel.enabled`        | `true`      | `false` turns the code-intel pulls (definition, references, implementations, hover, symbols, call hierarchy) into a notice |
-| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                                               |
-| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                                     |
-| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                                    |
-| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                                          |
+| Key                    | Default     | Effect                                                                                                                   |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                                     |
+| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there)                                    |
+| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                                         |
+| `sidebar.position`     | `"left"`    | which edge the file tree docks to: `left`, `top`, `right`, or `bottom` (`d` cycles clockwise)                            |
+| `sidebar.width`        | responsive  | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets)                   |
+| `sidebar.height`       | `10`        | tree height in rows while docked top or bottom; each axis keeps its own size                                             |
+| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                                          |
+| `problems.open`        | `false`     | show the problems panel at startup (`p` toggles; unlike `p`, this does not take focus)                                   |
+| `problems.position`    | `"bottom"`  | which edge the problems panel docks to (`d` cycles clockwise while it is focused)                                        |
+| `problems.height`      | `10`        | panel height in rows while docked top or bottom, clamped to the terminal (`[` / `]` resize it while focused, `\` resets) |
+| `problems.width`       | responsive  | panel width in cells while docked left or right; each axis keeps its own size                                            |
+| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                                         |
+| `diagnostics.enabled`  | `true`      | `false` runs no language servers; the problems panel reads `diagnostics disabled`                                        |
+| `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run)               |
+| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                                             |
+| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                                   |
+| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                                  |
+| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                                        |
 
-A CLI flag wins over its config key for the run it was passed on. `diagnostics.enabled` and
-`intel.enabled` are independent switches over the same language-server pool: turning diagnostics
-off with intel on still starts a server when a caret pull needs one, and the reverse never
-answers a caret.
+A CLI flag wins over its config key for the run it was passed on.
 
 Keyboard shortcuts are configurable the same way: a `keybindings` section maps
 action ids to combos (`{ "toggle-sidebar": "ctrl+e" }`), with `false` unbinding
@@ -193,7 +188,6 @@ profile, a file association, and an icon:
     "servers": {
       "lua": {
         "command": ["lua-language-server"],
-        "capabilities": ["definition", "references", "hover", "documentSymbol"],
       },
     },
   },
@@ -264,16 +258,10 @@ language match it starts no server.
 
 ### Configure servers and selection
 
-A server accepts `command`, `discovery`, `when`, `initializationOptions`, `settings`, and
-`capabilities`.
+A server accepts `command`, `discovery`, `when`, `initializationOptions`, and `settings`.
 `{repoRoot}` and `{repoUri}` placeholders in initialization and settings string values are replaced
-per repository. Capability hints may contain `definition`, `references`, `hover`, `documentSymbol`,
-`callHierarchy`, `implementation`, and `pullDiagnostics`; the server's initialize reply remains the
-authoritative check. Omitting `capabilities` on a new server defaults it to the full code-intel set;
-omitting it when overriding a built-in inherits that server's existing capabilities instead, so a
-built-in that answers no code intel keeps answering none. The hint only routes code intelligence; it
-never gates diagnostics, which run for any server its language profile selects, and the server's
-initialize reply decides whether it answers pull diagnostics or only pushes.
+per repository. A server runs wherever its language profile selects it, and its initialize reply
+decides whether it answers pull diagnostics or only pushes.
 
 `when` is declarative data, never a shell command. It accepts a repo-relative path (a file or a
 directory, such as `node_modules/vue`), a manifest key, or a Python dependency declaration. Relative

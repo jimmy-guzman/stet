@@ -30,6 +30,15 @@ describe("createKeyHandler", () => {
     state.seedNav(undefined);
   });
 
+  test("R reports diagnostics disabled, since no server can be running", () => {
+    state.setDiagnosticsEnabled(false);
+    const handle = createKeyHandler({ openInEditor: noop, quit: () => {} });
+
+    handle(keyEvent({ name: "r", shift: true }));
+
+    expect(state.statusBarModel()).toMatchObject({ message: "diagnostics disabled" });
+  });
+
   test("ctrl-c quits", () => {
     let quitCount = 0;
     const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
@@ -179,36 +188,6 @@ describe("createKeyHandler", () => {
     expect(state.themeComboboxOpen()).toBe(false);
   });
 
-  test("K requests hover for the symbol under the caret", () => {
-    let calls = 0;
-    const realShowHover = state.showHover;
-    state.showHover = async () => {
-      calls += 1;
-    };
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
-    try {
-      handle(keyEvent({ name: "K" }));
-      expect(calls).toBe(1);
-    } finally {
-      state.showHover = realShowHover;
-    }
-  });
-
-  test("S lists the open file's symbols", () => {
-    let calls = 0;
-    const realFindSymbols = state.findSymbols;
-    state.findSymbols = async () => {
-      calls += 1;
-    };
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
-    try {
-      handle(keyEvent({ name: "S" }));
-      expect(calls).toBe(1);
-    } finally {
-      state.findSymbols = realFindSymbols;
-    }
-  });
-
   test("plain s still opens the scope picker", () => {
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
     try {
@@ -249,9 +228,7 @@ describe("createKeyHandler", () => {
 
     expect(state.commandMenuOpen()).toBe(true);
     expect(state.commandMenuContext()).toBe("viewer");
-    // With no diff loaded the caret sits on no symbol, so the caret-intel actions are
-    // Omitted; "Find symbols" needs no caret, so the highlight opens on it.
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Find symbols");
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
   });
 
   test("the command menu owns the keyboard: j moves the highlight, esc closes, keys don't fall through", () => {
@@ -269,7 +246,7 @@ describe("createKeyHandler", () => {
     expect(state.commandMenuOpen()).toBe(true);
 
     handle(keyEvent({ name: "j" }));
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy file contents");
 
     handle(keyEvent({ name: "escape" }));
     expect(state.commandMenuOpen()).toBe(false);
@@ -289,8 +266,7 @@ describe("createKeyHandler", () => {
     });
     handle(keyEvent({ name: "f10", shift: true }));
 
-    // Step from "Find symbols" (0) to "Open in editor" (3).
-    handle(keyEvent({ name: "j" }));
+    // Step from "Copy reference" (0) to "Open in editor" (2).
     handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));
     expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Open in editor");
@@ -299,19 +275,6 @@ describe("createKeyHandler", () => {
 
     expect(calls).toEqual([["src/foo.ts", undefined, "terminal"]]);
     expect(state.commandMenuOpen()).toBe(false);
-  });
-
-  test("escape closes an open caret-anchored decoration and is swallowed before quit", () => {
-    state.openViewerDecoration({ lines: [{ kind: "prose", text: "const x: 1" }], status: "ready" });
-    expect(state.viewerDecoration()).not.toBeUndefined();
-    let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
-
-    handle(keyEvent({ name: "escape" }));
-
-    expect(state.viewerDecoration()).toBeUndefined();
-    // The decoration's esc must early-return before the global esc-quits-the-app path.
-    expect(quitCount).toBe(0);
   });
 
   test("q opens the quit confirm instead of quitting immediately", () => {

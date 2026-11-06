@@ -37,30 +37,3 @@ describe("diagnostics off switch", () => {
     expect(state.checkerState()).toBe(before);
   });
 });
-
-describe("intel off switch", () => {
-  test("a caret pull notifies instead of reaching a server", async () => {
-    state.setIntelEnabled(false);
-
-    await state.goToDefinition();
-
-    expect(state.statusBarModel()).toMatchObject({
-      category: "notification",
-      level: "info",
-      message: "intel disabled",
-    });
-  });
-
-  test("find symbols notifies instead of opening the overlay", async () => {
-    state.setIntelEnabled(false);
-
-    await state.findSymbols();
-
-    expect(state.symbolsOpen()).toBe(false);
-    expect(state.statusBarModel()).toMatchObject({
-      category: "notification",
-      level: "info",
-      message: "intel disabled",
-    });
-  });
-});

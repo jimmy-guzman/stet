@@ -10,12 +10,6 @@
  * injected host effect).
  */
 export type CommandAction =
-  | { kind: "goToDefinition" }
-  | { kind: "findReferences" }
-  | { kind: "callHierarchy" }
-  | { kind: "findImplementations" }
-  | { kind: "showHover" }
-  | { kind: "findSymbols" }
   | { kind: "copyReference"; path: string; line: number | undefined; column: number | undefined }
   | { kind: "copyFileContents" }
   | { kind: "loadFullContent" }
@@ -32,10 +26,6 @@ export interface CommandMenuInput {
   context: "tree" | "viewer";
   /** The viewed file; the viewer menu is empty without one. */
   selectedPath: string | undefined;
-  /** Whether the caret sits on a symbol (`caretWord`), gating the intel actions. */
-  hasSymbol: boolean;
-  /** The config's intel switch; off omits every intel action (omitted, not disabled). */
-  intelEnabled: boolean;
   /** The caret line (`newLine ?? oldLine`) for copy-reference and editor open. */
   caretLine: number | undefined;
   /** The caret's 1-based column, or undefined at line level (`caretColumn`). */
@@ -57,22 +47,7 @@ function viewerItems(input: CommandMenuInput): CommandMenuItem[] {
   }
   // Line-level (a gutter caret) has no column, so copy-reference degrades to path:line.
   const column = input.caretLine === undefined ? undefined : input.caretColumn;
-  const intel: CommandMenuItem[] =
-    input.hasSymbol && input.intelEnabled
-      ? [
-          { action: { kind: "goToDefinition" }, label: "Go to definition" },
-          { action: { kind: "findReferences" }, label: "Find references" },
-          { action: { kind: "findImplementations" }, label: "Find implementations" },
-          { action: { kind: "callHierarchy" }, label: "Call hierarchy" },
-          { action: { kind: "showHover" }, label: "Quick info" },
-        ]
-      : [];
   return [
-    ...intel,
-    // Needs no caret symbol (the outline addresses the whole file), only the intel switch.
-    ...(input.intelEnabled
-      ? [{ action: { kind: "findSymbols" }, label: "Find symbols" } as const]
-      : []),
     {
       action: { column, kind: "copyReference", line: input.caretLine, path },
       label: "Copy reference",

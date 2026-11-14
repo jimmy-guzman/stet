@@ -10,9 +10,6 @@ import { App } from "./App";
 import { helpText, parseCommand } from "./cli";
 import { configDefaults } from "./config/schema";
 import { Config, ConfigLive } from "./config/service";
-import { initialCheckerState } from "./diagnostics/checker";
-import { resolveSchemas, yamlSchemaSettings } from "./diagnostics/schemas";
-import { registerServers, resolveServers } from "./diagnostics/servers";
 import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import { resolveFileSupportConfig } from "./file-support/config";
 import { registerFileSupport } from "./file-support/registry";
@@ -97,16 +94,6 @@ try {
   );
   await configRuntime.dispose();
 
-  const diagnosticsEnabled = config.diagnostics?.enabled ?? configDefaults.diagnostics.enabled;
-
-  // The provisioner reads this env var; set it before any check runs the runtime.
-  // The flag wins over config, and both only ever turn downloads off.
-  if (
-    !(options.lspDownload && (config.diagnostics?.download ?? configDefaults.diagnostics.download))
-  ) {
-    process.env.STET_NO_LSP_DOWNLOAD = "1";
-  }
-
   // Register the configured themes and seed the theme selection *before* the
   // Renderer enters the alt-screen, so a config-validation throw still lands on
   // The normal terminal rather than a torn-down one. These need neither the
@@ -122,25 +109,12 @@ try {
     : config.theme;
   setSelection(themeSelection);
 
-  // Resolve servers first because language profiles validate their named references. Everything
-  // Registers before the runtime builds, so diff, icons, and diagnostics share one startup
-  // Snapshot for the full session.
-  const { issues: serverIssues, servers } = resolveServers(config.diagnostics?.servers ?? {});
-  // The JSON server takes its schema map only as a post-`initialized` notification; the YAML server
-  // Takes user associations through its `settings`. Fold both onto their specs before they register
-  // (per-repo `{repoUri}` substitution happens later in `handshakeConfigFor`).
-  const { issues: schemaIssues, schemas, userSchemas } = resolveSchemas(config.schemas ?? {});
-  if (servers.json !== undefined) {
-    servers.json = { ...servers.json, schemaAssociations: schemas };
-  }
-  if (servers.yaml !== undefined) {
-    servers.yaml = { ...servers.yaml, settings: yamlSchemaSettings(userSchemas) };
-  }
-  registerServers(servers);
-  const { issues: fileSupportIssues, registry: fileSupport } = resolveFileSupportConfig(
-    { files: config.files, icons: config.icons?.glyphs, languages: config.languages },
-    new Set(Object.keys(servers)),
-  );
+  // Registers before the runtime builds, so the diff and icons share one startup snapshot for the
+  // Full session.
+  const { issues: fileSupportIssues, registry: fileSupport } = resolveFileSupportConfig({
+    files: config.files,
+    icons: config.icons?.glyphs,
+  });
   registerFileSupport(fileSupport);
   const { issues: keybindingIssues, set: keybindings } = resolveKeybindings(
     config.keybindings ?? {},
@@ -230,14 +204,7 @@ try {
       // Decided in the same place here as it is for `ctrl-b` and a shrink past the minimum.
       state.collapseSidebar();
     }
-    state.setProblemsPosition(config.problems?.position ?? configDefaults.problems.position);
-    state.setProblemsHeightOverride(config.problems?.height ?? null);
-    state.setProblemsWidthOverride(config.problems?.width ?? null);
-    // Seeding the panel open is an initial condition, so unlike `p` it does not take
-    // Focus: only the action that means "go look at problems" focuses the panel.
-    state.setProblemsOpen(config.problems?.open ?? configDefaults.problems.open);
     state.setBlameEnabled(config.provenance?.enabled ?? configDefaults.provenance.enabled);
-    state.setDiagnosticsEnabled(diagnosticsEnabled);
     state.setSearchRegex(config.search?.regex ?? configDefaults.search.regex);
     state.setSearchCaseSensitive(
       config.search?.caseSensitive ?? configDefaults.search.caseSensitive,
@@ -295,20 +262,10 @@ try {
           initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`,
         );
         state.setExpandedDirectories(initialExpanded);
-        // Disabled diagnostics seed empty, or the pending placeholders never resolve.
-        state.setCheckerState(initialCheckerState(diagnosticsEnabled ? model.changed : []));
       });
-      void state.runChecks(model);
 
       // A bad config never blocks startup; the first issue surfaces as a notice.
-      const issues = [
-        ...configIssues,
-        ...themeIssues,
-        ...serverIssues,
-        ...schemaIssues,
-        ...fileSupportIssues,
-        ...keybindingIssues,
-      ];
+      const issues = [...configIssues, ...themeIssues, ...fileSupportIssues, ...keybindingIssues];
       if (issues.length > 0) {
         state.notify(issues[0] ?? "config has issues");
       }

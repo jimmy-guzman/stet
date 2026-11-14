@@ -5,8 +5,6 @@ import { join } from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
-import { stateForResolvedChecker } from "@/diagnostics/checker";
-import type { Diagnostic } from "@/diagnostics/checker";
 import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
@@ -70,61 +68,6 @@ describe("list scrollbar", () => {
     expect(thumbRow(captureCharFrame())).toBe(-1);
 
     renderer.destroy();
-  });
-
-  test("shows a thumb in the problems panel and tracks scroll", async () => {
-    const repoRoot = createFixtureRepo("stet-scrollbar-problems-", {
-      "src/a.ts": "export const a = 1;\n",
-    });
-    const scope = { kind: "all", ref: "HEAD" } as const;
-    const model = await loadModel(repoRoot, scope);
-    seedState(model, scope);
-
-    state.setCheckerState({
-      diagnostics: stateForResolvedChecker(
-        "diagnostics",
-        model.changed,
-        Array.from({ length: 60 }, (_, index): Diagnostic => ({
-          checker: "diagnostics",
-          column: 1,
-          line: 1 + index,
-          message: `synthetic finding ${String(index).padStart(2, "0")}`,
-          path: `${repoRoot}/src/file${index % 10}.ts`,
-          severity: "warning",
-          source: "probe",
-        })),
-        repoRoot,
-      ),
-    });
-
-    const { renderer, mockInput, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 30,
-      width: 100,
-    });
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-    await settleUntil("first render", (current) => current.includes("a.ts"));
-
-    try {
-      mockInput.pressKey("p");
-      await renderOnce();
-      await settleUntil("panel open", (current) => current.includes("synthetic finding 00"));
-
-      // 60 findings overflow the panel viewport, so its reserved column paints a
-      // Thumb; the sidebar has one file, so this thumb is the panel's.
-      const topRow = thumbRowAnywhere(captureCharFrame());
-      expect(topRow).toBeGreaterThanOrEqual(0);
-
-      for (let i = 0; i < 30; i += 1) {
-        mockInput.pressKey("j");
-        // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
-        await renderOnce();
-      }
-      await renderOnce();
-      expect(thumbRowAnywhere(captureCharFrame())).toBeGreaterThan(topRow);
-    } finally {
-      renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
   });
 
   test("shows a thumb in the search results and tracks scroll", async () => {

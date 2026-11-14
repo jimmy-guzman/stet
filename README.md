@@ -8,12 +8,11 @@ basic questions:
 - What files are in this repo?
 - What changed?
 - What did the agent touch most recently?
-- Are there errors or warnings in what changed?
 
 `stet` is meant to sit in the next pane and answer those questions without
 becoming part of the agent loop. It does not review code, approve changes, talk
-to the agent, or manage a workflow. It shows you the repo, the diff, and the
-problems. You decide what to say next.
+to the agent, or manage a workflow. It shows you the repo and the diff. You
+decide what to say next.
 
 Stet is the proofreader's mark for "let it stand": strike a word out, add dots
 beneath, and it stays.
@@ -46,16 +45,11 @@ beneath, and it stays.
   five-tier timeline, uncommitted, committed this session, committed on this
   branch, changed since the file's start, or original to it, git blame reframed
   around how much of what you are reviewing is yours and how recent it is.
-- Shows diagnostics in the tree, the viewer, and a problems panel.
-- Rearranges its own layout: the tree and the problems panel dock to any edge and
-  resize along it, with `d` cycling the focused pane clockwise, `m` toggling zoom on
-  the focused pane, and `ctrl-s` persisting the arrangement.
+- Rearranges its own layout: the tree docks to any edge and resizes along it,
+  with `d` cycling it clockwise, `m` toggling zoom on the focused pane, and
+  `ctrl-s` persisting the arrangement.
 - Copies a reference and snippet to paste back to the agent: `path` in the tree,
-  `path:line:col` in the viewer, and a whole diagnostic (or every one) from the
-  problems panel.
-
-The git-backed file tree renders first. Diagnostics come in later as
-decorations, so the basic view stays useful even when checks are still running.
+  and `path:line:col` or the selected lines in the viewer.
 
 ## Install
 
@@ -79,12 +73,12 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 - [Getting started](https://stet.jimmy.codes/docs): install, usage, flags, and
   requirements
 - [Guides](https://stet.jimmy.codes/docs/guides/reading-files-and-diffs):
-  reading files and diffs, search and navigation, diagnostics, scopes and
+  reading files and diffs, search and navigation, panes and layout, scopes and
   worktrees, and themes
 - [Keybindings](https://stet.jimmy.codes/docs/reference/keybindings): every
   shortcut (or press `?` in the app)
 - [Configuration](https://stet.jimmy.codes/docs/reference/configuration): themes,
-  file associations, icons, language servers, and editor setup at
+  file associations, icons, keybindings, and editor setup at
   `~/.config/stet/config.jsonc` (or `config.json`)
 
 ## Requirements

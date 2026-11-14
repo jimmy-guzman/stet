@@ -1,4 +1,4 @@
-import { Eye, GitBranch, ListTree, Search, TriangleAlert } from "lucide-react";
+import { Eye, GitBranch, History, ListTree, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -28,9 +28,9 @@ const features = [
     body: "Compare against any ref, drill into recent commits, and switch between git worktrees in place without leaving the view.",
   },
   {
-    icon: TriangleAlert,
-    title: "Diagnostics",
-    body: "Type errors and lint findings stream into the tree, the viewer, and a problems panel as the repo's language servers finish.",
+    icon: History,
+    title: "Line provenance",
+    body: "A gutter rail places every line on a timeline: uncommitted, committed this session, on this branch, or older, so you see how much of what you review is yours.",
   },
 ];
 
@@ -43,8 +43,8 @@ export default function Page() {
           Inspect an agent's changes as they happen
         </h1>
         <p className="max-w-2xl text-lg text-fd-muted-foreground text-balance">
-          Run an agent in one terminal pane and stet in another. See the repo tree, diffs, problems,
-          and latest activity, without putting stet in the agent loop.
+          Run an agent in one terminal pane and stet in another. See the repo tree, diffs, and
+          latest activity, without putting stet in the agent loop.
         </p>
         <InstallCommand command={`curl -fsSL ${siteUrl}/install | bash`} />
         <p className="max-w-xl text-sm text-fd-muted-foreground text-balance">

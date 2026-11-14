@@ -11,7 +11,7 @@ export async function GET() {
   const index = [
     "# stet",
     "",
-    "> A read-only companion TUI for CLI coding agents. Run an agent in one terminal pane and stet in the next to inspect what changed: the repo, the diff, and the problems. It only inspects, so it never reviews, approves, or talks to the agent.",
+    "> A read-only companion TUI for CLI coding agents. Run an agent in one terminal pane and stet in the next to inspect what changed: the repo and the diff. It only inspects, so it never reviews, approves, or talks to the agent.",
     "",
     "## Docs",
     "",

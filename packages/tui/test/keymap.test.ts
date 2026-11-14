@@ -30,15 +30,6 @@ describe("createKeyHandler", () => {
     state.seedNav(undefined);
   });
 
-  test("R reports diagnostics disabled, since no server can be running", () => {
-    state.setDiagnosticsEnabled(false);
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => {} });
-
-    handle(keyEvent({ name: "r", shift: true }));
-
-    expect(state.statusBarModel()).toMatchObject({ message: "diagnostics disabled" });
-  });
-
   test("ctrl-c quits", () => {
     let quitCount = 0;
     const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
@@ -135,29 +126,6 @@ describe("createKeyHandler", () => {
     handle(keyEvent({ name: "]" }));
 
     expect(state.sidebarOpen()).toBe(true);
-  });
-
-  test("the resize keys act on the focused pane, not always the sidebar", () => {
-    state.setTerminalHeight(40);
-    state.toggleProblems(); // Opens and focuses the panel
-    const before = state.layout().sidebar.width;
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
-
-    handle(keyEvent({ name: "]" }));
-
-    expect(state.layout().problems.height).toBe(11);
-    expect(state.layout().sidebar.width).toBe(before);
-  });
-
-  test("p closes the panel through the same path escape uses", () => {
-    state.toggleProblems();
-    expect(state.problemsOpen()).toBe(true);
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
-
-    handle(keyEvent({ name: "p" }));
-
-    expect(state.problemsOpen()).toBe(false);
-    expect(state.focusedPane()).toBe("tree");
   });
 
   test("ctrl-t pins; a later navigation opens a fresh preview; { } cycle; ctrl-w closes", () => {
@@ -336,52 +304,15 @@ describe("createKeyHandler", () => {
     expect(quitCount).toBe(1);
   });
 
-  // The copy keys are registered `global`, so before they dispatched on the focused
-  // Pane they read the viewer no matter which pane the user was actually in: `y` with
-  // A diagnostic selected copied a diff line instead of the diagnostic.
-  describe("copy keys with the problems panel focused", () => {
-    const focusProblemsWith = (message: string) => {
-      batch(() => {
-        state.seedNav("src/foo.ts");
-        state.setCheckerState({
-          diagnostics: new Map([
-            [
-              "src/a.ts",
-              {
-                count: 1,
-                diagnostics: [
-                  {
-                    checker: "diagnostics",
-                    column: 4,
-                    line: 12,
-                    message,
-                    path: "src/a.ts",
-                    severity: "error",
-                    source: "oxc",
-                  },
-                ],
-                status: "findings",
-              },
-            ],
-          ]),
-        });
-        state.toggleProblems();
-      });
-    };
-
+  describe("copy keys in the viewer", () => {
     // Count which action each key reached, without the clipboard subprocess
-    // (pbcopy/xclip, absent on CI). What each action *copies* is asserted on the pure
-    // Formatter in diagnostics-problems.test.ts.
+    // (pbcopy/xclip, absent on CI).
     const countCopyDispatches = (press: (handle: (key: KeyEvent) => void) => void) => {
       const calls: string[] = [];
       const real = {
-        copyAllProblems: state.copyAllProblems,
         copyFileContents: state.copyFileContents,
-        copyProblem: state.copyProblem,
         copySelection: state.copySelection,
       };
-      state.copyProblem = () => calls.push("copyProblem");
-      state.copyAllProblems = () => calls.push("copyAllProblems");
       state.copyFileContents = () => calls.push("copyFileContents");
       state.copySelection = () => calls.push("copySelection");
       try {
@@ -392,54 +323,11 @@ describe("createKeyHandler", () => {
       return calls;
     };
 
-    test("y copies the selected problem and never the viewer's reference", () => {
-      focusProblemsWith("bad thing");
-
-      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "y" })))).toEqual([
-        "copyProblem",
-      ]);
-    });
-
-    test("Y copies every problem and never the viewed file's contents", () => {
-      focusProblemsWith("bad thing");
-
-      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "Y", shift: true })))).toEqual(
-        ["copyAllProblems"],
-      );
-    });
-
-    test("C is inert: a line selection is a viewer concept the panel has no analogue for", () => {
-      focusProblemsWith("bad thing");
-
-      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "C", shift: true })))).toEqual(
-        [],
-      );
-    });
-
-    test("an empty panel says so rather than copying", () => {
+    test("Y copies the file and C the selection", () => {
       batch(() => {
-        state.setCheckerState({ diagnostics: new Map() });
-        state.setProblemsOpen(true);
-        state.setFocusedPane("problems");
+        state.seedNav("src/foo.ts");
+        state.setFocusedPane("diff");
       });
-      const handle = createKeyHandler({ openInEditor: noop, quit: noop });
-
-      handle(keyEvent({ name: "y" }));
-      expect(state.statusBarModel()).toMatchObject({
-        kind: "message",
-        message: "no problems to copy",
-      });
-
-      handle(keyEvent({ name: "Y", shift: true }));
-      expect(state.statusBarModel()).toMatchObject({
-        kind: "message",
-        message: "no problems to copy",
-      });
-    });
-
-    test("the viewer keeps its own copy targets once focus leaves the panel", () => {
-      focusProblemsWith("bad thing");
-      state.setFocusedPane("diff");
 
       expect(countCopyDispatches((handle) => handle(keyEvent({ name: "Y", shift: true })))).toEqual(
         ["copyFileContents"],
@@ -450,12 +338,10 @@ describe("createKeyHandler", () => {
     });
   });
 
-  test("escape only ever closes: problems panel, then search view, never quits", () => {
+  test("escape only ever closes the search view, never quits", () => {
     const handle = createKeyHandler({ openInEditor: noop, quit: noop });
 
-    state.setProblemsOpen(true);
     handle(keyEvent({ name: "escape" }));
-    expect(state.problemsOpen()).toBe(false);
     expect(state.quitConfirmOpen()).toBe(false);
 
     state.openSearch();

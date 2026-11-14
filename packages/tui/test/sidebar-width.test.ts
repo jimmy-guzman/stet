@@ -143,8 +143,6 @@ test("resetting while collapsed keeps the remembered width", () => {
   state.setTerminalWidth(80);
   grow(8); // 34 -> 50, stored
   state.toggleSidebar();
-  // The panel being open is what lets `\` dispatch at all while the tree is hidden.
-  state.toggleProblems();
   state.setFocusedPane("diff");
 
   state.resetPane();

@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { provenanceGlyph } from "@/components/provenance";
 import { legendGroups } from "@/help/legend";
-import { levelGlyph } from "@/log/levels";
-import { CHECK_BADGES, kindLetter } from "@/ui-helpers";
+import { kindLetter } from "@/ui-helpers";
 
 describe("legendGroups", () => {
   const groups = legendGroups();
@@ -21,17 +20,6 @@ describe("legendGroups", () => {
     expect(
       group("stage (colors the change letter)")?.entries.map((entry) => entry.meaning),
     ).toEqual(["staged", "unstaged", "staged and unstaged", "untracked"]);
-  });
-
-  test("covers the diagnostic severities and the check badges from their live sources", () => {
-    const diagnostics = glyphs("diagnostics");
-    expect(diagnostics).toContain(levelGlyph("error"));
-    expect(diagnostics).toContain(levelGlyph("warning"));
-    expect(diagnostics).toContain(levelGlyph("info"));
-    expect(diagnostics).toContain(CHECK_BADGES.pending.glyph);
-    expect(diagnostics).toContain(CHECK_BADGES.failed.glyph);
-    expect(diagnostics).toContain(CHECK_BADGES.clean.glyph);
-    expect(diagnostics).toContain(CHECK_BADGES.unavailable.glyph);
   });
 
   test("draws every provenance tier with the rail's own glyph", () => {

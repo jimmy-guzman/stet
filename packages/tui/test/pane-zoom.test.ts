@@ -68,17 +68,6 @@ test("switching focus carries the zoom to the newly focused pane", () => {
   expect(state.layout().viewer.width).toBe(0);
 });
 
-test("the problems panel zooms once it is focused", () => {
-  wide();
-  state.toggleProblems(); // Opens and focuses it
-  expect(state.layout().problems.height).toBe(10);
-
-  state.toggleZoom();
-
-  expect(state.layout().problems.height).toBe(38);
-  expect(state.layout().viewer.height).toBe(0);
-});
-
 test("toggling a pane's visibility exits zoom, so the toggle is never invisible", () => {
   wide();
   state.setFocusedPane("diff");
@@ -90,34 +79,6 @@ test("toggling a pane's visibility exits zoom, so the toggle is never invisible"
   expect(state.zoomed()).toBe(false);
   expect(state.sidebarOpen()).toBe(false);
   expect(state.layout().viewer.width).toBe(80); // Full width, now because the tree is closed
-});
-
-test("opening the problems panel exits zoom rather than filling the screen with it", () => {
-  wide();
-  state.toggleZoom();
-
-  state.toggleProblems();
-
-  expect(state.zoomed()).toBe(false);
-  expect(state.layout().problems.height).toBe(10);
-  expect(state.layout().sidebar.width).toBe(34);
-});
-
-test("escape closes a zoomed panel without leaving the next pane zoomed", () => {
-  wide();
-  state.toggleProblems();
-  state.toggleZoom();
-  expect(state.layout().problems.height).toBe(38);
-  const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
-
-  handle(key("escape"));
-
-  // Escape closes the panel, which is a visibility change, so it must exit zoom too:
-  // Otherwise the pane focus lands on silently fills the screen instead.
-  expect(state.problemsOpen()).toBe(false);
-  expect(state.zoomed()).toBe(false);
-  expect(state.layout().sidebar.width).toBe(34);
-  expect(state.layout().viewer.width).toBe(46);
 });
 
 test("zoom never resurrects a pane that is closed", () => {
@@ -141,19 +102,17 @@ test("zoom never resurrects a pane that is closed", () => {
 
 test("zoom follows focus around the whole cycle, and every stop is a pane that is open", () => {
   wide();
-  state.toggleProblems();
+  state.setFocusedPane("diff");
   state.toggleZoom();
   const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
 
-  // Walk the full ring while zoomed: each stop must fill the band, which is only true if the
-  // Pane focus named was open to begin with.
-  expect(state.layout().problems.height).toBe(38);
+  // Walk the ring while zoomed: each stop must fill the band, which is only true if the pane
+  // Focus named was open to begin with.
+  expect(state.layout().viewer.width).toBe(80);
   handle(key("tab"));
   expect(state.layout().sidebar.width).toBe(80);
   handle(key("tab"));
   expect(state.layout().viewer.width).toBe(80);
-  handle(key("tab"));
-  expect(state.layout().problems.height).toBe(38);
 });
 
 test("the geometry keys are inert while zoomed, and write nothing behind it", () => {

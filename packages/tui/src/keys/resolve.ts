@@ -102,7 +102,7 @@ export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybin
   const reported = new Set<string>();
   for (const action of keyActions) {
     const scopes: KeyContext[] =
-      action.context === "global" ? ["global", "problems", "tree", "viewer"] : [action.context];
+      action.context === "global" ? ["global", "tree", "viewer"] : [action.context];
     for (const combo of set.combos.get(action.id) ?? []) {
       for (const scope of scopes) {
         const signature = `${scope}:${combo.ctrl}:${combo.shift}:${combo.name}`;

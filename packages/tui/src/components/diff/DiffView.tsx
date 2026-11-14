@@ -21,7 +21,6 @@ import {
   visibleWindowVariable,
 } from "@/diff/windowing";
 import { wordAt } from "@/diff/words";
-import { levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { activeThemeMonochrome } from "@/theme/active";
 import { useTheme } from "@/theme/context";
@@ -86,6 +85,10 @@ function StyledLine(props: {
         // Highlight over our band); stet owns the line selection.
         el.selectable = false;
       }}
+      // Pinned to the width `heights()` measured against: left to flex layout, the leaf sizes one
+      // Cell wider than its box, so it wrapped at a width the measurer never saw and the
+      // Overflowing column was clipped off the right edge.
+      width={props.width}
       wrapMode={props.wrap ? "word" : "none"}
     />
   );
@@ -156,11 +159,11 @@ export function DiffView() {
     }
     return String(max).length;
   });
-  // The gutter is a change bar, the number, then the glyph: fixed cells left of the code,
-  // So a clean line reserves the bar/glyph columns and never shifts (bar + number + space
-  // + glyph + space). The provenance rail adds one fixed cell on the far left when on, so
-  // Turning it on grows the gutter by exactly one column and never oscillates per line.
-  const gutterWidth = () => numberWidth() + 4 + (state.blameEnabled() ? 1 : 0);
+  // The gutter is a change bar then the number: fixed cells left of the code, so a context
+  // Line reserves the bar column and never shifts (bar + number + space). The provenance
+  // Rail adds one fixed cell on the far left when on, so turning it on grows the gutter by
+  // Exactly one column and never oscillates per line.
+  const gutterWidth = () => numberWidth() + 2 + (state.blameEnabled() ? 1 : 0);
 
   const contentWidth = () => Math.max(1, state.layout().viewer.content.width - gutterWidth());
 
@@ -478,19 +481,13 @@ export function DiffView() {
     }
   });
 
-  // The gutter reads left to right as change bar, number, glyph, then code, carrying two
-  // Orthogonal signals on separate channels: the far-left change bar and the number digits
-  // Take the diff state (add green / remove red / context neutral), a dedicated glyph cell
-  // Takes the diagnostic severity. The bar is a single ¼-block glyph, add vs remove told
-  // Apart by color alone (a deliberate call: equal footprint over a NO_COLOR distinction,
-  // Which the +/- column used to carry), except under a monochrome theme, where color
-  // Cannot carry it and the same cell renders `+`/`-` instead. It is a Block Element
-  // (reliably one cell wide), never Box-Drawing, whose rarer glyphs fall back to a
-  // Mis-metriced font and misalign the gutter. The severity glyph only ever lands on an
-  // Added or context row since a removed line has no new-line number to map findings by.
-  const findingsFor = (row: DiffLineRow) =>
-    row.newLine === undefined ? undefined : state.lineMap().get(row.newLine);
-
+  // The gutter reads left to right as change bar, number, then code: the far-left change bar
+  // And the number digits take the diff state (add green / remove red / context neutral).
+  // The bar is a single ¼-block glyph, add vs remove told apart by color alone (a deliberate
+  // Call: equal footprint over a NO_COLOR distinction, which the +/- column used to carry),
+  // Except under a monochrome theme, where color cannot carry it and the same cell renders
+  // `+`/`-` instead. It is a Block Element (reliably one cell wide), never Box-Drawing, whose
+  // Rarer glyphs fall back to a mis-metriced font and misalign the gutter.
   const gutterNumberColor = (row: DiffLineRow) =>
     row.type === "add"
       ? theme.colors.diff.addedSign
@@ -506,35 +503,6 @@ export function DiffView() {
       : row.type === "remove"
         ? theme.colors.diff.removedSign
         : theme.colors.text.faint;
-
-  // The strongest severity on the line, or undefined when it has no findings. Feeds a
-  // Bare glyph (paired with color per the severity rule, so it reads under NO_COLOR)
-  // Rather than recoloring the number.
-  const lineSeverity = (row: DiffLineRow) => {
-    const findings = findingsFor(row);
-    if (findings === undefined) {
-      return undefined;
-    }
-    return findings.some((finding) => finding.severity === "error")
-      ? "error"
-      : findings.some((finding) => finding.severity === "warning")
-        ? "warning"
-        : "info";
-  };
-
-  // A width-1 glyph cell (blank when the line is clean, so the gutter never shifts),
-  // Colored by severity. `severity.info` directly, not `levelColor` (which maps info to
-  // A neutral text role for status lines, not the info-diagnostic hue used here).
-  const diagnosticGlyph = (row: DiffLineRow) => {
-    const severity = lineSeverity(row);
-    return severity === undefined ? " " : levelGlyph(severity);
-  };
-  const diagnosticColor = (row: DiffLineRow) => {
-    const severity = lineSeverity(row);
-    return severity === undefined
-      ? theme.colors.diff.lineNumberFg
-      : theme.colors.severity[severity];
-  };
 
   // The provenance rail: a width-1 band cell (blank on a row git can't attribute, so the
   // Gutter never shifts), the band's glyph weight colored by its provenance token. Only
@@ -706,13 +674,6 @@ export function DiffView() {
                       bg={gutterBackground(line())}
                     >
                       {`${lineLabel(line())} `}
-                    </text>
-                    <text
-                      ref={(el) => (el.selectable = false)}
-                      fg={diagnosticColor(line())}
-                      bg={gutterBackground(line())}
-                    >
-                      {`${diagnosticGlyph(line())} `}
                     </text>
                     <box
                       ref={(el) => (el.selectable = false)}

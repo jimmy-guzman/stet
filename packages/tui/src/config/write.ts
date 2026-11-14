@@ -23,15 +23,11 @@ export interface SettingsSnapshot {
   editor: string | undefined;
   iconsEnabled: boolean;
   ide: string | undefined;
-  /** A manual extent; undefined is the layout model's default (key absent). Same for the others. */
-  problemsHeight: number | undefined;
-  problemsOpen: boolean;
-  problemsPosition: Dock;
-  problemsWidth: number | undefined;
   provenanceEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegex: boolean;
   searchScope: "changed" | "repo";
+  /** A manual extent; undefined is the layout model's default (key absent). Same for the width. */
   sidebarHeight: number | undefined;
   sidebarOpen: boolean;
   sidebarPosition: Dock;
@@ -175,20 +171,6 @@ export function updateSettingsText(
       ["viewer", "wrap"],
       snapshot.wrap,
       config.viewer?.wrap ?? configDefaults.viewer.wrap,
-    ),
-    ...diff(
-      "problems",
-      ["problems", "open"],
-      snapshot.problemsOpen,
-      config.problems?.open ?? configDefaults.problems.open,
-    ),
-    ...diff("problems", ["problems", "height"], snapshot.problemsHeight, config.problems?.height),
-    ...diff("problems", ["problems", "width"], snapshot.problemsWidth, config.problems?.width),
-    ...diff(
-      "problems",
-      ["problems", "position"],
-      snapshot.problemsPosition,
-      config.problems?.position ?? configDefaults.problems.position,
     ),
     ...diff(
       "sidebar",

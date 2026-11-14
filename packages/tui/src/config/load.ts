@@ -17,7 +17,6 @@ const knownKeys = new Set(Object.keys(UserConfigSchema.fields));
 
 // Where the config restructure moved a key, the unknown-key report names the
 // Destination instead of calling the old key a typo.
-const movedKeys = new Map([["servers", `"servers" moved to "diagnostics.servers"`]]);
 const movedSectionKeys = new Map([["icons", `glyph overrides moved to "icons.glyphs"`]]);
 
 const trivia = new Set([
@@ -104,7 +103,7 @@ function decodeConfig(raw: unknown): LoadedConfig {
   }
   const issues = Object.keys(raw)
     .filter((key) => !knownKeys.has(key))
-    .map((key) => `config: ${movedKeys.get(key) ?? `unknown key "${key}"`}`);
+    .map((key) => `config: unknown key "${key}"`);
   const config = Object.keys(raw)
     .filter((key) => knownKeys.has(key))
     .reduce<UserConfig>(

@@ -17,7 +17,7 @@ interface Viewport {
 export interface Position {
   cursorLine: number | undefined;
   // The caret's raw UTF-16 offset on the cursor line, stored and restored verbatim
-  // (usually a word start, but a diagnostic jump can land it in a gap); the
+  // (usually a word start, but a search jump can land it in a gap); the
   // Word-anchor/highlight is derived at render time, never baked into this value.
   // Undefined means "the line's first word", mirroring how `cursorLine: undefined`
   // Means "first change" — so a fresh open lands the caret at the first symbol.

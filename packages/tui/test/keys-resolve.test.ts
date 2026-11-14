@@ -98,7 +98,7 @@ describe("resolveKeybindings", () => {
   });
 
   test("the same combo in two different panes is not a conflict", () => {
-    // The j key moves in the viewer, the tree, and the problems panel by
+    // The j key moves in the viewer and the tree by
     // Default; sharing it across disjoint panes is the norm, not a clash.
     expect(resolveKeybindings({}).issues).toEqual([]);
   });

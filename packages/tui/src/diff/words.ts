@@ -2,8 +2,7 @@
 // Hops word to word (identifier to identifier) rather than character by character,
 // And highlights the word it sits on. A "word" is a maximal run of identifier
 // Characters; every other character is a gap the caret skips over. Indices are
-// UTF-16 string offsets (what LSP `character` positions use), so the caret column
-// Maps straight onto a request position. No Solid/OpenTUI/Effect: unit-testable
+// UTF-16 string offsets, the same unit as JavaScript string indexing. No Solid/OpenTUI/Effect: unit-testable
 // Directly, like `git/tree`.
 
 const IDENTIFIER = /[\p{L}\p{N}_$]/u;
@@ -21,7 +20,7 @@ export function words(line: string): Word[] {
   let start = -1;
   // Iterate by code point (`\p{L}`/`\p{N}` are per code point) while tracking the
   // UTF-16 offset, so an astral identifier glyph counts as one character and the
-  // Returned offsets stay UTF-16 indices (what LSP `character` positions use).
+  // Returned offsets stay UTF-16 indices.
   let index = 0;
   for (const char of line) {
     if (IDENTIFIER.test(char)) {

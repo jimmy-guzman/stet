@@ -19,26 +19,6 @@ import { Clipboard } from "./clipboard/service";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
 import { Config } from "./config/service";
-import {
-  allFindings,
-  countBySeverity,
-  directorySummaries,
-  findingsLineMap,
-  initialCheckerState,
-  markPending,
-} from "./diagnostics/checker";
-import type { CheckerState, Diagnostic } from "./diagnostics/checker";
-import { LspProcess } from "./diagnostics/lsp-process";
-import {
-  buildProblemItems,
-  formatProblemEntry,
-  formatProblemItems,
-  isNavigableProblemItem,
-  problemsEmptyState,
-} from "./diagnostics/problems";
-import { Provisioner } from "./diagnostics/provision";
-import { LanguageServers } from "./diagnostics/servers";
-import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
 import { followScrollTop } from "./diff/follow";
@@ -91,24 +71,11 @@ import {
   worktreePathTails,
 } from "./git/worktree";
 import type { Worktree, WorktreeSummary } from "./git/worktree";
-import {
-  computeLayout,
-  horizontalDock,
-  PANE_MIN_HEIGHT,
-  PANE_MIN_WIDTH,
-  paneReadingOrder,
-} from "./layout/regions";
+import { computeLayout, horizontalDock, PANE_MIN_HEIGHT, PANE_MIN_WIDTH } from "./layout/regions";
 import type { Dock } from "./layout/regions";
-import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
-import {
-  buildStatusBarModel,
-  clearAlertSource,
-  latestAlert,
-  raiseAlert,
-  restateAlert,
-} from "./status/model";
+import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "./status/model";
 import type { StatusAlert, StatusAlerts, StatusAlertSource } from "./status/model";
 import { activeThemeName, appearance, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
@@ -157,7 +124,7 @@ interface JumpTarget {
 // Tracks its focused node and sidebar scroll, the viewer menu its caret and scroll.
 interface CommandMenuGuard {
   context: "tree" | "viewer";
-  focusedPane: "tree" | "diff" | "problems" | "search";
+  focusedPane: "tree" | "diff" | "search";
   path: string | undefined;
   focusedNodeId: string;
   sidebarScrollTop: number;
@@ -437,8 +404,6 @@ function createState() {
   );
   const [commandMenuGuard, setCommandMenuGuard] = tracked<CommandMenuGuard | undefined>(undefined);
   const [iconsEnabled, setIconsEnabled] = tracked(true);
-  /** Seeded from config. Off silences the run loop, so no language server spawns at all. */
-  const [diagnosticsEnabled, setDiagnosticsEnabled] = tracked(true);
   // The per-line provenance rail (blame reframed): off by default, toggled by `a`. The three
   // Timeline anchors: `sessionCommits` = SHAs in `sessionBase..HEAD` (since launch),
   // `branchCommits` = SHAs in `branchBase..HEAD` (this branch, a superset of the session set),
@@ -496,7 +461,7 @@ function createState() {
     | undefined
   >(undefined);
   const [focusedNodeId, setFocusedNodeId] = tracked("");
-  const [focusedPane, setFocusedPane] = tracked<"tree" | "diff" | "problems" | "search">("tree");
+  const [focusedPane, setFocusedPane] = tracked<"tree" | "diff" | "search">("tree");
   const [sidebarOpen, setSidebarOpen] = tracked(true);
   const [sidebarPosition, setSidebarPosition] = tracked<Dock>("left");
   // A pane keeps a size per axis: 50 columns is not 50 rows, so a move never converts,
@@ -504,16 +469,10 @@ function createState() {
   const [sidebarWidthOverride, setSidebarWidthOverride] = tracked<number | null>(null);
   const [sidebarHeightOverride, setSidebarHeightOverride] = tracked<number | null>(null);
   const [sidebarScrollTop, setSidebarScrollTop] = tracked(0);
-  const [problemsOpen, setProblemsOpen] = tracked(false);
   // Zoom follows focus rather than pinning a pane, so one boolean is the whole state:
   // `tab` moves which pane fills the screen with no rule of its own, and focus and
   // Visibility can never disagree.
   const [zoomed, setZoomed] = tracked(false);
-  const [problemsPosition, setProblemsPosition] = tracked<Dock>("bottom");
-  const [problemsWidthOverride, setProblemsWidthOverride] = tracked<number | null>(null);
-  const [problemsHeightOverride, setProblemsHeightOverride] = tracked<number | null>(null);
-  const [problemIndex, setProblemIndex] = tracked(0);
-  const [problemsScrollTop, setProblemsScrollTop] = tracked(0);
   const [fileComboboxOpen, setFileComboboxOpen] = tracked(false);
   const [fileComboboxQuery, setFileComboboxQuery] = tracked("");
   const [fileComboboxIndex, setFileComboboxIndex] = tracked(0);
@@ -570,7 +529,7 @@ function createState() {
   const [lastWatcherTick, setLastWatcherTick] = tracked(0);
   const [cursorIndex, setCursorIndex] = tracked(0);
   // The in-line caret: a UTF-16 offset (a word start) on the cursor line. Motion
-  // Hops word to word; a precise offset is still stored so a diagnostic jump lands
+  // Hops word to word; a precise offset is still stored so a search jump lands
   // On its exact column and copy-reference can emit `:line:col`. Normalized to the
   // Line's first word whenever the cursor line or content changes (the Viewer
   // Effect), unless a restore/jump placed it on a valid word.
@@ -604,9 +563,8 @@ function createState() {
     nextTabId = 1;
   });
   const [jumpTarget, setJumpTarget] = tracked<JumpTarget | undefined>(undefined);
-  const [checkerState, setCheckerState] = tracked<CheckerState>(initialCheckerState([]));
   // Unresolved problems, tagged by the source that owns each one's lifecycle. A single untyped
-  // Status channel was why a worktree failure and a diagnostics failure overwrote each other, and
+  // Status channel was why a failed worktree list and a failed switch overwrote each other, and
   // Why either one's retry wiped the other's alert.
   const [alerts, setAlerts] = tracked<StatusAlerts>([]);
   /**
@@ -616,11 +574,6 @@ function createState() {
   const [switchProgress, setSwitchProgress] = tracked<string | undefined>(undefined);
   const raise = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
     setAlerts((current) => raiseAlert(current, { level, source, text }));
-  };
-  // Re-report a persisting condition without advancing its recency (a background re-check finding
-  // The same failure), so it cannot leapfrog a fresher user-provoked alert into the one row.
-  const restate = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
-    setAlerts((current) => restateAlert(current, { level, source, text }));
   };
   const clearAlert = (source: StatusAlertSource) => {
     setAlerts((current) => clearAlertSource(current, source));
@@ -633,10 +586,6 @@ function createState() {
     { current: string; latest: string } | undefined
   >(undefined);
   const [activityLog, setActivityLog] = tracked<ActivityLog>(emptyActivityLog);
-  const [checksRunning, setChecksRunning] = tracked(false);
-  // Languages whose server is downloading right now, sourced live from the provisioner (not the
-  // Check run), so the status bar shows it promptly and drops it the moment the download resolves.
-  const [provisioningLanguages, setProvisioningLanguages] = tracked<ReadonlySet<string>>(new Set());
   const [now, setNow] = tracked(Date.now());
   const [terminalWidth, setTerminalWidth] = tracked(80);
   const [terminalHeight, setTerminalHeight] = tracked(24);
@@ -696,7 +645,7 @@ function createState() {
   const treeRowsById = createMemo(() => new Map(treeRows().map((row) => [row.node.id, row.index])));
   const focusedRowIndex = createMemo(() => treeRowsById().get(focusedNodeId()) ?? 0);
 
-  // A windowed uniform-row list (the sidebar, the problems panel) renders only
+  // A windowed uniform-row list (the sidebar) renders only
   // The rows inside [scrollTop, +viewport), so its renderable count is bounded
   // By the viewport, not the content. This registers the shared glue: a follow
   // Effect keeping the cursor framed (editor-style scrolloff) that tracks only
@@ -712,12 +661,8 @@ function createState() {
     rowCount: () => number;
     scrollTop: () => number;
     setScrollTop: (next: number) => void;
-    active?: () => boolean;
   }) {
     createEffect(() => {
-      if (options.active !== undefined && !options.active()) {
-        return;
-      }
       const top = options.cursor();
       const viewport = options.viewport();
       const current = untrack(options.scrollTop);
@@ -761,71 +706,6 @@ function createState() {
   // Per-directory aggregates, one pass each, so collapsed directory rows do O(1)
   // Lookups instead of scanning every entry per row per render.
   const directoryRecencyByPath = createMemo(() => directoryRecency(recencyByPath()));
-  const directorySummariesByPath = createMemo(() => directorySummaries(checkerState()));
-  const problems = createMemo(() => allFindings(checkerState()));
-  const counts = createMemo(() => countBySeverity(problems()));
-  const lineMap = createMemo(() => {
-    const path = selectedPath();
-    return path === undefined
-      ? new Map<number, Diagnostic[]>()
-      : findingsLineMap(path, checkerState());
-  });
-  // Reuse the `problems` memo's sorted findings so one checker update pays the
-  // AllFindings sort once, not once here and once inside buildProblemItems.
-  const allProblemItems = createMemo(() => buildProblemItems(checkerState(), problems()));
-  const problemsEmpty = createMemo(() =>
-    problemsEmptyState(checkerState(), {
-      enabled: diagnosticsEnabled(),
-      running: checksRunning(),
-    }),
-  );
-  // The first row the problems cursor can land on; headers and help sub-lines are
-  // Skipped so opening the panel never parks the cursor on a non-navigable row.
-  const firstNavigableProblemIndex = createMemo(() => {
-    const index = allProblemItems().findIndex(isNavigableProblemItem);
-    return index === -1 ? 0 : index;
-  });
-
-  // Keep the cursor on a navigable row as the item list changes underneath it, the same shape
-  // The search pane keeps its selection. `problemIndex` is a raw index into a list that mixes
-  // Headers, spacers, and help sub-lines in with the findings, and only `p` ever seeded it, so
-  // Every other way of arriving left it wherever it last pointed: a panel seeded open from
-  // Config sat on index 0, a file header, and rendered with no row marked at all. The row
-  // Highlight is the only thing in the panel that says "cursor", so there was nothing left in
-  // Its place. Re-homing searches backward for the nearest finding at or before where the
-  // Cursor was, so a rebuild that drops rows under it lands near where the user was rather
-  // Than at the top, and a cursor already on a finding resolves to itself, which is what keeps
-  // A background re-check from disturbing a settled selection.
-  createEffect(() => {
-    // Gated the way the follow window below is, and for the same two reasons: the cursor only
-    // Means anything while the panel is on screen, and the gate is tracked, so opening re-runs
-    // This and frames a finding at once. Ungated it would also sort every finding on each
-    // Diagnostics update in sessions that never open the panel.
-    if (!problemsOpen()) {
-      return;
-    }
-    const items = allProblemItems();
-    const index = untrack(problemIndex);
-    const item = items[index];
-    if (item !== undefined && isNavigableProblemItem(item)) {
-      return;
-    }
-    const bounded = Math.min(index, items.length - 1);
-    const previous = items.findLastIndex(
-      (candidate, candidateIndex) => candidateIndex <= bounded && isNavigableProblemItem(candidate),
-    );
-    setProblemIndex(previous === -1 ? firstNavigableProblemIndex() : previous);
-  });
-
-  // The `active` gate is tracked, so opening the panel frames the cursor at once.
-  followListWindow({
-    active: problemsOpen,
-    cursor: problemIndex,
-    rowCount: () => allProblemItems().length,
-    scrollTop: problemsScrollTop,
-    setScrollTop: setProblemsScrollTop,
-    viewport: () => layout().problems.content.height,
-  });
 
   // The go-to-file universe: repoFiles plus changed-only paths (staged
   // Deletions), the same universe the tree renders. Every dependency is
@@ -1371,9 +1251,9 @@ function createState() {
   }
 
   // Open a result row (Enter or a click): a match line lands the caret on its
-  // Exact column; a context line lands line-level. Both route through the same
-  // JumpTarget path as problems navigation, whose goToLocation step
-  // Closes the search view like any other navigation.
+  // Exact column; a context line lands line-level. Both route through the shared
+  // JumpTarget path, whose goToLocation step closes the search view like any other
+  // Navigation.
   function jumpToSearchItem(index: number) {
     const item = searchItems()[index];
     if (item === undefined || item.kind !== "line") {
@@ -1568,12 +1448,6 @@ function createState() {
   // Subtract from. Zoom is still a model input with no signal behind it.
   const layout = createMemo(() =>
     computeLayout({
-      problems: {
-        heightOverride: problemsHeightOverride(),
-        open: problemsOpen(),
-        position: problemsPosition(),
-        widthOverride: problemsWidthOverride(),
-      },
       sidebar: {
         heightOverride: sidebarHeightOverride(),
         open: sidebarOpen(),
@@ -1583,17 +1457,11 @@ function createState() {
       terminalHeight: terminalHeight(),
       terminalWidth: terminalWidth(),
       // Zoom follows focus, and needs no open-flag check of its own because focus never names
-      // A closed pane: every writer either targets the viewer, sits on a pane that is mounted
-      // Only while open, or routes through `focusNextPane`/`collapseSidebar`/`collapseProblems`,
-      // Which each land only on something open. The map is still a map, not an identity: the
-      // Search view is a second focus value for the one viewer slot.
-      zoom: !zoomed()
-        ? undefined
-        : focusedPane() === "problems"
-          ? "problems"
-          : focusedPane() === "tree"
-            ? "tree"
-            : "viewer",
+      // A closed pane: every writer either targets the viewer, sits on the tree while it is
+      // Mounted, or routes through `focusNextPane`/`collapseSidebar`, which each land only on
+      // Something open. The map is still a map, not an identity: the search view is a second
+      // Focus value for the one viewer slot.
+      zoom: !zoomed() ? undefined : focusedPane() === "tree" ? "tree" : "viewer",
     }),
   );
   // A truncated file reserves one row for the "N more lines" footer, so the diff
@@ -1632,51 +1500,14 @@ function createState() {
       setSidebarOpen(true);
     }
   };
-  // Closing the panel moves focus off it the way collapsing the sidebar does, and
-  // Lands on the tree only while the tree is on screen: with the sidebar collapsed,
-  // The old unconditional jump to "tree" left the keys driving a pane nobody could
-  // See. `esc`, the `p` toggle, and a shrink past the minimum share this one path.
-  const collapseProblems = () => {
-    // Closing the panel is a visibility change, so it exits zoom. This lives here rather
-    // Than only in the toggle because `esc` reaches this path directly, and without it the
-    // Pane focus lands on would silently take over the whole screen.
-    setZoomed(false);
-    if (focusedPane() === "problems") {
-      setFocusedPane(sidebarOpen() ? "tree" : viewerFocus());
-    }
-    setProblemsOpen(false);
-  };
-  const toggleProblems = () => {
-    if (problemsOpen()) {
-      collapseProblems();
-      return;
-    }
-    // The open direction needs its own clear: opening the panel would otherwise inherit
-    // The zoom through focus and fill the screen with it rather than docking it.
-    setZoomed(false);
-    setProblemsOpen(true);
-    // Opening the panel is an action meaning "go look at problems", so unlike the
-    // Config seeding it takes focus and frames the first navigable finding.
-    setFocusedPane("problems");
-    setProblemIndex(firstNavigableProblemIndex());
-  };
-  // `tab` walks the panes that are open, in the order they sit on screen, which is the whole
-  // Rule: focus lands only where something is, so it can never name a pane the user closed and
-  // The zoom that follows it can never paint one back. Open, not painted, is the test, because
-  // Zoom hides the other panes without closing them and `tab` carries the zoom along rather
-  // Than being trapped in whatever it lit up. One pane open means one entry and no-op, and an
-  // Unlisted focus value starts the walk rather than falling out of `(-1 + 1) % n`.
-  const focusNextPane = () => {
-    const order = paneReadingOrder(sidebarPosition(), problemsPosition())
-      .filter((slot) =>
-        slot === "tree" ? sidebarOpen() : slot === "problems" ? problemsOpen() : true,
-      )
-      .map((slot) => (slot === "viewer" ? viewerFocus() : slot));
-    const at = order.indexOf(focusedPane());
-    setFocusedPane(at === -1 ? order[0] : order[(at + 1) % order.length]);
-  };
-  // The two sizable panes as one shape, so an action names a pane and reads the same
-  // Accessors for either. Nothing new is stored: every field is a signal declared above.
+  // `tab` switches between the tree and the viewer, landing on the tree only while it is open, so
+  // Focus can never name a pane the user closed and the zoom that follows it can never paint one
+  // Back. Open, not painted, is the test, because zoom hides the tree without closing it and `tab`
+  // Carries the zoom along rather than being trapped in whatever it lit up.
+  const focusNextPane = () =>
+    setFocusedPane(focusedPane() !== "tree" && sidebarOpen() ? "tree" : viewerFocus());
+  // The sizable pane's accessors as one shape. Nothing new is stored: every field is a signal
+  // Declared above.
   const sidebarPane = {
     collapse: collapseSidebar,
     heightOverride: sidebarHeightOverride,
@@ -1690,25 +1521,10 @@ function createState() {
     widthOverride: sidebarWidthOverride,
   };
   type SizablePane = typeof sidebarPane;
-  // Annotated, not inferred: a field that drifts from the sidebar's shape is a compile
-  // Error here rather than a branch `sizingAxis` silently cannot reach.
-  const problemsPane: SizablePane = {
-    collapse: collapseProblems,
-    heightOverride: problemsHeightOverride,
-    open: problemsOpen,
-    position: problemsPosition,
-    rect: () => layout().problems,
-    setHeightOverride: setProblemsHeightOverride,
-    setOpen: setProblemsOpen,
-    setPosition: setProblemsPosition,
-    setWidthOverride: setProblemsWidthOverride,
-    widthOverride: problemsWidthOverride,
-  };
   // Which axis a nudge steps on, which floor it stops at, and which override holds the
   // Extent all come from the pane's *current edge*, never its identity: a top-docked tree
-  // Resizes in rows against PANE_MIN_HEIGHT exactly as the panel does. The step is per
-  // Axis too, since a terminal cell is taller than it is wide, so two columns read as
-  // About one row; that is why 2 and 1 are no longer attached to "tree" and "panel".
+  // Resizes in rows against PANE_MIN_HEIGHT. The step is per axis too, since a terminal cell
+  // Is taller than it is wide, so two columns read as about one row.
   const sizingAxis = (pane: SizablePane) =>
     horizontalDock(pane.position())
       ? {
@@ -1747,36 +1563,30 @@ function createState() {
     }
     axis.setOverride(next);
   };
-  // The tree and the panel are the two sizable panes. The viewer is whatever the
-  // Docks leave, so it has no size of its own and the keys fall back to the sidebar
-  // From it, which is what they did everywhere before the panel became sizable.
-  // Zoom is a temporary "show only this" mode, so every geometry key is inert until it
+  // The tree is the one sizable pane. The viewer is whatever the dock leaves, so it has
+  // No size of its own and the keys act on the sidebar from it too. Zoom is a temporary "show only this" mode, so every geometry key is inert until it
   // Clears: resizing a pane that already fills the screen means nothing, and the others
   // Are hidden without being closed, so a write there would land invisibly.
   const toggleZoom = () => setZoomed((zoom) => !zoom);
-  const sizingPane = () => (focusedPane() === "problems" ? problemsPane : sidebarPane);
-  const growPane = () => nudgePane(sizingPane(), 1);
-  const shrinkPane = () => nudgePane(sizingPane(), -1);
+  const growPane = () => nudgePane(sidebarPane, 1);
+  const shrinkPane = () => nudgePane(sidebarPane, -1);
   // Only the docked axis resets, so a left-docked tree's `\` never wipes a height set
   // While it was on top, which is what makes a four-press round trip idempotent. A closed
   // Pane ignores it, like `nudgePane`: otherwise `\` reached past a collapsed tree (the
   // Keys fall back to it from the viewer) and silently discarded the width `]` reopens at.
   const resetPane = () => {
-    const pane = sizingPane();
-    if (zoomed() || !pane.open()) {
+    if (zoomed() || !sidebarOpen()) {
       return;
     }
-    sizingAxis(pane).setOverride(null);
+    sizingAxis(sidebarPane).setOverride(null);
   };
   // A closed pane does not move: relocating something off-screen shows nothing and
-  // Quietly rewrites a setting `ctrl-s` would persist. It deliberately does not skip an
-  // Edge the other pane holds, since the model stacks a same-edge pair on purpose.
+  // Quietly rewrites a setting `ctrl-s` would persist.
   const movePane = () => {
-    const pane = sizingPane();
-    if (zoomed() || !pane.open()) {
+    if (zoomed() || !sidebarOpen()) {
       return;
     }
-    pane.setPosition(NEXT_DOCK[pane.position()]);
+    setSidebarPosition(NEXT_DOCK[sidebarPosition()]);
   };
   const overlayWidth = createMemo(() => Math.max(30, Math.min(70, terminalWidth() - 8)));
   const overlayLeft = createMemo(() =>
@@ -1796,7 +1606,7 @@ function createState() {
     caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn()),
   );
   // The exact 1-based column the caret points at, for `:col` in copy/stats. Driven
-  // By line-level alone (not `caretWord`), so a diagnostic jump that lands in a gap
+  // By line-level alone (not `caretWord`), so a search jump that lands in a gap
   // Still reports its precise column instead of falling back to line-only.
   const caretColumn = createMemo(() => (caretLineLevel() ? undefined : cursorColumn() + 1));
   // The inclusive [start, end] navIndex span of the active line selection, ordered
@@ -1854,14 +1664,6 @@ function createState() {
   const commandMenuItems = createMemo(() =>
     commandMenuOpen() ? buildCommandMenuItems(commandMenuInput(commandMenuContext())) : [],
   );
-  const cursorFindings = createMemo(() => {
-    const line = cursorLine();
-    return line?.newLine === undefined ? undefined : lineMap().get(line.newLine);
-  });
-  const countsText = createMemo(() => {
-    const value = counts();
-    return `${value.errors > 0 ? `${levelGlyph("error")}${value.errors}` : ""}${value.warnings > 0 ? ` ${levelGlyph("warning")}${value.warnings}` : ""}`.trim();
-  });
   // The caret line's commit for the status bar: `author · age · subject` for a committed line
   // (the band is the leading glyph the bar draws, not repeated in words), `uncommitted · working
   // Tree` otherwise. Undefined when the rail is off or the caret sits on a row git can't attribute.
@@ -1895,20 +1697,9 @@ function createState() {
         ? "n/N next/prev · esc clear"
         : "? help · q quit",
   );
-  const provisioningStatus = createMemo(() => {
-    const languages = [...provisioningLanguages()].toSorted();
-    if (languages.length === 0) {
-      return undefined;
-    }
-    return languages.length === 1
-      ? `installing ${languages[0]} server…`
-      : `installing ${languages.length} servers…`;
-  });
   const statusBarModel = createMemo(() => {
-    const provisioning = provisioningStatus();
     const latest = latestActivity(activityLog());
     const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
-    const finding = cursorFindings()?.[0];
     return buildStatusBarModel({
       activity:
         recent === undefined
@@ -1919,14 +1710,6 @@ function createState() {
               path: recent.path,
             },
       alert: latestAlert(alerts()),
-      backgroundProgress: provisioning ?? (checksRunning() ? "running diagnostics…" : undefined),
-      contextualFinding:
-        finding === undefined
-          ? undefined
-          : {
-              level: finding.severity satisfies LogLevel,
-              text: `${finding.checker}: ${finding.message}`,
-            },
       foregroundProgress: switchProgress(),
       guidance: guidance(),
       notification: notice(),
@@ -2457,7 +2240,7 @@ function createState() {
     return undefined;
   }
 
-  // A jump (diagnostic, symbol, reference, find) may target a line a fold is hiding.
+  // A jump (search, find) may target a line a fold is hiding.
   // Clear the fold(s) covering it so the jump can land; the Viewer's jump effect
   // Re-runs on the resulting navigable change and finds the now-visible line.
   function revealLineForJump(line: number) {
@@ -2485,197 +2268,6 @@ function createState() {
     setFoldedRegions(next);
     return true;
   }
-
-  let checksController: AbortController | undefined;
-  onReset(() => checksController?.abort());
-  /** Settles once every run started so far has exited, which is when each has let go of the pool. */
-  let checksExited: Promise<unknown> = Promise.resolve();
-  /** Held for the duration of `R`: a second `R` drops, and so does any run asked for meanwhile. */
-  let restartingServers = false;
-  onReset(() => {
-    restartingServers = false;
-  });
-  async function runChecks(model: GitModel) {
-    if (!diagnosticsEnabled() || restartingServers) {
-      return;
-    }
-    checksController?.abort();
-    const controller = new AbortController();
-    checksController = controller;
-    // Whether a diagnostics failure was already standing before this run cleared it: if so, a fresh
-    // Failure is the *same* ongoing condition re-reported, not a newly provoked one, so it must
-    // Return to its old recency (via `restate`) rather than jumping to the newest slot and evicting
-    // A worktree error the user provoked more recently.
-    const diagnosticsWasAlerting = alerts().some((alert) => alert.source === "diagnostics");
-    // The prior failure describes a run that no longer exists, so retire it as this one starts
-    // Rather than leaving it to contradict the progress line beside it.
-    clearAlert("diagnostics");
-    // Keep prior diagnostics while re-checking (update in place); only files new to the set get a
-    // Pending placeholder. Changed files are already marked pending by the edit-detection effect.
-    setCheckerState((current) => markPending(current, model.changed, []));
-    // Hold each file's badge across the run: awaiting files render this prior until their servers
-    // Report, so stable files never flicker to pending (markPending already pendinged edited/new ones).
-    const prior = checkerState().diagnostics;
-    setChecksRunning(true);
-    const failures: string[] = [];
-    try {
-      const run = runtime.runPromise(
-        Diagnostics.use((diagnostics) =>
-          diagnostics.run(model.repoRoot, model.changed, prior).pipe(
-            Stream.runForEach((update) =>
-              Effect.sync(() => {
-                setCheckerState((current) => ({ ...current, [update.checker]: update.state }));
-                for (const fileState of update.state.values()) {
-                  if (fileState.status === "failed") {
-                    failures.push(
-                      `${update.checker} failed: ${fileState.message?.split("\n")[0] ?? ""}`,
-                    );
-                    break;
-                  }
-                }
-              }),
-            ),
-          ),
-        ),
-        { signal: controller.signal },
-      );
-      checksExited = Promise.allSettled([checksExited, run]);
-      await run;
-      // Only a failure is worth the row. A clean run is already reported by everything it just
-      // Updated (the counts badge, the file badges, the problems panel), and the completion copy
-      // It used to leave behind outlived its usefulness: `checks passed` sat there indefinitely,
-      // Beside a red error count it had never contradicted. A first failure is newly provoked
-      // (`raise`, newest); a re-report of a still-broken condition keeps its old recency
-      // (`restate`), so a background re-check cannot bump it over a fresher worktree error.
-      if (failures[0] !== undefined) {
-        (diagnosticsWasAlerting ? restate : raise)("diagnostics", "error", failures[0]);
-      }
-    } catch {
-      // Interrupted by a newer run or a worktree switch
-    } finally {
-      if (checksController === controller) {
-        setChecksRunning(false);
-        if (recheckPending) {
-          recheckPending = false;
-          void runChecks(gitModel());
-        }
-      }
-    }
-  }
-
-  // A server with news no run is waiting for (its own post-install re-analysis, or an explicit
-  // `workspace/diagnostic/refresh`). It must not abort the run in flight: that run's own sends are
-  // What provoked most of these, and restarting it each time would starve it. Defer instead, which
-  // Terminates by construction: the follow-up run finds no changed text, so it sends the server
-  // Nothing, so it provokes no further publishes and no further nudge.
-  let recheckPending = false;
-  onReset(() => {
-    recheckPending = false;
-  });
-  function requestRecheck() {
-    if (checksRunning()) {
-      recheckPending = true;
-      return;
-    }
-    void runChecks(gitModel());
-  }
-
-  /**
-   * `R`: bring the repo's language servers back up from scratch. The escape hatch for a server that
-   * cannot be told about a change (a linter that reads its config once at startup) or has wedged;
-   * every editor ships one.
-   *
-   * Every holder of the pooled server has to let go before the pool can kill it, because
-   * `RcMap.invalidate` skips an entry anyone still references. There are two: the run in flight and
-   * the document keepers. Miss one and `R` leaves the wedged child running and merely spawns a
-   * second one beside it.
-   *
-   * So the run is awaited, not just aborted: an abort only requests the interrupt, and a run caught
-   * mid-acquire can still register a keeper. `restartingServers` is flipped before the first await,
-   * so a second `R` drops and no run starts until the pool has been evicted. A run dropped that way
-   * loses nothing, because this restart ends with a run of its own over the latest model.
-   */
-  async function restartLanguageServers() {
-    const model = gitModel();
-    if (model.repoRoot === "" || restartingServers) {
-      return;
-    }
-    restartingServers = true;
-    notify("restarting language servers");
-
-    // The run in flight holds handles to the children about to be killed; left alone, its requests
-    // Come back as "connection closed" and flash a red `failed` badge over every file it was checking.
-    //
-    // Drop the deferred re-check *before* aborting, or the abort itself resurrects it: the run's exit
-    // Path fires a pending re-check, and that fresh run re-acquires the very pool entries the restart
-    // Is about to evict. `RcMap.invalidate` skips a still-referenced entry, so the wedged child would
-    // Survive with a replacement beside it.
-    recheckPending = false;
-    checksController?.abort();
-    await checksExited;
-
-    await runtime
-      .runPromise(
-        Diagnostics.use((diagnostics) => diagnostics.resetServers(model.repoRoot)).pipe(
-          Effect.andThen(LanguageServers.use((servers) => servers.restart(model.repoRoot))),
-        ),
-      )
-      .catch(() => {});
-
-    restartingServers = false;
-    void runChecks(gitModel());
-  }
-
-  // A download starting/finishing drives the live "installing…" status: add on start, drop on
-  // Finish. Finishing also re-runs checks so the language's files resolve from pending.
-  runtime.runFork(
-    Provisioner.use((provisioner) =>
-      Queue.take(provisioner.starts).pipe(
-        Effect.flatMap((language) =>
-          Effect.sync(() => setProvisioningLanguages((current) => new Set(current).add(language))),
-        ),
-        Effect.forever,
-      ),
-    ),
-  );
-  runtime.runFork(
-    Provisioner.use((provisioner) =>
-      Queue.take(provisioner.completions).pipe(
-        Effect.flatMap((language) =>
-          Effect.sync(() => {
-            setProvisioningLanguages((current) => {
-              const next = new Set(current);
-              next.delete(language);
-              return next;
-            });
-          }).pipe(Effect.andThen(Effect.sync(() => void runChecks(gitModel())))),
-        ),
-        Effect.forever,
-      ),
-    ),
-  );
-  /**
-   * A server with news no run is waiting for: an explicit `workspace/diagnostic/refresh` nudge
-   * (rust-analyzer after a cargo-check cycle), a server that re-published on its own once it
-   * changed its mind (pyright re-analyzing after a dependency install invalidated its imports), or
-   * a tsserver answer the bridge forwarded to vue-language-server. Each re-runs checks, exactly
-   * like a finished download. A nudge from another repo's pooled server (a just-switched-away
-   * worktree) is ignored rather than churning the current one.
-   */
-  runtime.runFork(
-    LspProcess.use((lsp) =>
-      Queue.take(lsp.refreshes).pipe(
-        Effect.flatMap((refreshedRoot) =>
-          Effect.sync(() => {
-            if (refreshedRoot === gitModel().repoRoot) {
-              requestRecheck();
-            }
-          }),
-        ),
-        Effect.forever,
-      ),
-    ),
-  );
 
   // Hold a user-action acknowledgment for a fixed dwell (~1.5s) so an ambient
   // Status event or the next keystroke can't overwrite it before it's read.
@@ -2776,33 +2368,6 @@ function createState() {
     }
     const count = range[1] - range[0] + 1;
     copy(selectionText(), `copied ${count} line${count === 1 ? "" : "s"}`);
-  }
-
-  // Copy the problems panel's selected entry, or every entry (`y`/`Y` while the panel
-  // Is focused). Both read `allProblemItems`, the full list the panel windows, so an
-  // Off-screen diagnostic copies too. An empty panel leaves the clipboard untouched
-  // Rather than clearing it with an empty write.
-  function copyProblem() {
-    const item = allProblemItems()[problemIndex()];
-    const text = item === undefined ? undefined : formatProblemEntry(item);
-    if (text === undefined) {
-      notify("no problems to copy");
-      return;
-    }
-    copy(text, "copied 1 problem");
-  }
-
-  function copyAllProblems() {
-    const items = allProblemItems();
-    const text = formatProblemItems(items);
-    if (text === "") {
-      notify("no problems to copy");
-      return;
-    }
-    const count = items.filter(
-      (item) => item.kind === "problem" || (item.kind === "failure" && item.isFirst),
-    ).length;
-    copy(text, `copied ${count} problem${count === 1 ? "" : "s"}`);
   }
 
   // Opt the current path out of the truncation cap for a full re-read. Reached by
@@ -3068,10 +2633,6 @@ function createState() {
       editor: editorFlag(),
       iconsEnabled: iconsEnabled(),
       ide: ideFlag(),
-      problemsHeight: problemsHeightOverride() ?? undefined,
-      problemsOpen: problemsOpen(),
-      problemsPosition: problemsPosition(),
-      problemsWidth: problemsWidthOverride() ?? undefined,
       provenanceEnabled: blameEnabled(),
       searchCaseSensitive: searchCaseSensitive(),
       searchRegex: searchRegex(),
@@ -3259,11 +2820,11 @@ function createState() {
     };
   }
 
-  // Repoint the whole app (tree, diffs, polling, checks) at another worktree
+  // Repoint the whole app (tree, diffs, polling) at another worktree
   // Without a restart. Lives in state, not App, so the keymap, the picker's
   // Mouse click, and App's deleted-worktree recovery all reach the one action
   // Directly. It only writes state and reloads the model (no `renderer`), so it
-  // Belongs here next to `runChecks`.
+  // Belongs here.
   //
   // `label` names the target in the progress line, and `successNotice` is for a switch the user
   // Did not ask for (the deleted-worktree recovery): an unrequested switch has to say so, where a
@@ -3340,11 +2901,6 @@ function createState() {
         // Reset navigation: worktree A's history is meaningless in B, so collapse
         // To one fresh tab on the new worktree's selected file.
         seedNav(selected);
-        setProblemIndex(0);
-        // Worktree A's diagnostics are meaningless in B; without this, markPending and
-        // The cross-file carry-forward would accumulate every visited worktree's findings.
-        // Disabled diagnostics seed empty, or the pending placeholders never resolve.
-        setCheckerState(initialCheckerState(diagnosticsEnabled() ? fresh.changed : []));
         setActivityLog(emptyActivityLog);
         // The new worktree starts at the tree, but only when the tree is on screen. This has to
         // Stay after `seedNav`, which can route through `closeSearch`: reads inside a batch see
@@ -3358,7 +2914,6 @@ function createState() {
           notify(options.successNotice.text, options.successNotice.level);
         }
       });
-      void runChecks(fresh);
     } catch (error) {
       if (request !== switchRequest) {
         return;
@@ -3530,41 +3085,7 @@ function createState() {
               const watcher = yield* Watcher;
               return watcher.changes(root);
             }),
-          ).pipe(
-            Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))),
-            // Tell the language servers about the *whole* batch, gitignored paths included. A
-            // Package landing in `.venv/` or `node_modules/` is invisible to git and so to
-            // Every other consumer here, but it is precisely what invalidates a server's resolution
-            // Cache, and basedpyright has no filesystem watcher of its own to notice it. No cap and
-            // No ignore list: any cap drops a signal some server needed (pyright's `**` source
-            // Watcher dirty-marks per file), and unlike Neovim we derive no watchers from the globs,
-            // So a burst costs a glob match rather than an inotify handle.
-            //
-            // The batch goes down **raw**, and nothing here touches a path. Typing a change is a
-            // Synchronous `existsSync` (`fs.watch` calls both an appearance and a vanishing a
-            // "rename", so only the disk can tell them apart), and an install hands us tens of
-            // Thousands of paths at once: typing them here, before the globs have said whether any
-            // Server even wants them, measured 207ms of frozen render loop per `bun install` in a
-            // Repo where *no* server consumes this channel. So each server matches first and types
-            // Only what it claimed. `isTracked` is the one thing the servers cannot know and must be
-            // Told: git's view of the tree, which is what separates an atomic save (a rename over a
-            // Path git already knows, as vim and most formatters do) from a genuine appearance.
-            Stream.tap((changes) => {
-              if (changes.length === 0) {
-                return Effect.void;
-              }
-              const trackedPaths = repoFilePaths();
-              const { changedByPath } = gitModel();
-              return LanguageServers.use((servers) =>
-                servers.notifyWatchedFiles(
-                  root,
-                  changes,
-                  (path) => trackedPaths.has(path) || changedByPath.has(path),
-                ),
-              ).pipe(Effect.ignore);
-            }),
-            Stream.map(() => undefined),
-          );
+          ).pipe(Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))));
           const safetyTicks = Stream.fromEffect(
             Effect.suspend(() =>
               Effect.sleep(
@@ -3674,19 +3195,9 @@ function createState() {
     onCleanup(() => clearInterval(timer));
   });
 
-  // Re-run checks once the repo has been quiet for 2s; new activity resets it.
-  createEffect(() => {
-    if (activityLog().events.length === 0) {
-      return;
-    }
-    const timer = setTimeout(() => void runChecks(gitModel()), 2000);
-    onCleanup(() => clearTimeout(timer));
-  });
-
-  // Detect agent edits from each new model: record activity + mark checkers
-  // Pending, and re-run checks wholesale when the scope changes. A repoRoot
-  // Change (worktree switch or the initial seed) only re-baselines — the caller
-  // Runs the checks — so a swapped changed-set is never mistaken for agent edits.
+  // Detect agent edits from each new model and record them as activity. A scope or
+  // RepoRoot change (a scope pick, a worktree switch, or the initial seed) only
+  // Re-baselines, so a swapped changed-set is never mistaken for agent edits.
   let previousChanged: ChangedFile[] = [];
   let previousScopeKey = "";
   let previousRepoRoot = "";
@@ -3709,7 +3220,6 @@ function createState() {
     }
 
     if (prevScopeKey !== model.scopeKey) {
-      void runChecks(model);
       return;
     }
 
@@ -3730,16 +3240,6 @@ function createState() {
     if (entries.length > 0) {
       batch(() => {
         setLastChange(Date.now());
-        // Disabled diagnostics never resolve a pending placeholder, so don't plant one.
-        if (diagnosticsEnabled()) {
-          setCheckerState((current) =>
-            markPending(
-              current,
-              model.changed,
-              entries.map((entry) => entry.path),
-            ),
-          );
-        }
         setActivityLog((current) => recordActivity(current, entries, Date.now()));
       });
     }
@@ -3748,7 +3248,6 @@ function createState() {
   return {
     activateTab,
     activityLog,
-    allProblemItems,
     availableUpdate,
     blameEnabled,
     canGoBack,
@@ -3760,13 +3259,10 @@ function createState() {
     caretWord,
     changesOnly,
     checkForUpdate,
-    checkerState,
-    checksRunning,
     closeActiveTab,
     closeCommandMenu,
     closeSearch,
     closeThemePicker,
-    collapseProblems,
     collapseSidebar,
     commandMenuAnchor,
     commandMenuContext,
@@ -3778,22 +3274,16 @@ function createState() {
     commitsNow,
     commitsStatus,
     copy,
-    copyAllProblems,
     copyFileContents,
-    copyProblem,
     copySelection,
-    counts,
-    countsText,
     currentWorktreeDeleted,
     cursorColumn,
     cursorIndex,
     cursorLineContent,
     cursorLineNumber,
     cycleTab,
-    diagnosticsEnabled,
     diffView,
     directoryRecencyByPath,
-    directorySummariesByPath,
     dispatchCommandAction,
     editorTemplate,
     emptyTree,
@@ -3825,7 +3315,6 @@ function createState() {
     jumpTarget,
     jumpToSearchItem,
     layout,
-    lineMap,
     loadCommits,
     loadFullContent,
     mainView,
@@ -3850,12 +3339,6 @@ function createState() {
     pendingRestore,
     persistSettings,
     pinActiveTab,
-    problemIndex,
-    problems,
-    problemsEmpty,
-    problemsOpen,
-    problemsPosition,
-    problemsScrollTop,
     provenanceForRow,
     quitConfirmOpen,
     recencyByPath,
@@ -3864,9 +3347,7 @@ function createState() {
     resetFind,
     resetPane,
     resetState,
-    restartLanguageServers,
     revealLineForJump,
-    runChecks,
     scope,
     scopeMenuIndex,
     scopeMenuOpen,
@@ -3897,7 +3378,6 @@ function createState() {
     setBlameEnabled,
     setCaretLineLevel,
     setChangesOnly,
-    setCheckerState,
     setCliBaseRef,
     setCommandMenuIndex,
     setCommits,
@@ -3905,7 +3385,6 @@ function createState() {
     setCursorColumn,
     setCursorIndex,
     setCursorRow,
-    setDiagnosticsEnabled,
     setEditorFlag,
     setEditorTemplate,
     setEmptyTree,
@@ -3935,13 +3414,6 @@ function createState() {
     setNow,
     setOverflow,
     setPendingRestore,
-    setProblemIndex,
-    setProblemsHeightOverride,
-    setProblemsOpen,
-    setProblemsPosition,
-    setProblemsScrollTop,
-    setProblemsWidthOverride,
-    setProvisioningLanguages,
     setQuitConfirmOpen,
     setRepoRoot,
     setScope,
@@ -3993,7 +3465,6 @@ function createState() {
     toggleFold,
     toggleGap,
     togglePinActiveTab,
-    toggleProblems,
     toggleRegionAtCaret,
     toggleSearchCase,
     toggleSearchGroup,

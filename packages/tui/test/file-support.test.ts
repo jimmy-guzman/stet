@@ -1,11 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
-import { Effect } from "effect";
-
-import { activeServerGates, activeServers, resolveServers } from "@/diagnostics/servers";
 import { resolveFileSupportConfig } from "@/file-support/config";
 import {
   fileIconForPath,
@@ -15,18 +9,12 @@ import {
   snapshotFileSupport,
 } from "@/file-support/registry";
 
-/** The servers a path runs in this repo, read the way a diagnostics run reads them. */
-const activeServersForPath = (path: string, repoRoot: string) =>
-  activeServerGates(repoRoot).pipe(Effect.map((gates) => activeServers(path, gates)));
-
-const serverNames = new Set(Object.keys(resolveServers({}).servers));
-
 function withFileSupport(
   raw: Parameters<typeof resolveFileSupportConfig>[0],
   run: (issues: string[]) => void | Promise<void>,
 ) {
   const snapshot = snapshotFileSupport();
-  const resolved = resolveFileSupportConfig(raw, serverNames);
+  const resolved = resolveFileSupportConfig(raw);
   registerFileSupport(resolved.registry);
   return Promise.resolve(run(resolved.issues)).finally(() => restoreFileSupport(snapshot));
 }
@@ -74,7 +62,6 @@ test("false facets block lower matches independently", async () => {
         private: {
           filenames: ["private.ts"],
           icon: false,
-          language: false,
           syntax: false,
         },
       },
@@ -83,7 +70,6 @@ test("false facets block lower matches independently", async () => {
       expect(issues).toEqual([]);
       const support = fileSupportForPath("src/private.ts");
       expect(support.icon).toBe("file");
-      expect(support.language).toBeUndefined();
       expect(support.syntax).toBe("text");
     },
   );
@@ -118,16 +104,12 @@ test("built-in extension and glob matching ignores case across facets", async ()
   await withFileSupport({}, (issues) => {
     expect(issues).toEqual([]);
     // An uppercase extension (a Windows-authored or unconventionally cased file) resolves the same as
-    // Lowercase: the icon and the LSP language profile agree, instead of the icon matching while the
-    // Profile misses and silently drops diagnostics.
-    const tsx = fileSupportForPath("src/Component.TSX");
-    expect(tsx.icon).toBe("react");
-    expect(tsx.language?.languageId).toBe("typescriptreact");
-    // A Vue single-file component resolves every facet: the vue icon and profile, and the vue
-    // Grammar through filename inference (no syntax association is needed for it).
+    // Lowercase.
+    expect(fileSupportForPath("src/Component.TSX").icon).toBe("react");
+    // A Vue single-file component resolves both facets: the vue icon, and the vue grammar through
+    // Filename inference (no syntax association is needed for it).
     const vue = fileSupportForPath("src/App.vue");
     expect(vue.icon).toBe("vue");
-    expect(vue.language?.languageId).toBe("vue");
     expect(vue.syntax).toBe("vue");
     // A glob built-in is case-insensitive too: `*.gradle` still resolves groovy syntax.
     expect(fileSupportForPath("build.GRADLE").syntax).toBe("groovy");
@@ -138,53 +120,29 @@ test("invalid overrides retain built-ins while an invalid reference drops only i
   await withFileSupport(
     {
       files: {
-        "language-typescript": { extensions: [".ts"] },
+        "icon-typescript": { extensions: [".ts"] },
         "probe": { extensions: ["probe"], icon: "missing", syntax: "json" },
       },
-      languages: { typescript: { servers: "typescript" } },
     },
     (issues) => {
-      expect(issues).toContain('language "typescript": servers must be an array');
       expect(issues).toContain(
-        'file "language-typescript": extensions must be bare suffixes without a leading dot',
+        'file "icon-typescript": extensions must be bare suffixes without a leading dot',
       );
       expect(issues).toContain('file "probe": unknown icon "missing"; dropping the icon facet');
-      expect(fileSupportForPath("src/a.ts").language?.languageId).toBe("typescript");
+      expect(fileSupportForPath("src/a.ts").icon).toBe("typescript");
       expect(fileSupportForPath("src/a.probe").syntax).toBe("json");
       expect(fileSupportForPath("src/a.probe").icon).toBe("file");
     },
   );
 });
 
-test("language entries distinguish default gates, unconditional servers, and firstOf", async () => {
-  const repo = mkdtempSync(join(tmpdir(), "stet-first-of-"));
-  const biomeRepo = mkdtempSync(join(tmpdir(), "stet-first-of-"));
-  writeFileSync(join(biomeRepo, "biome.json"), "{}");
-  try {
-    await withFileSupport(
-      {
-        files: {
-          fallback: { extensions: ["fallback"], language: "fallback" },
-          forced: { extensions: ["forced"], language: "forced" },
-        },
-        languages: {
-          fallback: { languageId: "fallback", servers: [{ firstOf: ["biome", "typescript"] }] },
-          forced: { languageId: "forced", servers: [{ server: "biome" }] },
-        },
-      },
-      async (issues) => {
-        expect(issues).toEqual([]);
-        expect(await Effect.runPromise(activeServersForPath("a.fallback", repo))).toEqual([
-          "typescript",
-        ]);
-        expect(await Effect.runPromise(activeServersForPath("a.forced", repo))).toEqual(["biome"]);
-        expect(await Effect.runPromise(activeServersForPath("a.fallback", biomeRepo))).toEqual([
-          "biome",
-        ]);
-      },
-    );
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-    rmSync(biomeRepo, { force: true, recursive: true });
-  }
+test("a removed language facet is reported and the rest of its entry still applies", async () => {
+  await withFileSupport(
+    { files: { probe: { extensions: ["probe"], icon: "json", language: "json", syntax: "yaml" } } },
+    (issues) => {
+      expect(issues).toEqual(['file "probe": "language" was removed']);
+      expect(fileSupportForPath("a.probe").syntax).toBe("yaml");
+      expect(fileSupportForPath("a.probe").icon).toBe("json");
+    },
+  );
 });

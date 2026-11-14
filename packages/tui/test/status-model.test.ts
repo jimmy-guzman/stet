@@ -1,19 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  buildStatusBarModel,
-  clearAlertSource,
-  latestAlert,
-  raiseAlert,
-  restateAlert,
-} from "@/status/model";
+import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "@/status/model";
 import type { StatusBarModelInput } from "@/status/model";
 
 const baseInput = {
   activity: undefined,
   alert: undefined,
-  backgroundProgress: undefined,
-  contextualFinding: undefined,
   foregroundProgress: undefined,
   guidance: "? help · q quit",
   notification: undefined,
@@ -40,10 +32,10 @@ describe("status bar guidance", () => {
   });
 
   test("live content displaces guidance, and clearing it restores guidance", () => {
-    const busy = buildStatusBarModel({ ...baseInput, backgroundProgress: "running diagnostics…" });
-    expect(busy).toMatchObject({ kind: "message", message: "running diagnostics…" });
+    const busy = buildStatusBarModel({ ...baseInput, foregroundProgress: "switching…" });
+    expect(busy).toMatchObject({ kind: "message", message: "switching…" });
 
-    // The model is a pure function of its inputs, so "the run finished" is just the absent input.
+    // The model is a pure function of its inputs, so "the switch finished" is the absent input.
     expect(buildStatusBarModel(baseInput)).toMatchObject({ kind: "guidance" });
   });
 });
@@ -65,28 +57,14 @@ describe("status bar priority", () => {
     });
   });
 
-  test("a notification outranks the caret finding", () => {
+  test("a notification outranks a persistent alert", () => {
     expect(
       buildStatusBarModel({
         ...baseInput,
-        contextualFinding: { level: "warning", text: "diagnostics: unused value" },
+        alert: { level: "error", source: "worktree-switch", text: "missing worktree" },
         notification: { level: "success", text: "copied src/state.ts" },
       }),
     ).toMatchObject({ category: "notification", level: "success", message: "copied src/state.ts" });
-  });
-
-  test("the caret finding outranks a persistent alert", () => {
-    expect(
-      buildStatusBarModel({
-        ...baseInput,
-        alert: { level: "error", source: "diagnostics", text: "tsc failed: Cannot find module" },
-        contextualFinding: { level: "warning", text: "diagnostics: unused value" },
-      }),
-    ).toMatchObject({
-      category: "contextual-inspection",
-      level: "warning",
-      message: "diagnostics: unused value",
-    });
   });
 
   // The reason the alert tier sits above provenance: a real problem must never be hidden behind
@@ -95,32 +73,24 @@ describe("status bar priority", () => {
     expect(
       buildStatusBarModel({
         ...baseInput,
-        alert: { level: "error", source: "diagnostics", text: "tsc failed: Cannot find module" },
+        alert: { level: "error", source: "worktree-switch", text: "missing worktree" },
         provenance,
       }),
     ).toMatchObject({
       category: "persistent-alert",
       level: "error",
-      message: "tsc failed: Cannot find module",
+      message: "missing worktree",
     });
   });
 
-  // The user turned the rail on deliberately; a routine run must not evict what they asked to see.
-  test("provenance outranks background progress", () => {
-    expect(
-      buildStatusBarModel({ ...baseInput, backgroundProgress: "running diagnostics…", provenance }),
-    ).toEqual({
+  // The user turned the rail on deliberately; ambient activity must not evict what they asked to see.
+  test("provenance outranks recent activity", () => {
+    expect(buildStatusBarModel({ ...baseInput, activity, provenance })).toEqual({
       band: "session",
       category: "contextual-inspection",
       kind: "provenance",
       text: "Jimmy · now · fix status",
     });
-  });
-
-  test("background progress outranks recent activity", () => {
-    expect(
-      buildStatusBarModel({ ...baseInput, activity, backgroundProgress: "running diagnostics…" }),
-    ).toMatchObject({ category: "background-progress", message: "running diagnostics…" });
   });
 
   test("recent activity outranks guidance", () => {
@@ -133,7 +103,6 @@ describe("status bar priority", () => {
 });
 
 describe("status bar alerts", () => {
-  const diagnostics = { level: "error", source: "diagnostics", text: "tsc failed" } as const;
   const switchFail = {
     level: "warning",
     source: "worktree-switch",
@@ -145,15 +114,6 @@ describe("status bar alerts", () => {
     text: "couldn't list worktrees",
   } as const;
 
-  // The whole reason alerts carry a source. One untyped channel meant a diagnostics run starting
-  // Up wiped a worktree failure that nothing had resolved, and vice versa.
-  test("clearing one source leaves an unrelated source's alert standing", () => {
-    const raised = raiseAlert(raiseAlert([], switchFail), diagnostics);
-
-    expect(clearAlertSource(raised, "diagnostics")).toEqual([switchFail]);
-    expect(clearAlertSource(raised, "worktree-switch")).toEqual([diagnostics]);
-  });
-
   // A failed list and a failed switch are separate lifecycles: reopening the picker (which clears
   // The list source) must not retire an unretried switch error.
   test("clearing the list source leaves a switch failure standing", () => {
@@ -163,40 +123,26 @@ describe("status bar alerts", () => {
   });
 
   test("clearing a source with no alert is a no-op", () => {
-    expect(clearAlertSource([switchFail], "diagnostics")).toEqual([switchFail]);
+    expect(clearAlertSource([switchFail], "worktree-list")).toEqual([switchFail]);
   });
 
   test("a source raising again replaces its own alert rather than stacking", () => {
-    const raised = raiseAlert([diagnostics], { ...diagnostics, text: "ruff failed" });
+    const raised = raiseAlert([listFail], { ...listFail, text: "git failed" });
 
-    expect(raised).toEqual([{ ...diagnostics, text: "ruff failed" }]);
+    expect(raised).toEqual([{ ...listFail, text: "git failed" }]);
   });
 
-  // One row cannot rank a worktree failure against a diagnostics one, so recency decides: the
-  // Problem the user just provoked is the one they are waiting on.
+  // One row cannot rank one failure against another, so recency decides: the problem the user
+  // Just provoked is the one they are waiting on.
   test("the newest alert is the one the bar shows", () => {
-    expect(latestAlert(raiseAlert(raiseAlert([], switchFail), diagnostics))).toEqual(diagnostics);
-    expect(latestAlert(raiseAlert(raiseAlert([], diagnostics), switchFail))).toEqual(switchFail);
+    expect(latestAlert(raiseAlert(raiseAlert([], switchFail), listFail))).toEqual(listFail);
+    expect(latestAlert(raiseAlert(raiseAlert([], listFail), switchFail))).toEqual(switchFail);
   });
 
   test("a re-raised source becomes the newest", () => {
-    const raised = raiseAlert(raiseAlert([], diagnostics), switchFail);
+    const raised = raiseAlert(raiseAlert([], listFail), switchFail);
 
-    expect(latestAlert(raiseAlert(raised, diagnostics))).toEqual(diagnostics);
-  });
-
-  // Restating a persisting condition keeps its old recency, so a background diagnostics re-check
-  // Cannot leapfrog a worktree error the user provoked more recently.
-  test("restating an alert returns it to the oldest slot, so a fresher alert still shows", () => {
-    const raised = raiseAlert(raiseAlert([], diagnostics), switchFail);
-
-    const restated = restateAlert(raised, { ...diagnostics, text: "tsc failed again" });
-    expect(restated).toEqual([{ ...diagnostics, text: "tsc failed again" }, switchFail]);
-    expect(latestAlert(restated)).toEqual(switchFail);
-  });
-
-  test("restating with no fresher alert still shows the restated one", () => {
-    expect(latestAlert(restateAlert([diagnostics], diagnostics))).toEqual(diagnostics);
+    expect(latestAlert(raiseAlert(raised, listFail))).toEqual(listFail);
   });
 
   test("no alerts reads as none", () => {
@@ -210,8 +156,8 @@ describe("status bar fitting", () => {
       ...baseInput,
       alert: {
         level: "error",
-        source: "diagnostics",
-        text: "tsc failed: Cannot find module 'effect' and several other things besides",
+        source: "worktree-list",
+        text: "couldn't list worktrees: git exited with a long and winding explanation",
       },
       width: 30,
     });
@@ -221,7 +167,7 @@ describe("status bar fitting", () => {
     }
     // The glyph, its space, and both paddings all come out of the same 30 cells.
     expect(Bun.stringWidth(`✖ ${model.message}`)).toBeLessThanOrEqual(28);
-    expect(model.message.startsWith("tsc failed")).toBe(true);
+    expect(model.message.startsWith("couldn't list")).toBe(true);
   });
 
   test("a long activity path truncates from the front, keeping the filename", () => {

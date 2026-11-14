@@ -38,7 +38,6 @@ function diffScrollBox(node: Renderable) {
 
 function longFileToggleFixture(prefix: string) {
   const lines = Array.from({ length: 120 }, (_, index) => `const line_${index + 1} = ${index + 1}`);
-  // Pin the checkers so binaries on the runner's PATH cannot lint the fixture.
   const repoRoot = createFixtureRepo(prefix, {
     "long.ts": `${lines.join("\n")}\n`,
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,

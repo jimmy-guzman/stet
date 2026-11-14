@@ -7,7 +7,7 @@
  * `context` is where the keymap consults the binding: `global` runs before the pane tails, so a
  * combo bound in `global` shadows the same combo in any pane.
  */
-export type KeyContext = "global" | "problems" | "tree" | "viewer";
+export type KeyContext = "global" | "tree" | "viewer";
 
 export const keyActions = [
   { combos: ["ctrl-p"], context: "global", id: "go-to-file" },
@@ -15,7 +15,6 @@ export const keyActions = [
   { combos: ["/"], context: "global", id: "find" },
   { combos: ["q"], context: "global", id: "quit" },
   { combos: ["tab"], context: "global", id: "switch-pane" },
-  { combos: ["p"], context: "global", id: "problems" },
   { combos: ["ctrl-b"], context: "global", id: "toggle-sidebar" },
   { combos: ["]"], context: "global", id: "grow-pane" },
   { combos: ["["], context: "global", id: "shrink-pane" },
@@ -39,9 +38,6 @@ export const keyActions = [
   { combos: [">"], context: "global", id: "forward" },
   { combos: ["Shift+F10"], context: "global", id: "context-menu" },
   { combos: ["v"], context: "global", id: "toggle-view" },
-  { combos: ["n"], context: "global", id: "next-finding" },
-  { combos: ["r"], context: "global", id: "run-checks" },
-  { combos: ["R"], context: "global", id: "restart-servers" },
   { combos: ["f"], context: "global", id: "load-full" },
   { combos: ["e"], context: "global", id: "open-editor" },
   { combos: ["O"], context: "global", id: "open-external" },
@@ -65,9 +61,6 @@ export const keyActions = [
   { combos: ["l", "→"], context: "tree", id: "expand" },
   { combos: ["h", "←"], context: "tree", id: "collapse" },
   { combos: ["enter"], context: "tree", id: "open" },
-  { combos: ["j", "↓"], context: "problems", id: "problem-down" },
-  { combos: ["k", "↑"], context: "problems", id: "problem-up" },
-  { combos: ["enter"], context: "problems", id: "open-problem" },
 ] as const satisfies readonly {
   combos: readonly [string, ...string[]];
   context: KeyContext;

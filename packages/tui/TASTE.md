@@ -43,7 +43,7 @@ The rules are stack-agnostic. Where one is specific to a graphical or web platfo
 - Separate with space before reaching for borders or boxes. Proximity groups; lines clutter.
 - Align everything to the cell grid. Optical nudges are allowed, random offsets are not.
 - Keep rhythm: the gap between related items is smaller than the gap between groups.
-- Match density to the task. Dense for the tree and problems list, calmer for overlays. Do not mix the two in one surface.
+- Match density to the task. Dense for the tree and search results, calmer for overlays. Do not mix the two in one surface.
 - Keep chrome consistent: the overlay family shares one box, one width, one footer hint.
 
 ## 4. Motion
@@ -70,7 +70,7 @@ The rules are stack-agnostic. Where one is specific to a graphical or web platfo
 ## 6. Performance
 
 - Performance is part of the design. A slow interface is an ugly interface.
-- Budget the critical path. The first interaction should feel immediate; the git-backed tree renders before any checker resolves.
+- Budget the critical path. The first interaction should feel immediate; the git-backed tree renders before anything heavier (highlighting, provenance) resolves.
 - Stay within the frame budget or do not animate. Drop the effect before you ship jank.
 - Reserve space for async content. No layout shift.
 - Render only what is visible plus a small overscan; window long content rather than building every row.

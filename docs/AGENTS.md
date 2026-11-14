@@ -27,7 +27,7 @@ Check the capture against the sentence next to it, not just against the app. A s
 
 The mechanics:
 
-- Screenshots are generated, never hand-captured: `bun run screenshots` from the repo root drives the real binary through VHS (`packages/tui/script/screenshots.ts`). Pass names to shoot a subset, e.g. `bun run screenshots find problems`. Adding one means adding an entry to that file's `screens` array; do not drop a PNG into `public/screenshots/` by hand.
+- Screenshots are generated, never hand-captured: `bun run screenshots` from the repo root drives the real binary through VHS (`packages/tui/script/screenshots.ts`). Pass names to shoot a subset, e.g. `bun run screenshots find tabs`. Adding one means adding an entry to that file's `screens` array; do not drop a PNG into `public/screenshots/` by hand.
 - Capture against a clean checkout, or point `STET_SCREENSHOT_REPO` at one, since uncommitted files show up in the captured tree and changed count.
 - They live in `public/screenshots/` as lowercase kebab-case PNGs named for their screen, and embed as plain markdown images. A custom component would bypass `markdownImage` in `lib/llm-image.ts` and drop the image from `/llms.txt` and the `.md` routes.
 - Alt text is sentence case, describes the state captured, and never starts with "Screenshot of". Do not quote a number the capture produces (a fold marker's line count), which the next regeneration invalidates.
@@ -54,22 +54,22 @@ Where generating the fact is too heavy for a guard, such as the language matrix'
 - **One owner per fact.** A fact that can be enumerated from code lives on one page; every other page links to that owner instead of restating it. Re-enumerating is how copies drift, and it already happened: the language matrix carried Rust and Go but never Python until an audit caught it.
 - **Update the owner when its code changes.** A change to a `Driven by` module below must update the page that owns the fact. Nothing enforces this, so it is a review-time responsibility, named in the repo-wide docs rule in `packages/tui/AGENTS.md`.
 
-| Fact                                                                 | Owner page                                                       | Driven by                                                                                                                      |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Language and diagnostics matrix, per-language detail                 | `docs/content/docs/reference/languages.mdx`                      | `packages/tui/src/file-support/builtins.ts`, `packages/tui/src/diagnostics/servers.ts`, `packages/tui/src/diagnostics/when.ts` |
-| Config keys, environment variables, editor / theme / schema settings | `docs/content/docs/reference/configuration.mdx`                  | `packages/tui/src/config/schema.ts`, `packages/tui/src/editor/reference.ts`                                                    |
-| Keybindings                                                          | `docs/content/docs/reference/keybindings.mdx` (`GENERATED-KEYS`) | `packages/tui/src/help/keys.ts`, `packages/tui/src/keys/actions.ts`, then `bun run gen:keys`                                   |
-| Install, usage, flags, requirements                                  | `docs/content/docs/index.mdx`                                    | `packages/tui/src/cli.ts`                                                                                                      |
-| Pane focus, resize, docking, zoom, and their minimums and defaults   | `docs/content/docs/guides/panes-and-layout.mdx`                  | `packages/tui/src/layout/regions.ts`, the pane actions in `packages/tui/src/state.ts`                                          |
+| Fact                                                               | Owner page                                                       | Driven by                                                                                    |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Language support: syntax, folding, icons                           | `docs/content/docs/reference/languages.mdx`                      | `packages/tui/src/file-support/builtins.ts`, `packages/tui/src/diff/regions.ts`              |
+| Config keys, environment variables, editor / theme settings        | `docs/content/docs/reference/configuration.mdx`                  | `packages/tui/src/config/schema.ts`, `packages/tui/src/editor/reference.ts`                  |
+| Keybindings                                                        | `docs/content/docs/reference/keybindings.mdx` (`GENERATED-KEYS`) | `packages/tui/src/help/keys.ts`, `packages/tui/src/keys/actions.ts`, then `bun run gen:keys` |
+| Install, usage, flags, requirements                                | `docs/content/docs/index.mdx`                                    | `packages/tui/src/cli.ts`                                                                    |
+| Pane focus, resize, docking, zoom, and their minimums and defaults | `docs/content/docs/guides/panes-and-layout.mdx`                  | `packages/tui/src/layout/regions.ts`, the pane actions in `packages/tui/src/state.ts`        |
 
 ### Coverage
 
 Not every gap is a page. Per the self-explaining-interface standard above, a gap can be closed in the UI instead. What exists and is maintained, and the gaps an audit found; check a box when a gap is closed in a page or in-app, and add a row when one is filled or found.
 
 - [x] Getting started (`index.mdx`)
-- [x] Guides: panes & layout, reading files & diffs, search & navigation, diagnostics, scopes & worktrees, themes
+- [x] Guides: panes & layout, reading files & diffs, search & navigation, scopes & worktrees, themes
 - [x] Reference: keybindings, configuration, languages
-- [x] The tree and diagnostics marks (change kinds `M`/`A`/`D`/`R`/`U`, badges, recency, the provenance rail): explained in-app by the `?` legend, not a page (#331)
+- [x] The tree marks (change kinds `M`/`A`/`D`/`R`/`U`, stage colors, recency, the provenance rail): explained in-app by the `?` legend, not a page (#331)
 - [x] The panes themselves (focus, resize, docking, zoom): `guides/panes-and-layout.mdx`
 - [ ] The rest of the interface: the status bar tiers and the header (a short guide, or more in-app cues)
 - [ ] Guide: working alongside an agent (the loop, live refresh and the safety poll, the non-goals contract)

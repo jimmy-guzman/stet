@@ -89,9 +89,8 @@ function spansAt(spans: RenderSpan[][], lines: string[], index: number): RenderS
 /**
  * Build the unified row stream from `@pierre/diffs` metadata plus the flattened per-line spans
  * (index-aligned to `meta.additionLines`/`deletionLines`). Line rows carry a contiguous `navIndex`
- * so the cursor, diagnostics, and find can index navigable lines exactly as the old parsed-patch
- * model did. Body (line) rows are capped at `maxLines` unless `full`, mirroring the previous
- * viewer.
+ * so the cursor and find can index navigable lines exactly as the old parsed-patch model did. Body
+ * (line) rows are capped at `maxLines` unless `full`, mirroring the previous viewer.
  */
 export function buildDiffRows(
   meta: DiffMetaInput,

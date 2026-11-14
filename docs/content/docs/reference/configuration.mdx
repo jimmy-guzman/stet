@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Configure features, themes, editors, file associations, icons, and language servers.
+description: Configure features, themes, editors, file associations, and icons.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -37,34 +37,26 @@ here is optional and shown with its default:
   "icons": { "enabled": true }, // Nerd Font file-type icons
   "viewer": { "wrap": false }, // wrap long lines instead of scrolling
   "sidebar": { "open": true, "changesOnly": false, "position": "left" }, // sizes default to the layout
-  "problems": { "open": false, "position": "bottom" }, // sizes default to the layout
   "provenance": { "enabled": false }, // the per-line provenance rail
-  "diagnostics": { "enabled": true, "download": true }, // LSP diagnostics
   "update": { "check": true }, // background release check at launch
   "search": { "regex": false, "caseSensitive": false, "scope": "changed" },
 }
 ```
 
-| Key                    | Default     | Effect                                                                                                                   |
-| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                                     |
-| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there)                                    |
-| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                                         |
-| `sidebar.position`     | `"left"`    | which edge the file tree docks to: `left`, `top`, `right`, or `bottom` (`d` cycles clockwise)                            |
-| `sidebar.width`        | responsive  | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets)                   |
-| `sidebar.height`       | `10`        | tree height in rows while docked top or bottom; each axis keeps its own size                                             |
-| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                                          |
-| `problems.open`        | `false`     | show the problems panel at startup (`p` toggles; unlike `p`, this does not take focus)                                   |
-| `problems.position`    | `"bottom"`  | which edge the problems panel docks to (`d` cycles clockwise while it is focused)                                        |
-| `problems.height`      | `10`        | panel height in rows while docked top or bottom, clamped to the terminal (`[` / `]` resize it while focused, `\` resets) |
-| `problems.width`       | responsive  | panel width in cells while docked left or right; each axis keeps its own size                                            |
-| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                                         |
-| `diagnostics.enabled`  | `true`      | `false` runs no language servers; the problems panel reads `diagnostics disabled`                                        |
-| `diagnostics.download` | `true`      | auto-download a missing language server (`--no-lsp-download` / `STET_NO_LSP_DOWNLOAD` force off for a run)               |
-| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                                             |
-| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                                   |
-| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                                  |
-| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                                        |
+| Key                    | Default     | Effect                                                                                                 |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                   |
+| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there)                  |
+| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                       |
+| `sidebar.position`     | `"left"`    | which edge the file tree docks to: `left`, `top`, `right`, or `bottom` (`d` cycles clockwise)          |
+| `sidebar.width`        | responsive  | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets) |
+| `sidebar.height`       | `10`        | tree height in rows while docked top or bottom; each axis keeps its own size                           |
+| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                        |
+| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                       |
+| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                           |
+| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                 |
+| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                |
+| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                      |
 
 A CLI flag wins over its config key for the run it was passed on.
 
@@ -74,8 +66,7 @@ an action. The ids, the combo grammar, and the fixed exceptions live in the
 [keybindings reference](/docs/reference/keybindings#custom-keybindings).
 
 You never have to edit the file by hand for these: press `ctrl-s` anywhere to
-save your current session settings (theme, icons, wrap, sidebar, problems panel,
-changes-only, provenance, search toggles, plus any `--editor`/`--ide` passed this run) back
+save your current session settings (theme, icons, wrap, sidebar, changes-only, provenance, search toggles, plus any `--editor`/`--ide` passed this run) back
 to the config. Only keys that differ from the file are written, as targeted
 edits that keep your comments, and the notice names what changed; an editor
 resolved from `$EDITOR`-style environment fallbacks is never written, only a
@@ -163,62 +154,31 @@ appearance's half is rewritten, and saving `auto` removes the `theme` key.
 
 ## File support
 
-File support is four named registries layered over stet's built-ins:
+File support is two named registries layered over stet's built-ins:
 
-- `files` matches paths and selects syntax, icon, and language facets.
+- `files` matches paths and selects syntax and icon facets.
 - `icons.glyphs` maps icon names to Nerd Font glyphs.
-- `languages` maps profile names to an LSP `languageId` and ordered server entries.
-- `diagnostics.servers` maps server names to commands, repository conditions, initialization and
-  settings data, and static capability hints.
 
 Each registry has its own entry shape, but they share the same named layering behavior. An object
 with an existing name inherits fields it does not set, a new name adds an entry, and `false` removes
 an entry. Arrays replace inherited arrays. Icon entries are glyph strings rather than objects. An
-invalid entry reports a notice and leaves its built-in unchanged; an unknown icon, language, or
-syntax referenced by a file association drops only that facet.
+invalid entry reports a notice and leaves its built-in unchanged; an unknown icon or syntax
+referenced by a file association drops only that facet.
 
-### Add a language
+### Add a file type
 
-The four registries keep each concern reusable. This complete Lua example adds a command, an LSP
-profile, a file association, and an icon:
+This example highlights `.lua` files with the Lua grammar and gives them their own icon:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
-  "diagnostics": {
-    "servers": {
-      "lua": {
-        "command": ["lua-language-server"],
-      },
-    },
-  },
-  "languages": {
-    "lua": { "languageId": "lua", "servers": ["lua"] },
-  },
   "icons": {
     "glyphs": { "lua": "\ue620" },
   },
   "files": {
-    "lua": { "extensions": ["lua"], "syntax": "lua", "icon": "lua", "language": "lua" },
+    "lua": { "extensions": ["lua"], "syntax": "lua", "icon": "lua" },
   },
 }
 ```
-
-A configured command resolves from the repo's `node_modules/.bin`, then `PATH`. Set `discovery` to
-`"python"` to check the active `$VIRTUAL_ENV/bin` and the repo's `.venv/bin` before those defaults:
-
-```jsonc title="~/.config/stet/config.jsonc"
-{
-  "diagnostics": {
-    "servers": {
-      "pylsp": { "command": ["pylsp"], "discovery": "python" },
-    },
-  },
-}
-```
-
-User commands are never auto-provisioned. Overriding a built-in server's `command` also drops its
-trusted built-in provisioning definition, while its discovery strategy stays inherited unless you
-set `discovery` to `false`.
 
 ### Match files
 
@@ -226,12 +186,11 @@ A file association accepts `filenames`, `globs`, `extensions`, and `dotfiles`. E
 suffixes without a leading dot. A glob containing `/` matches the full repo-relative POSIX path; any
 other glob matches only the basename. Matching is case-insensitive unless `caseSensitive` is `true`.
 
-Each association may set `syntax`, `icon`, and `language`. Built-in and user associations
+Each association may set `syntax` and `icon`. Built-in and user associations
 participate in the same cascade, and each facet resolves independently by specificity: exact
 filename, glob, extension, then dotfile fallback. At the same specificity, a later association wins;
 user entries are registered after built-ins. Setting a facet to `false` blocks lower matches for
-that facet: syntax becomes plain text, icon becomes the generic file glyph, or LSP support is
-disabled.
+that facet: syntax becomes plain text, or icon becomes the generic file glyph.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -240,76 +199,18 @@ disabled.
       "globs": ["generated/**/*.ts"],
       "syntax": "typescript",
       "icon": false,
-      "language": false,
     },
     "docker-compose": {
       "filenames": ["compose.yaml", "compose.yml"],
       "syntax": "yaml",
       "icon": "docker",
-      "language": "yaml",
     },
   },
 }
 ```
 
 Without a matching syntax facet, stet asks its bundled filename inference for a Shiki grammar.
-Bare dotfiles do not masquerade as extensions. Without an icon match it uses `file`; without a
-language match it starts no server.
-
-### Configure servers and selection
-
-A server accepts `command`, `discovery`, `when`, `initializationOptions`, and `settings`.
-`{repoRoot}` and `{repoUri}` placeholders in initialization and settings string values are replaced
-per repository. A server runs wherever its language profile selects it, and its initialize reply
-decides whether it answers pull diagnostics or only pushes.
-
-`when` is declarative data, never a shell command. It accepts a repo-relative path (a file or a
-directory, such as `node_modules/vue`), a manifest key, or a Python dependency declaration. Relative
-paths may include parent-directory segments; absolute paths are rejected. An array means any
-condition may match:
-
-```jsonc
-"when": [
-  "deno.json",
-  "deno.jsonc",
-  { "file": "package.json", "key": ["devDependencies", "some-server"] },
-  { "file": "pyproject.toml", "dependency": "some-server" },
-]
-```
-
-A bare server name in a language uses that server's default `when`. `{ "server": "name" }` is
-unconditional, and adding `when` to that object supplies an entry-specific condition. A `firstOf`
-group selects its first eligible candidate. This lets one profile express a repository-selected
-primary server without duplicating file associations:
-
-```jsonc title="~/.config/stet/config.jsonc"
-{
-  "diagnostics": {
-    "servers": {
-      "deno": {
-        "command": ["deno", "lsp"],
-        "when": ["deno.json", "deno.jsonc"],
-      },
-    },
-  },
-  "languages": {
-    "typescript": {
-      "servers": [{ "firstOf": ["deno", "typescript"] }, "oxlint", "biome"],
-    },
-  },
-}
-```
-
-Python uses the same grammar: `[{ "firstOf": ["ty", "basedpyright"] }, "ruff"]` prefers ty where
-the repository opted into it and falls back to basedpyright. Reuse that list to keep detection, or
-write `{ "server": "ty" }` or `{ "server": "basedpyright" }` to force one checker.
-
-Set `discovery` or `when` to `false` on a server override to remove that built-in default. Set an
-entire server, language, icon, or file association to `false` to disable it.
-
-stet reads commands only from your global config. It never reads a server command from the
-repository being inspected, although a configured executable may resolve from that repository's
-`.venv/bin` or `node_modules/.bin`.
+Bare dotfiles do not masquerade as extensions. Without an icon match it uses `file`.
 
 <Callout>
   An entry that does not validate is reported in a notice; the rest of the config still applies.
@@ -317,38 +218,13 @@ repository being inspected, although a configured executable may resolve from th
   association drop only the affected facet.
 </Callout>
 
-## Schemas
-
-`schemas` associates a file-match pattern with a JSON Schema, for both the JSON and YAML servers
-(each applies the patterns that match the files it opens). `package.json`, `tsconfig.json`,
-`tsconfig.*.json`, and `jsconfig.json` are built in for JSON, whose server ships no catalog of its
-own; YAML additionally validates well-known files through its own SchemaStore integration with no
-configuration. Map a pattern to a schema URL, a list of URLs, or `false` to disable a built-in:
-
-```jsonc title="~/.config/stet/config.jsonc"
-{
-  "schemas": {
-    "*.deploy.json": "https://example.com/deploy.schema.json",
-    "values.yaml": ["https://example.com/a.json", "https://example.com/b.json"],
-    "app.config.json": "./schemas/app.schema.json",
-    "tsconfig.json": false,
-  },
-}
-```
-
-A relative or bare path resolves to a `file://` URL under the repository root, so a schema stored in
-the repo is read locally and works offline; an `http(s)` URL is fetched over the network.
-
 ## Environment variables
 
-| Variable               | Effect                                                                                                            |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `STET_EDITOR`          | fallback command template for the `e` key                                                                         |
-| `STET_IDE`             | fallback command template for the `o` key                                                                         |
-| `EDITOR` / `VISUAL`    | consulted after the `STET_*` variables; the two keys read them differently, see [Editor and IDE](#editor-and-ide) |
-| `STET_NO_LSP_DOWNLOAD` | do not auto-download a missing language server (same as `--no-lsp-download`)                                      |
-| `VIRTUAL_ENV`          | the active virtualenv, checked first when a server uses `"python"` discovery                                      |
-| `NO_COLOR`             | any non-empty value starts stet on the monochrome `mono-dark` / `mono-light` themes instead of the configured one |
-| `FORCE_COLOR`          | overrides `NO_COLOR`; `0` or `false` force monochrome, any other value keeps the configured theme                 |
-| `XDG_CONFIG_HOME`      | base directory for the config file                                                                                |
-| `XDG_CACHE_HOME`       | base directory for the language-server cache (`$XDG_CACHE_HOME/stet/lsp`, otherwise `~/.cache/stet/lsp`)          |
+| Variable            | Effect                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `STET_EDITOR`       | fallback command template for the `e` key                                                                         |
+| `STET_IDE`          | fallback command template for the `o` key                                                                         |
+| `EDITOR` / `VISUAL` | consulted after the `STET_*` variables; the two keys read them differently, see [Editor and IDE](#editor-and-ide) |
+| `NO_COLOR`          | any non-empty value starts stet on the monochrome `mono-dark` / `mono-light` themes instead of the configured one |
+| `FORCE_COLOR`       | overrides `NO_COLOR`; `0` or `false` force monochrome, any other value keeps the configured theme                 |
+| `XDG_CONFIG_HOME`   | base directory for the config file                                                                                |

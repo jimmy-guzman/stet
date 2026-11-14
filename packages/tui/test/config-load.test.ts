@@ -109,15 +109,12 @@ describe("loadConfigText", () => {
 
   test("registry entries load raw; their resolvers validate them later", () => {
     const { config, issues } = loadConfigText(
-      `{ "files": { "lua": { "extensions": ["lua"], "language": "lua" } }, "languages": { "lua": { "languageId": "lua", "servers": ["lua"] } }, "diagnostics": { "servers": { "lua": { "command": ["lua-language-server"] } } } }`,
+      `{ "files": { "lua": { "extensions": ["lua"], "syntax": "lua" } }, "icons": { "glyphs": { "lua": "" } } }`,
     );
 
     expect(issues).toEqual([]);
     expect(config.files).toMatchObject({ lua: { extensions: ["lua"] } });
-    expect(config.languages).toMatchObject({ lua: { languageId: "lua" } });
-    expect(config.diagnostics?.servers).toMatchObject({
-      lua: { command: ["lua-language-server"] },
-    });
+    expect(config.icons?.glyphs).toMatchObject({ lua: "" });
   });
 
   test("feature sections decode", () => {
@@ -126,7 +123,6 @@ describe("loadConfigText", () => {
       "viewer": { "wrap": true },
       "sidebar": { "open": false, "width": 40, "changesOnly": true },
       "provenance": { "enabled": true },
-      "diagnostics": { "enabled": false, "download": false },
       "update": { "check": false },
       "search": { "regex": true, "caseSensitive": true, "scope": "repo" }
     }`);
@@ -136,7 +132,6 @@ describe("loadConfigText", () => {
     expect(config.viewer).toEqual({ wrap: true });
     expect(config.sidebar).toEqual({ changesOnly: true, open: false, width: 40 });
     expect(config.provenance).toEqual({ enabled: true });
-    expect(config.diagnostics).toEqual({ download: false, enabled: false });
     expect(config.update).toEqual({ check: false });
     expect(config.search).toEqual({ caseSensitive: true, regex: true, scope: "repo" });
   });
@@ -165,13 +160,24 @@ describe("loadConfigText", () => {
     expect(issues).toHaveLength(1);
   });
 
-  test("the pre-restructure servers key points at its new home", () => {
-    const { config, issues } = loadConfigText(
-      `{ "servers": { "lua": { "command": ["lua-language-server"] } } }`,
-    );
+  test("the removed diagnostics keys are reported as unknown and the rest still loads", () => {
+    const { config, issues } = loadConfigText(`{
+      "diagnostics": { "enabled": false },
+      "languages": {},
+      "problems": { "open": true },
+      "schemas": {},
+      "servers": {},
+      "viewer": { "wrap": true }
+    }`);
 
-    expect(config).toEqual({});
-    expect(issues).toEqual(['config: "servers" moved to "diagnostics.servers"']);
+    expect(config).toEqual({ viewer: { wrap: true } });
+    expect(issues).toEqual([
+      'config: unknown key "diagnostics"',
+      'config: unknown key "languages"',
+      'config: unknown key "problems"',
+      'config: unknown key "schemas"',
+      'config: unknown key "servers"',
+    ]);
   });
 
   test("pre-restructure flat icon glyphs point at icons.glyphs", () => {
@@ -191,27 +197,17 @@ describe("loadConfigText", () => {
     }
 
     const { config, issues } = loadConfigText(
-      `{ "sidebar": { "position": "middle" }, "problems": { "open": true } }`,
+      `{ "sidebar": { "position": "middle" }, "viewer": { "wrap": true } }`,
     );
     expect(issues).toHaveLength(1);
     expect(config.sidebar).toBeUndefined();
-    expect(config.problems).toEqual({ open: true });
+    expect(config.viewer).toEqual({ wrap: true });
   });
 
-  test("problems height must be a positive integer", () => {
-    expect(loadConfigText(`{ "problems": { "height": 0 } }`).issues).toHaveLength(1);
-    expect(loadConfigText(`{ "problems": { "height": 8.5 } }`).issues).toHaveLength(1);
-    expect(loadConfigText(`{ "problems": { "height": 8 } }`).config.problems?.height).toBe(8);
-  });
-
-  test("a bad problems value costs only its own section", () => {
-    const { config, issues } = loadConfigText(
-      `{ "problems": { "open": "yes" }, "sidebar": { "open": false } }`,
-    );
-
-    expect(issues).toHaveLength(1);
-    expect(config.problems).toBeUndefined();
-    expect(config.sidebar).toEqual({ open: false });
+  test("sidebar height must be a positive integer", () => {
+    expect(loadConfigText(`{ "sidebar": { "height": 0 } }`).issues).toHaveLength(1);
+    expect(loadConfigText(`{ "sidebar": { "height": 8.5 } }`).issues).toHaveLength(1);
+    expect(loadConfigText(`{ "sidebar": { "height": 8 } }`).config.sidebar?.height).toBe(8);
   });
 
   test("sidebar width must be a positive integer", () => {

@@ -61,19 +61,17 @@ describe("scope switching", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      // Main runs the initial checks at startup; mirror that here. The `all` scope sees the unstaged
-      // Edit, so a.ts shows a "+1 -1" change indicator.
-      void state.runChecks(model);
+      // The `all` scope sees the unstaged edit, so a.ts shows a "+1 -1" change indicator.
       await settleUntil(
         "all scope shows the unstaged change",
-        (frame) => frame.includes("+1 -1") && !state.checksRunning(),
+        (frame) => frame.includes("+1 -1"),
         5,
         400,
       );
 
       // `s` opens the picker on the active scope (uncommitted, index 0); `j` moves
       // Down to staged (index 1); `return` selects it. Nothing is staged, so the new
-      // Changed set is empty and the recheck runs against it: the change indicator
+      // Changed set is empty: the change indicator
       // Must disappear, which a stale uncommitted-scope frame cannot satisfy.
       mockInput.pressKey("s");
       await settleUntil("scope picker opens", (frame) => frame.includes("switch scope"));
@@ -83,8 +81,7 @@ describe("scope switching", () => {
       mockInput.pressEnter();
       const after = await settleUntil(
         "staged scope drops the unstaged change",
-        (frame) =>
-          frame.includes("staged vs HEAD") && !frame.includes("+1 -1") && !state.checksRunning(),
+        (frame) => frame.includes("staged vs HEAD") && !frame.includes("+1 -1"),
         1,
         400,
       );

@@ -13,7 +13,7 @@ describe("levelColor", () => {
 });
 
 describe("levelGlyph", () => {
-  test("uses the same severity glyphs as the problems panel and tree rows", () => {
+  test("uses the bare severity glyphs", () => {
     expect(levelGlyph("error")).toBe("✖");
     expect(levelGlyph("warning")).toBe("⚠");
     expect(levelGlyph("success")).toBe("✓");

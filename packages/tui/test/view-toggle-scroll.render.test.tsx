@@ -30,15 +30,19 @@ const visibleLineNumbers = (frame: string) =>
 // Is short); find it so the test can read and perturb physical scroll metrics.
 const diffScrollBox = (node: Renderable) => {
   const candidates: ScrollBoxRenderable[] = [];
+
   const walk = (current: Renderable) => {
     if (current instanceof ScrollBoxRenderable) {
       candidates.push(current);
     }
+
     for (const child of current.getChildren()) {
       walk(child);
     }
   };
+
   walk(node);
+
   return candidates.toSorted((a, b) => b.scrollHeight - a.scrollHeight)[0];
 };
 
@@ -47,16 +51,19 @@ const longFileToggleFixture = (prefix: string) => {
     { length: 120 },
     (_, index) => `const line_${index + 1} = ${index + 1}`
   );
+
   const repoRoot = createFixtureRepo(prefix, {
     "long.ts": `${lines.join("\n")}\n`,
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
   });
+
   // Edit a single line near the bottom: the diff is a small hunk low in the file, so
   // The whole-file view is far taller than the diff content it replaces.
   writeFileSync(
     path.join(repoRoot, "long.ts"),
     `${lines.with(109, "const line_110 = 9999").join("\n")}\n`
   );
+
   return repoRoot;
 };
 
@@ -65,11 +72,13 @@ describe("view toggle scroll", () => {
     const repoRoot = longFileToggleFixture("stet-toggle-scroll-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -93,10 +102,13 @@ describe("view toggle scroll", () => {
           if (!current.includes("lines · ln 110")) {
             return false;
           }
+
           const numbers = visibleLineNumbers(current);
+
           return numbers.includes(110) && numbers.length > 20;
         }
       );
+
       expect(visibleLineNumbers(frame)).toContain(110);
 
       const box = diffScrollBox(renderer.root);

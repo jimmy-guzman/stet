@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 
 import type { ChangeKind, StageState } from "@/git/model";
 
@@ -95,12 +95,9 @@ const greyHex = (value: string) =>
  * meaning. Derived from the tokens rather than declared, so any all-grey theme (a user's included)
  * gets the hue-free renders, like the viewer's `+`/`-` change bar, without a flag to remember.
  */
-export const isMonochromeTheme = (theme: Theme) => {
-  const grey = (node: unknown): boolean =>
-    typeof node === "string"
-      ? greyHex(node)
-      : typeof node === "object" &&
-        node !== null &&
-        Object.values(node).every(grey);
-  return grey(theme);
-};
+export const isMonochromeTheme = (theme: Theme) =>
+  Object.values(theme)
+    .flatMap((group) =>
+      Predicate.isString(group) ? [group] : Object.values(group)
+    )
+    .every(greyHex);

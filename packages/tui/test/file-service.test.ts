@@ -6,6 +6,7 @@ import { createFixtureRepo, loadGitShowContent, runGit } from "./helpers";
 
 test("File.content classifies a deleted binary file from git-show as binary", async () => {
   const repo = createFixtureRepo("file-service-binary-", { "keep.txt": "x\n" });
+
   try {
     writeFileSync(
       path.join(repo, "logo.bin"),
@@ -28,6 +29,7 @@ test("File.content decodes a deleted text file from git-show", async () => {
   const repo = createFixtureRepo("file-service-text-", {
     "note.txt": "hello\nworld\n",
   });
+
   try {
     runGit(repo, ["rm", "note.txt"]);
 

@@ -1,3 +1,5 @@
+import { Option, Schema } from "effect";
+
 import { keyActions } from "./actions";
 import type { KeyActionId, KeyContext } from "./actions";
 import { parseCombo } from "./combo";
@@ -15,6 +17,7 @@ export interface KeybindingSet {
 export const defaultKeybindings = (): KeybindingSet => {
   const combos = new Map<KeyActionId, Combo[]>();
   const texts = new Map<KeyActionId, string[]>();
+
   for (const action of keyActions) {
     combos.set(
       action.id,
@@ -24,6 +27,7 @@ export const defaultKeybindings = (): KeybindingSet => {
     );
     texts.set(action.id, [...action.combos]);
   }
+
   return { combos, texts };
 };
 
@@ -49,6 +53,10 @@ const renamedIds = new Map([
   ["shrink-sidebar", "shrink-pane"],
 ]);
 
+const decodeComboTexts = Schema.decodeUnknownOption(
+  Schema.Union([Schema.String, Schema.Array(Schema.String)])
+);
+
 /**
  * Merge `config.keybindings` over the defaults, the registry-resolver way: an unknown action id or
  * an unparseable combo reports an issue and leaves the default in place, and `false` (or an empty
@@ -57,7 +65,7 @@ const renamedIds = new Map([
  * conflict but left as merged: the chain's order decides, and the issue says so.
  */
 export const resolveKeybindings = (
-  raw: Record<string, unknown>
+  raw: Schema.JsonObject
 ): ResolvedKeybindings => {
   const issues: string[] = [];
   const set = defaultKeybindings();
@@ -72,30 +80,32 @@ export const resolveKeybindings = (
       );
       continue;
     }
+
     if (value === false) {
       set.combos.set(id, []);
       set.texts.set(id, []);
       continue;
     }
-    const entries = typeof value === "string" ? [value] : value;
-    if (
-      !Array.isArray(entries) ||
-      entries.some((text) => typeof text !== "string")
-    ) {
+
+    const decoded = decodeComboTexts(value);
+
+    if (Option.isNone(decoded)) {
       issues.push(
         `keybinding "${id}": must be a combo, a list of combos, or false`
       );
       continue;
     }
-    const texts = entries.filter(
-      (text): text is string => typeof text === "string"
-    );
+
+    const texts = [decoded.value].flat();
+
     const parsed = texts.map((text) => ({ combo: parseCombo(text), text }));
     const bad = parsed.find((entry) => entry.combo === undefined);
+
     if (bad !== undefined) {
       issues.push(`keybinding "${id}": invalid combo "${bad.text}"`);
       continue;
     }
+
     set.combos.set(
       id,
       parsed
@@ -111,15 +121,18 @@ export const resolveKeybindings = (
   // The chain's order (globals before pane tails) decides which fires.
   const claims = new Map<string, KeyActionId>();
   const reported = new Set<string>();
+
   for (const action of keyActions) {
     const scopes: KeyContext[] =
       action.context === "global"
         ? ["global", "tree", "viewer"]
         : [action.context];
+
     for (const combo of set.combos.get(action.id) ?? []) {
       for (const scope of scopes) {
         const signature = `${scope}:${combo.ctrl}:${combo.shift}:${combo.name}`;
         const holder = claims.get(signature);
+
         if (holder === undefined) {
           claims.set(signature, action.id);
         } else if (

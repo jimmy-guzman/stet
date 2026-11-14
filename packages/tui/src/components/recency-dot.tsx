@@ -20,6 +20,7 @@ export const RecencyDot = (props: {
   // Color (string | undefined), never on the fraction's truthiness.
   const color = () => {
     const fraction = recencyFraction(props.at, state.now());
+
     return fraction === undefined
       ? undefined
       : lerpHex(
@@ -28,6 +29,7 @@ export const RecencyDot = (props: {
           fraction
         );
   };
+
   return (
     <Show when={color()}>
       {(fg) => (

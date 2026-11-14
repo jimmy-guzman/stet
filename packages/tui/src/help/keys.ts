@@ -215,13 +215,16 @@ const joinCombos = (texts: string[]) => {
   const parts = texts.map((text) =>
     /^(?<mod>(?:ctrl|shift)[+-])(?<key>.+)$/iu.exec(text)
   );
+
   const mod = parts[0]?.groups?.mod;
+
   const compressible =
     texts.length > 1 &&
     mod !== undefined &&
     parts.every(
       (part) => part?.groups?.mod === mod && part.groups.key !== undefined
     );
+
   return compressible
     ? `${mod}${parts.map((part) => part?.groups?.key ?? "").join(" / ")}`
     : texts.join(" / ");

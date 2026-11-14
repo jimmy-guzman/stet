@@ -55,11 +55,14 @@ export const buildCommandMenuItems = (
 
 const viewerItems = (input: CommandMenuInput): CommandMenuItem[] => {
   const path = input.selectedPath;
+
   if (path === undefined) {
     return [];
   }
+
   // Line-level (a gutter caret) has no column, so copy-reference degrades to path:line.
   const column = input.caretLine === undefined ? undefined : input.caretColumn;
+
   return [
     {
       action: { column, kind: "copyReference", line: input.caretLine, path },
@@ -94,9 +97,11 @@ const viewerItems = (input: CommandMenuInput): CommandMenuItem[] => {
 
 const treeItems = (input: CommandMenuInput): CommandMenuItem[] => {
   const node = input.treeNode;
+
   if (node === undefined) {
     return [];
   }
+
   const copyPath: CommandMenuItem = {
     action: {
       column: undefined,
@@ -106,11 +111,13 @@ const treeItems = (input: CommandMenuInput): CommandMenuItem[] => {
     },
     label: "Copy path",
   };
+
   // A directory has no open-in-a-viewer or pin-as-tab action (expand/collapse is the
   // Row click's job, not the menu's), so it offers only its path.
   if (node.kind === "directory") {
     return [copyPath];
   }
+
   return [
     { action: { kind: "pinTab", path: node.path }, label: "Pin as tab" },
     copyPath,

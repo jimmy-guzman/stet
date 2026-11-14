@@ -85,6 +85,7 @@ const spansAt = (
   index: number
 ): RenderSpan[] => {
   const highlighted = spans[index];
+
   if (highlighted !== undefined && highlighted.length > 0) {
     return highlighted;
   }
@@ -128,6 +129,7 @@ export const buildDiffRows = (
         text: collapsedLabel(hunk.collapsedBefore),
       });
     }
+
     let oldLine = hunk.deletionStart;
     let newLine = hunk.additionStart;
 
@@ -144,6 +146,7 @@ export const buildDiffRows = (
           oldLine += 1;
           newLine += 1;
         }
+
         continue;
       }
 
@@ -176,11 +179,14 @@ export const buildDiffRows = (
   }
 
   let body = 0;
+
   for (let index = 0; index < rows.length; index += 1) {
     if (rows[index]?.kind !== "line") {
       continue;
     }
+
     body += 1;
+
     if (body > options.maxLines) {
       return {
         hiddenLines: rows.slice(index).filter((row) => row.kind === "line")
@@ -195,9 +201,13 @@ export const buildDiffRows = (
 
 /** The navigable (cursorable) lines in order; `navIndex` equals array position. */
 export const navigableLinesFromRows = (rows: DiffRow[]): NavigableLine[] =>
-  rows.filter(isLineRow).map((row) => ({
-    content: row.spans.map((span) => span.text).join(""),
-    newLine: row.newLine,
-    oldLine: row.oldLine,
-    type: row.type,
-  }));
+  rows
+    .values()
+    .filter(isLineRow)
+    .map((row) => ({
+      content: row.spans.map((span) => span.text).join(""),
+      newLine: row.newLine,
+      oldLine: row.oldLine,
+      type: row.type,
+    }))
+    .toArray();

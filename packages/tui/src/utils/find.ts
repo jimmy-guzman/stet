@@ -7,8 +7,10 @@ export const findMatches = (
   if (query === "") {
     return [];
   }
+
   const caseSensitive = query !== query.toLowerCase();
   const needle = caseSensitive ? query : query.toLowerCase();
+
   return lines.flatMap((line, index) =>
     (caseSensitive ? line : line.toLowerCase()).includes(needle) ? [index] : []
   );

@@ -11,6 +11,7 @@ import { theme } from "@/theme/context";
 export const FileIcon = (props: { path: string; symlink?: boolean }) => {
   const model = () =>
     props.symlink === true ? namedIcon("symlink") : fileIconForPath(props.path);
+
   return (
     <Show when={state.iconsEnabled()}>
       <box width={2} overflow="hidden">

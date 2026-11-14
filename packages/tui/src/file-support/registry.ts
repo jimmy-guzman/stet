@@ -29,6 +29,7 @@ const compileAssociations = () =>
   [...files.values()].map((association, order): CompiledAssociation => {
     const normalize = (value: string) =>
       association.caseSensitive === true ? value : value.toLowerCase();
+
     return {
       association,
       globs: (association.globs ?? []).map((pattern) => ({
@@ -47,11 +48,15 @@ const state = {
 const matchRank = (path: string, compiled: CompiledAssociation) => {
   const { association } = compiled;
   const parts = fileNameParts(path);
+
   const normalize = (value: string) =>
     association.caseSensitive === true ? value : value.toLowerCase();
+
   const basename = normalize(parts.basename);
+
   const extension =
     parts.extension === undefined ? undefined : normalize(parts.extension);
+
   if (
     (association.filenames ?? []).some(
       (filename) => normalize(filename) === basename
@@ -59,6 +64,7 @@ const matchRank = (path: string, compiled: CompiledAssociation) => {
   ) {
     return 4;
   }
+
   if (
     compiled.globs.some(({ fullPath, matcher }) =>
       matcher.match(normalize(fullPath ? path : parts.basename))
@@ -66,6 +72,7 @@ const matchRank = (path: string, compiled: CompiledAssociation) => {
   ) {
     return 3;
   }
+
   if (
     extension !== undefined &&
     (association.extensions ?? []).some(
@@ -74,6 +81,7 @@ const matchRank = (path: string, compiled: CompiledAssociation) => {
   ) {
     return 2;
   }
+
   return association.dotfiles === true && parts.basename.startsWith(".")
     ? 1
     : undefined;
@@ -81,6 +89,7 @@ const matchRank = (path: string, compiled: CompiledAssociation) => {
 
 const inferredSyntax = (path: string) => {
   const { basename, extension } = fileNameParts(path);
+
   return basename.startsWith(".") && extension === undefined
     ? "text"
     : getFiletypeFromFileName(basename);
@@ -90,16 +99,20 @@ const resolve = (path: string): ResolvedFileSupport => {
   const matches = state.compiled
     .flatMap((compiled) => {
       const rank = matchRank(path, compiled);
+
       return rank === undefined ? [] : [{ ...compiled, rank }];
     })
     .toSorted(
       (left, right) => right.rank - left.rank || right.order - left.order
     );
+
   const syntax = matches.find(
     ({ association }) => association.syntax !== undefined
   )?.association.syntax;
+
   const icon = matches.find(({ association }) => association.icon !== undefined)
     ?.association.icon;
+
   return {
     icon: icon === undefined || icon === false ? "file" : icon,
     syntax: syntax === false ? "text" : (syntax ?? inferredSyntax(path)),
@@ -109,11 +122,14 @@ const resolve = (path: string): ResolvedFileSupport => {
 /** Resolve all file-support facets through one association cascade. */
 export const fileSupportForPath = (path: string) => {
   const cached = state.cache.get(path);
+
   if (cached !== undefined) {
     return cached;
   }
+
   const support = resolve(path);
   state.cache.set(path, support);
+
   return support;
 };
 
@@ -133,12 +149,15 @@ export const namedIcon = (name: string) => resolvedIcon(name);
 export const registerFileSupport = (registry: FileSupportRegistry) => {
   files.clear();
   icons.clear();
+
   for (const [name, association] of registry.files) {
     files.set(name, association);
   }
+
   for (const [name, glyph] of registry.icons) {
     icons.set(name, glyph);
   }
+
   state.compiled = compileAssociations();
   state.cache.clear();
 };

@@ -28,12 +28,14 @@ export interface ResolvedTheme {
 const scaleRgba = (hex: string, factor: number) => {
   const base = RGBA.fromHex(hex);
   const lift = (channel: number) => Math.min(1, channel * factor);
+
   return RGBA.fromValues(lift(base.r), lift(base.g), lift(base.b), base.a);
 };
 
 // Perceptual luminance (Rec. 601) of surface.base decides the emphasis direction.
 const surfaceIsLight = (hex: string) => {
   const { r, g, b } = RGBA.fromHex(hex);
+
   return 0.299 * r + 0.587 * g + 0.114 * b > 0.5;
 };
 
@@ -50,8 +52,10 @@ export const resolveTheme = (theme: Theme): ResolvedTheme => {
   const factor = surfaceIsLight(theme.surface.base)
     ? LIGHT_ACTIVE_FACTOR
     : DARK_ACTIVE_FACTOR;
+
   const active = (hex: string) => scaleRgba(hex, factor);
   const scrim = RGBA.fromHex(theme.surface.scrim);
+
   return {
     colors: theme,
     rgba: {

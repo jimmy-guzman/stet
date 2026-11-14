@@ -7,10 +7,10 @@ const ThemeSelection = Schema.Union([
   Schema.Struct({ dark: Schema.String, light: Schema.String }),
 ]);
 
-// Registries stay raw; each resolver validates entries only after merging them
+// Registries stay raw JSON; each resolver decodes entries only after merging them
 // Over their built-in (a `{ base, ...overrides }` partial is only a valid theme
 // Once merged over its base, and the same holds for files and glyphs).
-const RawRegistry = Schema.Record(Schema.String, Schema.Unknown);
+const RawRegistry = Schema.JsonObject;
 
 // Built from the layout model's own tuple: `Schema.Literals` infers `L[number]`, so the schema
 // And the `Dock` union cannot drift apart in either direction.

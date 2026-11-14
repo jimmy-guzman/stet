@@ -26,6 +26,7 @@ const hasBackground = (
   hex: string
 ) => {
   const want = RGBA.fromHex(hex);
+
   return frame.lines.some((line) =>
     line.spans.some(
       (span) =>
@@ -68,6 +69,7 @@ describe("runtime appearance follow (#101)", () => {
         height: 32,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("app chrome", (frame) => frame.includes("q quit"));
 

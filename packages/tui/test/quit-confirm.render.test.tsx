@@ -26,10 +26,13 @@ describe("quit confirm", () => {
     const repoRoot = createFixtureRepo("stet-quit-", {
       "src/a.ts": "export const a = 1\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, captureSpans, mockInput } =
       await testRender(() => <App />, { height: 24, width: 120 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -38,9 +41,11 @@ describe("quit confirm", () => {
 
       // Q must not quit outright: it raises the confirm prompt (y quit · esc cancel).
       mockInput.pressKey("q");
+
       const prompt = await settleUntil("quit confirm", (frame) =>
         frame.includes("Quit stet?")
       );
+
       expect(prompt).toContain("y quit · esc cancel");
 
       // The scrim dims the background (lower luminance) without blanking it: the tree
@@ -53,10 +58,12 @@ describe("quit confirm", () => {
 
       // Esc cancels and returns to the app instead of quitting.
       mockInput.pressEscape();
+
       const dismissed = await settleUntil(
         "confirm dismissed",
         (frame) => !frame.includes("Quit stet?")
       );
+
       expect(dismissed).toContain("? help · q quit");
     } finally {
       renderer.destroy();
@@ -69,10 +76,13 @@ describe("quit confirm", () => {
       "src/a.ts": "export const a = 1\n",
       "src/b.ts": "export const b = 2\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
       await testRender(() => <App />, { height: 24, width: 120 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -81,13 +91,16 @@ describe("quit confirm", () => {
         (frame) => frame.includes("b.ts"),
         5
       );
+
       // Start with b.ts selected, so a click that reaches a.ts's tree row is observable.
       state.selectFile("src/b.ts");
       // Locate a.ts in the sidebar tree (low column, not the viewer's filename header).
       const lines = chrome.split("\n");
+
       const row = lines.findIndex(
         (line) => line.includes("a.ts") && line.indexOf("a.ts") < 24
       );
+
       const col = lines[row].indexOf("a.ts");
       expect(row).toBeGreaterThan(0);
 

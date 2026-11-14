@@ -22,6 +22,7 @@ export const filterPathspecs = (field: string): string[] | undefined => {
     .map((token) =>
       token.startsWith("!") ? `:(exclude)${token.slice(1)}` : token
     );
+
   return tokens.length === 0 ? undefined : tokens;
 };
 
@@ -38,6 +39,7 @@ export const searchArgs = (
 ) => {
   const smartCase =
     !options.caseSensitive && query === query.toLowerCase() ? ["-i"] : [];
+
   return [
     "git",
     "grep",
@@ -65,21 +67,27 @@ export const searchArgs = (
 // Char after a string round-trip.
 export const parseSearchOutput = (stdout: Uint8Array): SearchMatch[] => {
   const decoder = new TextDecoder();
+
   return splitRecords(stdout).flatMap((record) => {
     const firstNul = record.indexOf(0);
     const secondNul = firstNul === -1 ? -1 : record.indexOf(0, firstNul + 1);
     const thirdNul = secondNul === -1 ? -1 : record.indexOf(0, secondNul + 1);
+
     if (thirdNul === -1) {
       return [];
     }
+
     const lineText = decoder.decode(record.subarray(firstNul + 1, secondNul));
     const columnText = decoder.decode(record.subarray(secondNul + 1, thirdNul));
     const line = lineText === "" ? Number.NaN : Number(lineText);
     const byteColumn = columnText === "" ? Number.NaN : Number(columnText);
+
     if (Number.isNaN(line) || Number.isNaN(byteColumn)) {
       return [];
     }
+
     const textBytes = record.subarray(thirdNul + 1);
+
     return [
       {
         column:
@@ -98,13 +106,17 @@ const NEWLINE = 0x0a;
 const splitRecords = (stdout: Uint8Array) => {
   const records: Uint8Array[] = [];
   let cursor = 0;
+
   while (cursor < stdout.length) {
     const newline = stdout.indexOf(NEWLINE, cursor);
     const end = newline === -1 ? stdout.length : newline;
+
     if (end > cursor) {
       records.push(stdout.subarray(cursor, end));
     }
+
     cursor = end + 1;
   }
+
   return records;
 };

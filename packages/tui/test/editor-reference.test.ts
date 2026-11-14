@@ -179,6 +179,7 @@ describe("resolveEditorTemplate", () => {
   test("explicit value (CLI flag or config) beats STET_EDITOR", () => {
     const saved = process.env.STET_EDITOR;
     process.env.STET_EDITOR = "nano +{line} {file}";
+
     try {
       expect(resolveEditorTemplate("nvim +{line} {file}")).toBe(
         "nvim +{line} {file}"
@@ -195,6 +196,7 @@ describe("resolveEditorTemplate", () => {
   test("STET_EDITOR is returned verbatim when it already contains {file}", () => {
     const saved = process.env.STET_EDITOR;
     process.env.STET_EDITOR = "emacsclient -nw +{line} {file}";
+
     try {
       expect(resolveEditorTemplate(undefined)).toBe(
         "emacsclient -nw +{line} {file}"
@@ -213,6 +215,7 @@ describe("resolveEditorTemplate", () => {
     const savedVisual = process.env.VISUAL;
     process.env.EDITOR = "";
     process.env.VISUAL = "hx";
+
     try {
       expect(resolveEditorTemplate(undefined)).toBe("hx {file}:{line}");
     } finally {
@@ -221,6 +224,7 @@ describe("resolveEditorTemplate", () => {
       } else {
         process.env.EDITOR = savedEditor;
       }
+
       if (savedVisual === undefined) {
         delete process.env.VISUAL;
       } else {
@@ -234,6 +238,7 @@ describe("resolveEditorTemplate", () => {
     const savedEditor = process.env.EDITOR;
     process.env.STET_EDITOR = "hx {file}:{line}";
     process.env.EDITOR = "vim";
+
     try {
       expect(resolveEditorTemplate(undefined)).toBe("hx {file}:{line}");
     } finally {
@@ -242,6 +247,7 @@ describe("resolveEditorTemplate", () => {
       } else {
         process.env.STET_EDITOR = savedStet;
       }
+
       if (savedEditor === undefined) {
         delete process.env.EDITOR;
       } else {
@@ -278,18 +284,22 @@ describe("resolveIdeTemplate", () => {
       STET_IDE: process.env.STET_IDE,
       VISUAL: process.env.VISUAL,
     };
+
     delete process.env.STET_IDE;
     delete process.env.VISUAL;
     delete process.env.EDITOR;
+
     try {
       expect(resolveIdeTemplate(undefined)).toBeUndefined();
     } finally {
       if (saved.STET_IDE !== undefined) {
         process.env.STET_IDE = saved.STET_IDE;
       }
+
       if (saved.VISUAL !== undefined) {
         process.env.VISUAL = saved.VISUAL;
       }
+
       if (saved.EDITOR !== undefined) {
         process.env.EDITOR = saved.EDITOR;
       }
@@ -299,6 +309,7 @@ describe("resolveIdeTemplate", () => {
   test("uses STET_IDE env var over $VISUAL", () => {
     const saved = process.env.STET_IDE;
     process.env.STET_IDE = "zed {file}:{line}";
+
     try {
       expect(resolveIdeTemplate(undefined)).toBe("zed {file}:{line}");
     } finally {
@@ -313,6 +324,7 @@ describe("resolveIdeTemplate", () => {
   test("explicit value wins over STET_IDE", () => {
     const saved = process.env.STET_IDE;
     process.env.STET_IDE = "zed {file}:{line}";
+
     try {
       expect(resolveIdeTemplate("subl {file}:{line}")).toBe(
         "subl {file}:{line}"

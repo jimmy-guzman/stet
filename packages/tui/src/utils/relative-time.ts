@@ -11,23 +11,30 @@ const YEAR = 365 * DAY;
  */
 export const relativeTime = (unixSeconds: number, now: number) => {
   const elapsed = Math.max(0, now - unixSeconds);
+
   if (elapsed < MINUTE) {
     return "now";
   }
+
   if (elapsed < HOUR) {
     return `${Math.floor(elapsed / MINUTE)}m`;
   }
+
   if (elapsed < DAY) {
     return `${Math.floor(elapsed / HOUR)}h`;
   }
+
   if (elapsed < WEEK) {
     return `${Math.floor(elapsed / DAY)}d`;
   }
+
   if (elapsed < MONTH) {
     return `${Math.floor(elapsed / WEEK)}w`;
   }
+
   if (elapsed < YEAR) {
     return `${Math.floor(elapsed / MONTH)}mo`;
   }
+
   return `${Math.floor(elapsed / YEAR)}y`;
 };

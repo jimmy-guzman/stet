@@ -56,6 +56,7 @@ export const parseCommand = (args: string[]): Command => {
   }
 
   const [, extra] = args;
+
   if (extra !== undefined) {
     throw new Error(
       extra.startsWith("-")
@@ -71,9 +72,11 @@ const scopeKind = (staged: boolean, unstaged: boolean): ScopeKind => {
   if (staged) {
     return "staged";
   }
+
   if (unstaged) {
     return "unstaged";
   }
+
   return "all";
 };
 
@@ -100,6 +103,7 @@ export const parseCliArgs = (args: string[]): CliOptions => {
 
   const staged = values.staged === true;
   const unstaged = values.unstaged === true;
+
   if (staged && unstaged) {
     throw new Error("--staged and --unstaged are mutually exclusive");
   }
@@ -127,6 +131,7 @@ const requireNonEmptyValue = (name: string, value: string | undefined) => {
   if (value !== undefined && value.trim() === "") {
     throw new Error(`${name} requires a non-empty value`);
   }
+
   return value;
 };
 
@@ -204,11 +209,13 @@ export const scopeMenuLabel = (kind: ScopeKind) => {
 // Each section heading.
 const keyBindingsHelp = () => {
   const groups = keyHelpGroups();
+
   const width = Math.max(
     ...groups.flatMap((group) =>
       group.entries.map((entry) => Bun.stringWidth(entry.combo))
     )
   );
+
   return groups
     .map(
       (group) =>

@@ -22,6 +22,7 @@ const longFileRepo = (prefix: string) => {
     { length: 120 },
     (_, i) => `const line_${i + 1} = ${i + 1}`
   );
+
   return createFixtureRepo(prefix, { "long.ts": `${lines.join("\n")}\n` });
 };
 
@@ -35,12 +36,14 @@ describe("diff viewer vertical scroll", () => {
     const repoRoot = longFileRepo("stet-wheel-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockMouse } =
       await testRender(() => <App />, {
         height: 34,
         useMouse: true,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -51,12 +54,14 @@ describe("diff viewer vertical scroll", () => {
       );
 
       await mockMouse.moveTo(90, 20);
+
       for (let tick = 0; tick < 40; tick += 1) {
         // oxlint-disable-next-line no-await-in-loop -- one wheel tick per render pass
         await mockMouse.scroll(90, 20, "down");
         // oxlint-disable-next-line no-await-in-loop -- one wheel tick per render pass
         await renderOnce();
       }
+
       const numbers = visibleLineNumbers(captureCharFrame());
 
       // Scrolled well past the first screen (cursor-follow must not yank it back)...
@@ -74,12 +79,14 @@ describe("diff viewer vertical scroll", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setFocusedPane("diff");
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         useMouse: true,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -93,10 +100,12 @@ describe("diff viewer vertical scroll", () => {
       await settleUntil("bottom", (frame) => frame.includes("line_120 ="));
 
       mockInput.pressKey("g");
+
       const top = await settleUntil(
         "top",
         (frame) => frame.includes("line_1 =") && !frame.includes("line_120 =")
       );
+
       expect(top).toContain("line_1 =");
     } finally {
       renderer.destroy();
@@ -109,12 +118,14 @@ describe("diff viewer vertical scroll", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setFocusedPane("diff");
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         useMouse: true,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {

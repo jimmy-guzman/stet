@@ -1,4 +1,4 @@
-import { Result } from "effect";
+import { Predicate, Result, Schema } from "effect";
 import { applyEdits, createScanner, modify, SyntaxKind } from "jsonc-parser";
 
 import type { Dock } from "@/layout/regions";
@@ -51,18 +51,18 @@ const themeEquals = (
   b: SettingsSnapshot["theme"]
 ) => {
   if (
-    typeof a === "string" ||
-    typeof b === "string" ||
+    Predicate.isString(a) ||
+    Predicate.isString(b) ||
     a === undefined ||
     b === undefined
   ) {
     return a === b;
   }
+
   return a.dark === b.dark && a.light === b.light;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isJsonObject = Schema.is(Schema.JsonObject);
 
 // The theme edit carries #113's pair rule: a picked name lands on the current
 // Appearance's half when the file holds a `{ dark, light }` pair (the other half
@@ -71,17 +71,18 @@ const themeEdit = (
   snapshot: SettingsSnapshot,
   fileTheme: SettingsSnapshot["theme"]
 ): SettingEdit => {
-  if (typeof snapshot.theme === "string" && isRecord(fileTheme)) {
+  if (Predicate.isString(snapshot.theme) && Predicate.isObject(fileTheme)) {
     return {
       label: "theme",
       path: ["theme", snapshot.appearance],
       value: snapshot.theme,
     };
   }
+
   return {
     label: "theme",
     path: ["theme"],
-    value: typeof snapshot.theme === "string" ? snapshot.theme : undefined,
+    value: Predicate.isString(snapshot.theme) ? snapshot.theme : undefined,
   };
 };
 
@@ -95,7 +96,7 @@ const diff = (
 // A targeted edit on an unreadable document risks the file, so both fail.
 const parseIssue = (text: string) => {
   try {
-    return isRecord(Bun.JSONC.parse(text))
+    return isJsonObject(Bun.JSONC.parse(text))
       ? undefined
       : "config is not a JSONC object; nothing saved";
   } catch {
@@ -106,6 +107,7 @@ const parseIssue = (text: string) => {
 const parses = (text: string) => {
   try {
     Bun.JSONC.parse(text);
+
     return true;
   } catch {
     return false;
@@ -122,9 +124,11 @@ const stripDanglingCommas = (text: string) => {
     SyntaxKind.LineCommentTrivia,
     SyntaxKind.BlockCommentTrivia,
   ]);
+
   const scanner = createScanner(text, false);
   const dangling: { length: number; offset: number }[] = [];
   let previous: SyntaxKind | undefined;
+
   for (
     let kind = scanner.scan();
     kind !== SyntaxKind.EOF;
@@ -133,6 +137,7 @@ const stripDanglingCommas = (text: string) => {
     if (trivia.has(kind)) {
       continue;
     }
+
     if (
       kind === SyntaxKind.CommaToken &&
       (previous === SyntaxKind.OpenBraceToken ||
@@ -143,8 +148,10 @@ const stripDanglingCommas = (text: string) => {
         offset: scanner.getTokenOffset(),
       });
     }
+
     previous = kind;
   }
+
   return dangling.reduceRight(
     (current, comma) =>
       current.slice(0, comma.offset) +
@@ -253,9 +260,11 @@ export const updateSettingsText = (
   snapshot: SettingsSnapshot
 ): Result.Result<{ text: string; saved: string[] }, string> => {
   const issue = isEmptyJsonc(text) ? undefined : parseIssue(text);
+
   if (issue !== undefined) {
     return Result.fail(issue);
   }
+
   const { config } = loadConfigText(text);
 
   const edits = [
@@ -270,20 +279,24 @@ export const updateSettingsText = (
   }
 
   let updated = text;
+
   for (const edit of edits) {
     updated = applyEdits(
       updated,
       modify(updated, edit.path, edit.value, { formattingOptions })
     );
   }
+
   // Removing the only property leaves jsonc-parser's edit dangling the property's
   // JSONC trailing comma (`{ , }`, measured against jsonc-parser 3.3.1), so a
   // Result that no longer parses gets that one comma stripped and is checked
   // Again; anything still broken fails without writing.
   const repaired = parses(updated) ? updated : stripDanglingCommas(updated);
+
   if (!parses(repaired)) {
     return Result.fail("could not edit config; nothing saved");
   }
+
   return Result.succeed({
     saved: [...new Set(edits.map((edit) => edit.label))],
     text: repaired,

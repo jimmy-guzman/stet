@@ -21,6 +21,7 @@ const paneRowOf = (frame: string, side: "left" | "right", text: string) =>
     .split("\n")
     .map((line) => {
       const parts = line.split("││");
+
       return side === "left" ? (parts[0] ?? "") : parts.slice(1).join("││");
     })
     .findIndex((cell) => cell.includes(text));
@@ -35,6 +36,7 @@ describe("double-click tracker resets on an intervening row click", () => {
       "a.txt": "alpha\n",
       "pkg/inner.ts": "export const inner = 1;\n",
     });
+
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
@@ -44,6 +46,7 @@ describe("double-click tracker resets on an intervening row click", () => {
         height: 24,
         width: 100,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -84,6 +87,7 @@ describe("double-click tracker resets on an intervening row click", () => {
       "src/a.ts": "const seed = 0\n",
       "src/b.ts": "const seed = 0\n",
     });
+
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const needleA = 1\n");
     writeFileSync(path.join(repoRoot, "src", "b.ts"), "const needleB = 2\n");
 
@@ -93,6 +97,7 @@ describe("double-click tracker resets on an intervening row click", () => {
 
     const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } =
       await testRender(() => <App />, { height: 30, width: 120 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {

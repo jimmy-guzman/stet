@@ -24,11 +24,14 @@ describe("long-line wrap toggle", () => {
     const words = Array.from({ length: 16 }, (_, index) => `tok${index}`).join(
       " "
     );
+
     const long = `const x = "${words} ENDMARKER"`;
+
     const repoRoot = createFixtureRepo("stet-wrap-toggle-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `first line\n${long}\n`,
     });
+
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
       `first CHANGED\n${long} CHANGED\n`
@@ -36,11 +39,13 @@ describe("long-line wrap toggle", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 80,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -49,21 +54,26 @@ describe("long-line wrap toggle", () => {
       const scrolled = await settleUntil("diff loaded", (frame) =>
         frame.includes("tok0")
       );
+
       expect(scrolled).not.toContain("ENDMARKER");
 
       // Toggle to wrap: the line now flows across rows and the marker appears.
       mockInput.pressKey("x");
+
       const wrapped = await settleUntil("long line wrapped", (frame) =>
         frame.includes("ENDMARKER")
       );
+
       expect(wrapped).toContain("ENDMARKER");
 
       // Toggle back to scroll: the marker is truncated away again.
       mockInput.pressKey("x");
+
       const reScrolled = await settleUntil(
         "long line truncated again",
         (frame) => frame.includes("tok0") && !frame.includes("ENDMARKER")
       );
+
       expect(reScrolled).not.toContain("ENDMARKER");
     } finally {
       renderer.destroy();

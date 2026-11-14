@@ -17,12 +17,14 @@ const MARKER_CELLS = 2;
 const AGE_CELLS = 4;
 const GAP = 2;
 const LABEL_MIN = 8;
+
 // The overlay's border takes two cells and each row's own padding takes two more, so the columns
 // Have four fewer than `overlayWidth`. Budgeting against the padding alone overruns the row by
 // Exactly the border, and the renderer silently clips the overrun off the right edge.
 const CHROME_CELLS = 4;
 
 const repoRoot = () => state.gitModel().repoRoot;
+
 const highlighted = () =>
   state.worktreeComboboxResults()?.[state.worktreeComboboxIndex()];
 
@@ -32,6 +34,7 @@ const labelCells = () =>
     LABEL_MIN,
     state.overlayWidth() - CHROME_CELLS - MARKER_CELLS - GAP - AGE_CELLS
   );
+
 // The path is one line for the highlighted worktree, not a column on every row: the worktrees of a
 // Repo share a long prefix, so a per-row path left-truncated to a fixed width slices that shared
 // Prefix at a different offset on every row (`…trees/`, `…ude/`, `…ees/`) and cuts the leaf, the
@@ -39,6 +42,7 @@ const labelCells = () =>
 // TruncateLeft only ever fires on a genuinely narrow terminal.
 const detailPath = () => {
   const worktree = highlighted();
+
   return worktree === undefined
     ? ""
     : truncateLeft(
@@ -55,6 +59,7 @@ const ageText = (at: number | undefined) =>
   at === undefined
     ? ""
     : relativeTime(Math.floor(at / 1000), Math.floor(state.now() / 1000));
+
 // It carries the fade the dot carries elsewhere: pink on a worktree touched just now, cooling into
 // The faint gray the ramp ends on as it goes quieter. It ramps over WORKTREE_ACTIVE_MS, not the
 // 30s a changed file stays fresh for, because work there arrives in bursts with pauses of minutes
@@ -63,6 +68,7 @@ const ageText = (at: number | undefined) =>
 // Signal, so the row still reads under NO_COLOR; color only ranks it.
 const ageColor = (at: number | undefined) => {
   const fraction = recencyFraction(at, state.now(), WORKTREE_ACTIVE_MS);
+
   return fraction === undefined
     ? theme.colors.text.faint
     : lerpHex(theme.colors.recency.fresh, theme.colors.recency.aged, fraction);
@@ -77,6 +83,7 @@ const onInput = (value: string) => {
 
 const onSubmit = () => {
   const worktree = highlighted();
+
   if (worktree === undefined) {
     state.setWorktreeComboboxOpen(false);
   } else {
@@ -161,8 +168,10 @@ export const WorktreeCombobox = () => {
               {(worktree, index) => {
                 const summary = () =>
                   state.worktreeSummaries().get(worktree().path);
+
                 const activityAt = () => summary()?.lastActivityAt;
                 const current = () => worktree().path === repoRoot();
+
                 const badges = () =>
                   [
                     worktree().locked ? "locked" : "",
@@ -170,10 +179,12 @@ export const WorktreeCombobox = () => {
                   ]
                     .filter((badge) => badge !== "")
                     .join(" ");
+
                 const nameFg = () =>
                   index === state.worktreeComboboxIndex()
                     ? theme.colors.text.selected
                     : theme.colors.text.strong;
+
                 // The badge shares the label's column rather than claiming one of its own: `locked`
                 // And `prunable` are rare, and a column reserved for them on every row would be
                 // Empty nearly always while costing the branch name the cells it needs.
@@ -182,6 +193,7 @@ export const WorktreeCombobox = () => {
                     4,
                     labelCells() - (badges() === "" ? 0 : badges().length + 1)
                   );
+
                 return (
                   <box
                     id={`worktree-combobox-${index}`}

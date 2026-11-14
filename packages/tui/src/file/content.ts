@@ -27,16 +27,20 @@ export const loadFileContent = (
 ): FileContent => {
   const absolutePath = `${repoRoot}/${path}`;
   let size: number;
+
   try {
     const stat = lstatSync(absolutePath);
+
     // Git stores a symlink's content as its target path text, never the dereferenced
     // File, so a link to a dir/binary/missing target still reads as its one-line path.
     if (stat.isSymbolicLink()) {
       return textContent(readlinkSync(absolutePath), options.full);
     }
+
     if (!stat.isFile()) {
       return { bytes: 0, kind: "binary" };
     }
+
     ({ size } = stat);
   } catch {
     return { kind: "missing" };
@@ -47,6 +51,7 @@ export const loadFileContent = (
   }
 
   let buffer: Buffer;
+
   try {
     buffer = readFileSync(absolutePath);
   } catch {
@@ -65,19 +70,24 @@ export const loadFileContentAsync = async (
   options: { full: boolean }
 ): Promise<FileContent> => {
   const absolutePath = `${repoRoot}/${path}`;
+
   try {
     const stat = await lstat(absolutePath);
+
     // Git stores a symlink's content as its target path text, never the dereferenced
     // File, so a link to a dir/binary/missing target still reads as its one-line path.
     if (stat.isSymbolicLink()) {
       return textContent(await readlink(absolutePath), options.full);
     }
+
     if (!stat.isFile()) {
       return { bytes: 0, kind: "binary" };
     }
+
     if (stat.size > MAX_FILE_BYTES && !options.full) {
       return { bytes: stat.size, kind: "too-large" };
     }
+
     return classifyFileBytes(await readFile(absolutePath), options);
   } catch {
     return { kind: "missing" };
@@ -124,11 +134,13 @@ export const textContent = (content: string, full: boolean): FileContent => {
 
 export const contentToContextPatch = (path: string, content: string) => {
   const header = [`--- a/${path}`, `+++ b/${path}`];
+
   if (content === "") {
     return header.join("\n");
   }
 
   const lines = content.split("\n");
+
   return [
     ...header,
     `@@ -1,${lines.length} +1,${lines.length} @@`,

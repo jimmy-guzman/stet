@@ -18,9 +18,11 @@ const BRANCH_GLYPH = "\u{F062C}";
 // A shown glyph occupies a fixed 2-cell box; ` · ` joins the identity and the right-side fields.
 const GLYPH_CELLS = 2;
 const SEP = " · ";
+
 // The row's own horizontal inset, on both edges. `available()` budgets against it, so the two must
 // Move together or the line is measured wider than it paints.
 const PADDING = 1;
+
 // Floors so a squeezed line degrades to a readable stub rather than a lone ellipsis, and so a branch
 // With almost no room is dropped outright instead of shown as `…`.
 const MIN_SCOPE = 8;
@@ -31,21 +33,27 @@ const MIN_BRANCH = 4;
 // Unrelated to a fixed commit) is dropped: the commit subject is the thing under inspection, and
 // The terminal title still carries repo/worktree. This also frees the line for the subject.
 const isCommit = () => state.scope().kind === "commit";
+
 const inWorktree = () => {
   const main = state.mainWorktreePath();
+
   return main !== "" && state.gitModel().repoRoot !== main;
 };
+
 // In a linked worktree the primary token is the worktree folder (usually the branch); in the main
 // Checkout it is the repo (the stable main worktree). The leading glyph says which of the two.
 const worktreeFolder = () => path.basename(state.gitModel().repoRoot);
+
 const primary = () =>
   inWorktree()
     ? worktreeFolder()
     : path.basename(state.mainWorktreePath()) || worktreeFolder();
+
 // The branch shown next to the primary name, except in a worktree whose folder already is the
 // Branch (strict match) where it would just duplicate the primary token.
 const rawBranch = () => {
   const { branch } = state.gitModel();
+
   return branch === undefined || (inWorktree() && branch === worktreeFolder())
     ? undefined
     : branch;
@@ -53,26 +61,34 @@ const rawBranch = () => {
 
 const glyphCells = () => (state.iconsEnabled() ? GLYPH_CELLS : 0);
 const available = () => Math.max(0, state.terminalWidth() - PADDING * 2);
+
 // The right-side field that is never truncated: the changed count.
 const tail = () => `${state.gitModel().changed.length} changed`;
+
 // A commit fills the left slot (where identity sits otherwise) and spans the width up to the tail,
 // Truncating with an ellipsis only when the full subject genuinely does not fit.
 const commitSubject = () => {
   const budget = available() - Bun.stringWidth(tail()) - SEP.length;
+
   return truncate(state.commitScopeLabel(), Math.max(MIN_SCOPE, budget));
 };
+
 // The changed count is never cut. The scope label shrinks (down to its floor) only once the primary
 // Name is squeezed to its own floor, so on a narrow line both stay readable.
 const scopeText = () => {
   const leftFloor =
     glyphCells() + Math.min(Bun.stringWidth(primary()), MIN_PRIMARY);
+
   const budget = available() - Bun.stringWidth(tail()) - SEP.length - leftFloor;
+
   return truncate(
     scopeLabel(state.scope(), state.emptyTree()),
     Math.max(MIN_SCOPE, budget)
   );
 };
+
 const rightText = () => `${scopeText()}${SEP}${tail()}`;
+
 // The primary name takes whatever the right side leaves, so a long repo or worktree folder name
 // Truncates with an ellipsis instead of pushing the line past the terminal edge.
 const primaryText = () =>
@@ -80,16 +96,21 @@ const primaryText = () =>
     primary(),
     available() - Bun.stringWidth(rightText()) - glyphCells()
   );
+
 // Truncate the branch to whatever the line has left after the primary name and the right side;
 // Below the floor the whole branch group is dropped rather than shown as a stub.
 const fitBranch = (branch: string) => {
   const leftFixed =
     glyphCells() + Bun.stringWidth(primaryText()) + SEP.length + glyphCells();
+
   const budget = available() - Bun.stringWidth(rightText()) - leftFixed;
+
   return budget < MIN_BRANCH ? undefined : truncate(branch, budget);
 };
+
 const branchText = () => {
   const branch = rawBranch();
+
   return branch === undefined ? undefined : fitBranch(branch);
 };
 

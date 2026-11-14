@@ -54,10 +54,13 @@ export const App = () => {
 
   createEffect(() => {
     const dir = path.basename(state.gitModel().repoRoot);
+
     if (dir === "") {
       renderer.setTerminalTitle("stet");
+
       return;
     }
+
     const repo = path.basename(state.mainWorktreePath()) || dir;
     const segments = dir === repo ? [repo] : [dir, repo];
     renderer.setTerminalTitle([...segments, "stet"].join(" · "));
@@ -76,6 +79,7 @@ export const App = () => {
       state.themeComboboxOpen() ||
       state.worktreeComboboxOpen() ||
       state.findOpen();
+
     if (!inputFocused) {
       renderer.setCursorPosition(0, 0, false);
     }
@@ -87,11 +91,13 @@ export const App = () => {
     // Rather than waiting for an event loop that the poll keeps alive.
     renderer.setTerminalTitle("");
     renderer.destroy();
+
     // Log after destroy so the message lands on the restored screen, not the alt
     // Buffer, at its own severity rather than a hardcoded one.
     if (message !== undefined) {
       log(message.level, message.text);
     }
+
     process.exit(0);
   };
 
@@ -113,23 +119,29 @@ export const App = () => {
     if (!state.currentWorktreeDeleted()) {
       return;
     }
+
     const main = state.mainWorktreePath();
     const root = state.gitModel().repoRoot;
+
     // The flag can outlive its cause (a fresh model was seeded, or we already
     // Switched away). Act only while something is genuinely gone.
     if (existsSync(root) && (main === "" || existsSync(main))) {
       state.setCurrentWorktreeDeleted(false);
+
       return;
     }
+
     // The main worktree survives and isn't where we already are: switch to it.
     if (main !== "" && main !== root && existsSync(main)) {
       const cached = state
         .worktrees()
         ?.find((worktree) => worktree.path === main);
+
       const label =
         cached === undefined
           ? (main.split("/").pop() ?? main)
           : worktreeLabel(cached);
+
       const target: Worktree = cached ?? {
         bare: false,
         detached: false,
@@ -138,6 +150,7 @@ export const App = () => {
         path: main,
         prunable: false,
       };
+
       // Nobody asked for this switch, so it has to announce itself; a warning, because losing the
       // Worktree under you is a degraded condition, not a routine move.
       void state.switchWorktree(target, {
@@ -147,8 +160,10 @@ export const App = () => {
           text: `worktree deleted, switched to ${label}`,
         },
       });
+
       return;
     }
+
     // Nothing recoverable: the repository itself is gone. A clean exit (code 0) of a
     // Degraded condition reads as a warning, not a crash.
     quit({
@@ -237,6 +252,7 @@ export const App = () => {
         <CommandMenu
           anchor={() => {
             const at = state.commandMenuAnchor();
+
             return at === undefined ? undefined : { col: at.x, row: at.y };
           }}
           viewportWidth={state.terminalWidth}

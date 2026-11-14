@@ -3,9 +3,11 @@
 // The split is an explicit iteration.
 export const toCodePoints = (text: string): string[] => {
   const chars: string[] = [];
+
   for (const char of text) {
     chars.push(char);
   }
+
   return chars;
 };
 
@@ -22,20 +24,26 @@ export const truncate = (text: string, max: number) => {
   if (max <= 0) {
     return "";
   }
+
   if (Bun.stringWidth(text) <= max) {
     return text;
   }
+
   const budget = max - 1;
   let width = 0;
   let kept = "";
+
   for (const { segment } of graphemes.segment(text)) {
     const cells = Bun.stringWidth(segment);
+
     if (width + cells > budget) {
       break;
     }
+
     width += cells;
     kept += segment;
   }
+
   return `${kept}…`;
 };
 
@@ -43,24 +51,32 @@ export const truncateLeft = (text: string, max: number) => {
   if (Bun.stringWidth(text) <= max) {
     return text;
   }
+
   if (max <= 1) {
     return max === 1 ? "…" : "";
   }
+
   const segments: string[] = [];
+
   for (const { segment } of graphemes.segment(text)) {
     segments.push(segment);
   }
+
   const budget = max - 1;
   let width = 0;
   let kept = "";
+
   for (const segment of segments.toReversed()) {
     const cells = Bun.stringWidth(segment);
+
     if (width + cells > budget) {
       break;
     }
+
     width += cells;
     kept = `${segment}${kept}`;
   }
+
   return `…${kept}`;
 };
 
@@ -76,9 +92,11 @@ export const truncateAroundMatch = (
   max: number
 ) => {
   const chars = toCodePoints(text);
+
   if (chars.length <= max) {
     return { matched, text };
   }
+
   if (max <= 1) {
     return { matched: [], text: max === 1 ? "…" : "" };
   }
@@ -90,10 +108,13 @@ export const truncateAroundMatch = (
     trail: boolean
   ) => {
     const prefix = lead ? "…" : "";
+
     return {
       matched: matched
+        .values()
         .filter((index) => index >= start && index < end)
-        .map((index) => index - start + prefix.length),
+        .map((index) => index - start + prefix.length)
+        .toArray(),
       text: `${prefix}${chars.slice(start, end).join("")}${trail ? "…" : ""}`,
     };
   };
@@ -102,6 +123,7 @@ export const truncateAroundMatch = (
   // There is no match to preserve, or when the match already sits in that tail.
   const tailStart = chars.length - (max - 1);
   const [firstMatch] = matched;
+
   if (firstMatch === undefined || firstMatch >= tailStart) {
     return window(tailStart, chars.length, true, false);
   }
@@ -113,10 +135,13 @@ export const truncateAroundMatch = (
   // More identifying match.
   const lastMatch = matched.at(-1) ?? firstMatch;
   const inner = max - 2;
+
   const start =
     lastMatch - firstMatch < inner ? firstMatch : lastMatch + 1 - inner;
+
   const lead = start > 0;
   const end = start + max - (lead ? 1 : 0) - 1;
+
   return window(start, end, lead, end < chars.length);
 };
 
@@ -124,23 +149,29 @@ export const truncateName = (name: string, max: number) => {
   if (name.length <= max) {
     return name;
   }
+
   if (max <= 1) {
     return max === 1 ? "…" : "";
   }
+
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 ? name.slice(dot) : "";
   const keep = max - 1 - ext.length;
+
   if (keep <= 0) {
     return `${name.slice(0, max - 1)}…`;
   }
+
   return `${name.slice(0, keep)}…${ext}`;
 };
 
 export const collapseHome = (path: string) => {
   const home = Bun.env.HOME;
+
   if (home === undefined || home === "") {
     return path;
   }
+
   return path === home || path.startsWith(`${home}/`)
     ? `~${path.slice(home.length)}`
     : path;

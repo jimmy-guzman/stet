@@ -82,9 +82,11 @@ test("a long recent path is shortened from the front, keeping the filename", () 
   );
 
   const model = state.statusBarModel();
+
   if (model.kind !== "ambient") {
     throw new Error("expected ambient activity");
   }
+
   expect(model.activity.path).toStartWith("…");
   expect(model.activity.path).toContain("DiffView.tsx");
 });

@@ -21,23 +21,29 @@ describe("gap expansion", () => {
       { length: 20 },
       (_, index) => `const l${index + 1} = ${index + 1}`
     );
+
     const source = `${lines.join("\n")}\n`;
+
     const repoRoot = createFixtureRepo("stet-gap-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/mod.ts": source,
     });
+
     const edited = source
       .replace("const l1 = 1", "const l1 = 100")
       .replace("const l20 = 20", "const l20 = 200");
+
     writeFileSync(path.join(repoRoot, "src", "mod.ts"), edited);
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -45,6 +51,7 @@ describe("gap expansion", () => {
       const collapsed = await settleUntil("gap marker shown", (frame) =>
         frame.includes("unmodified lines")
       );
+
       expect(collapsed).not.toContain("const l10 = 10");
 
       // Put the caret on the last line (below the gap), then expand the gap above it.
@@ -56,9 +63,11 @@ describe("gap expansion", () => {
         /ln 20:\d/u.test(frame)
       );
       mockInput.pressKey("z");
+
       const expanded = await settleUntil("gap expanded", (frame) =>
         frame.includes("const l10 = 10")
       );
+
       expect(expanded).toContain("const l10 = 10");
       expect(expanded).toMatch(/ln 20:\d/u);
     } finally {

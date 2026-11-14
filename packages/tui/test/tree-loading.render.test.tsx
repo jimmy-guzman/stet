@@ -56,11 +56,13 @@ test("reserves blank space without flashing the empty state at first paint", asy
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     // Settle on always-present chrome, then assert the sidebar held no flash for a
     // Stretch of frames (well past the old 150ms gate).
     await settleUntil("shell", (current) => current.includes("q quit"));
+
     for (let attempt = 0; attempt < 20; attempt += 1) {
       // oxlint-disable-next-line no-await-in-loop -- frame-by-frame check that nothing flashes
       await Bun.sleep(10);
@@ -81,6 +83,7 @@ test("fills the tree from the top once repoFiles loads", async () => {
   const repoRoot = createFixtureRepo("stet-loading-fill-", {
     "src/app.ts": "export const x = 1\n",
   });
+
   const model = await loadModel(repoRoot, allScope);
   seedLoading(model);
 
@@ -91,13 +94,16 @@ test("fills the tree from the top once repoFiles loads", async () => {
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     // Mirrors the repoFiles poll committing the full tree
     seedState(model, allScope);
+
     const frame = await settleUntil("tree", (current) =>
       sidebarOf(current).includes("app.ts")
     );
+
     const sidebar = sidebarOf(frame);
     expect(sidebar).toContain("app.ts");
     expect(sidebar).not.toContain("no files");
@@ -114,6 +120,7 @@ test("shows no changed-only preview during a deferred load in the default view",
   const repoRoot = createFixtureRepo("stet-loading-default-", {
     "src/app.ts": "export const x = 1\n",
   });
+
   writeFileSync(path.join(repoRoot, "src/changed.ts"), "export const y = 2\n");
   const model = await loadModel(repoRoot, allScope);
   // Default view (seedState leaves changesOnly off)
@@ -126,8 +133,10 @@ test("shows no changed-only preview during a deferred load in the default view",
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
     // The changed file must not appear during the load; assert across frames.
     for (let attempt = 0; attempt < 12; attempt += 1) {
       // oxlint-disable-next-line no-await-in-loop -- frame-by-frame check that nothing previews
@@ -139,9 +148,11 @@ test("shows no changed-only preview during a deferred load in the default view",
 
     // RepoFiles fills: full tree (changed + unchanged)
     seedState(model, allScope);
+
     const frame = await settleUntil("full tree", (current) =>
       sidebarOf(current).includes("changed.ts")
     );
+
     expect(sidebarOf(frame)).toContain("app.ts");
   } finally {
     renderer.destroy();
@@ -155,6 +166,7 @@ test("keeps changed-file rows visible during a deferred load in changes-only mod
   const repoRoot = createFixtureRepo("stet-loading-changes-", {
     "src/app.ts": "export const x = 1\n",
   });
+
   writeFileSync(path.join(repoRoot, "src/new.ts"), "export const y = 2\n");
   const model = await loadModel(repoRoot, allScope);
   seedLoading(model);
@@ -167,11 +179,14 @@ test("keeps changed-file rows visible during a deferred load in changes-only mod
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
     const frame = await settleUntil("changed row", (current) =>
       sidebarOf(current).includes("new.ts")
     );
+
     const sidebar = sidebarOf(frame);
     expect(sidebar).toContain("new.ts");
     expect(sidebar).not.toContain("no files");

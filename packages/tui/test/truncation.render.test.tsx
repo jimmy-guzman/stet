@@ -20,6 +20,7 @@ import {
 describe("truncation footer", () => {
   test("shows the hidden-line count and clears it when f loads the full file", async () => {
     const big = `${Array.from({ length: 6000 }, (_, index) => `line ${index}`).join("\n")}\n`;
+
     const repoRoot = createFixtureRepo("stet-trunc-", {
       "big.txt": big,
       "package.json": `${JSON.stringify({ name: "trunc-fixture" })}\n`,
@@ -34,22 +35,26 @@ describe("truncation footer", () => {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       const shown = await settleUntil("truncation footer", (frame) =>
         frame.includes("more lines · f to load")
       );
+
       expect(state.truncatedHidden()).toBeGreaterThan(0);
       expect(shown).toContain(
         `⋯ ${state.truncatedHidden()} more lines · f to load`
       );
 
       mockInput.pressKey("f");
+
       const loaded = await settleUntil(
         "footer clears after loading full content",
         (frame) => !frame.includes("f to load")
       );
+
       expect(loaded).not.toContain("f to load");
     } finally {
       renderer.destroy();

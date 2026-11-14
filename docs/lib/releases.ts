@@ -33,17 +33,17 @@ interface GithubRelease {
   prerelease: boolean;
 }
 
-const sectionTitles: Record<string, string> = {
-  Features: "Features",
-  "Bug Fixes": "Bug fixes",
-  "Performance Improvements": "Performance improvements",
-  "⚠ BREAKING CHANGES": "Breaking changes",
-  Reverts: "Reverts",
-  Documentation: "Documentation",
-};
+const sectionTitles = new Map([
+  ["Features", "Features"],
+  ["Bug Fixes", "Bug fixes"],
+  ["Performance Improvements", "Performance improvements"],
+  ["⚠ BREAKING CHANGES", "Breaking changes"],
+  ["Reverts", "Reverts"],
+  ["Documentation", "Documentation"],
+]);
 
 const normalizeTitle = (raw: string) =>
-  sectionTitles[raw] ?? raw.replace(/^[^\p{L}]+/u, "").trim();
+  sectionTitles.get(raw) ?? raw.replace(/^[^\p{L}]+/u, "").trim();
 
 const parseNote = (line: string): ReleaseNote => {
   let message = line.replace(/^\*\s+/u, "").trim();
@@ -60,6 +60,7 @@ const parseNote = (line: string): ReleaseNote => {
 
   const scopeMatch = /^\*\*(?<scope>[^*:]+):\*\*\s*/u.exec(message);
   const scope = scopeMatch?.groups?.scope;
+
   if (scopeMatch) {
     message = message.slice(scopeMatch[0].length);
   }
@@ -68,7 +69,9 @@ const parseNote = (line: string): ReleaseNote => {
     /^(?<emoji>\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|\p{Emoji_Modifier})*)\s+/u.exec(
       message
     );
+
   const emoji = emojiMatch?.groups?.emoji;
+
   if (emojiMatch) {
     message = message.slice(emojiMatch[0].length);
   }
@@ -88,6 +91,7 @@ export const parseReleaseBody = (body: string): ReleaseSection[] => {
 
   for (const line of body.split("\n")) {
     const heading = /^###\s+(?<title>.*)$/u.exec(line);
+
     if (heading?.groups) {
       sections.push({
         title: normalizeTitle(heading.groups.title.trim()),
@@ -95,6 +99,7 @@ export const parseReleaseBody = (body: string): ReleaseSection[] => {
       });
       continue;
     }
+
     if (line.startsWith("* ") && sections.length > 0) {
       sections.at(-1)?.notes.push(parseNote(line));
     }
@@ -138,13 +143,17 @@ const fetchReleasesPage = async (page: number) => {
       signal: AbortSignal.timeout(5000),
     }
   );
+
   if (!res.ok) {
     throw new Error(`releases request failed: ${res.status}`);
   }
+
   const data: unknown = await res.json();
+
   if (!Array.isArray(data)) {
     throw new TypeError("unexpected releases payload");
   }
+
   return {
     releases: data.filter(isGithubRelease),
     link: res.headers.get("link"),
@@ -153,12 +162,14 @@ const fetchReleasesPage = async (page: number) => {
 
 const lastPageFrom = (linkHeader: string | null): number => {
   const match = linkHeader?.match(/[?&]page=(?<last>\d+)[^>]*>;\s*rel="last"/u);
+
   return match?.groups ? Number(match.groups.last) : 1;
 };
 
 export const getReleases = async (): Promise<Release[]> => {
   try {
     const first = await fetchReleasesPage(1);
+
     const rest = await Promise.all(
       Array.from(
         { length: lastPageFrom(first.link) - 1 },
@@ -168,8 +179,9 @@ export const getReleases = async (): Promise<Release[]> => {
 
     return [first, ...rest]
       .flatMap((page) => page.releases)
-      .filter((release) => !release.draft && !release.prerelease)
-      .map(toRelease);
+      .flatMap((release) =>
+        release.draft || release.prerelease ? [] : [toRelease(release)]
+      );
   } catch {
     return [];
   }

@@ -19,6 +19,7 @@ test("highlightSnippet preserves every line of a multi-line signature", async ()
     "const a = 1\nconst b = 2",
     "typescript"
   );
+
   expect(lines.map((line) => line.map((span) => span.text).join(""))).toEqual([
     "const a = 1",
     "const b = 2",

@@ -11,6 +11,7 @@ const highlightSpan = (
   highlight: boolean
 ): HighlightSpan => {
   const base = fg === undefined ? { text } : { fg, text };
+
   return highlight ? { ...base, highlight: true } : base;
 };
 
@@ -26,25 +27,32 @@ export const markRange = (
   if (to <= from) {
     return spans;
   }
+
   const out: HighlightSpan[] = [];
   let col = 0;
+
   for (const span of spans) {
     let text = "";
     let highlighted = false;
+
     for (const char of span.text) {
       const inRange = col >= from && col < to;
+
       if (text !== "" && inRange !== highlighted) {
         out.push(highlightSpan(span.fg, text, highlighted));
         text = "";
       }
+
       highlighted = inRange;
       text += char;
       col += Bun.stringWidth(char);
     }
+
     if (text !== "") {
       out.push(highlightSpan(span.fg, text, highlighted));
     }
   }
+
   return out;
 };
 
@@ -55,16 +63,21 @@ export const columnToIndex = (line: string, col: number): number => {
   if (col <= 0) {
     return 0;
   }
+
   let display = 0;
   let index = 0;
+
   for (const char of line) {
     const charWidth = Bun.stringWidth(char);
+
     if (display + charWidth > col) {
       return index;
     }
+
     display += charWidth;
     index += char.length;
   }
+
   return index;
 };
 
@@ -84,24 +97,32 @@ export const sliceSpansWindow = (
   const end = start + width;
   const out: RenderSpan[] = [];
   let col = 0;
+
   for (const span of spans) {
     let text = "";
+
     for (const char of span.text) {
       const charWidth = Bun.stringWidth(char);
+
       if (col >= start && col + charWidth <= end) {
         text += char;
       }
+
       col += charWidth;
+
       if (col >= end) {
         break;
       }
     }
+
     if (text !== "") {
       out.push(span.fg === undefined ? { text } : { fg: span.fg, text });
     }
+
     if (col >= end) {
       break;
     }
   }
+
   return out;
 };

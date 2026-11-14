@@ -21,10 +21,13 @@ const wrappedLineCount = (text: string, width: number) => {
   if (width <= 0) {
     return 1;
   }
+
   let lines = 1;
   let col = 0;
+
   for (const word of text.split(" ")) {
     const w = Bun.stringWidth(word);
+
     if (col === 0) {
       col = w;
     } else if (col + 1 + w <= width) {
@@ -34,6 +37,7 @@ const wrappedLineCount = (text: string, width: number) => {
       col = w;
     }
   }
+
   return lines;
 };
 
@@ -60,6 +64,7 @@ export const HelpDialog = () => {
           heading: group.heading,
         }))
   );
+
   // A glyph needs only a few cells; a combo column holds `Shift+F10` and wider rebinds.
   const leftWidth = createMemo(() =>
     Math.max(
@@ -69,6 +74,7 @@ export const HelpDialog = () => {
       )
     )
   );
+
   // Size the list by its rendered height (descriptions can wrap to two lines), so the overlay shows
   // Every row without scrolling whenever the terminal has the room; sizing by entry count alone
   // Clipped wrapped rows off the bottom.
@@ -76,6 +82,7 @@ export const HelpDialog = () => {
     // Row interior after the border (2), scrollbar gutter (1), padding (2), and the left column,
     // Slightly conservative so the list never clips a row.
     const rightWidth = state.overlayWidth() - 5 - leftWidth();
+
     const rendered = groups().reduce(
       (sum, group, index) =>
         // Heading row (1) + a one-line spacer before every group but the first.
@@ -87,8 +94,10 @@ export const HelpDialog = () => {
         ),
       0
     );
+
     return Math.min(rendered, Math.max(1, state.terminalHeight() - 7));
   });
+
   return (
     <box
       position="absolute"

@@ -16,6 +16,7 @@ import {
 
 const lnOf = (frame: string) => {
   const match = /ln (?<line>\d+)/u.exec(frame);
+
   return match?.groups?.line === undefined
     ? undefined
     : Number(match.groups.line);
@@ -27,11 +28,13 @@ describe("back / forward navigation", () => {
       { length: 30 },
       (_, index) => `const line${index + 1} = ${index + 1}`
     );
+
     const repoRoot = createFixtureRepo("stet-backfwd-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${body.join("\n")}\n`,
       "src/b.ts": `${body.join("\n")}\n`,
     });
+
     // Edit both so each renders a hunk away from line 1.
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
@@ -44,11 +47,13 @@ describe("back / forward navigation", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -56,15 +61,18 @@ describe("back / forward navigation", () => {
 
       // Open a.ts and move the cursor down inside it, away from the first change.
       state.selectFile("src/a.ts");
+
       const onA = await settleUntil(
         "a.ts open",
         (frame) => frame.includes("src/a.ts") && lnOf(frame) !== undefined
       );
+
       const startLn = lnOf(onA);
       state.setFocusedPane("diff");
       mockInput.pressKey("j");
       await renderOnce();
       mockInput.pressKey("j");
+
       const moved = await settleUntil(
         "cursor moved",
         (frame) =>
@@ -72,6 +80,7 @@ describe("back / forward navigation", () => {
           lnOf(frame) !== undefined &&
           lnOf(frame) !== startLn
       );
+
       const movedLn = lnOf(moved);
       expect(movedLn).not.toBe(startLn);
 
@@ -84,10 +93,12 @@ describe("back / forward navigation", () => {
 
       // Back returns to a.ts at the exact line we left.
       state.goBack();
+
       const back = await settleUntil(
         "back on a.ts",
         (frame) => frame.includes("src/a.ts") && lnOf(frame) === movedLn
       );
+
       expect(lnOf(back)).toBe(movedLn);
 
       // Forward returns to b.ts.
@@ -107,10 +118,12 @@ describe("back / forward navigation", () => {
       { length: 30 },
       (_, index) => `const line${index + 1} = ${index + 1}`
     );
+
     const repoRoot = createFixtureRepo("stet-samefile-jump-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/c.ts": `${body.join("\n")}\n`,
     });
+
     // Two hunks far apart (lines 2 and 27), so both jump lines are navigable in the diff.
     writeFileSync(
       path.join(repoRoot, "src", "c.ts"),
@@ -125,6 +138,7 @@ describe("back / forward navigation", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -132,6 +146,7 @@ describe("back / forward navigation", () => {
         width: 120,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -151,10 +166,12 @@ describe("back / forward navigation", () => {
 
       // Back must land on the first jump's line (2), not the file's first change.
       state.goBack();
+
       const back = await settleUntil(
         "back to first jump line",
         (frame) => frame.includes("src/c.ts") && lnOf(frame) === 2
       );
+
       expect(lnOf(back)).toBe(2);
     } finally {
       renderer.destroy();

@@ -60,6 +60,7 @@ export const parseCommitTimes = (output: string) =>
       .filter((parts) => parts.length === 2)
       .flatMap(([sha, seconds]) => {
         const at = Number(seconds);
+
         return sha === undefined || !Number.isFinite(at)
           ? []
           : [[sha, at * 1000] as const];
@@ -73,6 +74,7 @@ export const parseWorktreeList = (output: string): Worktree[] => {
   for (const record of output.split("\0\0")) {
     const attributes = record.split("\0").filter((line) => line !== "");
     const [first] = attributes;
+
     if (first === undefined || !first.startsWith("worktree ")) {
       continue;
     }
@@ -125,6 +127,7 @@ export const parseWorktreeStatusPaths = (output: string) => {
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+
     if (token === undefined || token.length < 4) {
       continue;
     }
@@ -150,11 +153,14 @@ export const parseWorktreeStatusPaths = (output: string) => {
  */
 const gitDirOf = (worktreePath: string): string | undefined => {
   const dotGit = `${worktreePath}/.git`;
+
   try {
     if (statSync(dotGit).isDirectory()) {
       return dotGit;
     }
+
     const pointer = readFileSync(dotGit, "utf-8").trim();
+
     return pointer.startsWith("gitdir: ")
       ? pointer.slice("gitdir: ".length)
       : undefined;
@@ -171,9 +177,11 @@ const gitDirOf = (worktreePath: string): string | undefined => {
  */
 const reflogMtime = (worktreePath: string) => {
   const gitDir = gitDirOf(worktreePath);
+
   if (gitDir === undefined) {
     return 0;
   }
+
   try {
     return statSync(`${gitDir}/logs/HEAD`).mtimeMs;
   } catch {
@@ -195,9 +203,11 @@ export const summarizeWorktree = (
   // A deleted (or vanished-mid-scan) file stats to 0 and so drops out of the max on its own.
   const entries = parseWorktreeStatusPaths(statusOutput);
   let newest = Math.max(reflogMtime(path), commitTimeMs ?? 0);
+
   for (const entry of entries) {
     newest = Math.max(newest, fileMtime(path, entry));
   }
+
   return { lastActivityAt: newest === 0 ? undefined : newest, path };
 };
 
@@ -253,6 +263,7 @@ export const orderWorktrees = (
 export const worktreePathTails = (worktrees: readonly Worktree[]) => {
   const paths = worktrees.map((worktree) => worktree.path.split("/"));
   const [first] = paths;
+
   if (first === undefined) {
     return new Map<string, string>();
   }
@@ -260,6 +271,7 @@ export const worktreePathTails = (worktrees: readonly Worktree[]) => {
   const mismatch = first.findIndex((segment, index) =>
     paths.some((other) => other[index] !== segment)
   );
+
   const shared = mismatch === -1 ? first.length : mismatch;
 
   return new Map(

@@ -18,6 +18,7 @@ interface PageProps {
 export default async function Page(props: PageProps) {
   const params = await props.params;
   const page = source.getPage(params.slug);
+
   if (!page) {
     notFound();
   }
@@ -44,6 +45,7 @@ export const generateStaticParams = () => source.generateParams();
 export const generateMetadata = async (props: PageProps): Promise<Metadata> => {
   const params = await props.params;
   const page = source.getPage(params.slug);
+
   if (!page) {
     notFound();
   }

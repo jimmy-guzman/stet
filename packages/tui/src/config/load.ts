@@ -1,4 +1,4 @@
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 import { createScanner, ScanError, SyntaxKind } from "jsonc-parser";
 
 import { emptyConfig, UserConfigSchema } from "./schema";
@@ -12,6 +12,8 @@ export interface LoadedConfig {
 }
 
 const decode = Schema.decodeUnknownResult(UserConfigSchema);
+
+const decodeObject = Schema.decodeUnknownOption(Schema.JsonObject);
 
 const knownKeys = new Set(Object.keys(UserConfigSchema.fields));
 
@@ -36,6 +38,7 @@ const trivia = new Set([
  */
 export const isEmptyJsonc = (text: string) => {
   const scanner = createScanner(text, false);
+
   for (
     let kind = scanner.scan();
     kind !== SyntaxKind.EOF;
@@ -45,6 +48,7 @@ export const isEmptyJsonc = (text: string) => {
       return false;
     }
   }
+
   return true;
 };
 
@@ -62,12 +66,10 @@ const parseJsonc = (text: string): Result.Result<unknown, string> => {
   }
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 // One line (the status notice renders one), without the SchemaError() wrapper.
-const formatIssue = (error: unknown) => {
+const formatIssue = (error: Schema.SchemaError) => {
   const text = String(error).replaceAll(/\s+/gu, " ");
+
   return /^SchemaError\((?<detail>.*)\)$/u.exec(text)?.groups?.detail ?? text;
 };
 
@@ -76,14 +78,18 @@ const formatIssue = (error: unknown) => {
 // Files...) decodes verbatim, diffs empty, and stays its resolver's job.
 const unknownSectionKeys = (
   section: string,
-  rawValue: unknown,
-  decodedValue: unknown
+  rawValue: Schema.Json,
+  decoded: UserConfig
 ) => {
-  if (!isRecord(rawValue) || !isRecord(decodedValue)) {
+  const [decodedValue] = Object.values(decoded);
+
+  if (!Predicate.isObject(rawValue) || !Predicate.isObject(decodedValue)) {
     return [];
   }
+
   const kept = new Set(Object.keys(decodedValue));
   const hint = movedSectionKeys.get(section);
+
   return Object.keys(rawValue)
     .filter((key) => !kept.has(key))
     .map(
@@ -100,36 +106,41 @@ const unknownSectionKeys = (
  */
 export const loadConfigText = (text: string): LoadedConfig =>
   parseJsonc(text).pipe(
+    Result.flatMap((raw) =>
+      decodeObject(raw).pipe(
+        Result.fromOption(() => "config must be a JSONC object")
+      )
+    ),
     Result.match({
       onFailure: (error) => ({ config: emptyConfig, issues: [error] }),
       onSuccess: (raw) => decodeConfig(raw),
     })
   );
 
-const decodeConfig = (raw: unknown): LoadedConfig => {
-  if (!isRecord(raw)) {
-    return { config: emptyConfig, issues: ["config must be a JSONC object"] };
-  }
+const decodeConfig = (raw: Schema.JsonObject): LoadedConfig => {
   const issues = Object.keys(raw)
     .filter((key) => !knownKeys.has(key))
     .map((key) => `config: unknown key "${key}"`);
+
   let config: UserConfig = emptyConfig;
+
   for (const key of Object.keys(raw).filter((name) => knownKeys.has(name))) {
     const acc = config;
     config = decode({ [key]: raw[key] }).pipe(
       Result.match({
         onFailure: (error) => {
           issues.push(formatIssue(error));
+
           return acc;
         },
         onSuccess: (part) => {
-          issues.push(
-            ...unknownSectionKeys(key, raw[key], Object.values(part)[0])
-          );
+          issues.push(...unknownSectionKeys(key, raw[key], part));
+
           return { ...acc, ...part };
         },
       })
     );
   }
+
   return { config, issues };
 };

@@ -39,6 +39,7 @@ describe("parseWorktreeList", () => {
   test("parses the main worktree and a linked worktree with branches", () => {
     const output =
       "worktree /repo\0HEAD 1111111111111111111111111111111111111111\0branch refs/heads/main\0\0worktree /repo/.claude/worktrees/feat\0HEAD 2222222222222222222222222222222222222222\0branch refs/heads/feat\0\0";
+
     expect(parseWorktreeList(output)).toEqual([
       {
         bare: false,
@@ -64,6 +65,7 @@ describe("parseWorktreeList", () => {
   test("marks a detached worktree and leaves branch undefined", () => {
     const output =
       "worktree /repo/spike\0HEAD 3333333333333333333333333333333333333333\0detached\0\0";
+
     const [entry] = parseWorktreeList(output);
     expect(entry).toMatchObject({
       detached: true,
@@ -75,6 +77,7 @@ describe("parseWorktreeList", () => {
   test("marks bare, locked, and prunable entries, with and without reasons", () => {
     const output =
       "worktree /repo.git\0bare\0\0worktree /repo/locked-bare-reason\0HEAD 4444444444444444444444444444444444444444\0branch refs/heads/a\0locked\0\0worktree /repo/locked-with-reason\0HEAD 5555555555555555555555555555555555555555\0branch refs/heads/b\0locked path is on a portable device\0\0worktree /repo/gone\0HEAD 6666666666666666666666666666666666666666\0branch refs/heads/c\0prunable gitdir file points to non-existent location\0\0";
+
     const [bare, locked, lockedReason, prunable] = parseWorktreeList(output);
     expect(bare).toMatchObject({ bare: true, path: "/repo.git" });
     expect(bare?.branch).toBeUndefined();
@@ -92,6 +95,7 @@ describe("parseWorktreeList", () => {
   test("skips malformed records and tolerates trailing nuls", () => {
     const output =
       "HEAD 7777777777777777777777777777777777777777\0\0worktree /repo\0HEAD 8888888888888888888888888888888888888888\0branch refs/heads/main\0\0\0";
+
     const worktrees = parseWorktreeList(output);
     expect(worktrees).toHaveLength(1);
     expect(worktrees[0]).toMatchObject({ branch: "main", path: "/repo" });
@@ -152,6 +156,7 @@ describe("summarizeWorktree", () => {
     const repoRoot = createFixtureRepo("stet-worktree-summary-", {
       "a.ts": "const a = 1\n",
     });
+
     try {
       writeFileSync(path.join(repoRoot, "old.ts"), "const old = 1\n");
       writeFileSync(path.join(repoRoot, "new.ts"), "const fresh = 1\n");
@@ -189,6 +194,7 @@ describe("summarizeWorktree", () => {
     const repoRoot = createFixtureRepo("stet-worktree-newer-", {
       "a.ts": "const a = 1\n",
     });
+
     try {
       writeFileSync(path.join(repoRoot, "edit.ts"), "const edited = 1\n");
       utimesSync(
@@ -215,6 +221,7 @@ describe("summarizeWorktree", () => {
     const repoRoot = createFixtureRepo("stet-worktree-reflog-", {
       "a.ts": "const a = 1\n",
     });
+
     try {
       // The fixture's own commit wrote logs/HEAD moments ago; no commit time is passed, so the
       // Reflog is the only signal left and it must still register the worktree as freshly touched.
@@ -250,10 +257,12 @@ describe("mergeWorktreeSummaries", () => {
 
   test("replaces the map when a worktree appears", () => {
     const previous = new Map([["/repo", summary("/repo", undefined)]]);
+
     const merged = mergeWorktreeSummaries(previous, [
       summary("/repo", undefined),
       summary("/side", 50),
     ]);
+
     expect(merged).not.toBe(previous);
     expect(merged.size).toBe(2);
   });
@@ -267,6 +276,7 @@ describe("orderWorktrees", () => {
       worktree("/repo", "main"),
       worktree("/repo/warm", "warm"),
     ];
+
     const summaries = new Map([
       ["/repo/hot", summary("/repo/hot", 9000)],
       ["/repo/warm", summary("/repo/warm", 5000)],
@@ -291,6 +301,7 @@ describe("worktrees in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-git-worktree-", {
       "a.ts": "const a = 1\n",
     });
+
     try {
       runGit(repoRoot, [
         "worktree",
@@ -317,12 +328,15 @@ describe("worktrees in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-worktree-summaries-", {
       "a.ts": "const a = 1\n",
     });
+
     const linkedRoot = `${repoRoot}-linked`;
+
     try {
       runGit(repoRoot, ["worktree", "add", "-b", "side", linkedRoot]);
       writeFileSync(path.join(linkedRoot, "one.ts"), "const one = 1\n");
 
       const worktrees = await loadWorktrees(repoRoot);
+
       const summaries = await loadWorktreeSummaries(
         [...worktrees, worktree(`${repoRoot}-does-not-exist`, "gone")],
         repoRoot
@@ -331,6 +345,7 @@ describe("worktrees in a fixture repo", () => {
       // The dead worktree is dropped rather than failing the batch; the live ones both report a real
       // Age, because even a clean worktree has just been committed to by the fixture.
       expect(summaries).toHaveLength(2);
+
       for (const entry of summaries) {
         expect(entry.lastActivityAt).toBeGreaterThan(Date.now() - 60_000);
       }
@@ -346,8 +361,10 @@ describe("worktrees in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-worktree-rank-", {
       "a.ts": "const a = 1\n",
     });
+
     const staleRoot = `${repoRoot}-stale`;
     const committedRoot = `${repoRoot}-committed`;
+
     try {
       runGit(repoRoot, ["worktree", "add", "-b", "stale", staleRoot]);
       runGit(repoRoot, ["worktree", "add", "-b", "committed", committedRoot]);

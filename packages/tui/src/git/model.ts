@@ -60,9 +60,11 @@ const lineStats = (
   if (stat !== undefined) {
     return stat;
   }
+
   if (kind !== "untracked") {
     return { additions: 0, binary: false, deletions: 0 };
   }
+
   return { ...statUntrackedFile(repoRoot, path), deletions: 0 };
 };
 
@@ -83,10 +85,13 @@ export const assembleChanged = (
     scope.kind === "commit"
       ? []
       : parseUntrackedFiles(untrackedOutput);
+
   const nameStatus = parseNameStatus(nameStatusOutput);
+
   const statusByPath = new Map(
     [...nameStatus, ...untracked].map((entry) => [entry.path, entry])
   );
+
   const numstat = parseNumstat(numstatOutput);
   const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]));
   const stageByPath = parsePorcelainStatus(porcelainOutput);
@@ -96,15 +101,18 @@ export const assembleChanged = (
     .map((path) => {
       const stat = numstatByPath.get(path);
       const statusEntry = statusByPath.get(path);
+
       const kind =
         statusEntry?.kind ??
         inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0);
+
       const { additions, binary, deletions } = lineStats(
         repoRoot,
         path,
         kind,
         stat
       );
+
       const file: ChangedFile = {
         additions,
         binary,
@@ -118,6 +126,7 @@ export const assembleChanged = (
           (kind === "untracked" ? "untracked" : "unstaged"),
         warnings: warningsFor(path, kind, additions, deletions),
       };
+
       return file;
     })
     .toSorted((a, b) => a.path.localeCompare(b.path));
@@ -166,6 +175,7 @@ export const mergeChanged = (
 
   const changed = next.changed.map((file) => {
     const before = prev.changedByPath.get(file.path);
+
     return before !== undefined && sameChangedFile(before, file)
       ? before
       : file;
@@ -251,6 +261,7 @@ export const parsePorcelainStatus = (
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+
     if (token === undefined || token.length < 4) {
       continue;
     }
@@ -271,9 +282,11 @@ export const parsePorcelainStatus = (
       token[1] === "C"
     ) {
       const original = tokens[index + 1];
+
       if (original !== undefined && original !== "") {
         stageByPath.set(original, stage);
       }
+
       index += 1;
     }
   }
@@ -286,11 +299,13 @@ export const parsePorcelainStatus = (
 // Has a name). A detached HEAD (`## HEAD (no branch)`) has no branch, so it returns undefined.
 export const parseBranch = (output: string): string | undefined => {
   const [header] = output.split("\0");
+
   if (header === undefined || !header.startsWith("## ")) {
     return undefined;
   }
 
   const rest = header.slice(3);
+
   if (rest.includes("(no branch)")) {
     return undefined;
   }
@@ -298,6 +313,7 @@ export const parseBranch = (output: string): string | undefined => {
   const unborn = "No commits yet on ";
   const named = rest.startsWith(unborn) ? rest.slice(unborn.length) : rest;
   const upstream = named.indexOf("...");
+
   return (
     (upstream === -1 ? named : named.slice(0, upstream)).trim() || undefined
   );
@@ -323,6 +339,7 @@ const stageFromCodes = (index: string, worktree: string): StageState => {
 
   const staged = index !== " " && index !== "?";
   const unstaged = worktree !== " " && worktree !== "?";
+
   if (staged && unstaged) {
     return "mixed";
   }
@@ -342,6 +359,7 @@ export const changedPathsDiffer = (
   if (previous.length !== next.length) {
     return true;
   }
+
   return previous.some((file, index) => file.path !== next[index]?.path);
 };
 
@@ -358,6 +376,7 @@ const parseTrackedStage = (output: string) =>
     .map((entry) => {
       const tab = entry.indexOf("\t");
       const mode = entry.slice(0, entry.indexOf(" "));
+
       return { path: entry.slice(tab + 1), symlink: mode === SYMLINK_MODE };
     });
 
@@ -367,6 +386,7 @@ export const parseRepoFiles = (
   untrackedOutput: string
 ): Pick<GitModel, "repoFiles" | "repoFilesKey"> => {
   const tracked = parseTrackedStage(trackedStageOutput);
+
   const untracked = untrackedOutput
     .split("\0")
     .filter((path) => path !== "")
@@ -404,6 +424,7 @@ export const parseRepoFiles = (
   }
 
   repoFilesCache = { key: repoFilesKey, repoFiles };
+
   return { repoFiles, repoFilesKey };
 };
 
@@ -425,6 +446,7 @@ export const parseUntrackedFiles = (output: string): StatusEntry[] =>
 
 export const parseNumstat = (output: string) => {
   const tokens = output.split("\0");
+
   const entries: {
     path: string;
     additions: number;
@@ -434,12 +456,14 @@ export const parseNumstat = (output: string) => {
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+
     if (token === undefined || token === "") {
       continue;
     }
 
     const [addedRaw = "0", deletedRaw = "0", ...pathParts] = token.split("\t");
     let path = pathParts.join("\t");
+
     // A rename record carries no inline path at all ("added\tdeleted\t" NUL old
     // NUL new), unlike a path that merely ends with a tab
     if (pathParts.length === 1 && pathParts[0] === "") {
@@ -465,6 +489,7 @@ export const parseNameStatus = (output: string): StatusEntry[] => {
 
   for (let index = 0; index < tokens.length; index += 1) {
     const status = tokens[index];
+
     if (status === undefined || status.trim() === "") {
       continue;
     }
@@ -561,6 +586,7 @@ const warningsFor = (
 const statUntrackedFile = (repoRoot: string, path: string) => {
   // LoadFileContent absorbs dangling symlinks and files deleted mid-scan as "missing"
   const content = loadFileContent(repoRoot, path, { full: false });
+
   if (content.kind === "text") {
     return { additions: content.lineCount, binary: false };
   }

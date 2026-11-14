@@ -21,6 +21,7 @@ import {
 const u32be = (n: number) => {
   const bytes = new Uint8Array(4);
   new DataView(bytes.buffer).setUint32(0, n);
+
   return [...bytes];
 };
 
@@ -66,6 +67,7 @@ const pathspecDiff = (
             ? [file.path]
             : [file.oldPath, file.path]),
         ];
+
   // `git diff` exits 1 when there are differences (and always with --no-index),
   // Which execFileSync throws on; the patch text is still on stdout.
   try {
@@ -75,9 +77,10 @@ const pathspecDiff = (
       env: stripGitEnv(process.env),
     });
   } catch (error) {
-    if (error !== null && typeof error === "object" && "stdout" in error) {
+    if (error instanceof Error && "stdout" in error) {
       return String(error.stdout);
     }
+
     throw error;
   }
 };
@@ -92,9 +95,11 @@ const changedFile = async (
 ) => {
   const model = await loadModel(repoRoot, scope);
   const changed = model.changedByPath.get(file);
+
   if (changed === undefined) {
     throw new Error(`${file} not in the ${scope.kind} changed set`);
   }
+
   return changed;
 };
 
@@ -109,6 +114,7 @@ const expectSameRows = async (
   const file = await changedFile(repoRoot, scope, filePath);
   const inProcess = await loadFileDiff(repoRoot, scope, file);
   expect(rows(inProcess)).toEqual(rows(pathspecDiff(repoRoot, scope, file)));
+
   return inProcess;
 };
 
@@ -124,6 +130,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-mod-", {
       "src/a.ts": "one\ntwo\nthree\nfour\nfive\n",
     });
+
     writeFileSync(
       path.join(repoRoot, "src/a.ts"),
       "one\ntwo\nCHANGED\nfour\nfive\n"
@@ -135,6 +142,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-unstaged-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
+
     writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nstaged\nthree\n");
     runGit(repoRoot, ["add", "src/a.ts"]);
     writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nstaged\nworktree\n");
@@ -149,6 +157,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-staged-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
+
     writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nSTAGED\nthree\n");
     runGit(repoRoot, ["add", "src/a.ts"]);
     // A further worktree-only edit that must NOT appear in the staged diff.
@@ -164,6 +173,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-add-staged-", {
       "src/keep.ts": "keep\n",
     });
+
     writeFileSync(path.join(repoRoot, "src/new.ts"), "hello\nworld\n");
     runGit(repoRoot, ["add", "src/new.ts"]);
     await expectSameRows(
@@ -177,6 +187,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-add-all-", {
       "src/keep.ts": "keep\n",
     });
+
     writeFileSync(path.join(repoRoot, "src/new.ts"), "hello\nworld\n");
     runGit(repoRoot, ["add", "src/new.ts"]);
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "src/new.ts");
@@ -186,6 +197,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-del-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
+
     rmSync(path.join(repoRoot, "src/a.ts"));
     await expectSameRows(
       repoRoot,
@@ -198,6 +210,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-del-staged-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
+
     runGit(repoRoot, ["rm", "src/a.ts"]);
     await expectSameRows(repoRoot, { kind: "staged", ref: "HEAD" }, "src/a.ts");
   });
@@ -206,6 +219,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-rename-", {
       "src/old.ts": "keep\nbefore\nkeep2\n",
     });
+
     runGit(repoRoot, ["mv", "src/old.ts", "src/new.ts"]);
     writeFileSync(path.join(repoRoot, "src/new.ts"), "keep\nafter\nkeep2\n");
     runGit(repoRoot, ["add", "src/new.ts"]);
@@ -220,6 +234,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-nonl-", {
       "a.txt": "line\n",
     });
+
     writeFileSync(path.join(repoRoot, "a.txt"), "line\nmore");
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "a.txt");
   });
@@ -228,6 +243,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-crlf-", {
       "a.txt": "one\r\ntwo\r\nthree\r\n",
     });
+
     writeFileSync(path.join(repoRoot, "a.txt"), "one\r\nCHANGED\r\nthree\r\n");
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "a.txt");
   });
@@ -236,6 +252,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-space-", {
       "src/a file café.ts": "one\ntwo\n",
     });
+
     writeFileSync(path.join(repoRoot, "src/a file café.ts"), "one\nCHANGED\n");
     await expectSameRows(
       repoRoot,
@@ -248,12 +265,15 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-untracked-", {
       "src/keep.ts": "keep\n",
     });
+
     writeFileSync(path.join(repoRoot, "src/new.ts"), "brand\nnew\n");
+
     const inProcess = await expectSameRows(
       repoRoot,
       { kind: "unstaged", ref: "HEAD" },
       "src/new.ts"
     );
+
     expect(rows(inProcess)).toEqual([
       { content: "brand", newLine: 1, oldLine: undefined, type: "add" },
       { content: "new", newLine: 2, oldLine: undefined, type: "add" },
@@ -264,6 +284,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-bin-", {
       "keep.ts": "keep\n",
     });
+
     writeFileSync(
       path.join(repoRoot, "img.bin"),
       new Uint8Array([1, 2, 0, 3, 255, 0, 7])
@@ -279,6 +300,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-lastcommit-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
+
     writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nthree\n");
     writeFileSync(path.join(repoRoot, "src/added.ts"), "fresh\n");
     runGit(repoRoot, ["add", "."]);
@@ -289,11 +311,13 @@ describe("in-process fileDiff matches git", () => {
       encoding: "utf-8",
       env: stripGitEnv(process.env),
     }).trim();
+
     const scope: DiffScope = {
       headRef: "HEAD",
       kind: "last-commit",
       ref: parent,
     };
+
     await expectSameRows(repoRoot, scope, "src/a.ts");
     await expectSameRows(repoRoot, scope, "src/added.ts");
   });
@@ -302,6 +326,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-session-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
+
     const base = head(repoRoot);
     writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nthree\n");
     runGit(repoRoot, ["add", "."]);

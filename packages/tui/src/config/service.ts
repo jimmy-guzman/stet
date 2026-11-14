@@ -40,6 +40,7 @@ export const ConfigLive = Layer.effect(
     load: () =>
       Effect.gen(function* configLoad() {
         const path = yield* firstExistingConfig;
+
         if (path === undefined) {
           return { config: {}, issues: [] };
         }
@@ -62,11 +63,13 @@ export const ConfigLive = Layer.effect(
         const existing = yield* firstExistingConfig;
         // No file yet: seed the primary candidate; Bun.write creates its directory.
         const path = existing ?? configPaths()[0];
+
         if (path === undefined) {
           return yield* new ConfigWriteError({
             message: "no config path available",
           });
         }
+
         const text =
           existing === undefined
             ? "{}"
@@ -77,6 +80,7 @@ export const ConfigLive = Layer.effect(
                   }),
                 try: async () => await Bun.file(existing).text(),
               });
+
         const updated = yield* updateSettingsText(text, snapshot).pipe(
           Result.match({
             onFailure: (message) =>
@@ -84,6 +88,7 @@ export const ConfigLive = Layer.effect(
             onSuccess: (value) => Effect.succeed(value),
           })
         );
+
         if (updated.saved.length > 0) {
           yield* Effect.tryPromise({
             catch: (cause) =>
@@ -93,6 +98,7 @@ export const ConfigLive = Layer.effect(
             try: async () => await Bun.write(path, updated.text),
           });
         }
+
         return updated.saved;
       }),
   }))

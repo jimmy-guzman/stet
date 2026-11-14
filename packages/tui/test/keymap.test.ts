@@ -35,21 +35,26 @@ const countCopyDispatches = (
   press: (handle: (key: KeyEvent) => void) => void
 ) => {
   const calls: string[] = [];
+
   const real = {
     copyFileContents: state.copyFileContents,
     copySelection: state.copySelection,
   };
+
   state.copyFileContents = () => {
     calls.push("copyFileContents");
   };
+
   state.copySelection = () => {
     calls.push("copySelection");
   };
+
   try {
     press(createKeyHandler({ openInEditor: noopOpen, quit: noop }));
   } finally {
     Object.assign(state, real);
   }
+
   return calls;
 };
 
@@ -63,6 +68,7 @@ describe("createKeyHandler", () => {
 
   test("ctrl-c quits", () => {
     let quitCount = 0;
+
     const handle = createKeyHandler({
       openInEditor: noopOpen,
       quit: () => {
@@ -77,6 +83,7 @@ describe("createKeyHandler", () => {
 
   test("a plain c does not quit", () => {
     let quitCount = 0;
+
     const handle = createKeyHandler({
       openInEditor: noopOpen,
       quit: () => {
@@ -94,6 +101,7 @@ describe("createKeyHandler", () => {
       state.seedNav("src/foo.ts");
     });
     const calls: [string, number | undefined, string][] = [];
+
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
@@ -109,6 +117,7 @@ describe("createKeyHandler", () => {
 
   test("e does nothing when no file is selected", () => {
     const calls: unknown[] = [];
+
     const handle = createKeyHandler({
       openInEditor: async (...args) => {
         calls.push(args);
@@ -127,6 +136,7 @@ describe("createKeyHandler", () => {
       state.seedNav("src/bar.ts");
     });
     const calls: [string, number | undefined, string][] = [];
+
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
@@ -142,6 +152,7 @@ describe("createKeyHandler", () => {
 
   test("o does nothing when no file is selected", () => {
     const calls: unknown[] = [];
+
     const handle = createKeyHandler({
       openInEditor: async (...args) => {
         calls.push(args);
@@ -212,6 +223,7 @@ describe("createKeyHandler", () => {
 
   test("plain s still opens the scope picker", () => {
     const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
+
     try {
       handle(keyEvent({ name: "s" }));
       expect(state.scopeMenuOpen()).toBe(true);
@@ -222,6 +234,7 @@ describe("createKeyHandler", () => {
 
   test("Shift+S outside the file view is a no-op, never the scope picker", () => {
     const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
+
     try {
       // Combos match modifiers exactly: Shift+S is the symbols binding, gated on
       // The file view, and it never falls through to the plain-s scope picker
@@ -261,12 +274,14 @@ describe("createKeyHandler", () => {
       state.setFocusedPane("diff");
     });
     let quitCount = 0;
+
     const handle = createKeyHandler({
       openInEditor: noopOpen,
       quit: () => {
         quitCount += 1;
       },
     });
+
     handle(keyEvent({ name: "f10", shift: true }));
 
     // A plain q is swallowed while the menu is open (no fall-through to global quit).
@@ -289,6 +304,7 @@ describe("createKeyHandler", () => {
       state.setFocusedPane("diff");
     });
     const calls: [string, number | undefined, string][] = [];
+
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
@@ -296,6 +312,7 @@ describe("createKeyHandler", () => {
       },
       quit: noop,
     });
+
     handle(keyEvent({ name: "f10", shift: true }));
 
     // Step from "Copy reference" (0) to "Open in editor" (2).
@@ -313,6 +330,7 @@ describe("createKeyHandler", () => {
 
   test("q opens the quit confirm instead of quitting immediately", () => {
     let quitCount = 0;
+
     const handle = createKeyHandler({
       openInEditor: noopOpen,
       quit: () => {
@@ -328,6 +346,7 @@ describe("createKeyHandler", () => {
 
   test("escape from a clean state does nothing: never opens the confirm, never quits", () => {
     let quitCount = 0;
+
     const handle = createKeyHandler({
       openInEditor: noopOpen,
       quit: () => {
@@ -343,6 +362,7 @@ describe("createKeyHandler", () => {
 
   test("the quit confirm owns the keyboard: y and enter quit, esc and n cancel, other keys are swallowed", () => {
     let quitCount = 0;
+
     const handle = createKeyHandler({
       openInEditor: noopOpen,
       quit: () => {
@@ -377,6 +397,7 @@ describe("createKeyHandler", () => {
 
   test("ctrl-c quits instantly even while the quit confirm is open", () => {
     let quitCount = 0;
+
     const handle = createKeyHandler({
       openInEditor: noopOpen,
       quit: () => {

@@ -11,6 +11,7 @@ const grow = (times: number) => {
     state.growPane();
   }
 };
+
 const shrink = (times: number) => {
   for (let step = 0; step < times; step += 1) {
     state.shrinkPane();

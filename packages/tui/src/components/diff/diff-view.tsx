@@ -50,6 +50,7 @@ const caretRangeFor = (
   word: { start: number; end: number }
 ): CaretRange => {
   const from = Bun.stringWidth(content.slice(0, word.start));
+
   return {
     from,
     to: from + Bun.stringWidth(content.slice(word.start, word.end)),
@@ -72,16 +73,20 @@ const StyledLine = (props: {
     if (ref === undefined) {
       return;
     }
+
     const { row } = props;
+
     // The change bar and line metadata live in the fixed gutter (so they stay put while
     // The code scrolls); this buffer renders code only.
     const windowed = props.wrap
       ? row.spans
       : sliceSpansWindow(row.spans, props.scrollX, props.width);
+
     // The caret word gets a background. Its range is in content display columns;
     // In scroll mode the window starts at scrollX, so shift the range by it. In
     // Wrap mode the column styling follows the word wherever it wraps.
     const offset = props.wrap ? 0 : props.scrollX;
+
     const spans: HighlightSpan[] =
       props.caret === undefined
         ? windowed
@@ -90,15 +95,18 @@ const StyledLine = (props: {
             props.caret.from - offset,
             props.caret.to - offset
           );
+
     ref.content = new StyledText(
       spans.map((part) => {
         const chunk = fg(part.fg ?? theme.colors.text.primary)(part.text);
+
         return part.highlight === true
           ? bg(theme.colors.caret.wordBg)(chunk)
           : chunk;
       })
     );
   });
+
   return (
     <text
       ref={(el) => {
@@ -123,15 +131,18 @@ const edgeDirection = (localY: number) => {
   if (localY <= 0) {
     return -1;
   }
+
   return localY >= state.viewerHeight() - 1 ? 1 : 0;
 };
 
 const isCursor = (row: DiffLineRow) => row.navIndex === state.cursorIndex();
+
 // A row inside the active line selection. Selected rows reuse the cursor lift
 // (`resolveBackground`'s active branch), so the band is theme-correct per diff
 // State with no new token; the focus row still shows its caret word on top.
 const isSelected = (row: DiffLineRow) => {
   const range = state.selectionRange();
+
   return (
     range !== undefined && row.navIndex >= range[0] && row.navIndex <= range[1]
   );
@@ -148,6 +159,7 @@ const gutterNumberColor = (row: DiffLineRow) => {
   if (row.type === "add") {
     return theme.colors.diff.addedSign;
   }
+
   return row.type === "remove"
     ? theme.colors.diff.removedSign
     : theme.colors.diff.lineNumberFg;
@@ -157,15 +169,19 @@ const changeBar = (row: DiffLineRow) => {
   if (row.type === "context") {
     return " ";
   }
+
   if (activeThemeMonochrome()) {
     return row.type === "add" ? "+" : "-";
   }
+
   return "▎";
 };
+
 const changeBarColor = (row: DiffLineRow) => {
   if (row.type === "add") {
     return theme.colors.diff.addedSign;
   }
+
   return row.type === "remove"
     ? theme.colors.diff.removedSign
     : theme.colors.text.faint;
@@ -189,6 +205,7 @@ const gutterState = (row: DiffLineRow) => {
       normal: theme.colors.diff.addedBg,
     };
   }
+
   return row.type === "remove"
     ? {
         active: theme.rgba.removedBgActive,
@@ -199,27 +216,35 @@ const gutterState = (row: DiffLineRow) => {
 
 const gutterBackground = (row: DiffLineRow) =>
   resolveBackground(gutterState(row), isCursor(row) || isSelected(row));
+
 const asLineRow = (row: DiffRow) => (isLineRow(row) ? row : undefined);
+
 // A collapsed-region marker: a fold (`▸ N lines folded`), a collapsed git gap
 // (`⋯ N unmodified lines`), or an expanded gap's re-collapse handle (`⋯ hide N …`).
 const markerGlyph = (row: DiffRow) =>
   row.kind === "marker" && row.regionKind === "fold" ? "▸" : "⋯";
+
 const markerLabel = (row: DiffRow) => {
   if (row.kind !== "marker") {
     return "";
   }
+
   const noun = row.count === 1 ? "line" : "lines";
+
   if (row.regionKind === "fold") {
     return `${row.count} ${noun} folded`;
   }
+
   return row.collapsed
     ? `${row.count} unmodified ${noun}`
     : `hide ${row.count} unmodified ${noun}`;
 };
+
 const toggleMarker = (row: DiffRow) => {
   if (row.kind !== "marker") {
     return;
   }
+
   if (row.regionKind === "fold") {
     state.toggleFold(row.key);
   } else {
@@ -253,19 +278,23 @@ export const DiffView = () => {
   let dragActive = false;
   let dragScrollDirection = 0;
   let dragScrollTimer: ReturnType<typeof setInterval> | undefined;
+
   // Nearest line row's navIndex for every `rows()` index (the line at or before it,
   // Else the first line after), precomputed so a drag tick is an O(1) lookup instead
   // Of re-scanning rows() each time.
   const nearestNavByRow = createMemo(() => {
     const all = rows();
     let last = all.find(isLineRow)?.navIndex;
+
     return all.map((row) => {
       if (isLineRow(row)) {
         last = row.navIndex;
       }
+
       return last;
     });
   });
+
   const navIndexForRow = (rowIndex: number) => nearestNavByRow()[rowIndex];
   const findMatchSet = createMemo(() => new Set(state.findMatches()));
 
@@ -273,11 +302,13 @@ export const DiffView = () => {
   // Position in the full row stream (which also contains hunk headers).
   const lineRowIndices = createMemo(() => {
     const indices: number[] = [];
+
     for (const [index, row] of rows().entries()) {
       if (row.kind === "line") {
         indices.push(index);
       }
     }
+
     return indices;
   });
 
@@ -285,13 +316,16 @@ export const DiffView = () => {
   // The whole file, never resized from the visible slice.
   const numberWidth = createMemo(() => {
     let max = 1;
+
     for (const row of rows()) {
       if (isLineRow(row)) {
         max = Math.max(max, row.newLine ?? 0, row.oldLine ?? 0);
       }
     }
+
     return String(max).length;
   });
+
   // The gutter is a change bar then the number: fixed cells left of the code, so a context
   // Line reserves the bar column and never shifts (bar + number + space).
   const gutterWidth = () => numberWidth() + 2;
@@ -307,11 +341,14 @@ export const DiffView = () => {
     if (!wrap()) {
       return rows().map(() => 1);
     }
+
     const width = contentWidth();
+
     return rows().map((row) => {
       if (row.kind !== "line") {
         return 1;
       }
+
       // The gutter (bar/number/glyph) is fixed, so the content that wraps is code only.
       return measurer.measure(
         row.spans.map((span) => span.text).join(""),
@@ -319,6 +356,7 @@ export const DiffView = () => {
       );
     });
   });
+
   const rowEnds = createMemo(() => cumulativeRowEnds(heights()));
   const contentHeight = () => rowEnds().at(-1) ?? 0;
 
@@ -326,6 +364,7 @@ export const DiffView = () => {
   // Range that doesn't shift as you scroll vertically.
   const longestLine = createMemo(() => {
     let max = 0;
+
     for (const row of rows()) {
       if (isLineRow(row)) {
         max = Math.max(
@@ -334,8 +373,10 @@ export const DiffView = () => {
         );
       }
     }
+
     return max;
   });
+
   const maxScrollX = () => Math.max(0, longestLine() - contentWidth());
 
   // The deepest the viewport can scroll: total content height (sum of per-row
@@ -349,6 +390,7 @@ export const DiffView = () => {
   // Mount a few rows beyond the viewport as a buffer so a fast scroll tick never
   // Flashes an unmounted row at the viewport edge.
   const OVERSCAN = 8;
+
   const window = createMemo(() =>
     wrap()
       ? visibleWindowVariable(
@@ -364,6 +406,7 @@ export const DiffView = () => {
           OVERSCAN
         )
   );
+
   const visibleRows = createMemo(() =>
     rows().slice(window().start, window().end)
   );
@@ -372,6 +415,7 @@ export const DiffView = () => {
   // File). The reset-on-file-change is now owned by the viewer's pendingRestore.
   createEffect(() => {
     const max = maxScrollX();
+
     if (scrollX() > max) {
       setScrollX(max);
     }
@@ -382,6 +426,7 @@ export const DiffView = () => {
   // Back into the reconciler below.
   createEffect(() => {
     const max = maxScrollY();
+
     if (untrack(scrollTop) > max) {
       setScrollTop(max);
     }
@@ -409,10 +454,12 @@ export const DiffView = () => {
     scroll.verticalScrollBar.scrollSize = untrack(contentHeight);
     scroll.verticalScrollBar.viewportSize = state.viewerHeight();
     scroll.scrollTo(want);
+
     if (diverged) {
       renderer.requestRender();
     }
   };
+
   onCleanup(() => {
     if (scrollRef !== undefined) {
       renderer.unregisterLifecyclePass(scrollRef);
@@ -427,9 +474,11 @@ export const DiffView = () => {
   // Scroll and the slice trails the visible content, blanking the lower viewport.
   const HORIZONTAL_STEP = 4;
   const VERTICAL_STEP = 3;
+
   const onWheel = (event: MouseEvent) => {
     const direction = event.scroll?.direction;
     const delta = event.scroll?.delta ?? 1;
+
     if (direction === "left" || direction === "right") {
       if (!wrap()) {
         const sign = direction === "right" ? 1 : -1;
@@ -440,11 +489,14 @@ export const DiffView = () => {
           )
         );
       }
+
       if (event.scroll !== undefined) {
         event.scroll.delta = 0;
       }
+
       return;
     }
+
     const sign = direction === "down" ? 1 : -1;
     setScrollTop((previous) =>
       Math.max(
@@ -452,6 +504,7 @@ export const DiffView = () => {
         Math.min(previous + sign * delta * VERTICAL_STEP, maxScrollY())
       )
     );
+
     if (event.scroll !== undefined) {
       event.scroll.delta = 0;
     }
@@ -461,17 +514,21 @@ export const DiffView = () => {
     x: event.x - (interactionRef?.screenX ?? 0),
     y: event.y - (interactionRef?.screenY ?? 0),
   });
+
   const rowIndexForPointer = (
     localY: number,
     currentScroll = untrack(scrollTop)
   ) => rowIndexAtOffset(rowEnds(), currentScroll + localY);
+
   const extendDragTo = (localY: number, currentScroll = untrack(scrollTop)) => {
     const viewportCell = Math.max(
       0,
       Math.min(localY, state.viewerHeight() - 1)
     );
+
     const rowIndex = rowIndexForPointer(viewportCell, currentScroll);
     const nav = rowIndex === undefined ? undefined : navIndexForRow(rowIndex);
+
     if (nav !== undefined) {
       batch(() => {
         state.setFocusedPane("diff");
@@ -479,47 +536,63 @@ export const DiffView = () => {
       });
     }
   };
+
   const stopDragScroll = () => {
     dragScrollDirection = 0;
+
     if (dragScrollTimer !== undefined) {
       clearInterval(dragScrollTimer);
       dragScrollTimer = undefined;
     }
   };
+
   const finishDrag = () => {
     dragActive = false;
     stopDragScroll();
   };
+
   const scrollDragSelection = () => {
     if (!dragActive || dragScrollDirection === 0) {
       stopDragScroll();
+
       return;
     }
+
     const current = untrack(scrollTop);
+
     const next = Math.max(
       0,
       Math.min(current + dragScrollDirection, maxScrollY())
     );
+
     if (next === current) {
       stopDragScroll();
+
       return;
     }
+
     setScrollTop(next);
     extendDragTo(dragScrollDirection < 0 ? 0 : state.viewerHeight() - 1, next);
   };
+
   const updateDragScroll = (localY: number) => {
     const direction = edgeDirection(localY);
+
     if (direction === 0) {
       stopDragScroll();
+
       return;
     }
+
     if (direction === dragScrollDirection && dragScrollTimer !== undefined) {
       return;
     }
+
     stopDragScroll();
     dragScrollDirection = direction;
     dragScrollTimer = setInterval(scrollDragSelection, 50);
   };
+
   onCleanup(finishDrag);
 
   // Keep the cursor's row inside the viewport by scrolling the box to it, with a
@@ -531,15 +604,19 @@ export const DiffView = () => {
   // Wheel scrolling could never leave the cursor's screen.
   createEffect(() => {
     const cursorRow = lineRowIndices()[state.cursorIndex()];
+
     if (dragActive) {
       return;
     }
+
     if (cursorRow === undefined || scrollRef === undefined) {
       return;
     }
+
     const rowHeights = heights();
     const top = rowEnds()[cursorRow - 1] ?? 0;
     const current = untrack(scrollTop);
+
     const next = followScrollTop({
       current,
       height: rowHeights[cursorRow] ?? 1,
@@ -548,6 +625,7 @@ export const DiffView = () => {
       top,
       viewport: state.viewerHeight(),
     });
+
     if (next !== current) {
       setScrollTop(next);
     }
@@ -557,6 +635,7 @@ export const DiffView = () => {
   // Caret offset; undefined when the caret sits in a gap (no word to highlight).
   const caretRange = createMemo<CaretRange | undefined>(() => {
     const word = state.caretWord();
+
     return word === undefined
       ? undefined
       : caretRangeFor(state.cursorLineContent(), word);
@@ -566,10 +645,12 @@ export const DiffView = () => {
   // Lifted to a memo so the context menu's anchor reads it without recomputing.
   const cursorTop = createMemo(() => {
     const cursorRow = lineRowIndices()[state.cursorIndex()];
+
     return cursorRow === undefined
       ? undefined
       : (rowEnds()[cursorRow - 1] ?? 0);
   });
+
   // The viewer interior width (gutter + content, inside the border), the coordinate
   // Space the context menu's absolute left/clamp live in.
   const innerWidth = () => contentWidth() + gutterWidth();
@@ -581,6 +662,7 @@ export const DiffView = () => {
   // Cursor line or it is scrolled out of view, which hides the menu.
   const commandAnchor = createMemo(() => {
     const top = cursorTop();
+
     return top === undefined
       ? undefined
       : caretCell({
@@ -613,10 +695,13 @@ export const DiffView = () => {
   const CARET_SCROLL_MARGIN = 4;
   createEffect(() => {
     const range = caretRange();
+
     if (range === undefined || wrap()) {
       return;
     }
+
     const current = untrack(scrollX);
+
     const next = followScrollX({
       current,
       from: range.from,
@@ -625,6 +710,7 @@ export const DiffView = () => {
       to: range.to,
       viewport: contentWidth(),
     });
+
     if (next !== current) {
       setScrollX(next);
     }
@@ -642,12 +728,14 @@ export const DiffView = () => {
         normal: theme.colors.find.matchBg,
       };
     }
+
     if (row.type === "add") {
       return {
         active: theme.rgba.addedBgActive,
         normal: theme.colors.diff.addedBg,
       };
     }
+
     return row.type === "remove"
       ? {
           active: theme.rgba.removedBgActive,
@@ -670,6 +758,7 @@ export const DiffView = () => {
           el.onLifecyclePass = () => {
             syncScroll(el);
           };
+
           renderer.registerLifecyclePass(el);
         }}
         width="100%"
@@ -791,35 +880,46 @@ export const DiffView = () => {
           const pointer = localPointer(event);
           const currentScroll = untrack(scrollTop);
           const rowIndex = rowIndexForPointer(pointer.y, currentScroll);
+
           if (rowIndex === undefined) {
             state.setFocusedPane("diff");
+
             return;
           }
+
           const row = rows()[rowIndex];
+
           if (row === undefined) {
             state.setFocusedPane("diff");
+
             return;
           }
+
           if (!isLineRow(row)) {
             batch(() => {
               state.setFocusedPane("diff");
               toggleMarker(row);
             });
+
             return;
           }
+
           if (event.modifiers.shift) {
             batch(() => {
               state.setFocusedPane("diff");
               state.extendSelectionTo(row.navIndex);
             });
+
             return;
           }
+
           dragActive = event.button === 0;
           batch(() => {
             state.setFocusedPane("diff");
             state.setCursorRow(row.navIndex);
             const content = row.spans.map((part) => part.text).join("");
             const rowTop = rowEnds()[rowIndex - 1] ?? 0;
+
             const offset = wrap()
               ? measurer.offsetForVisualRow(
                   content,
@@ -827,7 +927,9 @@ export const DiffView = () => {
                   currentScroll + pointer.y - rowTop
                 )
               : scrollX();
+
             const column = pointer.x - gutterWidth() + offset;
+
             if (column >= 0) {
               const index = columnToIndex(content, column);
               state.setCursorColumn(wordAt(content, index)?.start ?? index);
@@ -835,15 +937,18 @@ export const DiffView = () => {
               state.setCaretLineLevel(true);
             }
           });
+
           if (isRightClick(event)) {
             state.openCommandMenu("viewer");
           }
         }}
         onMouseDrag={(event: MouseEvent) => {
           event.stopPropagation();
+
           if (!dragActive) {
             return;
           }
+
           const pointer = localPointer(event);
           extendDragTo(pointer.y);
           updateDragScroll(pointer.y);

@@ -52,6 +52,7 @@ describe("buildFileTree", () => {
     const tree = buildFileTree(repoFiles, changedByPath, {
       changesOnly: false,
     });
+
     const rows = flattenTree(tree, new Set(["dir:src"]));
     const appRow = rows.find((row) => row.node.path === "src/App.tsx");
     const readmeRow = rows.find((row) => row.node.path === "README.md");
@@ -68,6 +69,7 @@ describe("buildFileTree", () => {
     const tree = buildFileTree(repoFiles, changedByPath, {
       changesOnly: false,
     });
+
     expect(tree.map((node) => node.name)).toEqual([
       "src",
       "notes.md",
@@ -79,6 +81,7 @@ describe("buildFileTree", () => {
     const tree = buildFileTree(repoFiles, changedByPath, {
       changesOnly: false,
     });
+
     const src = tree.find(
       (node) => node.type === "directory" && node.path === "src"
     );
@@ -96,9 +99,11 @@ describe("buildFileTree", () => {
     const tree = buildFileTree(repoFiles, changedByPath, {
       changesOnly: false,
     });
+
     const src = tree.find(
       (node) => node.type === "directory" && node.path === "src"
     );
+
     const chain =
       src?.type === "directory"
         ? src.children.find((node) => node.type === "directory")
@@ -127,6 +132,7 @@ describe("buildFileTree", () => {
       kind: "deleted",
       stage: "staged",
     });
+
     const tree = buildFileTree(
       repoFiles,
       new Map([...changedByPath, ["src/gone.ts", deleted]]),
@@ -134,6 +140,7 @@ describe("buildFileTree", () => {
         changesOnly: false,
       }
     );
+
     const rows = flattenTree(tree, new Set(["dir:src"]));
 
     expect(rows.map((row) => row.node.path)).toContain("src/gone.ts");
@@ -143,10 +150,12 @@ describe("buildFileTree", () => {
     const tree = buildFileTree(repoFiles, changedByPath, {
       changesOnly: false,
     });
+
     const rows = flattenTree(
       tree,
       new Set(["dir:src", "dir:src/components/ui"])
     );
+
     const button = rows.find(
       (row) => row.node.path === "src/components/ui/Button.tsx"
     );
@@ -177,19 +186,24 @@ describe("structure and decoration split", () => {
   test("structure depends only on the path set, not on changed values", () => {
     const paths = new Set(["src/App.tsx", "src/git.ts"]);
     const lean = buildTreeStructure(repoFiles, paths, { changesOnly: false });
+
     const churned = buildTreeStructure(repoFiles, paths, {
       changesOnly: false,
     });
 
     // Same file set in, structurally identical tree out (no change overlay yet).
     expect(lean).toEqual(churned);
+
     const appRow = flattenTree(lean, new Set(["dir:src"])).find(
       (row) => row.node.path === "src/App.tsx"
     );
+
     expect(appRow?.node.type === "file" && appRow.node.changed).toBe(undefined);
+
     const src = lean.find(
       (node) => node.type === "directory" && node.path === "src"
     );
+
     expect(src?.type === "directory" && src.changedCount).toBe(0);
   });
 
@@ -201,6 +215,7 @@ describe("structure and decoration split", () => {
         changesOnly: false,
       }
     );
+
     const decorated = decorateTree(structure, changedByPath);
 
     expect(decorated.find((node) => node.path === "src")).toMatchObject({
@@ -225,11 +240,13 @@ describe("structure and decoration split", () => {
         changesOnly: false,
       }
     );
+
     const first = decorateTree(structure, changedByPath);
     const second = decorateTree(first, changedByPath);
 
     // Nothing changed between calls — the entire array and every node should be the same ref.
     expect(second).toBe(first);
+
     for (const [i, node] of first.entries()) {
       expect(second[i]).toBe(node);
     }
@@ -237,14 +254,18 @@ describe("structure and decoration split", () => {
     // An unchanged file inside a directory also keeps its reference.
     const expanded = new Set(["dir:src", "dir:src/components/ui"]);
     const rows = flattenTree(first, expanded);
+
     const buttonBefore = rows.find(
       (r) => r.node.path === "src/components/ui/Button.tsx"
     );
+
     expect(buttonBefore).toBeDefined();
     const rows2 = flattenTree(second, expanded);
+
     const buttonAfter = rows2.find(
       (r) => r.node.path === "src/components/ui/Button.tsx"
     );
+
     expect(buttonAfter).toBeDefined();
     expect(buttonAfter?.node).toBe(buttonBefore?.node);
   });
@@ -253,12 +274,14 @@ describe("structure and decoration split", () => {
     const composed = buildFileTree(repoFiles, changedByPath, {
       changesOnly: false,
     });
+
     const split = decorateTree(
       buildTreeStructure(repoFiles, new Set(changedByPath.keys()), {
         changesOnly: false,
       }),
       changedByPath
     );
+
     expect(composed).toEqual(split);
   });
 });
@@ -269,6 +292,7 @@ describe("expansion", () => {
       "src/App.tsx",
       "src/components/ui/Button.tsx",
     ]);
+
     expect([...expanded].toSorted()).toEqual([
       "dir:src",
       "dir:src/components",
@@ -289,6 +313,7 @@ describe("navigation helpers", () => {
     const tree = buildFileTree(repoFiles, changedByPath, {
       changesOnly: false,
     });
+
     const src = tree.find(
       (node) => node.type === "directory" && node.path === "src"
     );

@@ -16,6 +16,7 @@ import { setSelection } from "@/theme/active";
 // Every save reports through a notice, which the status bar renders as its message.
 const statusMessage = () => {
   const model = state.statusBarModel();
+
   return model.kind === "message" ? model.message : "";
 };
 
@@ -33,6 +34,7 @@ const withConfigDir = async (run: (dir: string) => Promise<void>) => {
     } else {
       process.env.XDG_CONFIG_HOME = previous;
     }
+
     setSelection(undefined);
     rmSync(dir, { force: true, recursive: true });
   });
@@ -73,6 +75,7 @@ describe("persistSettings", () => {
         path.join(dir, "stet", "config.jsonc"),
         "utf-8"
       );
+
       expect(Bun.JSONC.parse(text)).toEqual({ sidebar: { position: "top" } });
       expect(statusMessage()).toBe("saved sidebar to config");
     });

@@ -13,6 +13,7 @@ describe("sliceSpansWindow", () => {
       { fg: "#f00", text: "const" },
       { fg: "#0f0", text: " value = 1" },
     ];
+
     expect(sliceSpansWindow(spans, 0, 8)).toEqual([
       { fg: "#f00", text: "const" },
       { fg: "#0f0", text: " va" },
@@ -24,6 +25,7 @@ describe("sliceSpansWindow", () => {
       { fg: "#f00", text: "const" },
       { fg: "#0f0", text: " value = 1" },
     ];
+
     // Skip 6 cols ("const "), then take 5 → "value".
     expect(sliceSpansWindow(spans, 6, 5)).toEqual([
       { fg: "#0f0", text: "value" },
@@ -36,6 +38,7 @@ describe("sliceSpansWindow", () => {
       { fg: "#0f0", text: "EFGH" },
       { text: "ijkl" },
     ];
+
     expect(sliceSpansWindow(spans, 4, 4)).toEqual([
       { fg: "#0f0", text: "EFGH" },
     ]);
@@ -67,6 +70,7 @@ describe("markRange", () => {
       { fg: "#f00", text: "ab" },
       { fg: "#0f0", text: "cd" },
     ];
+
     expect(markRange(spans, 1, 3)).toEqual([
       { fg: "#f00", text: "a" },
       { fg: "#f00", highlight: true, text: "b" },

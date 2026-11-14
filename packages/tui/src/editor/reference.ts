@@ -6,22 +6,22 @@ import path from "node:path";
  * rather than a bare single-file window; terminal editors have no workspace and carry only
  * `{file}`/`{line}`.
  */
-const KNOWN_EDITOR_TEMPLATES: Record<string, string> = {
-  code: "code {repo} --goto {file}:{line}",
-  cursor: "cursor {repo} --goto {file}:{line}",
-  emacs: "emacs +{line} {file}",
-  helix: "helix {file}:{line}",
-  hx: "hx {file}:{line}",
-  idea: "idea {repo} --line {line} {file}",
-  kak: "kak +{line} {file}",
-  micro: "micro {file}:{line}",
-  nano: "nano +{line} {file}",
-  nvim: "nvim +{line} {file}",
-  subl: "subl {file}:{line}",
-  vi: "vi +{line} {file}",
-  vim: "vim +{line} {file}",
-  zed: "zed {repo} {file}:{line}",
-};
+const KNOWN_EDITOR_TEMPLATES = new Map([
+  ["code", "code {repo} --goto {file}:{line}"],
+  ["cursor", "cursor {repo} --goto {file}:{line}"],
+  ["emacs", "emacs +{line} {file}"],
+  ["helix", "helix {file}:{line}"],
+  ["hx", "hx {file}:{line}"],
+  ["idea", "idea {repo} --line {line} {file}"],
+  ["kak", "kak +{line} {file}"],
+  ["micro", "micro {file}:{line}"],
+  ["nano", "nano +{line} {file}"],
+  ["nvim", "nvim +{line} {file}"],
+  ["subl", "subl {file}:{line}"],
+  ["vi", "vi +{line} {file}"],
+  ["vim", "vim +{line} {file}"],
+  ["zed", "zed {repo} {file}:{line}"],
+]);
 
 /**
  * Expands a value into a full command template. If the value already contains `{file}` it is
@@ -33,8 +33,10 @@ const normalizeTemplate = (value: string, defaultSuffix: string): string => {
   if (value.includes("{file}")) {
     return value;
   }
+
   const bin = path.basename(value.split(/\s+/u)[0] ?? value);
-  return KNOWN_EDITOR_TEMPLATES[bin] ?? `${value} ${defaultSuffix}`;
+
+  return KNOWN_EDITOR_TEMPLATES.get(bin) ?? `${value} ${defaultSuffix}`;
 };
 
 /**
@@ -54,15 +56,19 @@ export const resolveEditorTemplate = (explicit: string | undefined): string => {
   }
 
   const stet = process.env.STET_EDITOR;
+
   if (stet !== undefined && stet !== "") {
     return normalizeTemplate(stet, "+{line} {file}");
   }
 
   const editor = process.env.EDITOR;
+
   if (editor !== undefined && editor !== "") {
     return normalizeTemplate(editor, "+{line} {file}");
   }
+
   const visual = process.env.VISUAL;
+
   if (visual !== undefined && visual !== "") {
     return normalizeTemplate(visual, "+{line} {file}");
   }
@@ -89,12 +95,14 @@ export const resolveIdeTemplate = (
   }
 
   const stet = process.env.STET_IDE;
+
   if (stet !== undefined && stet !== "") {
     return normalizeTemplate(stet, "{file}:{line}");
   }
 
   const visual = process.env.VISUAL;
   const editor = process.env.EDITOR;
+
   if (visual !== undefined && visual !== "" && visual !== editor) {
     return normalizeTemplate(visual, "{file}:{line}");
   }
@@ -115,6 +123,7 @@ export const openExternalCommand = (
   if (platform === "darwin") {
     return ["open", filePath];
   }
+
   return platform === "linux" ? ["xdg-open", filePath] : undefined;
 };
 
@@ -143,14 +152,17 @@ export const buildEditorCommand = (
 ): string[] => {
   const tokens = template.split(/\s+/u).filter((token) => token !== "");
   const noLine = line === undefined;
+
   return tokens
     .filter((token, index) => {
       if (!noLine) {
         return true;
       }
+
       if (isLoneLine(token)) {
         return false;
       }
+
       return !(
         token.startsWith("-") &&
         !/\{(?:file|line|repo)\}/u.test(token) &&
@@ -165,9 +177,11 @@ export const buildEditorCommand = (
         if (key === "file") {
           return file;
         }
+
         if (key === "repo") {
           return repo;
         }
+
         return String(line);
       })
     );

@@ -12,6 +12,7 @@ const DENY_FIRST_SEGMENT = new Set([
   "rebase-merge",
   "rebase-apply",
 ]);
+
 const DENY_EXACT = new Set(["COMMIT_EDITMSG", "FETCH_HEAD"]);
 
 /**
@@ -35,7 +36,7 @@ export const classify = (
   filename: string | null | undefined
 ): WatchEventClass => {
   // `fs.watch` omits the name on some events (`null` on macOS, `undefined` on Linux inotify).
-  if (typeof filename !== "string") {
+  if (filename === null || filename === undefined) {
     return gitInternalPrefix === "" ? "internal" : "worktree";
   }
 
@@ -46,6 +47,7 @@ export const classify = (
   }
 
   const internalPath = filename.slice(gitInternalPrefix.length);
+
   if (
     internalPath.endsWith(".lock") ||
     DENY_EXACT.has(internalPath) ||
@@ -53,5 +55,6 @@ export const classify = (
   ) {
     return "ignored";
   }
+
   return "internal";
 };

@@ -26,8 +26,10 @@ export const runUpgrade = async (input: {
   fetchLatest?: () => Promise<string | undefined>;
 }) => {
   const latest = await (input.fetchLatest ?? fetchLatestVersion)();
+
   if (latest !== undefined && !isNewer(latest, input.currentVersion)) {
     logSuccess(`stet ${input.currentVersion} is already up to date`);
+
     return 0;
   }
 
@@ -35,10 +37,12 @@ export const runUpgrade = async (input: {
 
   if (invocation === undefined) {
     logError(unknownGuidance);
+
     return 1;
   }
 
   logInfo(invocation.label);
+
   const proc = Bun.spawn(invocation.argv, {
     stderr: "inherit",
     stdin: "inherit",

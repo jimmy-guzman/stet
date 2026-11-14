@@ -27,6 +27,7 @@ describe("themeForName", () => {
 
 const channel = (hex: string, offset: number) => {
   const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+
   return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 };
 
@@ -39,6 +40,7 @@ const contrast = (foreground: string, background: string) => {
   const values = [luminance(foreground), luminance(background)].toSorted(
     (a, b) => b - a
   );
+
   return (values[0] + 0.05) / (values[1] + 0.05);
 };
 
@@ -204,6 +206,7 @@ describe("themeNames", () => {
 
   test("lists registered themes after the built-ins", () => {
     const snapshot = snapshotRegistry();
+
     try {
       registerThemes(
         resolveThemes({ "registry-probe": { base: "dark" } }).themes

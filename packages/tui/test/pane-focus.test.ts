@@ -72,6 +72,7 @@ test("tab in the search view cycles its fields and stays in the pane", () => {
   wide();
   state.openSearch();
   expect(state.searchFocus()).toBe("query");
+
   const handle = createKeyHandler({
     openInEditor: async () => {},
     quit: () => {},
@@ -91,17 +92,21 @@ test("switching worktrees lands focus on the tree only while the tree is on scre
   const repoRoot = createFixtureRepo("stet-pane-focus-switch-", {
     "notes.txt": "one\n",
   });
+
   const linkedRoot = path.join(repoRoot, ".wt");
   runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
   const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
   seedState(model, { kind: "all", ref: "HEAD" });
   const worktrees = await loadWorktrees(repoRoot);
+
   const linked = worktrees.find(
     (worktree) => worktree.branch === "side-branch"
   );
+
   if (linked === undefined) {
     throw new Error("linked worktree missing");
   }
+
   state.toggleSidebar();
   expect(state.sidebarOpen()).toBe(false);
 

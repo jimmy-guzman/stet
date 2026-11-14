@@ -37,17 +37,22 @@ export const BinaryPreview = (props: {
     if (props.single !== undefined) {
       return summary(props.single);
     }
+
     const oldSide = props.diff?.oldSide;
     const newSide = props.diff?.newSide;
+
     if (oldSide !== undefined && newSide !== undefined) {
       return `${summary(oldSide)}  ->  ${summary(newSide)}`;
     }
+
     if (newSide !== undefined) {
       return `added · ${summary(newSide)}`;
     }
+
     if (oldSide !== undefined) {
       return `deleted · ${summary(oldSide)}`;
     }
+
     return "";
   };
 

@@ -19,10 +19,13 @@ export const getStetVersion = async (): Promise<string | undefined> => {
         signal: AbortSignal.timeout(3000),
       }
     );
+
     if (!res.ok) {
       return undefined;
     }
+
     const data: unknown = await res.json();
+
     return isVersionPayload(data) ? data.version : undefined;
   } catch {
     return undefined;

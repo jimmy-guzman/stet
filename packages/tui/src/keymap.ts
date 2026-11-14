@@ -29,12 +29,16 @@ interface HostEffects {
 
 const cycleFind = (direction: number) => {
   const matches = state.findMatches();
+
   if (matches.length === 0) {
     return;
   }
+
   const pos =
     (state.findMatchPos() + direction + matches.length) % matches.length;
+
   const target = matches[pos];
+
   if (target !== undefined) {
     state.setFindMatchPos(pos);
     state.setCursorRow(target);
@@ -86,7 +90,9 @@ const runBindings =
     const binding = bindings.find(
       ({ id, when }) => ctx.pressed(id) && (when?.() ?? true)
     );
+
     binding?.run(ctx);
+
     return binding !== undefined;
   };
 
@@ -94,6 +100,7 @@ const fileViewShowing = () => state.mainView() === "file";
 
 const caretLineNumber = () => {
   const line = state.navigableLines()[state.cursorIndex()];
+
   return line?.newLine ?? line?.oldLine;
 };
 
@@ -102,8 +109,10 @@ const caretLineNumber = () => {
 const handleCtrlC: KeyStep = ({ key, host }) => {
   if (key.ctrl && key.name === "c") {
     host.quit();
+
     return true;
   }
+
   return false;
 };
 
@@ -113,11 +122,13 @@ const handleQuitConfirm: KeyStep = ({ key, host }) => {
   if (!state.quitConfirmOpen()) {
     return false;
   }
+
   if (key.name === "y" || key.name === "return") {
     host.quit();
   } else if (key.name === "escape" || key.name === "n") {
     state.setQuitConfirmOpen(false);
   }
+
   return true;
 };
 
@@ -125,11 +136,13 @@ const handleHelpDialog: KeyStep = ({ key }) => {
   if (!state.helpDialogOpen()) {
     return false;
   }
+
   if (key.name === "escape" || key.name === "?" || key.name === "q") {
     state.setHelpDialogOpen(false);
   } else if (key.name === "tab") {
     state.setHelpView(state.helpView() === "keys" ? "marks" : "keys");
   }
+
   return true;
 };
 
@@ -140,6 +153,7 @@ const handleWorktreeCombobox: KeyStep = ({ key }) => {
   if (!state.worktreeComboboxOpen()) {
     return false;
   }
+
   if (key.name === "escape") {
     state.setWorktreeComboboxOpen(false);
   } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
@@ -154,6 +168,7 @@ const handleWorktreeCombobox: KeyStep = ({ key }) => {
       Math.max(state.worktreeComboboxIndex() - 1, 0)
     );
   }
+
   return true;
 };
 
@@ -163,12 +178,16 @@ const applyScopeMenuSelection = (inCommits: boolean) => {
     if (state.selectCommit(state.scopeMenuIndex())) {
       state.setScopeMenuOpen(false);
     }
+
     return;
   }
+
   const kind = scopeKinds[state.scopeMenuIndex()];
+
   if (kind !== undefined) {
     state.selectScope(kind);
   }
+
   state.setScopeMenuOpen(false);
 };
 
@@ -176,14 +195,18 @@ const handleScopeMenu: KeyStep = ({ key }) => {
   if (!state.scopeMenuOpen()) {
     return false;
   }
+
   const inCommits = state.scopeMenuView() === "commits";
+
   // Level 1 is the kinds plus a trailing "commits" drill-down row (at index
   // ScopeKinds.length); level 2 is the loaded commit list.
   const lastIndex = inCommits
     ? Math.max(0, state.commits().length - 1)
     : scopeKinds.length;
+
   const onCommitsRow =
     !inCommits && state.scopeMenuIndex() === scopeKinds.length;
+
   if (key.name === "escape" || (key.name === "left" && inCommits)) {
     // Esc (or left) backs out of the drill-down first, then closes the picker.
     if (inCommits) {
@@ -207,6 +230,7 @@ const handleScopeMenu: KeyStep = ({ key }) => {
   } else if (key.name === "return") {
     applyScopeMenuSelection(inCommits);
   }
+
   return true;
 };
 
@@ -217,7 +241,9 @@ const handleCommandMenu: KeyStep = ({ key, host }) => {
   if (!state.commandMenuOpen()) {
     return false;
   }
+
   const items = state.commandMenuItems();
+
   if (key.name === "escape") {
     state.closeCommandMenu();
   } else if (key.name === "j" || key.name === "down") {
@@ -228,6 +254,7 @@ const handleCommandMenu: KeyStep = ({ key, host }) => {
     state.setCommandMenuIndex(Math.max(state.commandMenuIndex() - 1, 0));
   } else if (key.name === "return") {
     const item = items[state.commandMenuIndex()];
+
     if (item !== undefined) {
       if (item.action.kind === "openEditor") {
         void host.openInEditor(
@@ -239,8 +266,10 @@ const handleCommandMenu: KeyStep = ({ key, host }) => {
         state.dispatchCommandAction(item.action);
       }
     }
+
     state.closeCommandMenu();
   }
+
   return true;
 };
 
@@ -248,6 +277,7 @@ const handleFileCombobox: KeyStep = ({ key }) => {
   if (!state.fileComboboxOpen()) {
     return false;
   }
+
   if (key.name === "escape") {
     state.setFileComboboxOpen(false);
   } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
@@ -260,6 +290,7 @@ const handleFileCombobox: KeyStep = ({ key }) => {
   } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
     state.setFileComboboxIndex(Math.max(state.fileComboboxIndex() - 1, 0));
   }
+
   return true;
 };
 
@@ -270,6 +301,7 @@ const handleThemeCombobox: KeyStep = ({ key }) => {
   if (!state.themeComboboxOpen()) {
     return false;
   }
+
   if (key.name === "escape") {
     state.closeThemePicker(false);
   } else if (key.ctrl && key.name === "s") {
@@ -287,6 +319,7 @@ const handleThemeCombobox: KeyStep = ({ key }) => {
   } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
     state.setThemeComboboxIndex(Math.max(state.themeComboboxIndex() - 1, 0));
   }
+
   return true;
 };
 
@@ -333,8 +366,10 @@ const searchChords = new Map<string, () => void>([
 const handleSearchChrome: KeyStep = ({ key }) => {
   if (key.name === "escape") {
     state.closeSearch();
+
     return true;
   }
+
   if (key.name === "tab") {
     // The focused input would swallow the tab as text otherwise.
     key.preventDefault();
@@ -344,10 +379,13 @@ const handleSearchChrome: KeyStep = ({ key }) => {
     state.setSearchFocus(
       order[(at + step + order.length) % order.length] ?? "query"
     );
+
     return true;
   }
+
   const chord = key.ctrl ? searchChords.get(key.name) : undefined;
   chord?.();
+
   return chord !== undefined;
 };
 
@@ -358,13 +396,17 @@ const handleSearchChrome: KeyStep = ({ key }) => {
 const handleSearchInput: KeyStep = ({ key }) => {
   if (key.name === "down" || (key.ctrl && key.name === "n")) {
     state.setSearchFocus("results");
+
     return true;
   }
+
   if (key.ctrl && key.name === "b") {
     key.preventDefault();
     state.toggleSidebar();
+
     return true;
   }
+
   return !(key.ctrl && key.name === "p");
 };
 
@@ -375,44 +417,57 @@ const handleSearchResultMoves: KeyStep = ({ key }) => {
     (key.ctrl && key.name === "n")
   ) {
     state.moveSearchSelection(1);
+
     return true;
   }
+
   if (key.name === "k" || key.name === "up" || (key.ctrl && key.name === "p")) {
     // At the first navigable row, up returns to the query field.
     const current = state.searchIndex();
+
     const previous = state
       .searchItems()
       .findLastIndex(
         (item, index) => index < current && isNavigableSearchItem(item)
       );
+
     if (previous === -1) {
       state.setSearchFocus("query");
     } else {
       state.moveSearchSelection(-1);
     }
+
     return true;
   }
+
   if (key.ctrl && key.name === "d") {
     state.pageSearchSelection(1);
+
     return true;
   }
+
   if (key.ctrl && key.name === "u") {
     state.pageSearchSelection(-1);
+
     return true;
   }
+
   return false;
 };
 
 const handleSearchResultGroups: KeyStep = ({ key }) => {
   const item = state.searchItems()[state.searchIndex()];
+
   if (key.name === "return") {
     if (item?.kind === "header") {
       state.toggleSearchGroup(item.path);
     } else {
       state.jumpToSearchItem(state.searchIndex());
     }
+
     return true;
   }
+
   if (
     key.name === "h" ||
     key.name === "left" ||
@@ -424,31 +479,41 @@ const handleSearchResultGroups: KeyStep = ({ key }) => {
       // A visible line row means its group is expanded; only headers can
       // Already be collapsed.
       const collapsed = item.kind === "header" && item.collapsed;
+
       if (collapse !== collapsed) {
         state.toggleSearchGroup(item.path);
       }
     }
+
     return true;
   }
+
   return false;
 };
 
 const handleSearchResultEnds: KeyStep = ({ key }) => {
   const items = state.searchItems();
+
   if (key.name === "g" && !key.shift) {
     const first = items.findIndex(isNavigableSearchItem);
+
     if (first !== -1) {
       state.setSearchSelection(first);
     }
+
     return true;
   }
+
   if (key.name === "G" || (key.name === "g" && key.shift)) {
     const last = items.findLastIndex(isNavigableSearchItem);
+
     if (last !== -1) {
       state.setSearchSelection(last);
     }
+
     return true;
   }
+
   return false;
 };
 
@@ -458,6 +523,7 @@ const handleSearchResultEnds: KeyStep = ({ key }) => {
 // Rather than opening the highlighted result in the IDE.
 const handleSearchResultTargets: KeyStep = ({ key, host }) => {
   const item = state.searchItems()[state.searchIndex()];
+
   if ((key.name === "e" || key.name === "o") && !key.shift) {
     if (item !== undefined && item.kind !== "gap") {
       void host.openInEditor(
@@ -466,8 +532,10 @@ const handleSearchResultTargets: KeyStep = ({ key, host }) => {
         key.name === "e" ? "terminal" : "ide"
       );
     }
+
     return true;
   }
+
   if (key.name === "y" && !key.shift) {
     if (item?.kind === "header") {
       state.copy(formatCopyReference({ path: item.path }));
@@ -480,8 +548,10 @@ const handleSearchResultTargets: KeyStep = ({ key, host }) => {
         })
       );
     }
+
     return true;
   }
+
   return false;
 };
 
@@ -505,12 +575,15 @@ const handleSearchPane: KeyStep = (ctx) => {
   if (state.mainView() !== "search" || state.focusedPane() !== "search") {
     return false;
   }
+
   if (handleSearchChrome(ctx)) {
     return true;
   }
+
   if (state.searchFocus() !== "results") {
     return handleSearchInput(ctx);
   }
+
   return searchResultSteps.some((step) => step(ctx));
 };
 
@@ -520,9 +593,11 @@ const handleFindBar: KeyStep = ({ key }) => {
   if (!state.findOpen()) {
     return false;
   }
+
   if (key.name === "escape") {
     state.resetFind();
   }
+
   return true;
 };
 
@@ -534,18 +609,25 @@ const handleCommittedFind: KeyStep = ({ key }) => {
   if (!state.findActive() || state.mainView() !== "file") {
     return false;
   }
+
   if (key.name === "escape") {
     state.resetFind();
+
     return true;
   }
+
   if (key.name === "n" && !key.shift) {
     cycleFind(1);
+
     return true;
   }
+
   if (key.name === "N" || (key.name === "n" && key.shift)) {
     cycleFind(-1);
+
     return true;
   }
+
   return false;
 };
 
@@ -555,8 +637,10 @@ const handleCommittedFind: KeyStep = ({ key }) => {
 const handleSelectionEscape: KeyStep = ({ key }) => {
   if (state.selectionAnchor() !== undefined && key.name === "escape") {
     state.setSelectionAnchor(undefined);
+
     return true;
   }
+
   return false;
 };
 
@@ -605,9 +689,11 @@ const handleGlobalEscape: KeyStep = ({ key }) => {
   if (key.name !== "escape") {
     return false;
   }
+
   if (state.mainView() === "search") {
     state.closeSearch();
   }
+
   return true;
 };
 
@@ -742,6 +828,7 @@ const globalBindings: readonly Binding[] = [
     id: "latest-file",
     run: () => {
       const latest = latestActivity(state.activityLog());
+
       if (latest !== undefined) {
         state.selectFile(latest.path);
       }
@@ -766,6 +853,7 @@ const globalBindings: readonly Binding[] = [
     id: "context-menu",
     run: () => {
       const pane = state.focusedPane();
+
       if (pane === "tree") {
         state.openCommandMenu("tree");
       } else if (pane === "diff" && fileViewShowing()) {
@@ -782,6 +870,7 @@ const handleSelectedFile = (
 ) => {
   if (pressed("toggle-view") && state.selectedFile() !== undefined) {
     const lineNumber = caretLineNumber();
+
     if (lineNumber !== undefined) {
       state.setJumpTarget({
         escalate: false,
@@ -789,31 +878,42 @@ const handleSelectedFile = (
         path: selectedPath,
       });
     }
+
     // Diff and file views have different line lists, so a selection anchored in
     // One is meaningless in the other; drop it as this toggle re-homes the caret.
     state.setSelectionAnchor(undefined);
     state.setFileView(!state.fileView());
+
     return true;
   }
+
   if (pressed("load-full")) {
     state.loadFullContent();
+
     return true;
   }
+
   if (pressed("open-editor")) {
     void host.openInEditor(selectedPath, caretLineNumber(), "terminal");
+
     return true;
   }
+
   // Open externally defaults to the ide opener's Shift pair (bare uppercase, so the
   // Modifier survives terminals that drop Shift on control keys). Gated on
   // FileViewShowing like the sibling single-file actions.
   if (pressed("open-external")) {
     state.openExternally(selectedPath);
+
     return true;
   }
+
   if (pressed("open-ide")) {
     void host.openInEditor(selectedPath, caretLineNumber(), "ide");
+
     return true;
   }
+
   return false;
 };
 
@@ -824,10 +924,13 @@ const handleFileView: KeyStep = (ctx) => {
   if (!fileViewShowing()) {
     return false;
   }
+
   const selectedPath = state.selectedPath();
+
   if (selectedPath !== undefined && handleSelectedFile(ctx, selectedPath)) {
     return true;
   }
+
   // Copy-reference is registered `global` but is really pane-dispatched: it reads
   // Whichever pane holds focus, choosing between the tree and the viewer. It stays
   // One action id (one rebind, one help row) rather than a per-pane id, which the
@@ -835,14 +938,18 @@ const handleFileView: KeyStep = (ctx) => {
   // Global action claims its combo in every pane scope.
   if (ctx.pressed("copy-file")) {
     state.copyFileContents();
+
     return true;
   }
+
   // Copy the selected lines' source text, or the caret line when there is no
   // Selection. Distinct from copy-reference and copy-file.
   if (ctx.pressed("copy-selection")) {
     state.copySelection();
+
     return true;
   }
+
   return false;
 };
 
@@ -850,14 +957,19 @@ const handleCopyReference: KeyStep = ({ pressed }) => {
   if (!pressed("copy-reference")) {
     return false;
   }
+
   if (state.focusedPane() === "tree") {
     const row = state.treeRows()[state.focusedRowIndex()];
+
     if (row !== undefined) {
       state.copy(formatCopyReference({ path: row.node.path }));
     }
+
     return true;
   }
+
   const selectedPath = state.selectedPath();
+
   if (selectedPath !== undefined && fileViewShowing()) {
     const lineNumber = caretLineNumber();
     state.copy(
@@ -871,6 +983,7 @@ const handleCopyReference: KeyStep = ({ pressed }) => {
       })
     );
   }
+
   return true;
 };
 
@@ -966,7 +1079,9 @@ const handleDiffPane: KeyStep = (ctx) => {
   if (state.focusedPane() !== "diff") {
     return false;
   }
+
   runBindings(diffBindings)(ctx);
+
   return true;
 };
 
@@ -989,6 +1104,7 @@ const treeBindings: readonly Binding[] = [
     id: "expand",
     run: () => {
       const row = focusedTreeRow();
+
       if (row?.node.type === "directory") {
         state.setExpandedDirectories(
           new Set(state.expandedDirectories()).add(row.node.id)
@@ -1002,6 +1118,7 @@ const treeBindings: readonly Binding[] = [
     id: "collapse",
     run: () => {
       const row = focusedTreeRow();
+
       if (row?.node.type === "directory") {
         const next = new Set(state.expandedDirectories());
         next.delete(row.node.id);
@@ -1013,8 +1130,10 @@ const treeBindings: readonly Binding[] = [
     id: "open",
     run: () => {
       const row = focusedTreeRow();
+
       if (row !== undefined) {
         const file = firstFileInNode(row.node);
+
         if (file !== undefined) {
           state.selectFile(file.path);
         }
@@ -1065,6 +1184,7 @@ export const createKeyHandler = (host: HostEffects) => (key: KeyEvent) => {
   // MatchesKey replaces the old per-site !shift/!ctrl exclusion guards.
   const pressed = (id: KeyActionId) =>
     combosFor(id).some((combo) => matchesKey(key, combo));
+
   const ctx = { host, key, pressed };
   batch(() => {
     keyChain.some((step) => step(ctx));

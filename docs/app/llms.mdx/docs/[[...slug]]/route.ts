@@ -12,6 +12,7 @@ export const revalidate = false;
 export const GET = async (_request: Request, props: RouteProps) => {
   const params = await props.params;
   const page = source.getPage(params.slug);
+
   if (!page) {
     notFound();
   }

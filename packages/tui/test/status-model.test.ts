@@ -43,6 +43,7 @@ describe("status bar guidance", () => {
       ...baseInput,
       foregroundProgress: "switching…",
     });
+
     expect(busy).toMatchObject({ kind: "message", message: "switching…" });
 
     // The model is a pure function of its inputs, so "the switch finished" is the absent input.
@@ -100,6 +101,7 @@ describe("status bar alerts", () => {
     source: "worktree-switch",
     text: "missing worktree",
   } as const;
+
   const listFail = {
     level: "error",
     source: "worktree-list",
@@ -163,6 +165,7 @@ describe("status bar fitting", () => {
     if (model.kind !== "message") {
       throw new Error("expected a message");
     }
+
     // The glyph, its space, and both paddings all come out of the same 30 cells.
     expect(Bun.stringWidth(`✖ ${model.message}`)).toBeLessThanOrEqual(28);
     expect(model.message.startsWith("couldn't list")).toBe(true);
@@ -181,6 +184,7 @@ describe("status bar fitting", () => {
     if (model.kind !== "ambient") {
       throw new Error("expected ambient activity");
     }
+
     expect(model.activity.path).toStartWith("…");
     expect(model.activity.path).toEndWith("DiffView.tsx");
     expect(Bun.stringWidth(`● ${model.activity.path}`)).toBeLessThanOrEqual(38);
@@ -209,6 +213,7 @@ describe("status bar fitting", () => {
     if (model.kind !== "ambient") {
       throw new Error("expected ambient activity");
     }
+
     // Each bug is two cells wide but one code point; a length-based budget would overflow the row.
     expect(Bun.stringWidth(`● ${model.activity.path}`)).toBeLessThanOrEqual(18);
   });

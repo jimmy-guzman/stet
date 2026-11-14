@@ -22,6 +22,7 @@ export const Sidebar = () => {
   // The same cost as a small one. The cursor-follow and clamp live in state.
   const visibleRows = createMemo(() => {
     const start = state.sidebarScrollTop();
+
     return state.treeRows().slice(start, start + viewport());
   });
 

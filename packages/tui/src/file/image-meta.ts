@@ -12,10 +12,13 @@ export interface ImageMeta {
 
 const view = (b: Uint8Array) =>
   new DataView(b.buffer, b.byteOffset, b.byteLength);
+
 const u16be = (b: Uint8Array, o: number) => view(b).getUint16(o);
 const u16le = (b: Uint8Array, o: number) => view(b).getUint16(o, true);
+
 const u24le = (b: Uint8Array, o: number) =>
   u16le(b, o) + view(b).getUint8(o + 2) * 0x1_00_00;
+
 const u32be = (b: Uint8Array, o: number) => view(b).getUint32(o);
 const u32le = (b: Uint8Array, o: number) => view(b).getUint32(o, true);
 const i32le = (b: Uint8Array, o: number) => view(b).getInt32(o, true);
@@ -31,6 +34,7 @@ const png = (b: Uint8Array): ImageMeta | undefined => {
   if (b.length < 24 || !startsWith(b, PNG_SIGNATURE)) {
     return undefined;
   }
+
   return { format: "PNG", height: u32be(b, 20), width: u32be(b, 16) };
 };
 
@@ -39,6 +43,7 @@ const gif = (b: Uint8Array): ImageMeta | undefined => {
   if (b.length < 10 || !startsWith(b, [0x47, 0x49, 0x46, 0x38])) {
     return undefined;
   }
+
   return { format: "GIF", height: u16le(b, 8), width: u16le(b, 6) };
 };
 
@@ -47,6 +52,7 @@ const bmp = (b: Uint8Array): ImageMeta | undefined => {
   if (b.length < 26 || !startsWith(b, [0x42, 0x4d])) {
     return undefined;
   }
+
   return {
     format: "BMP",
     height: Math.abs(i32le(b, 22)),
@@ -63,6 +69,7 @@ const webp = (b: Uint8Array): ImageMeta | undefined => {
   ) {
     return undefined;
   }
+
   if (startsWith(b, [0x56, 0x50, 0x38, 0x20], 12)) {
     // Lossy VP8: 14-bit width/height after the 3-byte start code, masked to drop the scale bits.
     return {
@@ -71,15 +78,18 @@ const webp = (b: Uint8Array): ImageMeta | undefined => {
       width: u16le(b, 26) % 0x40_00,
     };
   }
+
   if (startsWith(b, [0x56, 0x50, 0x38, 0x4c], 12)) {
     // Lossless VP8L: 14-bit (width-1) then 14-bit (height-1) packed little-endian from offset 21.
     const bits = u32le(b, 21);
+
     return {
       format: "WebP",
       height: (Math.floor(bits / 0x40_00) % 0x40_00) + 1,
       width: (bits % 0x40_00) + 1,
     };
   }
+
   if (startsWith(b, [0x56, 0x50, 0x38, 0x58], 12)) {
     // Extended VP8X: 24-bit (canvas-1) little-endian width/height at 24 and 27.
     return {
@@ -88,6 +98,7 @@ const webp = (b: Uint8Array): ImageMeta | undefined => {
       width: u24le(b, 24) + 1,
     };
   }
+
   // An unrecognized inner chunk: no dimensions to read, so fall through like every other
   // Parser that can't decode its header rather than reporting a fabricated 0x0.
   return undefined;
@@ -106,17 +117,21 @@ const jpeg = (b: Uint8Array): ImageMeta | undefined => {
   if (b.length < 4 || !startsWith(b, [0xff, 0xd8])) {
     return undefined;
   }
+
   for (let offset = 2; offset + 9 < b.length;) {
     if (b[offset] !== 0xff) {
       offset += 1;
       continue;
     }
+
     const marker = b[offset + 1];
+
     // Standalone markers (padding, RSTn, SOI/EOI) carry no length field.
     if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
       offset += 2;
       continue;
     }
+
     if (isSofMarker(marker)) {
       return {
         format: "JPEG",
@@ -124,8 +139,10 @@ const jpeg = (b: Uint8Array): ImageMeta | undefined => {
         width: u16be(b, offset + 7),
       };
     }
+
     offset += 2 + u16be(b, offset + 2);
   }
+
   return undefined;
 };
 
@@ -134,9 +151,11 @@ const PARSERS = [png, gif, webp, bmp, jpeg];
 export const imageMeta = (bytes: Uint8Array): ImageMeta | undefined => {
   for (const parse of PARSERS) {
     const meta = parse(bytes);
+
     if (meta !== undefined) {
       return meta;
     }
   }
+
   return undefined;
 };

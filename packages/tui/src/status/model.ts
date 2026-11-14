@@ -116,6 +116,7 @@ export const buildStatusBarModel = (
       width
     );
   }
+
   if (input.notification !== undefined) {
     return fitMessage(
       "notification",
@@ -124,6 +125,7 @@ export const buildStatusBarModel = (
       width
     );
   }
+
   if (input.alert !== undefined) {
     return fitMessage(
       "persistent-alert",
@@ -132,10 +134,13 @@ export const buildStatusBarModel = (
       width
     );
   }
+
   const activity = fitActivity(input.activity, width);
+
   if (activity !== undefined) {
     return { activity, category: "ambient", kind: "ambient" };
   }
+
   return {
     category: "guidance",
     kind: "guidance",
@@ -170,6 +175,7 @@ const fitActivity = (
     activity === undefined
       ? ""
       : truncateLeft(activity.path, Math.max(0, width - ACTIVITY_LEAD_CELLS));
+
   return activity === undefined || path === "" || path === "…"
     ? undefined
     : { ...activity, path };

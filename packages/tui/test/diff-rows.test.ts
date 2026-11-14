@@ -54,15 +54,18 @@ describe("buildDiffRows", () => {
       full: false,
       maxLines: 1600,
     });
+
     expect(hiddenLines).toBe(0);
     expect(
       rows.map((row) => {
         if (row.kind === "separator") {
           return `S:${row.text}`;
         }
+
         if (row.kind === "line") {
           return `${row.type}:${row.oldLine ?? "-"}/${row.newLine ?? "-"}`;
         }
+
         return `M:${row.key}`;
       })
     ).toEqual([
@@ -79,6 +82,7 @@ describe("buildDiffRows", () => {
       full: false,
       maxLines: 1600,
     });
+
     expect(rows[0]).toEqual({
       count: 6,
       kind: "separator",
@@ -91,6 +95,7 @@ describe("buildDiffRows", () => {
       full: false,
       maxLines: 1600,
     });
+
     expect(rows[0]).toEqual({
       count: 1,
       kind: "separator",
@@ -103,6 +108,7 @@ describe("buildDiffRows", () => {
       full: false,
       maxLines: 1600,
     });
+
     expect(rows.some((row) => row.kind === "separator")).toBe(false);
   });
 
@@ -111,9 +117,11 @@ describe("buildDiffRows", () => {
       full: false,
       maxLines: 1600,
     });
+
     const remove = rows.find(
       (row) => row.kind === "line" && row.type === "remove"
     );
+
     expect(remove?.kind === "line" && remove.spans).toEqual([
       { text: 'const b = "two";' },
     ]);
@@ -126,10 +134,12 @@ describe("buildDiffRows", () => {
       [],
       [],
     ];
+
     const { rows } = buildDiffRows(sampleMeta(), addSpans, [], {
       full: false,
       maxLines: 1600,
     });
+
     const added = rows.find((row) => row.kind === "line" && row.type === "add");
     expect(added?.kind === "line" && added.spans).toEqual([
       { fg: "#79B8FF", text: 'const b = "three";' },
@@ -141,9 +151,11 @@ describe("buildDiffRows", () => {
       full: false,
       maxLines: 1600,
     });
+
     const navIndexes = rows
       .filter((row) => row.kind === "line")
       .map((row) => (row.kind === "line" ? row.navIndex : -1));
+
     expect(navIndexes).toEqual([0, 1, 2, 3, 4]);
 
     const navigable = navigableLinesFromRows(rows);
@@ -161,6 +173,7 @@ describe("buildDiffRows", () => {
       full: false,
       maxLines: 3,
     });
+
     expect(capped.hiddenLines).toBe(2);
     expect(capped.rows.filter((row) => row.kind === "line")).toHaveLength(3);
 
@@ -168,6 +181,7 @@ describe("buildDiffRows", () => {
       full: true,
       maxLines: 3,
     });
+
     expect(full.hiddenLines).toBe(0);
     expect(full.rows.filter((row) => row.kind === "line")).toHaveLength(5);
   });

@@ -20,9 +20,11 @@ import {
 describe("sidebar scroll follow", () => {
   test("keeps the focused file visible after a mouse click then keyboard nav", async () => {
     const files: Record<string, string> = {};
+
     for (let i = 0; i < 40; i += 1) {
       files[`f${String(i).padStart(2, "0")}.txt`] = `content ${i}\n`;
     }
+
     const repoRoot = createFixtureRepo("stet-scroll-", files);
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
@@ -30,6 +32,7 @@ describe("sidebar scroll follow", () => {
 
     const { renderer, mockMouse, mockInput, renderOnce, captureCharFrame } =
       await testRender(() => <App />, { height: 16, width: 90 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) => current.includes("f00.txt"));
 
@@ -43,6 +46,7 @@ describe("sidebar scroll follow", () => {
       // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
       await renderOnce();
     }
+
     await renderOnce();
 
     // The viewer pane echoes the selected file name, so scope to the sidebar.
@@ -50,6 +54,7 @@ describe("sidebar scroll follow", () => {
       .split("\n")
       .map((line) => line.split("││")[0])
       .join("\n");
+
     const focusedPath = state.treeRows()[state.focusedRowIndex()].node.path;
 
     expect(sidebar).toContain(focusedPath);

@@ -88,10 +88,12 @@ test("zoom never resurrects a pane that is closed", () => {
   wide();
   state.toggleSidebar();
   expect(state.sidebarOpen()).toBe(false);
+
   const handle = createKeyHandler({
     openInEditor: async () => {},
     quit: () => {},
   });
+
   // Zoom takes its target from focus with no open-flag check of its own, so what keeps it from
   // Painting a closed pane back is that `tab` cannot focus one in the first place.
   handle(key("tab"));
@@ -110,6 +112,7 @@ test("zoom follows focus around the whole cycle, and every stop is a pane that i
   wide();
   state.setFocusedPane("diff");
   state.toggleZoom();
+
   const handle = createKeyHandler({
     openInEditor: async () => {},
     quit: () => {},

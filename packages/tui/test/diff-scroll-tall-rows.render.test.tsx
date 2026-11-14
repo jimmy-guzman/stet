@@ -27,11 +27,14 @@ test("last line stays reachable past emoji rows that render two terminal rows", 
   const lines = Array.from({ length: 40 }, (_, i) => {
     const n = i + 1;
     const emoji = "- `⚠️ marker | 🟠 wide` - ";
+
     return `${emoji}line_${n} ${"detail ".repeat(10)}${n}`;
   });
+
   const repoRoot = createFixtureRepo("stet-tallrow-", {
     "long.md": `${lines.join("\n")}\n`,
   });
+
   const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
   seedState(model, { kind: "all", ref: "HEAD" });
   state.setFocusedPane("diff");
@@ -43,15 +46,18 @@ test("last line stays reachable past emoji rows that render two terminal rows", 
       height: 24,
       width: 90,
     });
+
   const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
   try {
     await settleUntil("content", (frame) => frame.includes("line_1 "), 5);
 
     mockInput.pressKey("G");
+
     const frame = await settleUntil("last line reachable", (current) =>
       current.includes("line_40 ")
     );
+
     expect(frame).toMatch(/line_40 /u);
   } finally {
     renderer.destroy();

@@ -20,6 +20,7 @@ export const ClipboardLive = Layer.effect(
     return {
       copy: (text) => {
         const command = clipboardCommand();
+
         if (command === undefined) {
           return Effect.fail(
             new ClipboardError({

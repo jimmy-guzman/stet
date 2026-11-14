@@ -45,13 +45,17 @@ export const caretCell = ({
   scrollX,
 }: CaretAnchorInput): CaretCell | undefined => {
   const row = cursorTop - scrollTop;
+
   if (row < 0 || row >= viewportHeight) {
     return undefined;
   }
+
   const col = contentLeft + caretFrom - scrollX;
+
   if (col < contentLeft || col >= viewportWidth) {
     return undefined;
   }
+
   return { col, row };
 };
 
@@ -90,5 +94,6 @@ export const placeCard = ({
   const flipped = below + cardHeight > viewportHeight;
   const top = flipped ? Math.max(0, anchor.row - cardHeight) : below;
   const left = Math.max(0, Math.min(anchor.col, viewportWidth - cardWidth));
+
   return { flipped, left, top };
 };

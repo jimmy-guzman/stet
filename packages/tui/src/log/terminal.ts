@@ -9,10 +9,13 @@ import type { LogLevel } from "./levels";
 // Bun.enableANSIColors, which already honors TTY / NO_COLOR / FORCE_COLOR.
 const format = (text: string, level: LogLevel) => {
   const line = `${levelGlyph(level)} ${text}`;
+
   if (level === "info" || !Bun.enableANSIColors) {
     return line;
   }
+
   const ansi = Bun.color(levelColor(activeTheme().colors, level), "ansi");
+
   return ansi === null ? line : `${ansi}${line}\u001B[0m`;
 };
 
@@ -20,19 +23,24 @@ const format = (text: string, level: LogLevel) => {
 // Thin wrappers, so a caller with a dynamic level (the quit notice) uses `log`.
 export const log = (level: LogLevel, text: string) => {
   const line = format(text, level);
+
   if (level === "error") {
     console.error(line);
+
     return;
   }
+
   console.log(line);
 };
 
 export const logError = (text: string) => {
   log("error", text);
 };
+
 export const logSuccess = (text: string) => {
   log("success", text);
 };
+
 export const logInfo = (text: string) => {
   log("info", text);
 };

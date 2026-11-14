@@ -19,8 +19,10 @@ describe("help overlay", () => {
     const repoRoot = createFixtureRepo("stet-help-", {
       "src/a.ts": "export const a = 1\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         // Tall enough to fit the whole grouped keybindings list (its section headers
@@ -29,6 +31,7 @@ describe("help overlay", () => {
         height: 80,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -37,9 +40,11 @@ describe("help overlay", () => {
         (frame) => frame.includes("q quit"),
         5
       );
+
       expect(initial).toContain("? help · q quit");
 
       mockInput.pressKey("?");
+
       // The wait is deliberately loose, and must stay that way: it stops on the first frame that
       // Carries any row, and every assertion below reads the whole list off that one frame. That
       // Is the guard for #363, where a scrollbox came up one row shorter than the box around it
@@ -48,6 +53,7 @@ describe("help overlay", () => {
       const help = await settleUntil("help overlay", (frame) =>
         frame.includes("switch to another git worktree")
       );
+
       // Section headings group the list; assert ones no description text contains, so a
       // Regression to a flat list (no headings) fails. Spread top/middle/bottom.
       expect(help).toContain("navigation");
@@ -84,10 +90,12 @@ describe("help overlay", () => {
       expect(state.sidebarOpen()).toBe(true);
 
       mockInput.pressEscape();
+
       const closedByEscape = await settleUntil(
         "help closed by escape",
         (frame) => !frame.includes("switch to another git worktree")
       );
+
       expect(closedByEscape).toContain("? help · q quit");
 
       // Q must close the overlay, not quit the app
@@ -96,10 +104,12 @@ describe("help overlay", () => {
         frame.includes("switch to another git worktree")
       );
       mockInput.pressKey("q");
+
       const closed = await settleUntil(
         "help closed by q",
         (frame) => !frame.includes("switch to another git worktree")
       );
+
       expect(closed).toContain("q quit");
       expect(closed).toContain("? help · q quit");
     } finally {
@@ -112,13 +122,16 @@ describe("help overlay", () => {
     const repoRoot = createFixtureRepo("stet-marks-", {
       "src/a.ts": "export const a = 1\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 72,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -131,9 +144,11 @@ describe("help overlay", () => {
 
       // Settle on a meaning unique to the legend, so it tells the two views apart.
       mockInput.pressTab();
+
       const marks = await settleUntil("marks legend", (frame) =>
         frame.includes("staged and unstaged")
       );
+
       // The view swapped: the keybinding descriptions are gone and the marks are explained.
       expect(marks).not.toContain("switch to another git worktree");
       // The active view is bracketed (a NO_COLOR-safe cue), not just brightened.
@@ -141,9 +156,11 @@ describe("help overlay", () => {
       expect(marks).toContain("modified");
 
       mockInput.pressTab();
+
       const back = await settleUntil("back to the keys", (frame) =>
         frame.includes("switch to another git worktree")
       );
+
       expect(back).not.toContain("staged and unstaged");
     } finally {
       renderer.destroy();

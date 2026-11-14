@@ -87,9 +87,11 @@ describe("parseCombo", () => {
 
 const combo = (text: string) => {
   const parsed = parseCombo(text);
+
   if (parsed === undefined) {
     throw new Error(`combo "${text}" did not parse`);
   }
+
   return parsed;
 };
 

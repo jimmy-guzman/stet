@@ -20,6 +20,7 @@ describe("worktree picker", () => {
       "README.md": "# Fixture\n",
       "src/main-only.ts": "export const main = true\n",
     });
+
     const linkedRoot = path.join(repoRoot, ".wt");
     runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
     writeFileSync(
@@ -33,11 +34,13 @@ describe("worktree picker", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -46,22 +49,27 @@ describe("worktree picker", () => {
         (frame) => frame.includes("q quit") && frame.includes("main-only.ts"),
         5
       );
+
       expect(initial).toContain("main-only.ts");
       expect(initial).not.toContain("side-only.ts");
 
       mockInput.pressKey("w");
+
       const picker = await settleUntil(
         "worktree picker",
         (frame) =>
           frame.includes("switch worktree") && frame.includes("side-branch")
       );
+
       expect(picker).toContain("side-branch");
 
       mockInput.pressEscape();
+
       const closed = await settleUntil(
         "picker closed",
         (frame) => !frame.includes("side-branch")
       );
+
       expect(closed).toContain("main-only.ts");
       expect(closed).not.toContain("side-only.ts");
 
@@ -73,6 +81,7 @@ describe("worktree picker", () => {
       // Let the cursor move commit before enter, as a real key cadence would
       await settleUntil("picker cursor moved", () => true, 2);
       mockInput.pressEnter();
+
       const switched = await settleUntil(
         "linked worktree loaded",
         (frame) =>
@@ -80,6 +89,7 @@ describe("worktree picker", () => {
           frame.includes("side-branch") &&
           frame.includes("uncommitted vs HEAD")
       );
+
       expect(switched).toContain("side-only.ts");
       expect(switched).toContain("side-branch");
       expect(switched).toContain("uncommitted vs HEAD");
@@ -93,6 +103,7 @@ describe("worktree picker", () => {
     const repoRoot = createFixtureRepo("stet-worktree-activity-", {
       "README.md": "# Fixture\n",
     });
+
     // Outside the repo, so the main worktree reads as genuinely clean: a nested worktree is an
     // Untracked entry in its parent (real setups gitignore theirs, as this repo does).
     const linkedRoot = `${repoRoot}-linked`;
@@ -102,17 +113,20 @@ describe("worktree picker", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
 
       mockInput.pressKey("w");
+
       // Loose on purpose, and load-bearing: this stops on the first frame carrying a row, and both
       // Rows are one update with the scrollbox's height, so a frame with one and not the other
       // Means the viewport came up a row short of its box. That is #363, and waiting for the
@@ -121,6 +135,7 @@ describe("worktree picker", () => {
         "worktree summaries",
         (frame) => frame.includes("busy-branch") && frame.includes("now")
       );
+
       // Asserted against the frame first so a regression prints it, not just a row count.
       expect(picker).toMatch(/● (?:main|master)/u);
 
@@ -129,8 +144,10 @@ describe("worktree picker", () => {
       const rows = picker
         .split("\n")
         .filter((line) => /busy-branch|● (?<default>main|master)/u.test(line));
+
       expect(rows).toHaveLength(2);
       expect(rows[0]).toContain("busy-branch");
+
       for (const row of rows) {
         expect(row).toContain("now");
       }
@@ -145,16 +162,19 @@ describe("worktree picker", () => {
     const repoRoot = createFixtureRepo("stet-wt-path-", {
       "README.md": "# Fixture\n",
     });
+
     const linkedRoot = `${repoRoot}-linked`;
     runGit(repoRoot, ["worktree", "add", "-b", "other-branch", linkedRoot]);
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 160,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -174,15 +194,18 @@ describe("worktree picker", () => {
       const onMain = await settleUntil("main's path", (frame) =>
         frame.includes(mainName)
       );
+
       expect(onMain).toContain(mainName);
       expect(onMain).not.toContain(linkedName);
 
       // Moving the cursor swaps the footer to the newly highlighted worktree.
       mockInput.pressArrow("up");
+
       const onLinked = await settleUntil(
         "the linked worktree's path",
         (frame) => frame.includes(linkedName)
       );
+
       expect(onLinked).toContain(linkedName);
     } finally {
       renderer.destroy();
@@ -195,6 +218,7 @@ describe("worktree picker", () => {
     const repoRoot = createFixtureRepo("stet-worktree-align-", {
       "README.md": "# Fixture\n",
     });
+
     const busyRoot = `${repoRoot}-busy`;
     const lockedRoot = `${repoRoot}-locked`;
     const quietRoot = `${repoRoot}-quiet`;
@@ -213,16 +237,19 @@ describe("worktree picker", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
       mockInput.pressKey("w");
+
       const frame = await settleUntil(
         "worktree rows",
         (candidate) =>
@@ -241,6 +268,7 @@ describe("worktree picker", () => {
           )
           .map((line) => {
             const match = /\bnow\b/u.exec(line);
+
             return match === null ? -1 : match.index;
           })
       );
@@ -251,6 +279,7 @@ describe("worktree picker", () => {
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
+
       for (const root of [busyRoot, lockedRoot, quietRoot]) {
         rmSync(root, { force: true, recursive: true });
       }
@@ -261,16 +290,19 @@ describe("worktree picker", () => {
     const repoRoot = createFixtureRepo("stet-worktree-filter-", {
       "README.md": "# Fixture\n",
     });
+
     const linkedRoot = path.join(repoRoot, ".wt");
     runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -294,19 +326,23 @@ describe("worktree picker", () => {
       // Suffix happened to carry two more z's, the row survived, and this test failed on ~1.5% of
       // Runs.
       await mockInput.typeText("branch");
+
       const filtered = await settleUntil(
         "filtered to side-branch",
         (frame) => frame.includes("side-branch") && !mainRow.test(frame)
       );
+
       expect(filtered).toContain("side-branch");
       expect(filtered).not.toMatch(mainRow);
 
       await mockInput.typeText("zzz");
+
       const empty = await settleUntil(
         "no matches",
         (frame) =>
           frame.includes("no matches") && !frame.includes("side-branch")
       );
+
       expect(empty).toContain("no matches");
     } finally {
       renderer.destroy();

@@ -19,6 +19,7 @@ export const CodeLine = (props: {
     if (ref === undefined) {
       return;
     }
+
     const windowed = sliceSpansWindow(props.spans(), 0, props.width());
     ref.content = new StyledText(
       (windowed.length === 0 ? [{ text: "" }] : windowed).map((span) =>
@@ -26,6 +27,7 @@ export const CodeLine = (props: {
       )
     );
   });
+
   return (
     <text
       ref={(el) => {

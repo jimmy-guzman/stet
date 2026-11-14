@@ -12,6 +12,7 @@ import { ProcessLive } from "@/process";
 import { createFixtureRepo, runGit } from "./helpers";
 
 const FIELD = "\u001F";
+
 // A NUL-terminated `git log -z` stream: fields joined by 0x1F, commits by NUL.
 const stream = (...rows: string[][]) =>
   `${rows.map((fields) => fields.join(FIELD)).join("\0")}\0`;
@@ -39,6 +40,7 @@ describe("parseLog", () => {
       ["aaa111", "aaa", "bbb222", "Jimmy", "1700000000", "fix: null guard"],
       ["bbb222", "bbb", "ccc333", "Alex", "1699990000", "refactor tree"]
     );
+
     expect(parseLog(out)).toEqual([
       {
         author: "Jimmy",
@@ -70,6 +72,7 @@ describe("parseLog", () => {
       "1699000000",
       "initial commit",
     ]);
+
     expect(parseLog(out)[0]?.parent).toBeUndefined();
   });
 
@@ -82,6 +85,7 @@ describe("parseLog", () => {
       "1699000000",
       "merge branch",
     ]);
+
     expect(parseLog(out)[0]?.parent).toBe("p1");
   });
 
@@ -94,6 +98,7 @@ describe("parseLog", () => {
       "1699000000",
       "feat(x): a, b: c",
     ]);
+
     expect(parseLog(out)[0]?.subject).toBe("feat(x): a, b: c");
   });
 
@@ -134,6 +139,7 @@ test("Git.recentCommits returns no commits for a commitless repo (unborn HEAD)",
   // `git log` exits 128 with no output here; it must surface as an empty list, not
   // An error, so the picker shows its empty state.
   const repo = mkdtempSync(path.join(tmpdir(), "git-log-empty-"));
+
   try {
     runGit(repo, ["init"]);
     expect(await runRecentCommits(repo, 30)).toEqual([]);

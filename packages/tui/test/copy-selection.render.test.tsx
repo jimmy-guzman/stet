@@ -23,10 +23,12 @@ const snippetRepo = (prefix: string) => {
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
     "src/snippet.ts": "alpha\n",
   });
+
   writeFileSync(
     path.join(repoRoot, "src", "snippet.ts"),
     "alpha\nbeta\ngamma\n"
   );
+
   return repoRoot;
 };
 
@@ -35,14 +37,17 @@ const longSnippetRepo = (prefix: string) => {
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
     "src/snippet.ts": "// base\n",
   });
+
   const additions = Array.from(
     { length: 40 },
     (_, index) => `// line-${String(index + 1).padStart(2, "0")}`
   );
+
   writeFileSync(
     path.join(repoRoot, "src", "snippet.ts"),
     ["// base", ...additions, ""].join("\n")
   );
+
   return repoRoot;
 };
 
@@ -51,11 +56,13 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-copy-sel-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     // Verify the C key reaches copySelection without depending on the clipboard
@@ -90,6 +97,7 @@ describe("line selection copy", () => {
       mockInput.pressArrow("down", { shift: true });
       await settleUntil("selection spans three lines", () => {
         const range = state.selectionRange();
+
         return range !== undefined && range[0] === 0 && range[1] === 2;
       });
       expect(state.selectionText()).toBe("alpha\nbeta\ngamma");
@@ -114,11 +122,13 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-copy-sel-mouse-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
@@ -127,6 +137,7 @@ describe("line selection copy", () => {
         "diff shown",
         (current) => current.includes("alpha") && current.includes("gamma")
       );
+
       const rows = frame.split("\n");
       const alphaRow = rows.findIndex((row) => row.includes("alpha"));
       const gammaRow = rows.findIndex((row) => row.includes("gamma"));
@@ -147,11 +158,13 @@ describe("line selection copy", () => {
       mockInput.pressArrow("down", { shift: true });
       await settleUntil("keyboard selection reaches the second line", () => {
         const range = state.selectionRange();
+
         return range !== undefined && range[0] === 0 && range[1] === 1;
       });
       await mouse.click(contentX, gammaRow, 0, { modifiers: { shift: true } });
       await settleUntil("selection spans the clicked range", () => {
         const range = state.selectionRange();
+
         return range !== undefined && range[0] === 0 && range[1] === 2;
       });
 
@@ -167,6 +180,7 @@ describe("line selection copy", () => {
       await mouse.drag(contentX, alphaRow, contentX, gammaRow);
       await settleUntil("drag selects the range", () => {
         const range = state.selectionRange();
+
         return range !== undefined && range[0] === 0 && range[1] === 2;
       });
     } finally {
@@ -179,6 +193,7 @@ describe("line selection copy", () => {
     const repoRoot = longSnippetRepo("stet-copy-sel-edge-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -186,6 +201,7 @@ describe("line selection copy", () => {
         width: 110,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
@@ -194,6 +210,7 @@ describe("line selection copy", () => {
         "long diff shown",
         (current) => current.includes("base") && current.includes("line-01")
       );
+
       const frameRows = frame.split("\n");
       const baseRow = frameRows.findIndex((row) => row.includes("base"));
       expect(baseRow).toBeGreaterThan(0);
@@ -207,6 +224,7 @@ describe("line selection copy", () => {
         "held bottom edge advances without more pointer motion",
         () => {
           const range = state.selectionRange();
+
           return (
             state.viewerScrollTop() >= 4 && range !== undefined && range[1] > 8
           );
@@ -250,10 +268,12 @@ describe("line selection copy", () => {
       "}",
       "export const after = 5",
     ].join("\n");
+
     const repoRoot = createFixtureRepo("stet-sel-fold-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/mod.ts": `${source}\n`,
     });
+
     // A trivial edit makes it a changed file so it auto-opens in the viewer.
     writeFileSync(
       path.join(repoRoot, "src", "mod.ts"),
@@ -262,11 +282,13 @@ describe("line selection copy", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -295,6 +317,7 @@ describe("line selection copy", () => {
       mockInput.pressArrow("up", { shift: true });
       await settleUntil("caret inside foo, anchor on after", () => {
         const range = state.selectionRange();
+
         return (
           state.cursorLineContent().includes("const a = 9") && range?.[1] === 5
         );
@@ -305,10 +328,12 @@ describe("line selection copy", () => {
       // Caret re-homes to the fold header (index 1) and the anchor shifts up (5 -> 3),
       // So the full tuple must be [1, 3]; without the anchor remap it would clear.
       mockInput.pressKey("z");
+
       const folded = await settleUntil(
         "block folded and both endpoints remapped",
         (frame) => {
           const range = state.selectionRange();
+
           return (
             !frame.includes("const b = 2") &&
             range !== undefined &&
@@ -317,6 +342,7 @@ describe("line selection copy", () => {
           );
         }
       );
+
       expect(folded).not.toContain("const b = 2");
       expect(state.selectionRange()).toEqual([1, 3]);
     } finally {
@@ -329,11 +355,13 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-sel-scope-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -371,11 +399,13 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-sel-find-esc-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {

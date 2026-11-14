@@ -8,6 +8,7 @@ import path from "node:path";
  */
 export const configPaths = (env: NodeJS.ProcessEnv = process.env) => {
   const base = env.XDG_CONFIG_HOME ?? path.join(homedir(), ".config");
+
   return [
     path.join(base, "stet", "config.jsonc"),
     path.join(base, "stet", "config.json"),

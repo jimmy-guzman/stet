@@ -5,13 +5,16 @@ import { kindLetter } from "@/ui-helpers";
 
 describe("legendGroups", () => {
   const groups = legendGroups();
+
   const group = (heading: string) =>
     groups.find((entry) => entry.heading === heading);
+
   const glyphs = (heading: string) =>
     group(heading)?.entries.map((entry) => entry.glyph) ?? [];
 
   test("draws every change kind with the tree's own letter", () => {
     const changes = glyphs("changes");
+
     for (const kind of [
       "modified",
       "added",

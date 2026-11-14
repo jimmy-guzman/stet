@@ -33,6 +33,7 @@ export interface RepoContext {
 // The only way anything should name one: a caller that reaches for a bare constant is a caller that
 // Has stopped asking the repository.
 const SHA1_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
 const SHA256_EMPTY_TREE =
   "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 
@@ -75,7 +76,9 @@ export const parseRepoContext = (stdout: string): RepoContext | undefined => {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "");
+
   const [repoRoot, commonDir, objectFormat] = lines;
+
   if (
     lines.length !== 3 ||
     repoRoot === undefined ||
@@ -84,6 +87,7 @@ export const parseRepoContext = (stdout: string): RepoContext | undefined => {
   ) {
     return undefined;
   }
+
   if (
     !repoRoot.startsWith("/") ||
     !commonDir.startsWith("/") ||
@@ -93,6 +97,7 @@ export const parseRepoContext = (stdout: string): RepoContext | undefined => {
   }
 
   const suffix = "/.git";
+
   return {
     emptyTree: emptyTreeForFormat(objectFormat),
     mainWorktreePath: commonDir.endsWith(suffix)
@@ -151,12 +156,15 @@ export const repoFailureMessage = (
   if (failure === "missing-git") {
     return "git is not installed, or not on PATH";
   }
+
   if (failure === "not-a-repo") {
     return `not a git repository: ${cwd}`;
   }
+
   if (failure === "bare-repo") {
     return `no git working tree at ${cwd}`;
   }
+
   if (failure === "unsupported-git") {
     // Name the option git rejected rather than a minimum version: stet's floor is whatever the
     // Oldest of its invocations needs, and only this one has proven itself.
@@ -164,6 +172,7 @@ export const repoFailureMessage = (
   }
 
   const first = detail.trim().split("\n")[0] ?? "";
+
   return first === ""
     ? `could not read the git repository at ${cwd}`
     : `could not read the git repository at ${cwd}: ${first}`;

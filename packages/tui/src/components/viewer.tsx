@@ -20,6 +20,7 @@ import { Tabs } from "./tabs";
 // Land on the raw (clamped) offset so a jump into a gap still lands precisely.
 const caretForColumn = (content: string, column: number) => {
   const index = Math.max(0, Math.min(column - 1, content.length));
+
   return wordAt(content, index)?.start ?? index;
 };
 
@@ -32,6 +33,7 @@ const restoreIndex = (
   if (found !== -1) {
     return found;
   }
+
   return cursorLine === undefined
     ? 0
     : Math.max(0, nearestNavigableIndex(lines, cursorLine));
@@ -39,23 +41,30 @@ const restoreIndex = (
 
 const cursorLabel = () => {
   const line = state.cursorLineNumber();
+
   if (line === undefined) {
     return "";
   }
+
   const column = state.caretColumn();
+
   return column === undefined ? `ln ${line}` : `ln ${line}:${column}`;
 };
 
 const focused = () =>
   state.focusedPane() === "diff" || state.focusedPane() === "search";
+
 const displayedFile = () => {
   const view = state.diffView();
+
   return view === undefined
     ? undefined
     : state.gitModel().changedByPath.get(view.path);
 };
+
 const isPlaceholder = () => {
   const content = state.diffView()?.fileContent;
+
   return (
     state.diffView()?.showFileContent === true &&
     content !== undefined &&
@@ -69,6 +78,7 @@ const isPlaceholder = () => {
 const binaryPreview = () => {
   const view = state.diffView();
   const content = view?.fileContent;
+
   if (view?.showFileContent === true && content?.kind === "binary") {
     return {
       diff: undefined,
@@ -76,6 +86,7 @@ const binaryPreview = () => {
       single: { bytes: content.bytes, image: content.image },
     };
   }
+
   return view?.binary === undefined
     ? undefined
     : { diff: view.binary, path: view.path, single: undefined };
@@ -85,10 +96,13 @@ const findCounter = () => {
   if (state.findQuery() === "") {
     return "";
   }
+
   const count = state.findMatches().length;
+
   if (count === 0) {
     return "no matches";
   }
+
   // Clamp: a live edit during an active find can leave the position past the end.
   return `${Math.min(state.findMatchPos(), count - 1) + 1}/${count}`;
 };
@@ -104,11 +118,13 @@ const onFindSubmit = () => {
   batch(() => {
     const matches = state.findMatches();
     const [first] = matches;
+
     if (first !== undefined) {
       state.setFindMatchPos(0);
       state.setCursorRow(first);
       state.setFindActive(true);
     }
+
     state.setFindOpen(false);
   });
 };
@@ -124,17 +140,22 @@ export const Viewer = () => {
   // Reset and DiffView's scrollX reset with one path.
   createEffect(() => {
     const pending = state.pendingRestore();
+
     if (pending === undefined) {
       return;
     }
+
     const view = state.diffView();
+
     if (
       view?.path !== pending.path ||
       view.showFileContent !== state.showFileContent()
     ) {
       return;
     }
+
     const lines = state.navigableLines();
+
     const found =
       pending.cursorLine === undefined
         ? lines.findIndex((line) => line.type !== "context")
@@ -143,6 +164,7 @@ export const Viewer = () => {
               line.newLine === pending.cursorLine ||
               line.oldLine === pending.cursorLine
           );
+
     // A fresh open homes to the first change. When the file has line changes yet
     // This snapshot shows none, the diff is still loading (an interrupted git read
     // Can briefly commit an empty patch); don't spend the one-shot restore on it,
@@ -150,10 +172,12 @@ export const Viewer = () => {
     // Change lines (binary, rename/mode-only) settles with none, so it still
     // Consumes at the top.
     const changed = state.selectedFile();
+
     const expectsChangeLines =
       changed !== undefined &&
       !changed.binary &&
       changed.additions + changed.deletions > 0;
+
     if (
       pending.cursorLine === undefined &&
       found === -1 &&
@@ -162,12 +186,15 @@ export const Viewer = () => {
     ) {
       return;
     }
+
     const index = restoreIndex(lines, found, pending.cursorLine);
+
     // The caret restores to its remembered offset (already a word start), or the
     // New line's first word on a fresh open; the clamp effect below corrects an
     // Offset that no longer fits if the content changed under it.
     const column =
       pending.cursorColumn ?? firstWord(lines[index]?.content ?? "");
+
     batch(() => {
       state.setCaretLineLevel(false);
       state.setCursorIndex(index);
@@ -182,6 +209,7 @@ export const Viewer = () => {
   // Re-homes the caret to the new line's first word).
   createEffect(() => {
     const last = state.navigableLines().length - 1;
+
     if (state.cursorIndex() > last) {
       state.setCursorRow(Math.max(0, last));
     }
@@ -207,9 +235,11 @@ export const Viewer = () => {
   // Effect above so it runs last and the jump's line wins over the restored cursor.
   createEffect(() => {
     const jump = state.jumpTarget();
+
     if (jump === undefined || jump.path !== state.selectedPath()) {
       return;
     }
+
     // Only resolve once the loaded snapshot matches the current target AND view
     // Intent. `selectedPath`/`fileView` update synchronously, but `diffView`
     // (which feeds `navigableLines`) loads async; acting on a stale snapshot
@@ -218,14 +248,17 @@ export const Viewer = () => {
     // Flips to file view, it waits for the full content instead of clearing
     // Itself against the still-loaded diff.
     const view = state.diffView();
+
     if (
       view?.path !== jump.path ||
       view.showFileContent !== state.showFileContent()
     ) {
       return;
     }
+
     const lines = state.navigableLines();
     const index = lines.findIndex((line) => line.newLine === jump.line);
+
     if (index !== -1) {
       const content = lines[index]?.content ?? "";
       batch(() => {
@@ -242,29 +275,38 @@ export const Viewer = () => {
         state.setPendingRestore(undefined);
         state.setJumpTarget(undefined);
       });
+
       return;
     }
+
     // A fold may be hiding the target line; clearing it re-runs this effect (which
     // Reads `navigableLines`) so the now-visible line is found on the next pass.
     if (state.revealLineForJump(jump.line)) {
       return;
     }
+
     if (state.truncated() && !state.fullContentPaths().has(jump.path)) {
       state.setFullContentPaths((current) => new Set(current).add(jump.path));
+
       return;
     }
+
     if (
       jump.escalate &&
       state.selectedFile() !== undefined &&
       !state.fileView()
     ) {
       state.setFileView(true);
+
       return;
     }
+
     const nearest = nearestNavigableIndex(lines, jump.line);
+
     if (nearest >= 0) {
       state.setCursorRow(nearest);
     }
+
     state.setJumpTarget(undefined);
   });
 

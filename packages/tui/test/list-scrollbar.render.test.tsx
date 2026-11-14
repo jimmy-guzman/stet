@@ -32,9 +32,11 @@ const thumbRow = (frame: string) =>
 describe("list scrollbar", () => {
   test("shows a thumb only when the tree overflows, and it tracks scroll", async () => {
     const files: Record<string, string> = {};
+
     for (let i = 0; i < 300; i += 1) {
       files[`big/f${String(i).padStart(3, "0")}.txt`] = `content ${i}\n`;
     }
+
     const repoRoot = createFixtureRepo("stet-scrollbar-", files);
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
@@ -45,6 +47,7 @@ describe("list scrollbar", () => {
         height: 16,
         width: 90,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) =>
       current.includes("f000.txt")
@@ -61,6 +64,7 @@ describe("list scrollbar", () => {
       // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
       await renderOnce();
     }
+
     await renderOnce();
     expect(thumbRow(captureCharFrame())).toBeGreaterThan(topRow);
 
@@ -71,6 +75,7 @@ describe("list scrollbar", () => {
       // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
       await renderOnce();
     }
+
     mockInput.pressKey("h");
     await renderOnce();
     await renderOnce();
@@ -83,10 +88,12 @@ describe("list scrollbar", () => {
     const repoRoot = createFixtureRepo("stet-scrollbar-search-", {
       "src/many.ts": "seed\n",
     });
+
     const lines = Array.from(
       { length: 60 },
       (_, index) => `const needle${index} = ${index}`
     );
+
     writeFileSync(
       path.join(repoRoot, "src", "many.ts"),
       `${lines.join("\n")}\n`
@@ -97,6 +104,7 @@ describe("list scrollbar", () => {
 
     const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } =
       await testRender(() => <App />, { height: 34, width: 120 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -119,6 +127,7 @@ describe("list scrollbar", () => {
         // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
         await renderOnce();
       }
+
       await renderOnce();
       expect(thumbRowAnywhere(captureCharFrame())).toBeGreaterThan(topRow);
     } finally {

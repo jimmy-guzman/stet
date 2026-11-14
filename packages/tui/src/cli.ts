@@ -29,7 +29,6 @@ export interface CliOptions {
   help: boolean;
   icons: boolean;
   ide: string | undefined;
-  lspDownload: boolean;
   /** Long line handling: `scroll` (default) or `wrap`. */
   overflow: "scroll" | "wrap";
   scope: DiffScope;
@@ -67,7 +66,6 @@ export function parseArgs(args: string[]): CliOptions {
       "help": { short: "h", type: "boolean" },
       "ide": { type: "string" },
       "no-icons": { type: "boolean" },
-      "no-lsp-download": { type: "boolean" },
       "staged": { type: "boolean" },
       "unstaged": { type: "boolean" },
       "version": { short: "v", type: "boolean" },
@@ -91,7 +89,6 @@ export function parseArgs(args: string[]): CliOptions {
     help: values.help ?? false,
     icons: !values["no-icons"],
     ide: requireNonEmptyValue("--ide", values.ide),
-    lspDownload: !values["no-lsp-download"],
     overflow: values.wrap ? "wrap" : "scroll",
     scope: { kind, ref: requireNonEmptyValue("<ref>", positionals[0]) ?? "HEAD" },
     version: values.version ?? false,
@@ -208,7 +205,6 @@ Usage:
   stet --staged [ref]
   stet --unstaged
   stet --no-icons        (disable Nerd Font file-type icons in the tree)
-  stet --no-lsp-download (do not auto-download a missing language server)
   stet --wrap            (wrap long lines in the viewer instead of overflowing)
   stet --editor <template>
   stet --ide <template>

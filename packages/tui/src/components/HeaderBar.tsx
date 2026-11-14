@@ -53,12 +53,8 @@ export function HeaderBar() {
 
   const glyphCells = () => (state.iconsEnabled() ? GLYPH_CELLS : 0);
   const available = () => Math.max(0, state.terminalWidth() - PADDING * 2);
-  // The right-side fields that are never truncated: the changed count and optional diagnostics badge.
-  const tail = () => {
-    const changed = `${state.gitModel().changed.length} changed`;
-    const counts = state.countsText();
-    return counts === "" ? changed : `${changed}${SEP}${counts}`;
-  };
+  // The right-side field that is never truncated: the changed count.
+  const tail = () => `${state.gitModel().changed.length} changed`;
   // A commit fills the left slot (where identity sits otherwise) and spans the width up to the tail,
   // Truncating with an ellipsis only when the full subject genuinely does not fit.
   const commitSubject = () => {

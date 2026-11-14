@@ -17,8 +17,8 @@ export interface StatusBarActivity {
 
 // One tag per lifecycle, not per feature: a failed worktree list retries by reopening the picker,
 // A failed switch retries by switching, so they must not clear each other (browsing the picker
-// Cannot be allowed to retire an unretried switch error). Diagnostics is its own lifecycle again.
-export type StatusAlertSource = "diagnostics" | "worktree-list" | "worktree-switch";
+// Cannot be allowed to retire an unretried switch error).
+export type StatusAlertSource = "worktree-list" | "worktree-switch";
 
 /**
  * An unresolved problem the user has not been told about anywhere else, held until its own source
@@ -26,8 +26,8 @@ export type StatusAlertSource = "diagnostics" | "worktree-list" | "worktree-swit
  * durable UI it changed, and persisting one here outlives its usefulness (the `checks passed` that
  * sat under a red error count).
  *
- * `source` is what keeps two independent alerts from clobbering each other, so a worktree failure
- * survives a diagnostics run and vice versa.
+ * `source` is what keeps two independent alerts from clobbering each other, so a failed switch
+ * survives browsing the picker and vice versa.
  */
 export interface StatusAlert {
   level: "error" | "warning";
@@ -37,24 +37,14 @@ export interface StatusAlert {
 
 /**
  * Raised alerts, oldest first. Ordered rather than keyed because the order carries the meaning:
- * with one row to show and no way to rank a worktree failure against a diagnostics one, the newest
- * wins, being the problem the user just provoked.
+ * with one row to show and no way to rank one failure against another, the newest wins, being the
+ * problem the user just provoked.
  */
 export type StatusAlerts = readonly StatusAlert[];
 
 /** Replaces any alert from the same source and moves it to the newest position. */
 export function raiseAlert(alerts: StatusAlerts, alert: StatusAlert): StatusAlerts {
   return [...alerts.filter((current) => current.source !== alert.source), alert];
-}
-
-/**
- * Re-state an alert for a condition that never went away, without advancing its recency: it returns
- * to the _oldest_ slot, so a fresher user-provoked alert still owns the row. This is how a
- * background diagnostics re-check re-reports a persisting failure without leapfrogging a worktree
- * error the user just provoked, which `raiseAlert` (newest wins) would.
- */
-export function restateAlert(alerts: StatusAlerts, alert: StatusAlert): StatusAlerts {
-  return [alert, ...alerts.filter((current) => current.source !== alert.source)];
 }
 
 /** Retires one source's alert, leaving every other source's untouched. */
@@ -67,12 +57,7 @@ export function latestAlert(alerts: StatusAlerts) {
 }
 
 interface StatusBarMessage {
-  category:
-    | "notification"
-    | "foreground-progress"
-    | "contextual-inspection"
-    | "persistent-alert"
-    | "background-progress";
+  category: "notification" | "foreground-progress" | "persistent-alert";
   kind: "message";
   level: LogLevel;
   message: string;
@@ -106,8 +91,6 @@ export type StatusBarModel =
 export interface StatusBarModelInput {
   activity: StatusBarActivity | undefined;
   alert: StatusAlert | undefined;
-  backgroundProgress: string | undefined;
-  contextualFinding: { level: LogLevel; text: string } | undefined;
   foregroundProgress: string | undefined;
   guidance: string;
   notification: { level: LogLevel; text: string } | undefined;
@@ -123,10 +106,8 @@ export interface StatusBarModelInput {
  * shrinks. Guidance sits at the bottom and always has content, which is what makes the return total
  * and every tier above it a pure displacement.
  *
- * The order encodes what the user is waiting on, most-acute first. Two placements carry the reason
- * they exist: a persistent alert outranks provenance, so a real problem is never hidden behind the
- * blame inspector; and provenance outranks background progress, because the user turned the rail on
- * deliberately and a routine `running diagnostics…` should not evict what they asked to see.
+ * The order encodes what the user is waiting on, most-acute first. A persistent alert outranks
+ * provenance, so a real problem is never hidden behind the blame inspector.
  *
  * @param input The live signals, already resolved to plain values by `state.statusBarModel`
  * @returns The single item to render, fitted to `width` in terminal cells
@@ -139,14 +120,6 @@ export function buildStatusBarModel(input: StatusBarModelInput): StatusBarModel 
   }
   if (input.notification !== undefined) {
     return fitMessage("notification", input.notification.level, input.notification.text, width);
-  }
-  if (input.contextualFinding !== undefined) {
-    return fitMessage(
-      "contextual-inspection",
-      input.contextualFinding.level,
-      input.contextualFinding.text,
-      width,
-    );
   }
   if (input.alert !== undefined) {
     return fitMessage("persistent-alert", input.alert.level, input.alert.text, width);
@@ -161,9 +134,6 @@ export function buildStatusBarModel(input: StatusBarModelInput): StatusBarModel 
         Math.max(0, width - Bun.stringWidth(`${provenanceGlyph(input.provenance.band)} `)),
       ),
     };
-  }
-  if (input.backgroundProgress !== undefined) {
-    return fitMessage("background-progress", "info", input.backgroundProgress, width);
   }
 
   const activity = fitActivity(input.activity, width);

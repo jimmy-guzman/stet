@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { DockedPane, Layout, LayoutInput } from "@/layout/regions";
-import { computeLayout, DOCKS, PANE_DEFAULT_HEIGHT, paneReadingOrder } from "@/layout/regions";
+import { computeLayout, DOCKS, PANE_DEFAULT_HEIGHT } from "@/layout/regions";
 
 const pane = (overrides: Partial<DockedPane> = {}): DockedPane => ({
   heightOverride: null,
@@ -13,7 +13,6 @@ const pane = (overrides: Partial<DockedPane> = {}): DockedPane => ({
 
 const layout = (overrides: Partial<LayoutInput> = {}) =>
   computeLayout({
-    problems: pane({ open: false, position: "bottom" }),
     sidebar: pane(),
     terminalHeight: 24,
     terminalWidth: 80,
@@ -32,51 +31,44 @@ const covered = (result: Layout) => [
   ...cells(result.header),
   ...cells(result.sidebar),
   ...cells(result.viewer),
-  ...cells(result.problems),
   ...cells(result.status),
 ];
 
-test("the regions tile the terminal exactly, for every pairing of docks", () => {
+test("the regions tile the terminal exactly, for every dock", () => {
   for (const sidebarPosition of DOCKS) {
-    for (const problemsPosition of DOCKS) {
-      for (const [width, height] of [
-        [80, 24],
-        [120, 40],
-        [200, 60],
-      ]) {
-        const painted = covered(
-          layout({
-            problems: pane({ open: true, position: problemsPosition }),
-            sidebar: pane({ position: sidebarPosition }),
-            terminalHeight: height,
-            terminalWidth: width,
-          }),
-        );
-        const where = `${sidebarPosition}/${problemsPosition} at ${width}x${height}`;
-        expect(`${where}: ${painted.length}`).toBe(`${where}: ${width * height}`);
-        expect(`${where}: ${new Set(painted).size}`).toBe(`${where}: ${width * height}`);
-      }
+    for (const [width, height] of [
+      [80, 24],
+      [120, 40],
+      [200, 60],
+    ]) {
+      const painted = covered(
+        layout({
+          sidebar: pane({ position: sidebarPosition }),
+          terminalHeight: height,
+          terminalWidth: width,
+        }),
+      );
+      const where = `${sidebarPosition} at ${width}x${height}`;
+      expect(`${where}: ${painted.length}`).toBe(`${where}: ${width * height}`);
+      expect(`${where}: ${new Set(painted).size}`).toBe(`${where}: ${width * height}`);
     }
   }
 });
 
-test("the default arrangement reproduces the shell it replaces", () => {
-  const result = layout({ problems: pane({ open: true, position: "bottom" }), terminalHeight: 24 });
+test("the default arrangement docks the tree left beside the viewer", () => {
+  const result = layout({ terminalHeight: 24 });
 
   expect(result.header).toEqual({ height: 1, width: 80, x: 0, y: 0 });
   expect(result.status).toEqual({ height: 1, width: 80, x: 0, y: 23 });
   // The tree docks left at the responsive default and runs the full band height.
   expect(result.sidebar.width).toBe(34);
   expect(result.sidebar.x).toBe(0);
-  // The panel spans the whole terminal, the tree included, and the viewer keeps
-  // The `terminalHeight - header - status - border` rows it had as `paneHeight`.
-  expect(result.problems.width).toBe(80);
-  expect(result.problems.height).toBe(PANE_DEFAULT_HEIGHT);
-  expect(result.viewer.content.height).toBe(24 - 4 - PANE_DEFAULT_HEIGHT);
+  expect(result.sidebar.height).toBe(result.viewer.height);
+  expect(result.viewer.content.height).toBe(24 - 4);
 });
 
 test("content is the frame inside its single-cell border", () => {
-  const result = layout({ problems: pane({ open: true, position: "bottom" }) });
+  const result = layout();
 
   expect(result.sidebar.content).toEqual({
     height: result.sidebar.height - 2,
@@ -84,7 +76,6 @@ test("content is the frame inside its single-cell border", () => {
     x: result.sidebar.x + 1,
     y: result.sidebar.y + 1,
   });
-  expect(result.problems.content.width).toBe(78);
 });
 
 test("a closed pane is a zero rect and yields its space to the viewer", () => {
@@ -117,12 +108,9 @@ test("a manual width is clamped by the terminal but never destroyed by it", () =
 });
 
 test("a docked pane never squeezes the viewer out of the terminal", () => {
-  const result = layout({
-    problems: pane({ open: true, position: "bottom" }),
-    terminalHeight: 12,
-  });
+  const result = layout({ sidebar: pane({ position: "bottom" }), terminalHeight: 12 });
 
-  expect(result.problems.height).toBeLessThan(PANE_DEFAULT_HEIGHT);
+  expect(result.sidebar.height).toBeLessThan(PANE_DEFAULT_HEIGHT);
   expect(result.viewer.height).toBeGreaterThanOrEqual(4);
 });
 
@@ -136,50 +124,12 @@ test("the right dock swaps the columns and changes no width", () => {
   expect(right.sidebar.x).toBe(left.viewer.width);
 });
 
-test("docking the tree on top stacks it over the viewer and the panel", () => {
-  const result = layout({
-    problems: pane({ open: true, position: "bottom" }),
-    sidebar: pane({ position: "top" }),
-    terminalHeight: 40,
-  });
+test("docking the tree on top stacks it over the viewer", () => {
+  const result = layout({ sidebar: pane({ position: "top" }), terminalHeight: 40 });
 
   expect(result.sidebar.width).toBe(80);
   expect(result.viewer.width).toBe(80);
-  expect(result.problems.width).toBe(80);
   expect(result.sidebar.y).toBeLessThan(result.viewer.y);
-  expect(result.viewer.y).toBeLessThan(result.problems.y);
-});
-
-test("a bottom-docked panel spans the terminal while a left-docked tree runs full height", () => {
-  const result = layout({ problems: pane({ open: true, position: "bottom" }) });
-
-  expect(result.problems.width).toBe(80);
-  expect(result.problems.x).toBe(0);
-  expect(result.sidebar.height).toBe(result.viewer.height);
-});
-
-test("a pair on one axis leaves the viewer its minimum, not just the first of them", () => {
-  // Each carve sees only the band as it stands, so without reserving the second
-  // Pane's minimum up front the pair walks the viewer under its floor while both
-  // Carves look correct alone. 24 + 24 + 28 fits in 85 columns, so it must.
-  const columns = layout({
-    problems: pane({ open: true, position: "left" }),
-    sidebar: pane({ position: "left" }),
-    terminalWidth: 85,
-  });
-  expect(columns.viewer.width).toBeGreaterThanOrEqual(28);
-  expect(columns.problems.width).toBeGreaterThanOrEqual(24);
-  expect(columns.sidebar.width).toBeGreaterThanOrEqual(24);
-
-  // The same hole on the vertical axis: 5 + 5 + 4 fits in an 18-row terminal.
-  const rows = layout({
-    problems: pane({ open: true, position: "bottom" }),
-    sidebar: pane({ position: "top" }),
-    terminalHeight: 18,
-  });
-  expect(rows.viewer.height).toBeGreaterThanOrEqual(4);
-  expect(rows.problems.height).toBeGreaterThanOrEqual(5);
-  expect(rows.sidebar.height).toBeGreaterThanOrEqual(5);
 });
 
 test("a pane honors only the override on the axis it is docked to", () => {
@@ -194,99 +144,25 @@ test("a pane honors only the override on the axis it is docked to", () => {
   expect(top.width).toBe(80);
 });
 
-test("the defaults belong to the axis, not to the pane", () => {
+test("the default extent belongs to the axis", () => {
   const onTop = layout({ sidebar: pane({ position: "top" }), terminalHeight: 40 });
   expect(onTop.sidebar.height).toBe(PANE_DEFAULT_HEIGHT);
 
-  const onLeft = layout({
-    problems: pane({ open: true, position: "left" }),
-    sidebar: pane({ open: false }),
-  });
-  expect(onLeft.problems.width).toBe(34);
-});
-
-test("the carve order holds on a trailing edge too", () => {
-  const left = layout({
-    problems: pane({ open: true, position: "left" }),
-    sidebar: pane({ position: "left" }),
-  });
-  expect(left.problems.x).toBeLessThan(left.sidebar.x);
-
-  const right = layout({
-    problems: pane({ open: true, position: "right" }),
-    sidebar: pane({ position: "right" }),
-  });
-  expect(right.problems.x).toBeGreaterThan(right.sidebar.x);
-});
-
-test("two panes on the same edge stack, the panel outermost", () => {
-  const result = layout({
-    problems: pane({ open: true, position: "bottom" }),
-    sidebar: pane({ position: "bottom" }),
-    terminalHeight: 40,
-  });
-
-  expect(result.problems.y).toBeGreaterThan(result.sidebar.y);
-  expect(result.sidebar.y).toBeGreaterThan(result.viewer.y);
+  const onBottom = layout({ sidebar: pane({ position: "bottom" }), terminalHeight: 40 });
+  expect(onBottom.sidebar.height).toBe(PANE_DEFAULT_HEIGHT);
+  expect(onBottom.sidebar.y).toBeGreaterThan(onBottom.viewer.y);
 });
 
 test("zoom gives one pane the band without touching the open flags", () => {
-  const open = { problems: pane({ open: true, position: "bottom" }), sidebar: pane() };
+  const open = { sidebar: pane() };
 
   const zoomed = layout({ ...open, zoom: "viewer" });
   expect(zoomed.viewer.height).toBe(22);
   expect(zoomed.viewer.width).toBe(80);
   expect(zoomed.sidebar.width).toBe(0);
-  expect(zoomed.problems.height).toBe(0);
 
   expect(layout({ ...open, zoom: "tree" }).sidebar.width).toBe(80);
-  expect(layout({ ...open, zoom: "problems" }).problems.height).toBe(22);
+  expect(layout({ ...open, zoom: "tree" }).viewer.width).toBe(0);
   // The header and status rows are never zoomed away.
   expect(layout({ ...open, zoom: "tree" }).header.height).toBe(1);
-});
-
-test("the reading order matches where the panes actually land, for every pairing of docks", () => {
-  for (const sidebarPosition of DOCKS) {
-    for (const problemsPosition of DOCKS) {
-      for (const [width, height] of [
-        [80, 24],
-        [120, 40],
-        [200, 60],
-      ]) {
-        const placed = layout({
-          problems: pane({ open: true, position: problemsPosition }),
-          sidebar: pane({ position: sidebarPosition }),
-          terminalHeight: height,
-          terminalWidth: width,
-        });
-        // Sorting the rects the model produced is the definition the helper has to meet, so a
-        // Pairing it gets wrong fails here rather than waiting for someone to press tab.
-        const onScreen = (
-          [
-            ["tree", placed.sidebar],
-            ["viewer", placed.viewer],
-            ["problems", placed.problems],
-          ] as const
-        )
-          .toSorted(([, left], [, right]) => left.y - right.y || left.x - right.x)
-          .map(([slot]) => slot);
-        const where = `${sidebarPosition}/${problemsPosition} at ${width}x${height}`;
-        expect(`${where}: ${paneReadingOrder(sidebarPosition, problemsPosition).join(" ")}`).toBe(
-          `${where}: ${onScreen.join(" ")}`,
-        );
-      }
-    }
-  }
-});
-
-test("the panel falls between the tree and the viewer when it shares their first row", () => {
-  // The case an edge-keyed table gets wrong: a right-docked panel starts on the same row as a
-  // Top-docked tree, so it reads second, while the same tree against a bottom-docked panel
-  // Reads it last.
-  expect(paneReadingOrder("top", "right")).toEqual(["tree", "problems", "viewer"]);
-  expect(paneReadingOrder("top", "bottom")).toEqual(["tree", "viewer", "problems"]);
-});
-
-test("the default arrangement reads tree, viewer, problems", () => {
-  expect(paneReadingOrder("left", "bottom")).toEqual(["tree", "viewer", "problems"]);
 });

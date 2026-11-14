@@ -58,8 +58,7 @@ test("selecting out of range is a no-op", () => {
 });
 
 // The rebaselineScope commit branch is reached only through switchWorktree (the
-// Helper isn't exported and shouldn't be exposed just to test it). A .txt-only
-// Fixture keeps runChecks from spawning an LSP server into the shared runtime.
+// Helper isn't exported and shouldn't be exposed just to test it).
 test("switching worktrees while viewing a commit resets the scope to all", async () => {
   const repoRoot = createFixtureRepo("stet-commit-rebaseline-", { "notes.txt": "one\n" });
   const linkedRoot = join(repoRoot, ".wt");

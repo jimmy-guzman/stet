@@ -9,7 +9,6 @@ import { CommandMenu } from "./components/CommandMenu";
 import { FileCombobox } from "./components/FileCombobox";
 import { HeaderBar } from "./components/HeaderBar";
 import { HelpDialog } from "./components/HelpDialog";
-import { ProblemsPanel } from "./components/ProblemsPanel";
 import { QuitConfirm } from "./components/QuitConfirm";
 import { ScopeMenu } from "./components/ScopeMenu";
 import { Sidebar } from "./components/Sidebar";
@@ -189,17 +188,6 @@ export function App() {
           height={state.layout().viewer.height}
         >
           <Viewer />
-        </box>
-      </Show>
-      <Show when={state.layout().problems.width > 0}>
-        <box
-          position="absolute"
-          left={state.layout().problems.x}
-          top={state.layout().problems.y}
-          width={state.layout().problems.width}
-          height={state.layout().problems.height}
-        >
-          <ProblemsPanel />
         </box>
       </Show>
       <box

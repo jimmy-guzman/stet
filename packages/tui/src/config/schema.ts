@@ -9,8 +9,7 @@ const ThemeSelection = Schema.Union([
 
 // Registries stay raw; each resolver validates entries only after merging them
 // Over their built-in (a `{ base, ...overrides }` partial is only a valid theme
-// Once merged over its base, and the same holds for servers, languages, files,
-// And glyphs).
+// Once merged over its base, and the same holds for files and glyphs).
 const RawRegistry = Schema.Record(Schema.String, Schema.Unknown);
 
 const Toggle = Schema.Struct({ enabled: Schema.optionalKey(Schema.Boolean) });
@@ -23,13 +22,6 @@ const PaneExtent = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0));
 // Config is shaped by feature: each section owns its settings, including its
 // Off switch, so a feature's whole surface lives under one key.
 export const UserConfigSchema = Schema.Struct({
-  diagnostics: Schema.optionalKey(
-    Schema.Struct({
-      download: Schema.optionalKey(Schema.Boolean),
-      enabled: Schema.optionalKey(Schema.Boolean),
-      servers: Schema.optionalKey(RawRegistry),
-    }),
-  ),
   editor: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
   files: Schema.optionalKey(RawRegistry),
   icons: Schema.optionalKey(
@@ -42,19 +34,7 @@ export const UserConfigSchema = Schema.Struct({
   // Values are a combo, a list of combos, or false; `resolveKeybindings`
   // Validates them against the action registry.
   keybindings: Schema.optionalKey(RawRegistry),
-  languages: Schema.optionalKey(RawRegistry),
-  problems: Schema.optionalKey(
-    Schema.Struct({
-      height: Schema.optionalKey(PaneExtent),
-      open: Schema.optionalKey(Schema.Boolean),
-      position: Schema.optionalKey(DockPosition),
-      width: Schema.optionalKey(PaneExtent),
-    }),
-  ),
   provenance: Schema.optionalKey(Toggle),
-  // Values are a schema URL, a list of URLs, or false; `resolveSchemas` validates
-  // Them and merges over the built-in JSON associations.
-  schemas: Schema.optionalKey(RawRegistry),
   search: Schema.optionalKey(
     Schema.Struct({
       caseSensitive: Schema.optionalKey(Schema.Boolean),
@@ -90,13 +70,11 @@ export type UserConfig = Schema.Schema.Type<typeof UserConfigSchema>;
  *
  * Only keys whose absence means a value belong here. `editor`, `ide`, and `theme` are absent
  * because an unset key means "nothing to say" and is deliberately never written; `sidebar.width`
- * and `problems.height` because an absent size is the one the layout model computes, not a config
+ * and `sidebar.height` because an absent size is the one the layout model computes, not a config
  * value; the registries because they are merge bases their own resolvers fold over, not settings.
  */
 export const configDefaults = {
-  diagnostics: { download: true, enabled: true },
   icons: { enabled: true },
-  problems: { open: false, position: "bottom" },
   provenance: { enabled: false },
   search: { caseSensitive: false, regex: false, scope: "changed" },
   sidebar: { changesOnly: false, open: true, position: "left" },

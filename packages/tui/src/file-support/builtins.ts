@@ -1,4 +1,4 @@
-import type { FileAssociation, LanguageProfile } from "./model";
+import type { FileAssociation } from "./model";
 
 /** Named Nerd Font glyphs used by built-in file associations and tree chrome. */
 export const builtinIcons = new Map<string, string>([
@@ -54,39 +54,6 @@ export const builtinIcons = new Map<string, string>([
   ["storybook", "\u{e8b3}"],
 ]);
 
-const typescriptServers = ["typescript", "oxlint", "biome"] as const;
-
-/** LSP profiles are separate from file matching so several associations can reuse one route. */
-export const builtinLanguages = new Map<string, LanguageProfile>([
-  ["css", { languageId: "css", servers: ["biome"] }],
-  ["go", { languageId: "go", servers: ["gopls"] }],
-  ["go.mod", { languageId: "go.mod", servers: ["gopls"] }],
-  ["go.work", { languageId: "go.work", servers: ["gopls"] }],
-  ["graphql", { languageId: "graphql", servers: ["biome"] }],
-  ["json", { languageId: "json", servers: ["json", "biome"] }],
-  ["jsonc", { languageId: "jsonc", servers: ["json", "biome"] }],
-  [
-    "python",
-    {
-      languageId: "python",
-      servers: [{ firstOf: ["ty", "basedpyright"] }, "ruff"],
-    },
-  ],
-  ["rust", { languageId: "rust", servers: ["rust-analyzer"] }],
-  ["javascript", { languageId: "javascript", servers: typescriptServers }],
-  ["javascriptreact", { languageId: "javascriptreact", servers: typescriptServers }],
-  ["typescript", { languageId: "typescript", servers: typescriptServers }],
-  ["typescriptreact", { languageId: "typescriptreact", servers: typescriptServers }],
-  /**
-   * The same family plus Vue's own server: tsserver opens a `vue` document only through its Vue
-   * plugin, and `activeServers` routes a plugin-declared languageId to the server only while that
-   * plugin is loaded. `vue-language-server` adds the template compiler, SFC, and `<style>`
-   * findings.
-   */
-  ["vue", { languageId: "vue", servers: [...typescriptServers, "vue"] }],
-  ["yaml", { languageId: "yaml", servers: ["yaml"] }],
-]);
-
 const iconExtensions = (
   name: string,
   icon: string,
@@ -95,22 +62,6 @@ const iconExtensions = (
 
 /** Built-in file associations. Later entries win ties at the same match specificity. */
 export const builtinFiles = new Map<string, FileAssociation>([
-  ["language-css", { extensions: ["css"], language: "css" }],
-  ["language-go", { extensions: ["go"], language: "go" }],
-  ["language-go-mod", { filenames: ["go.mod"], language: "go.mod" }],
-  ["language-go-work", { filenames: ["go.work"], language: "go.work" }],
-  ["language-graphql", { extensions: ["graphql"], language: "graphql" }],
-  ["language-json", { extensions: ["json"], language: "json" }],
-  ["language-jsonc", { extensions: ["jsonc"], language: "jsonc" }],
-  ["language-python", { extensions: ["py", "pyi"], language: "python" }],
-  ["language-rust", { extensions: ["rs"], language: "rust" }],
-  ["language-javascript", { extensions: ["js", "mjs", "cjs"], language: "javascript" }],
-  ["language-javascriptreact", { extensions: ["jsx"], language: "javascriptreact" }],
-  ["language-typescript", { extensions: ["ts", "mts", "cts"], language: "typescript" }],
-  ["language-typescriptreact", { extensions: ["tsx"], language: "typescriptreact" }],
-  ["language-vue", { extensions: ["vue"], language: "vue" }],
-  ["language-yaml", { extensions: ["yaml", "yml"], language: "yaml" }],
-
   ["syntax-env", { filenames: [".env"], syntax: "dotenv" }],
   ["syntax-npmrc", { filenames: [".npmrc"], syntax: "ini" }],
   ["syntax-prettierrc", { filenames: [".prettierrc"], syntax: "jsonc" }],

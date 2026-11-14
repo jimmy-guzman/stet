@@ -17,15 +17,8 @@ const KEY_HELP_GROUPS: {
   {
     entries: [
       {
-        actions: [
-          "focus-down",
-          "focus-up",
-          "cursor-down",
-          "cursor-up",
-          "problem-down",
-          "problem-up",
-        ],
-        description: "move in the tree, viewer, or problems panel",
+        actions: ["focus-down", "focus-up", "cursor-down", "cursor-up"],
+        description: "move in the tree or viewer",
       },
       {
         actions: ["collapse", "expand", "caret-prev", "caret-next"],
@@ -33,15 +26,12 @@ const KEY_HELP_GROUPS: {
       },
       {
         actions: ["switch-pane"],
-        description: "cycle focus through the open panes; the search pane's tab cycles its fields",
+        description:
+          "switch focus between the tree and viewer; the search pane's tab cycles its fields",
       },
-      {
-        actions: ["open", "open-problem"],
-        description: "open the focused item / jump to a problem",
-      },
+      { actions: ["open"], description: "open the focused item" },
       { actions: ["go-to-file"], description: "go to file: fuzzy-search the whole repo" },
       { actions: ["latest-file"], description: "jump to the most recently changed file" },
-      { actions: ["next-finding"], description: "jump to the next file with findings" },
     ],
     heading: "navigation",
   },
@@ -62,12 +52,9 @@ const KEY_HELP_GROUPS: {
       { actions: ["back", "forward"], description: "back / forward through viewer history" },
       {
         actions: ["copy-reference"],
-        description: "copy path (tree), path:line:col (viewer), or the selected result / problem",
+        description: "copy path (tree), path:line:col (viewer), or the selected result",
       },
-      {
-        actions: ["copy-file"],
-        description: "copy the file (viewer) or every entry (problems)",
-      },
+      { actions: ["copy-file"], description: "copy the file" },
       {
         actions: ["select-up", "select-down"],
         description: "extend a line selection (drag also selects)",
@@ -91,23 +78,19 @@ const KEY_HELP_GROUPS: {
       { actions: ["worktrees"], description: "switch to another git worktree" },
       { actions: ["changes-only"], description: "toggle changes-only filter for the tree" },
       { actions: ["save-settings"], description: "save current settings to config" },
-      { actions: ["run-checks"], description: "re-run diagnostics" },
-      { actions: ["restart-servers"], description: "restart language servers" },
     ],
     heading: "workspace",
   },
   {
     entries: [
-      { actions: ["problems"], description: "toggle the problems panel" },
       { actions: ["toggle-sidebar"], description: "toggle the file tree sidebar" },
       {
         actions: ["shrink-pane", "grow-pane", "reset-pane"],
-        description:
-          "shrink (closes past min) / grow / reset the focused problems panel, else the tree",
+        description: "shrink (closes past min) / grow / reset the tree",
       },
       {
         actions: ["move-pane"],
-        description: "dock the focused pane to the next edge, clockwise",
+        description: "dock the tree to the next edge, clockwise",
       },
       {
         actions: ["zoom-pane"],

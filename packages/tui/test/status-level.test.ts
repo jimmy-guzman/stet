@@ -6,30 +6,6 @@ import { state } from "@/state";
 // The pure ladder and its fitting are covered in status-model.test.ts. These cover the seam: that
 // Each live signal reaches the input it is supposed to feed, and that the bar reflects it.
 
-test("a downloading language server surfaces background progress", () => {
-  state.setProvisioningLanguages(new Set(["typescript"]));
-
-  expect(state.statusBarModel()).toMatchObject({
-    category: "background-progress",
-    kind: "message",
-    level: "info",
-    message: "installing typescript server…",
-  });
-});
-
-test("a second downloading server collapses to a count", () => {
-  state.setProvisioningLanguages(new Set(["typescript", "oxlint"]));
-
-  expect(state.statusBarModel()).toMatchObject({ message: "installing 2 servers…" });
-});
-
-test("the installing status clears once no server is downloading", () => {
-  state.setProvisioningLanguages(new Set(["typescript"]));
-  state.setProvisioningLanguages(new Set<string>());
-
-  expect(state.statusBarModel()).toMatchObject({ kind: "guidance" });
-});
-
 test("a notice surfaces its text and level as a full-row notification", () => {
   state.notify("copied src/state.ts", "success");
 
@@ -108,20 +84,6 @@ test("activity older than the recency window drops off the status line", () => {
   );
 
   expect(state.statusBarModel()).toMatchObject({ kind: "guidance" });
-});
-
-test("background progress outranks a recent changed file", () => {
-  state.setTerminalWidth(300);
-  state.setActivityLog(
-    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
-  );
-  state.setProvisioningLanguages(new Set(["typescript"]));
-
-  // One row, one tenant: the install is what the user is waiting on, so the changed file waits.
-  expect(state.statusBarModel()).toMatchObject({
-    category: "background-progress",
-    message: "installing typescript server…",
-  });
 });
 
 test("the recent activity timestamp reaches the bar, then drops once it ages out", () => {

@@ -1,9 +1,6 @@
-import type { Diagnostic } from "./diagnostics/checker";
 import type { FileContent } from "./file/content";
 import type { ChangedFile } from "./git/model";
 import type { Worktree } from "./git/worktree";
-import { levelGlyph } from "./log/levels";
-import type { Theme } from "./theme/tokens";
 
 // The right-side stats for the active file: line count in full-file view, the
 // Add/remove counts (plus any warnings) in diff view. The diff/file mode is left
@@ -68,31 +65,6 @@ export function kindLetter(kind: ChangedFile["kind"]) {
   return "M";
 }
 
-/**
- * The one source for each diagnostics-status badge's glyph, color, and meaning, so the tree cell
- * (`TreeRow`) and the `?` legend (`help/legend.ts`) can never disagree. These cover the states a
- * changed file's diagnostics settle into; the finding severities (`✖`/`⚠`/`ℹ` with a count) stay on
- * `levelGlyph`, since those carry a number rather than being a single fixed badge.
- */
-export const CHECK_BADGES = {
-  clean: {
-    color: (colors: Theme) => colors.success,
-    glyph: levelGlyph("success"),
-    meaning: "no problems",
-  },
-  failed: {
-    color: (colors: Theme) => colors.severity.error,
-    glyph: "⊗",
-    meaning: "failed to run",
-  },
-  pending: { color: (colors: Theme) => colors.text.muted, glyph: "…", meaning: "running" },
-  unavailable: {
-    color: (colors: Theme) => colors.text.muted,
-    glyph: "○",
-    meaning: "no server for this file",
-  },
-} as const;
-
 export function nearestNavigableIndex(
   lines: { newLine?: number; oldLine?: number }[],
   target: number,
@@ -113,17 +85,4 @@ export function nearestNavigableIndex(
   });
 
   return best;
-}
-
-export function orderedFindingPaths(problems: Diagnostic[]) {
-  return [...new Set(problems.map((problem) => problem.path))];
-}
-
-export function nextFindingPath(paths: string[], selectedPath: string | undefined) {
-  if (paths.length === 0) {
-    return undefined;
-  }
-
-  const current = selectedPath === undefined ? -1 : paths.indexOf(selectedPath);
-  return paths[(current + 1) % paths.length];
 }

@@ -2,7 +2,7 @@ import { getFiletypeFromFileName } from "@pierre/diffs";
 
 import { fileNameParts } from "@/utils/file-name";
 
-import { builtinFiles, builtinIcons, builtinLanguages } from "./builtins";
+import { builtinFiles, builtinIcons } from "./builtins";
 import type { FileAssociation, FileSupportRegistry, ResolvedFileSupport } from "./model";
 
 interface CompiledAssociation {
@@ -15,11 +15,10 @@ function freshRegistry() {
   return {
     files: new Map(builtinFiles),
     icons: new Map(builtinIcons),
-    languages: new Map(builtinLanguages),
   };
 }
 
-const { files, icons, languages } = freshRegistry();
+const { files, icons } = freshRegistry();
 
 function compileAssociations() {
   return [...files.values()].map((association, order): CompiledAssociation => {
@@ -84,13 +83,8 @@ function resolve(path: string): ResolvedFileSupport {
   const syntax = matches.find(({ association }) => association.syntax !== undefined)?.association
     .syntax;
   const icon = matches.find(({ association }) => association.icon !== undefined)?.association.icon;
-  const language = matches.find(({ association }) => association.language !== undefined)
-    ?.association.language;
-  const languageProfile =
-    language === undefined || language === false ? undefined : languages.get(language);
   return {
     icon: icon === undefined || icon === false ? "file" : icon,
-    ...(languageProfile === undefined ? {} : { language: languageProfile }),
     syntax: syntax === undefined ? inferredSyntax(path) : syntax === false ? "text" : syntax,
   };
 }
@@ -124,23 +118,15 @@ export function namedIcon(name: string) {
   return resolvedIcon(name);
 }
 
-export function registeredLanguageProfiles() {
-  return languages.values();
-}
-
 /** Replace the startup registry after config validation and invalidate resolved paths. */
 export function registerFileSupport(registry: FileSupportRegistry) {
   files.clear();
   icons.clear();
-  languages.clear();
   for (const [name, association] of registry.files) {
     files.set(name, association);
   }
   for (const [name, glyph] of registry.icons) {
     icons.set(name, glyph);
-  }
-  for (const [name, language] of registry.languages) {
-    languages.set(name, language);
   }
   state.compiled = compileAssociations();
   state.cache.clear();
@@ -151,7 +137,7 @@ export function defaultFileSupportRegistry(): FileSupportRegistry {
 }
 
 export function snapshotFileSupport() {
-  return { files: new Map(files), icons: new Map(icons), languages: new Map(languages) };
+  return { files: new Map(files), icons: new Map(icons) };
 }
 
 export function restoreFileSupport(snapshot: ReturnType<typeof snapshotFileSupport>) {

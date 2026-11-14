@@ -11,10 +11,9 @@ const DENY_EXACT = new Set(["COMMIT_EDITMSG", "FETCH_HEAD"]);
 
 /**
  * How a raw `fs.watch` event should be treated. `"worktree"` is a working-tree file edit (tick the
- * git refresh and hand the path to the language servers); `"internal"` is a meaningful git-state
- * change (HEAD/index/refs, or any event on a linked worktree's git-dir root) that ticks the refresh
- * but is not a content change; `"ignored"` is a high-churn internal git drops on every write and
- * produces no tick.
+ * git refresh); `"internal"` is a meaningful git-state change (HEAD/index/refs, or any event on a
+ * linked worktree's git-dir root) that ticks the refresh but is not a content change; `"ignored"`
+ * is a high-churn internal git drops on every write and produces no tick.
  */
 export type WatchEventClass = "worktree" | "internal" | "ignored";
 

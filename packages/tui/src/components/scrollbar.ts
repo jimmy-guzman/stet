@@ -1,8 +1,8 @@
 /**
  * Cell-granular thumb for a hand-drawn vertical scrollbar over a windowed, uniform-height-1 list
- * (the sidebar, problems panel, and search results, which mount only the visible slice so OpenTUI's
- * native scrollbox has no content to measure a thumb from). Returns undefined when the content
- * fits: the column then paints nothing but stays reserved, so growth never shifts layout.
+ * (the sidebar and search results, which mount only the visible slice so OpenTUI's native scrollbox
+ * has no content to measure a thumb from). Returns undefined when the content fits: the column then
+ * paints nothing but stays reserved, so growth never shifts layout.
  */
 export function scrollbarThumb(rowCount: number, viewport: number, scrollTop: number) {
   if (viewport <= 0 || rowCount <= viewport) {

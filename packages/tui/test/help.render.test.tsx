@@ -4,6 +4,7 @@ import { rmSync } from "node:fs";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
+import { state } from "@/state";
 
 import packageJson from "../package.json";
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
@@ -43,7 +44,7 @@ describe("help overlay", () => {
       // The version left the header bar for this overlay's title row; it must still be reachable.
       expect(help).toContain(`stet@${packageJson.version}`);
       expect(help).toContain("go to file: fuzzy-search the whole repo");
-      expect(help).toContain("copy the file (viewer) or every entry (problems)");
+      expect(help).toContain("copy the file");
       // Folding took over `z`; wrap moved to `x`. Both must be listed under their keys.
       expect(help).toContain("fold / unfold the region at the caret");
       expect(help).toContain("toggle long-line wrap in the viewer");
@@ -61,15 +62,14 @@ describe("help overlay", () => {
       expect(help).toContain("pin / unpin the current file as a tab");
       expect(help).toContain("quit (confirm with y)");
 
-      // P and ctrl-b must be swallowed: no problems panel, no sidebar toggle, overlay stays
-      mockInput.pressKey("p");
+      // Ctrl-b must be swallowed: no sidebar toggle, overlay stays
       mockInput.pressKey("b", { ctrl: true });
-      const afterSwallowed = await settleUntil(
+      await settleUntil(
         "overlay still open",
         (frame) => frame.includes("switch to another git worktree"),
         3,
       );
-      expect(afterSwallowed).not.toContain("no problems");
+      expect(state.sidebarOpen()).toBe(true);
 
       mockInput.pressEscape();
       const closedByEscape = await settleUntil(
@@ -77,7 +77,6 @@ describe("help overlay", () => {
         (frame) => !frame.includes("switch to another git worktree"),
       );
       expect(closedByEscape).toContain("? help · q quit");
-      expect(closedByEscape).not.toContain("no problems");
 
       // Q must close the overlay, not quit the app
       mockInput.pressKey("?");
@@ -119,7 +118,7 @@ describe("help overlay", () => {
       // Description, so it cannot tell the two views apart).
       mockInput.pressTab();
       const marks = await settleUntil("marks legend", (frame) =>
-        frame.includes("no server for this file"),
+        frame.includes("original to the file"),
       );
       // The view swapped: the keybinding descriptions are gone and the marks are explained.
       expect(marks).not.toContain("switch to another git worktree");
@@ -133,7 +132,7 @@ describe("help overlay", () => {
       const back = await settleUntil("back to the keys", (frame) =>
         frame.includes("switch to another git worktree"),
       );
-      expect(back).not.toContain("no server for this file");
+      expect(back).not.toContain("original to the file");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

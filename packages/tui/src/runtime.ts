@@ -2,10 +2,6 @@ import { Layer, ManagedRuntime } from "effect";
 
 import { ClipboardLive } from "./clipboard/service";
 import { ConfigLive } from "./config/service";
-import { LspProcessLive } from "./diagnostics/lsp-process";
-import { ProvisionerLive } from "./diagnostics/provision";
-import { LanguageServersLive } from "./diagnostics/servers";
-import { DiagnosticsLive } from "./diagnostics/service";
 import { DiffEngineLive } from "./diff/engine";
 import { EditorLive } from "./editor/service";
 import { FileLive } from "./file/service";
@@ -16,9 +12,7 @@ import { WatcherLive } from "./watcher/service";
 // One long-lived Effect runtime holding the service layer. Solid signals and
 // Effects run service effects through `runtime.runPromise` / `runtime.runFork`
 // Instead of the old effect-atom registry; this is the only Effect↔Solid seam.
-// The LSP-backed diagnostics pool sits over its own long-lived LspProcess.
 const AppLayer = Layer.mergeAll(
-  DiagnosticsLive,
   DiffEngineLive,
   EditorLive,
   FileLive,
@@ -28,9 +22,6 @@ const AppLayer = Layer.mergeAll(
   ConfigLive,
   WatcherLive,
 ).pipe(
-  Layer.provideMerge(LanguageServersLive),
-  Layer.provideMerge(LspProcessLive),
-  Layer.provideMerge(ProvisionerLive),
   // Provide Git to Watcher (and re-export it to the runtime for startup/state).
   Layer.provideMerge(GitLive),
   // Every subprocess reaches Process through its own service, so this one only wires the layers

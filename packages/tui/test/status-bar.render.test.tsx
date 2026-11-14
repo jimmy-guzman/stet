@@ -82,54 +82,6 @@ describe("status bar changed-file cue", () => {
     }
   }, 20_000);
 
-  test("lets the caret finding take over the full row", async () => {
-    const repoRoot = createFixtureRepo("stet-statusbar-", { "notes.txt": "alpha\n" });
-    writeFileSync(join(repoRoot, "notes.txt"), "alpha\nbravo\n");
-
-    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-    seedState(model, { kind: "all", ref: "HEAD" });
-    state.setDiagnosticsEnabled(false);
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 30,
-      width: 110,
-    });
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-
-    try {
-      await settleUntil("caret on the changed line", (frame) => /ln 2:1\b/.test(frame));
-      state.setCheckerState({
-        diagnostics: new Map([
-          [
-            "notes.txt",
-            {
-              count: 1,
-              diagnostics: [
-                {
-                  checker: "diagnostics",
-                  line: 2,
-                  message: "unused value",
-                  path: "notes.txt",
-                  severity: "warning",
-                },
-              ],
-              status: "findings",
-            },
-          ],
-        ]),
-      });
-      const frame = await settleUntil("finding fills the status line", (current) =>
-        current.includes("⚠ diagnostics: unused value"),
-      );
-      const statusLine = frame.split("\n").find((row) => row.includes("diagnostics: unused value"));
-
-      expect(statusLine).toBeDefined();
-      expect(statusLine).not.toContain("? help · q quit");
-    } finally {
-      renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
-  }, 20_000);
-
   // Guidance is the lowest tier, find modes included: the row goes to whatever is live and comes
   // Back to the hint once nothing is. Guidance never shares the row, so it is never budgeted
   // Against a neighbour and the two can never disagree about who shrinks.

@@ -29,8 +29,8 @@ describe("sidebar filename does not scroll on wheel", () => {
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-      // Recent (a dot renders beside the name) but not a working-tree change, so no diff or
-      // Diagnostic badge reserves the two cells the dot overruns the name's slot by.
+      // Recent (a dot renders beside the name) but not a working-tree change, so no diff badge
+      // Reserves the two cells the dot overruns the name's slot by.
       state.setActivityLog(
         recordActivity(emptyActivityLog, [{ kind: "changed", path: longName }], Date.now()),
       );

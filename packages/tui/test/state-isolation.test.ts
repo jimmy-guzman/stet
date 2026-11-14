@@ -14,7 +14,6 @@ test("a dying test leaves the state dirty", () => {
   state.toggleBlame();
   state.setFindOpen(true);
   state.setQuitConfirmOpen(true);
-  state.setProblemsOpen(true);
   state.setTerminalWidth(200);
 
   expect(state.blameEnabled()).toBe(true);
@@ -24,7 +23,6 @@ test("the next test still starts from the defaults", () => {
   expect(state.blameEnabled()).toBe(false);
   expect(state.findOpen()).toBe(false);
   expect(state.quitConfirmOpen()).toBe(false);
-  expect(state.problemsOpen()).toBe(false);
   expect(state.terminalWidth()).toBe(80);
 });
 

@@ -1,29 +1,26 @@
 ---
 title: Languages
-description: What stet gives every language, and which get diagnostics.
+description: The highlighting, folding, and icons stet gives every language.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
-Language support is layered. Named file associations select syntax, icons, and
-LSP profiles independently. Every recognized file gets syntax highlighting, a
-file-type icon, and structural folding; language servers add diagnostics for
-the profiles the table marks. You can change any layer
+Language support is layered. Named file associations select syntax and icons
+independently. Every recognized file gets syntax highlighting, a file-type icon,
+and structural folding. You can change any layer
 through [your config](/docs/reference/configuration#file-support).
 
-| Language                | Highlighting | Folding    | Diagnostics             |
-| ----------------------- | ------------ | ---------- | ----------------------- |
-| TypeScript & JavaScript | yes          | indent     | types + lint            |
-| Vue                     | yes          | indent     | types + lint + template |
-| Rust                    | yes          | indent     | types + cargo           |
-| Python                  | yes          | indent     | types + lint            |
-| Go                      | yes          | indent     | types + vet             |
-| JSON & JSONC            | yes          | indent     | schema + lint           |
-| YAML                    | yes          | indent     | schema                  |
-| CSS                     | yes          | indent     | lint                    |
-| GraphQL                 | yes          | indent     | lint                    |
-| Markdown                | yes          | by heading |                         |
-| 200+ others             | yes          | indent     | via config              |
+| Language                | Highlighting | Folding    |
+| ----------------------- | ------------ | ---------- |
+| TypeScript & JavaScript | yes          | indent     |
+| Vue                     | yes          | indent     |
+| Rust                    | yes          | indent     |
+| Python                  | yes          | indent     |
+| Go                      | yes          | indent     |
+| JSON & JSONC            | yes          | indent     |
+| YAML                    | yes          | indent     |
+| CSS                     | yes          | indent     |
+| GraphQL                 | yes          | indent     |
+| Markdown                | yes          | by heading |
+| 200+ others             | yes          | indent     |
 
 ## Syntax highlighting
 
@@ -53,205 +50,6 @@ appears in every file-list surface. Matching follows exact filename, glob,
 extension, and dotfile specificity; `--no-icons` keeps every layout stable while
 hiding the glyphs if your terminal font lacks them.
 
-## Diagnostics
-
-Servers overlap deliberately: every server that claims a file runs, and their
-findings merge per file, each tagged with its own source label. A linter that
-competes with an always-on default activates only where the repo opted into
-it, the way an editor extension would. Where a language has competing type
-checkers, stet runs the one the repo opted into and only that one, so the same
-code is never type-checked twice. Both rules are written as data in the same
-grammar [your config uses](/docs/reference/configuration#configure-servers-and-selection): a
-server's `when` says which repos it runs in, and a `firstOf` group picks exactly one of several
-candidates. A language profile can reuse those defaults or override a candidate with an
-unconditional `{ "server": "name" }` or its own `when`.
-
-### TypeScript & JavaScript
-
-`.ts`, `.tsx`, `.js`, `.jsx`, and the `.mts`/`.cts`/`.mjs`/`.cjs` variants run
-through three servers: `typescript-language-server` reports type errors (label
-`tsc`), oxlint reports lint findings (label `oxc`), and Biome joins them (label
-`biome`) when the repo has a `biome.json` or `biome.jsonc`.
-
-### Vue
-
-`.vue` single-file components get type errors for both the `<script>` block and
-template expressions from `typescript-language-server` (label `tsc`), oxlint's
-lint of the script block (label `oxc`), and Biome where configured. tsserver
-cannot read a `.vue` file on its own: stet loads the Vue TypeScript plugin
-(`@vue/typescript-plugin`) into it, which is also what makes a `.vue` import
-resolve from a `.ts` file.
-
-The plugin loads in a Vue repo: one with `vue` among its `package.json`
-dependencies or devDependencies, or installed under `node_modules` (pnpm's hoist
-directory included, so a pnpm workspace whose root manifest never names vue
-still counts). Outside one, `.vue` files get oxlint only. Until the plugin is on
-hand they never reach a plugin-less tsserver, which would read them as clean;
-`.ts` files never wait on the plugin. The plugin is pinned and downloads from npm the
-first time a Vue repo needs it, even when the server itself was found in the
-repo or on your `PATH`; a repo that installed `@vue/language-server` or the
-plugin itself (under `node_modules`, or pnpm's hoist directory) is used as is.
-Once the plugin lands, or a repo becomes a Vue repo mid-session, tsserver
-restarts with it on its own.
-
-In a Vue repo, `vue-language-server` (`@vue/language-server`) also runs and
-reports what the template compiler and the SFC parser catch: an unclosed tag,
-an invalid `v-for`, a malformed block (label `vue`), plus CSS errors and lint
-warnings in `<style>`, labeled by the block's language (`css`, `scss`, or
-`less`). Its findings don't overlap with tsserver's. It reads
-the component's project, and with it the tsconfig's `vueCompilerOptions`, from
-tsserver: stet forwards those requests to the running `typescript-language-server`.
-Until tsserver has the plugin, the server uses its defaults and ignores
-`vueCompilerOptions`; it restarts with your project's settings once the plugin
-lands. Like the plugin, the server is pinned and downloads from npm when neither
-the repo nor your `PATH` has it.
-
-### Rust
-
-`.rs` files get rust-analyzer's own analysis (label `rust-analyzer`) plus the
-findings cargo check produces through it (label `rustc`). stet downloads the
-server automatically the first time a Rust file needs it.
-
-### Python
-
-`.py` and `.pyi` files get a type checker plus ruff's lint findings (label
-`Ruff`). Python has more than one type checker, so stet runs the one your
-project runs: [ty](https://github.com/astral-sh/ty) (label `ty`) in a repo that
-opted into it, basedpyright (label `basedpyright`) everywhere else, never both.
-So the warnings you see are the ones your CI gates on.
-
-A repo counts as a ty repo when it has a `ty.toml` or `.ty.toml`, a `[tool.ty]`
-table in `pyproject.toml`, or ty among its declared dependencies (`[project]`
-dependencies, a dependency group, an optional-dependencies extra, `[tool.uv]
-dev-dependencies`, or a Poetry dependency table). That
-rule is not private machinery: it is ty's `when` gate, and the one-checker rule
-is a `firstOf` group, both written in the exact grammar
-[your config uses](/docs/reference/configuration#configure-servers-and-selection), so you can
-reproduce, re-gate, or replace the whole arrangement. Bare names retain their server's default
-gate; use the object form when you want to force a checker regardless of repository signals:
-
-```jsonc title="~/.config/stet/config.jsonc"
-{
-  "languages": {
-    "python": { "servers": [{ "server": "basedpyright" }, "ruff"] },
-  },
-}
-```
-
-Servers download automatically the first time a Python file needs them,
-basedpyright from npm, ty and ruff as sha256-verified GitHub release binaries.
-
-### Go
-
-`.go` files get [gopls](https://pkg.go.dev/golang.org/x/tools/gopls), Go's
-official language server: type and build errors plus the `go vet` analyzers it
-runs by default (label `compiler`, and the analyzer's name for a vet finding).
-`go.mod` and `go.work` get their module diagnostics through the same server.
-
-gopls ships no prebuilt binaries and stet never builds it, so unlike the other
-built-in servers stet never downloads it. Install it yourself with
-`go install golang.org/x/tools/gopls@latest`; stet finds it on your `PATH`.
-Without it, Go files show as unavailable rather than falsely clean.
-
-### JSON & JSONC
-
-`vscode-json-language-server` validates well-known files against their schemas:
-`package.json`, `tsconfig.json`, `tsconfig.*.json`, and `jsconfig.json` out of
-the box, plus any file you associate through the
-[`schemas`](/docs/reference/configuration#schemas) config. Biome adds its lint
-where configured. The built-in associations point at [SchemaStore](https://www.schemastore.org/) URLs
-fetched over the network, so an offline repo falls back to syntax checking.
-
-### YAML
-
-`yaml-language-server` validates `.yaml` and `.yml` against schemas it
-discovers through [SchemaStore](https://www.schemastore.org/) (GitHub
-workflows, and so on). It fetches those schemas over the network, so an offline repo falls
-back to syntax checking.
-
-### CSS & GraphQL
-
-Biome covers both, only in repos with a biome config. Without one these files
-show as unavailable rather than falsely clean.
-
-## How servers are found
-
-The default discovery strategy checks the repo's own `node_modules/.bin`, then
-your `PATH`. For provisionable built-in servers only, stet then checks for an
-existing pinned copy in its LSP cache. Python discovery first checks the active
-`$VIRTUAL_ENV/bin`, then the repo's `.venv/bin`, before using the same
-`node_modules/.bin` and `PATH` lookup. Opting a user-defined server into Python
-discovery changes only those local lookup locations; it does not enable cache
-use or provisioning. User-defined servers are never provisioned. The cache is
-`$XDG_CACHE_HOME/stet/lsp` when `XDG_CACHE_HOME` is set, and
-`~/.cache/stet/lsp` otherwise. If a provisionable built-in remains missing,
-stet downloads it into that cache: packages distributed through `npm` (this
-path needs `npm` on your `PATH`), or a SHA-256-verified GitHub release binary
-for the servers it doesn't (`rust-analyzer`, `ruff`, `ty`). A server's tsserver
-plugin (`@vue/typescript-plugin` for Vue) is pinned and downloaded the same way,
-into a `plugins/` subdirectory of the server's cache entry, whatever tier found
-the server itself; a plugin the repo already installed is used from the repo.
-Set `"diagnostics": { "download": false }` in your config to turn downloads off,
-or pass `--no-lsp-download` (or set `STET_NO_LSP_DOWNLOAD`) for one run.
-
-`gopls` is the exception among built-ins: it ships no prebuilt binaries and stet
-never builds from source, so stet never downloads it. Install it yourself
-(`go install golang.org/x/tools/gopls@latest`) and stet finds it on your `PATH`;
-without it, Go files show as unavailable rather than falsely clean.
-
-<Callout>
-  A download that cannot complete (offline, air-gapped, locked-down CI) times out, and its files
-  show as unavailable instead of waiting forever.
-</Callout>
-
-## Installing dependencies while stet is open
-
-Agents install dependencies constantly, and a language server that never hears
-about it keeps reporting imports it can no longer resolve. stet tells each
-server about the on-disk changes it asked to hear about, as they happen,
-including inside gitignored directories like `.venv/`.
-
-In Python, that means running `uv add fastapi` while stet is open clears the
-`Import "fastapi" could not be resolved` errors on its own: basedpyright has no
-file watcher of its own, so this is the only way it learns a package arrived.
-You do not need to restart, and you do not need to press `r`.
-
-<Callout>
-  Servers that watch the filesystem themselves, like rust-analyzer and tsserver, keep doing so and
-  pick up `cargo add` or `npm install` through their own watchers.
-</Callout>
-
-<Callout>
-  If a server does get stuck, `R` restarts the language servers for the repo. `r` only re-reads what
-  they already believe, which is why it cannot clear a stale cache on its own. `R` is also the
-  fallback where filesystem watching is unavailable (some sandboxes and containers): installs go
-  unnoticed there, so press `R` after installing.
-</Callout>
-
-## Add your own languages
-
-Custom support connects a named `server`, `language` profile, and `file`
-association. The registries stay separate so several associations can reuse one
-LSP profile and several profiles can reuse one server:
-
-```jsonc title="~/.config/stet/config.jsonc"
-{
-  "diagnostics": {
-    "servers": {
-      "lua": { "command": ["lua-language-server"] },
-    },
-  },
-  "languages": {
-    "lua": { "languageId": "lua", "servers": ["lua"] },
-  },
-  "files": {
-    "lua": { "extensions": ["lua"], "syntax": "lua", "language": "lua" },
-  },
-}
-```
-
-Server conditions and `firstOf` groups let the same profile select a different
-server by repository. stet resolves user-configured commands locally and never
-runs a command declared by the inspected repository. See
-[configuration](/docs/reference/configuration#file-support) for matching,
-icons, gates, server options, and overriding or disabling built-ins.
+To add a file type, map it to a syntax and an icon with a `files` association. See
+[configuration](/docs/reference/configuration#file-support) for matching rules
+and overriding or disabling built-ins.

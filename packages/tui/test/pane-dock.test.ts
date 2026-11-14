@@ -28,18 +28,13 @@ test("the move key walks the edges clockwise and four presses return home", () =
   expect(state.sidebarPosition()).toBe("left");
 });
 
-test("moving acts on the focused pane, and on the tree from anywhere else", () => {
+test("moving acts on the tree from the viewer too", () => {
   wide();
-  state.toggleProblems(); // Opens and focuses the panel
-
-  state.movePane();
-  expect(state.problemsPosition()).toBe("left");
-  expect(state.sidebarPosition()).toBe("left");
-
   state.setFocusedPane("diff");
+
   state.movePane();
+
   expect(state.sidebarPosition()).toBe("top");
-  expect(state.problemsPosition()).toBe("left");
 });
 
 test("a closed pane does not move", () => {
@@ -71,17 +66,14 @@ test("a pane keeps a size per axis, so a round trip restores it", () => {
   expect(state.layout().sidebar.width).toBe(38);
 });
 
-test("the step follows the axis, not the pane", () => {
+test("the step follows the axis", () => {
   wide();
+  state.growPane(); // Left-docked, so it sizes in columns
+  expect(state.layout().sidebar.width).toBe(36);
+
   state.movePane(); // The tree is now top-docked, so it sizes in rows
   state.growPane();
   expect(state.layout().sidebar.height).toBe(11);
-
-  state.toggleProblems();
-  state.movePane(); // The panel is now left-docked, so it sizes in columns
-  const before = state.layout().problems.width;
-  state.growPane();
-  expect(state.layout().problems.width).toBe(before + 2);
 });
 
 test("the minimum follows the axis: a top-docked tree closes at the row floor", () => {
@@ -114,20 +106,4 @@ test("reset clears only the docked axis", () => {
   state.movePane();
   state.movePane();
   expect(state.layout().sidebar.width).toBe(36);
-});
-
-test("both panes can share one edge, and the panel carves outermost", () => {
-  wide();
-  state.toggleProblems(); // Bottom-docked and focused
-  state.setFocusedPane("diff");
-
-  state.movePane(); // Left -> top
-  state.movePane(); // -> right
-  state.movePane(); // -> bottom, the edge the panel already holds
-  expect(state.sidebarPosition()).toBe("bottom");
-  expect(state.problemsPosition()).toBe("bottom");
-
-  expect(state.problemsOpen()).toBe(true);
-  expect(state.sidebarOpen()).toBe(true);
-  expect(state.layout().problems.y).toBeGreaterThan(state.layout().sidebar.y);
 });

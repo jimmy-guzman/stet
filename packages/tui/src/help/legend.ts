@@ -1,9 +1,8 @@
 import { provenanceGlyph } from "@/components/provenance";
 import type { ChangeKind, StageState } from "@/git/model";
 import type { Provenance } from "@/git/provenance";
-import { levelGlyph } from "@/log/levels";
 import type { Theme } from "@/theme/tokens";
-import { CHECK_BADGES, kindLetter } from "@/ui-helpers";
+import { kindLetter } from "@/ui-helpers";
 
 // The `Record`s make a new enum member a compile error until it earns a meaning, so the legend
 // Cannot silently fall behind a mark the tree or the rail starts drawing. The `*_ORDER` arrays carry
@@ -51,19 +50,11 @@ const PROVENANCE_ORDER = [
   "initial",
 ] as const satisfies readonly Provenance[];
 
-const SEVERITY_ORDER = ["error", "warning", "info"] as const;
-const CHECK_ORDER = [
-  "pending",
-  "failed",
-  "clean",
-  "unavailable",
-] as const satisfies readonly (keyof typeof CHECK_BADGES)[];
-
 /**
  * The `?` overlay's marks view, the counterpart to `keyHelpGroups()`. Every glyph is read from the
- * same source the app renders with (`kindLetter`, `levelGlyph`, `provenanceGlyph`, `CHECK_BADGES`),
- * so a mark and its explanation cannot drift apart. A `color` accessor is optional: the change
- * letters read neutral, since their color in the tree is the separate stage axis.
+ * same source the app renders with (`kindLetter`, `provenanceGlyph`), so a mark and its explanation
+ * cannot drift apart. A `color` accessor is optional: the change letters read neutral, since their
+ * color in the tree is the separate stage axis.
  */
 export function legendGroups(): {
   entries: { color?: (colors: Theme) => string; glyph: string; meaning: string }[];
@@ -84,21 +75,6 @@ export function legendGroups(): {
         meaning: STAGE_MEANINGS[stage],
       })),
       heading: "stage (colors the change letter)",
-    },
-    {
-      entries: [
-        ...SEVERITY_ORDER.map((level) => ({
-          color: (colors: Theme) => colors.severity[level],
-          glyph: levelGlyph(level),
-          meaning: level,
-        })),
-        ...CHECK_ORDER.map((state) => ({
-          color: CHECK_BADGES[state].color,
-          glyph: CHECK_BADGES[state].glyph,
-          meaning: CHECK_BADGES[state].meaning,
-        })),
-      ],
-      heading: "diagnostics",
     },
     {
       // The `●` matches the mark `RecencyDot` draws; a lone decorative dot, not an enum, so it

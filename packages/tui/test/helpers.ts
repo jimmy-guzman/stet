@@ -8,7 +8,6 @@ import { Effect, Layer } from "effect";
 import { batch } from "solid-js";
 
 import type { DiffScope } from "@/cli";
-import { initialCheckerState } from "@/diagnostics/checker";
 import { File, FileLive } from "@/file/service";
 import type { ChangedFile, GitModel } from "@/git/model";
 import { emptyTreeForFormat } from "@/git/repo";
@@ -126,13 +125,9 @@ export function seedState(
     state.seedNav(selected);
     state.setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
     state.setExpandedDirectories(expanded);
-    state.setCheckerState(initialCheckerState(model.changed));
     state.setFileView(false);
     state.setFullContentPaths(new Set<string>());
     state.setFocusedPane("tree");
-    state.setProblemsOpen(false);
-    state.setProblemIndex(0);
-    state.setProblemsScrollTop(0);
     state.setFileComboboxOpen(false);
     state.setFileComboboxQuery("");
     state.setFileComboboxIndex(0);

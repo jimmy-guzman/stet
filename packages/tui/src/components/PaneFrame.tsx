@@ -5,10 +5,10 @@ import { Show } from "solid-js";
 import { useTheme } from "@/theme/context";
 
 /**
- * The shared frame for the three persistent panes (tree, viewer, problems). The box border stays
- * neutral in every state; focus tints the four corner glyphs pink, drawn as absolute overlays so
- * they reserve no content space (no reflow on focus). A corner glyph is a self-contained cell, so
- * it never pokes past or wraps a neutral side the way a spine on the border edge would.
+ * The shared frame for the two persistent panes (tree, viewer). The box border stays neutral in
+ * every state; focus tints the four corner glyphs pink, drawn as absolute overlays so they reserve
+ * no content space (no reflow on focus). A corner glyph is a self-contained cell, so it never pokes
+ * past or wraps a neutral side the way a spine on the border edge would.
  */
 export function PaneFrame(props: {
   focused: boolean;

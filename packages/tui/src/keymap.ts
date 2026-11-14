@@ -3,14 +3,12 @@ import { batch } from "solid-js";
 
 import { scopeKinds } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
-import { isNavigableProblemItem } from "./diagnostics/problems";
 import { latestActivity } from "./git/activity";
 import { firstFileInNode } from "./git/tree";
 import type { KeyActionId } from "./keys/actions";
 import { matchesKey } from "./keys/combo";
 import { combosFor } from "./keys/registry";
 import { state } from "./state";
-import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
 import { isNavigableSearchItem } from "./viewer/search-items";
 
 /**
@@ -227,8 +225,8 @@ export function createKeyHandler(host: HostEffects) {
       // Text and submit (the jump) are the input elements' job (like the
       // Palette). Only the input sub-focuses swallow the remaining keys (they
       // Own printable characters); results focus has no input, so unhandled
-      // Keys fall through and the global bindings (q, ?, ctrl-p, p...) keep
-      // Working, matching the problems pane. With the tree focused, keys fall
+      // Keys fall through and the global bindings (q, ?, ctrl-p...) keep
+      // Working. With the tree focused, keys fall
       // Through to the tree branch while the view stays on screen.
       if (state.mainView() === "search" && state.focusedPane() === "search") {
         if (key.name === "escape") {
@@ -457,13 +455,9 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "escape") {
-        // Esc only ever closes: the problems panel, then the search view left on
-        // Screen with the tree focused, then nothing. Esc never quits; quitting is
-        // Q, which raises the confirm above.
-        if (state.problemsOpen()) {
-          state.collapseProblems();
-          return;
-        }
+        // Esc only ever closes: the search view left on screen with the tree
+        // Focused, then nothing. Esc never quits; quitting is Q, which raises the
+        // Confirm above.
         if (state.mainView() === "search") {
           state.closeSearch();
           return;
@@ -473,11 +467,6 @@ export function createKeyHandler(host: HostEffects) {
 
       if (pressed("switch-pane")) {
         state.focusNextPane();
-        return;
-      }
-
-      if (pressed("problems")) {
-        state.toggleProblems();
         return;
       }
 
@@ -650,34 +639,6 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (pressed("next-finding")) {
-        const next = nextFindingPath(orderedFindingPaths(state.problems()), selectedPath);
-        if (next !== undefined) {
-          state.selectFile(next);
-        }
-        return;
-      }
-
-      if (pressed("run-checks")) {
-        if (!state.diagnosticsEnabled()) {
-          state.notify("diagnostics disabled");
-          return;
-        }
-        void state.runChecks(state.gitModel());
-        return;
-      }
-
-      // Run-checks re-reads what the servers already think; this throws the
-      // Servers away and asks again.
-      if (pressed("restart-servers")) {
-        if (!state.diagnosticsEnabled()) {
-          state.notify("diagnostics disabled");
-          return;
-        }
-        void state.restartLanguageServers();
-        return;
-      }
-
       if (pressed("load-full") && fileViewShowing && selectedPath !== undefined) {
         state.loadFullContent();
         return;
@@ -705,38 +666,24 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // The copy actions are registered `global` but are really pane-dispatched: each
-      // Reads whichever pane holds focus, the way copy-reference has always chosen
-      // Between the tree and the viewer. They stay one action id per concept (one
-      // Rebind, one help row) rather than a per-pane id, which the conflict detector
-      // Would report against the global binding anyway, since a global action claims
-      // Its combo in every pane scope. The problems arm leads each handler so `y`/`Y`
-      // Never reach past the focused panel to the viewer behind it.
-      if (pressed("copy-file")) {
-        if (focusedPane === "problems") {
-          state.copyAllProblems();
-          return;
-        }
-        if (fileViewShowing) {
-          state.copyFileContents();
-          return;
-        }
+      // Copy-reference is registered `global` but is really pane-dispatched: it reads
+      // Whichever pane holds focus, choosing between the tree and the viewer. It stays
+      // One action id (one rebind, one help row) rather than a per-pane id, which the
+      // Conflict detector would report against the global binding anyway, since a
+      // Global action claims its combo in every pane scope.
+      if (pressed("copy-file") && fileViewShowing) {
+        state.copyFileContents();
+        return;
       }
 
       // Copy the selected lines' source text, or the caret line when there is no
-      // Selection. Distinct from copy-reference and copy-file. A line selection is a
-      // Viewer concept the problems panel has no analogue for, so it is inert there
-      // Rather than reaching back to the viewer.
-      if (pressed("copy-selection") && focusedPane !== "problems" && fileViewShowing) {
+      // Selection. Distinct from copy-reference and copy-file.
+      if (pressed("copy-selection") && fileViewShowing) {
         state.copySelection();
         return;
       }
 
       if (pressed("copy-reference")) {
-        if (focusedPane === "problems") {
-          state.copyProblem();
-          return;
-        }
         if (focusedPane === "tree") {
           const row = state.treeRows()[state.focusedRowIndex()];
           if (row !== undefined) {
@@ -757,39 +704,6 @@ export function createKeyHandler(host: HostEffects) {
               path: selectedPath,
             }),
           );
-        }
-        return;
-      }
-
-      if (focusedPane === "problems") {
-        const items = state.allProblemItems();
-        const current = state.problemIndex();
-        if (pressed("problem-down")) {
-          const next = items.findIndex(
-            (item, index) => index > current && isNavigableProblemItem(item),
-          );
-          if (next !== -1) {
-            state.setProblemIndex(next);
-          }
-        } else if (pressed("problem-up")) {
-          const previous = items.findLastIndex(
-            (item, index) => index < current && isNavigableProblemItem(item),
-          );
-          if (previous !== -1) {
-            state.setProblemIndex(previous);
-          }
-        } else if (pressed("open-problem")) {
-          const item = items[state.problemIndex()];
-          if (item?.kind === "problem") {
-            const { problem } = item;
-            state.selectFile(
-              problem.path,
-              problem.line === undefined
-                ? undefined
-                : { column: problem.column, escalate: true, line: problem.line },
-            );
-            state.setFocusedPane("diff");
-          }
         }
         return;
       }

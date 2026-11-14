@@ -14,8 +14,8 @@ export const DOCKS = ["left", "top", "right", "bottom"] as const;
 /** Which edge a pane docks to. The viewer is always the center, so it never carries one. */
 export type Dock = (typeof DOCKS)[number];
 
-/** One of the three panes: the two dockable ones and the viewer they carve from. */
-export type PaneSlot = "problems" | "tree" | "viewer";
+/** One of the two panes: the dockable tree and the viewer it carves from. */
+type PaneSlot = "tree" | "viewer";
 
 interface Rect {
   x: number;
@@ -42,7 +42,6 @@ export interface LayoutInput {
   terminalWidth: number;
   terminalHeight: number;
   sidebar: DockedPane;
-  problems: DockedPane;
   zoom: PaneSlot | undefined;
 }
 
@@ -50,7 +49,6 @@ export interface Layout {
   header: Rect;
   sidebar: PaneRect;
   viewer: PaneRect;
-  problems: PaneRect;
   status: Rect;
 }
 
@@ -91,24 +89,12 @@ const responsiveWidth = (available: number) =>
 /** Whether an edge sizes in columns; a top or bottom dock sizes in rows. */
 export const horizontalDock = (position: Dock) => position === "left" || position === "right";
 
-/**
- * Cells a later pane on the same axis still needs, so the first carve cannot spend the second's
- * minimum. Panes on one axis are carved in turn, and each clamp only sees the band as it stands, so
- * without this the pair walks the viewer under its floor while every carve looks correct alone.
- */
-const siblingReserve = (pane: DockedPane, next: DockedPane) => {
-  if (!next.open || horizontalDock(pane.position) !== horizontalDock(next.position)) {
-    return 0;
-  }
-  return horizontalDock(next.position) ? PANE_MIN_WIDTH : PANE_MIN_HEIGHT;
-};
-
 // A manual extent is stored raw and only clamped here, so it never overflows a
 // Shrunken terminal yet is restored intact when the terminal grows back. The
 // Responsive default and a manual override share the clamp, so what must survive
 // The carve holds in both cases; the outer floor covers a band too small to
-// Satisfy every minimum, where the pane falls back to its own and takes what
-// There is, which is what a single over-wide pane on a narrow terminal already did.
+// Satisfy both minimums, where the pane falls back to its own and takes what
+// There is.
 const clampExtent = (desired: number, available: number, paneMin: number, reserved: number) =>
   Math.min(
     available,
@@ -116,13 +102,12 @@ const clampExtent = (desired: number, available: number, paneMin: number, reserv
   );
 
 /**
- * Slice one pane off its edge of the band and hand back what is left for the next carve.
+ * Slice the pane off its edge of the band and hand back what is left for the viewer.
  *
- * @param band - The area still unclaimed, in absolute terminal cells.
+ * @param band - The area between the header and status rows, in absolute terminal cells.
  * @param pane - The pane to place; a closed one claims nothing and yields a zero rect.
- * @param reserve - Cells a later same-axis pane needs, kept free on top of the viewer's own floor.
  */
-function carve(band: Rect, pane: DockedPane, reserve: number): { band: Rect; rect: PaneRect } {
+function carve(band: Rect, pane: DockedPane): { band: Rect; rect: PaneRect } {
   if (!pane.open) {
     return { band, rect: EMPTY_PANE };
   }
@@ -131,7 +116,7 @@ function carve(band: Rect, pane: DockedPane, reserve: number): { band: Rect; rec
       pane.widthOverride ?? responsiveWidth(band.width),
       band.width,
       PANE_MIN_WIDTH,
-      VIEWER_MIN_WIDTH + reserve,
+      VIEWER_MIN_WIDTH,
     );
     const leading = pane.position === "left";
     return {
@@ -148,7 +133,7 @@ function carve(band: Rect, pane: DockedPane, reserve: number): { band: Rect; rec
     pane.heightOverride ?? PANE_DEFAULT_HEIGHT,
     band.height,
     PANE_MIN_HEIGHT,
-    VIEWER_MIN_HEIGHT + reserve,
+    VIEWER_MIN_HEIGHT,
   );
   const leading = pane.position === "top";
   return {
@@ -163,13 +148,7 @@ function carve(band: Rect, pane: DockedPane, reserve: number): { band: Rect; rec
 }
 
 /**
- * Partition the terminal into the header row, the three panes, and the status row.
- *
- * The problems panel carves before the sidebar, which is what makes a bottom-docked panel span the
- * full terminal while the tree runs full height beside the viewer: its findings are repo-wide and
- * it drives the tree, so it is a peer pane rather than something sitting under the viewer. That
- * order is also why a same-edge pair needs no special case, and why there is no separate
- * panel-alignment knob.
+ * Partition the terminal into the header row, the two panes, and the status row.
  *
  * @returns Every region in absolute terminal cells; a closed or zoomed-out pane is all zeros.
  */
@@ -193,58 +172,17 @@ export function computeLayout(input: LayoutInput): Layout {
   if (input.zoom !== undefined) {
     return {
       header,
-      problems: input.zoom === "problems" ? withContent(band) : EMPTY_PANE,
       sidebar: input.zoom === "tree" ? withContent(band) : EMPTY_PANE,
       status,
       viewer: input.zoom === "viewer" ? withContent(band) : EMPTY_PANE,
     };
   }
 
-  const problems = carve(band, input.problems, siblingReserve(input.problems, input.sidebar));
-  const sidebar = carve(problems.band, input.sidebar, 0);
+  const sidebar = carve(band, input.sidebar);
   return {
     header,
-    problems: problems.rect,
     sidebar: sidebar.rect,
     status,
     viewer: withContent(sidebar.band),
   };
-}
-
-/**
- * The three panes in screen reading order, top to bottom then left to right, which is the order
- * focus cycling walks so that `tab` follows what is on screen rather than a list that contradicts
- * it once a pane is re-docked.
- *
- * Read off placed rects instead of a table keyed by edge, because the edge alone does not decide
- * the order: the carve does. With the panel docked right and the tree on top the two share the
- * first row, so the panel falls between them, while the same tree against a bottom-docked panel
- * puts the panel last. A table would have to restate all sixteen pairings and could then disagree
- * with `carve`. Sizes only scale those rects and never reorder them, so the arrangement is read
- * from a nominal terminal where every pane is placed, which also keeps a pane that is closed,
- * zoomed away, or squeezed to nothing from sorting as if it sat at the origin.
- *
- * @param sidebar - The edge the tree holds.
- * @param problems - The edge the problems panel holds.
- * @returns All three slots, including panes that are currently closed; the caller filters.
- */
-export function paneReadingOrder(sidebar: Dock, problems: Dock): PaneSlot[] {
-  const placed = computeLayout({
-    problems: { heightOverride: null, open: true, position: problems, widthOverride: null },
-    sidebar: { heightOverride: null, open: true, position: sidebar, widthOverride: null },
-    // Comfortably past every minimum, so both panes take their default extent and each lands
-    // At its own edge; anything smaller could clamp a pane onto another's coordinates.
-    terminalHeight: 60,
-    terminalWidth: 200,
-    zoom: undefined,
-  });
-  return (
-    [
-      ["tree", placed.sidebar],
-      ["viewer", placed.viewer],
-      ["problems", placed.problems],
-    ] as const
-  )
-    .toSorted(([, left], [, right]) => left.y - right.y || left.x - right.x)
-    .map(([slot]) => slot);
 }

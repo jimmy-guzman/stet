@@ -2,14 +2,13 @@
  * Regenerate the docs screenshots by driving the real stet binary through VHS (a headless terminal
  * that renders Nerd Font icons correctly), so the icons and theme match a real terminal. Each
  * screen is a generated .tape that launches stet, drives it to a state with keystrokes, and
- * screenshots it. The problems/diagnostics shots need a changed file with diagnostics, so a temp
- * errorful file is created in src/ around those runs only.
+ * screenshots it.
  *
  * Capture against a clean checkout so the tree and diff are representative — uncommitted files show
  * up in the captured tree. By default that's this repo; set `STET_SCREENSHOT_REPO` to point stet at
  * another checkout (e.g. a clean main worktree) while the images still land in THIS repo's docs.
  * Requires `vhs` on PATH (brew install vhs) and a Nerd Font installed for the file-type icons. Pass
- * screen names to shoot a subset, e.g. `bun run screenshots find problems`.
+ * screen names to shoot a subset, e.g. `bun run screenshots find tabs`.
  *
  * Screens marked `worktree: true` launch from a throwaway linked worktree instead, so the header
  * renders its worktree identity rather than the main checkout's. Screens marked `recentEdits: true`
@@ -47,11 +46,6 @@ const TAPES = resolve(tmpdir(), "stet-screenshots");
  */
 const BASE_REF = "f1e0d21";
 /**
- * Inside src/ so it falls under tsconfig's include and typescript-language-server reports the type
- * error alongside oxlint's unused-symbol findings.
- */
-const FIXTURE = `${REPO}/packages/tui/src/_diagnostics-demo.ts`;
-/**
  * A throwaway image for the binary-preview shot: an untracked PNG so the viewer renders its
  * metadata card (type, dimensions, size) instead of a diff. Generated with ffmpeg (already required
  * by VHS) at a legible size, and planted only for that shot so it never shows up in another tree.
@@ -66,8 +60,8 @@ const IMAGE_FIXTURE = `${REPO}/packages/tui/_demo-image.png`;
  * `node_modules` and bun only finds the hoisted install by walking up to the repo root. The folder
  * and branch deliberately differ, since a branch that strictly equals its folder is dropped.
  */
-const WORKTREE_DIR = `${REPO}/.claude/worktrees/pull-diagnostics`;
-const WORKTREE_BRANCH = "feat/pull-diagnostics";
+const WORKTREE_DIR = `${REPO}/.claude/worktrees/tidy-layout`;
+const WORKTREE_BRANCH = "feat/tidy-layout";
 /**
  * A throwaway config dir for the `config: true` shots: stet reads `XDG_CONFIG_HOME`, so pointing
  * those tapes here gives them named themes and a reachable context-menu binding without touching
@@ -157,37 +151,28 @@ function launchCmd(env = "", root = REPO) {
 /**
  * Open a substantial real source-file diff (the palette focuses the viewer on select), so the hero
  * and theme shots feature a changed file with hunks rather than the default docs file.
- * `diagnostics/servers` carries the largest source diff in the `BASE_REF..HEAD` window (+266/-95)
- * and opens on interleaved additions and removals, so it reads as real review work.
+ * `components/diff/DiffView` carries one of the largest source diffs in the `BASE_REF..HEAD` window
+ * (+254/-201) and interleaves additions and removals, so it reads as real review work.
  */
-const openServersDiff = [
-  "Ctrl+P",
-  'Type "diagnostics/servers"',
-  "Sleep 400ms",
-  "Enter",
-  "Sleep 800ms",
-].join("\n");
+const openHeroDiff = ["Ctrl+P", 'Type "diff/DiffView"', "Sleep 400ms", "Enter", "Sleep 800ms"].join(
+  "\n",
+);
 
-/**
- * One entry per README screenshot. `steps` run after the app is up; the end state is captured.
- * `fixture: true` marks screens that need the temporary diagnostics file planted first.
- */
+/** One entry per README screenshot. `steps` run after the app is up; the end state is captured. */
 const screens = [
-  // Let the diff settle and the checks finish (tsserver project load is the slow part) so the hero
-  // Shot shows the resolved "checks finished" state, not a mid-run spinner.
-  { name: "stet", steps: [openServersDiff, "Sleep 16s"].join("\n"), worktree: true },
+  { name: "stet", steps: [openHeroDiff, "Sleep 1500ms"].join("\n"), worktree: true },
   {
     /**
      * Pin two files into tabs (`ctrl-t`), then land on a third as the active preview, so the strip
      * shows the two pinned tabs (muted) beside the active preview tab (full-strength, italic). All
-     * three carry a diff so the tabs show their status tint; `diagnostics/servers`, `git/model`,
-     * and `components/HeaderBar` all sit in the captured `BASE_REF..HEAD` window, and their
-     * basenames stay distinct so the strip reads at a glance.
+     * three carry a diff so the tabs show their status tint; `diff/DiffView`, `git/model`, and
+     * `components/HeaderBar` all sit in the captured `BASE_REF..HEAD` window, and their basenames
+     * stay distinct so the strip reads at a glance.
      */
     name: "tabs",
     steps: [
       "Ctrl+P",
-      'Type "diagnostics/servers"',
+      'Type "diff/DiffView"',
       "Sleep 400ms",
       "Enter",
       "Sleep 700ms",
@@ -225,7 +210,7 @@ const screens = [
     config: true,
     launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
     name: "theme-switcher",
-    steps: [openServersDiff, 'Type "t"', "Sleep 700ms", "Down@200ms 8", "Sleep 1200ms"].join("\n"),
+    steps: [openHeroDiff, 'Type "t"', "Sleep 700ms", "Down@200ms 8", "Sleep 1200ms"].join("\n"),
   },
   {
     /**
@@ -239,7 +224,7 @@ const screens = [
     launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
     name: "save-settings",
     steps: [
-      openServersDiff,
+      openHeroDiff,
       'Type "x"',
       "Sleep 400ms",
       'Type "a"',
@@ -272,8 +257,8 @@ const screens = [
   {
     /**
      * Open the diff and let it focus/settle, then open the find bar and type a term present in the
-     * viewport where the file opens (lowercase "provision" is smart-case, so it also matches the
-     * `Provisioner`/`ProvisionChannel` symbols in servers.ts's first two hunks, highlighting in
+     * viewport where the file opens (lowercase "window" is smart-case, so it also matches the
+     * `visibleWindow`/`visibleWindowVariable` imports in DiffView's first hunk, highlighting in
      * view rather than off-screen). Capture the open bar showing the live N/M counter and
      * highlights. No commit: a too-early `/` or a no-match Enter both collapse back to a plain diff
      * with no find UI, so generous settles and a real match matter.
@@ -281,13 +266,13 @@ const screens = [
     name: "find",
     steps: [
       "Ctrl+P",
-      'Type "diagnostics/servers"',
+      'Type "diff/DiffView"',
       "Sleep 500ms",
       "Enter",
       "Sleep 1500ms",
       'Type "/"',
       "Sleep 600ms",
-      'Type "provision"',
+      'Type "window"',
       "Sleep 1s",
     ].join("\n"),
   },
@@ -375,53 +360,19 @@ const screens = [
     ].join("\n"),
   },
   {
-    // Open the fixture, open the panel, then wait out tsserver's project load (slower than oxlint).
-    fixture: true,
-    name: "problems",
-    steps: [
-      "Ctrl+P",
-      'Type "diagnostics-demo"',
-      "Sleep 400ms",
-      "Enter",
-      "Sleep 800ms",
-      'Type "p"',
-      "Sleep 16s",
-    ].join("\n"),
-  },
-  {
     /**
-     * Findings docked beside the diff instead of under it, which is the arrangement the layout
-     * guide is actually about. `p` both opens the panel and focuses it, which `d` needs, and `d`
-     * rotates clockwise from the panel's `bottom` default, so three presses land it on the right
-     * with the tree still left. Reuses the diagnostics fixture so the panel has real rows to show,
-     * and waits out tsserver's project load before docking, the same as the problems shot.
+     * The tree docked to the right of the diff instead of the default left: `d` rotates it
+     * clockwise, so two presses carry it left -> top -> right.
      */
-    fixture: true,
     name: "pane-docking",
-    steps: [
-      "Ctrl+P",
-      'Type "diagnostics-demo"',
-      "Sleep 400ms",
-      "Enter",
-      "Sleep 800ms",
-      'Type "p"',
-      "Sleep 16s",
-      'Type "d"',
-      "Sleep 300ms",
-      'Type "d"',
-      "Sleep 300ms",
-      'Type "d"',
-      "Sleep 1200ms",
-    ].join("\n"),
+    steps: [openHeroDiff, 'Type "d"', "Sleep 300ms", 'Type "d"', "Sleep 1200ms"].join("\n"),
   },
   {
     /**
      * The tree marking what an agent just touched. The settle waits out `RECENT_EDITS` (the last of
      * them lands ~17s after launch) and leaves each one a different age inside the 30s recency
      * window, so the dots read as a ramp rather than one flat state. `.` then jumps to the newest
-     * of them. Deliberately captured while diagnostics are still running: background progress
-     * outranks the ambient tier, so the status bar's own recency row is not reachable here, and the
-     * tree cue is what this section claims anyway.
+     * of them.
      */
     name: "recent-activity",
     recentEdits: true,
@@ -466,46 +417,7 @@ async function shoot(screen: (typeof screens)[number]) {
   }
 }
 
-/**
- * Diagnostics only exist for a changed file, so plant one. Lead with clean exported lines (no
- * findings, plain gutter) so the flagged lines' severity-colored gutter numbers stand out, then tsc
- * type errors (number = string) and oxc unused-symbol findings.
- */
-// Refuse to clobber a pre-existing FIXTURE: that path is script-owned, so anything
-// There wasn't put by us, and `plantedFixture` makes removeFixture delete only what
-// This run created rather than blindly rm-ing the path.
-let plantedFixture = false;
-function writeFixture() {
-  if (existsSync(FIXTURE)) {
-    throw new Error(`refusing to overwrite existing ${FIXTURE} (not created by this script)`);
-  }
-  plantedFixture = true;
-  return Bun.write(
-    FIXTURE,
-    [
-      "export function double(n: number) {",
-      "  return n * 2",
-      "}",
-      "",
-      'export const label: number = "oops"',
-      "const ignored = double(label)",
-      "const count: string = 42",
-      "function helper(unusedParam: number) {}",
-      "",
-    ].join("\n"),
-  );
-}
-
-// Removers are sync so a signal handler can run them before exit, not just the finally path.
-function removeFixture() {
-  if (!plantedFixture) {
-    return;
-  }
-  rmSync(FIXTURE, { force: true });
-  plantedFixture = false;
-}
-
-// Same ownership rule as the diagnostics fixture: refuse a path we did not create, tear down our own.
+// Refuse to clobber a path this script did not create, and tear down only what it created.
 let plantedImageFixture = false;
 async function writeImageFixture() {
   if (existsSync(IMAGE_FIXTURE)) {
@@ -544,7 +456,7 @@ function removeImageFixture() {
   plantedImageFixture = false;
 }
 
-// Same ownership rule as the fixture: refuse a path we did not create, and only tear down our own.
+// Same ownership rule as the image fixture: refuse a path we did not create, tear down our own.
 let plantedWorktree = false;
 async function addWorktree() {
   if (existsSync(WORKTREE_DIR)) {
@@ -552,16 +464,10 @@ async function addWorktree() {
   }
   plantedWorktree = true;
   await run("git", ["worktree", "add", "-b", WORKTREE_BRANCH, WORKTREE_DIR, "HEAD"], REPO);
-  // A linked worktree starts with no node_modules, which a real one gets from `bun install`. Without
-  // It the checkers resolve to stet's provisioned cache instead of the repo's pinned binaries, and
-  // Oxlint cannot load the `$schema` its config points at, badging a warning that belongs to this
-  // Rig rather than the repo. Symlinking the main install instead would leave an untracked
-  // `node_modules` in the changed count, since gitignore's `node_modules/` matches only a directory.
-  await run(BUN, ["install", "--frozen-lockfile"], WORKTREE_DIR);
 }
 
 // Sync like the other removers, so the signal handler can tear the worktree down before exit.
-// `--force` twice: once for the worktree's own install, once for the branch it never merged.
+// `--force` for the worktree, `-D` for the branch it never merged.
 function removeWorktree() {
   if (!plantedWorktree) {
     return;
@@ -631,15 +537,14 @@ if (!OXIPNG) {
 
 const wanted = screens.filter((screen) => only.size === 0 || only.has(screen.name));
 const standalone = wanted.filter(
-  (screen) => !screen.fixture && !screen.worktree && !screen.imageFixture && !screen.recentEdits,
+  (screen) => !screen.worktree && !screen.imageFixture && !screen.recentEdits,
 );
 const worktreed = wanted.filter((screen) => screen.worktree);
-const fixtured = wanted.filter((screen) => screen.fixture);
 const imageFixtured = wanted.filter((screen) => screen.imageFixture);
 const recentEdited = wanted.filter((screen) => screen.recentEdits);
 
 // One cleanup list drives both the finally and the signal handlers, so a Ctrl-C mid-shoot leaves
-// Behind neither the temp config, the diagnostics fixture, nor a source file the recency shot edited.
+// Behind neither the temp config, the demo image, nor a source file the recency shot edited.
 const cleanups: (() => void)[] = [];
 function cleanup() {
   for (const remove of cleanups.splice(0)) {
@@ -671,17 +576,6 @@ try {
     await addWorktree();
     cleanups.push(removeWorktree);
     for (const screen of worktreed) {
-      // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
-      await shoot(screen);
-    }
-  }
-
-  if (fixtured.length > 0) {
-    // An errorful file in src/ would show up in every other shot's tree, so plant it only now,
-    // After the standalone shots, and tear it down through the shared cleanup.
-    await writeFixture();
-    cleanups.push(removeFixture);
-    for (const screen of fixtured) {
       // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
       await shoot(screen);
     }

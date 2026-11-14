@@ -1,4 +1,4 @@
-import { sep } from "node:path";
+import path from "node:path";
 
 // High-churn git internals that never change the working-tree, staged, or branch
 // State stet renders. An agent writing to the repo churns these continuously
@@ -6,7 +6,12 @@ import { sep } from "node:path";
 // File per write), and watching them re-runs a full `git status` and repaint per
 // Event. A denylist, not a whitelist: a forgotten entry costs one redundant
 // Refresh, never a dropped HEAD/index/refs signal shown stale until the poll.
-const DENY_FIRST_SEGMENT = new Set(["objects", "logs", "rebase-merge", "rebase-apply"]);
+const DENY_FIRST_SEGMENT = new Set([
+  "objects",
+  "logs",
+  "rebase-merge",
+  "rebase-apply",
+]);
 const DENY_EXACT = new Set(["COMMIT_EDITMSG", "FETCH_HEAD"]);
 
 /**
@@ -25,10 +30,10 @@ export type WatchEventClass = "worktree" | "internal" | "ignored";
  * when it cannot classify (a nameless event on the worktree root might be a content change, so
  * `"worktree"`; on the git-dir root it is always `"internal"`): either way it ticks.
  */
-export function classify(
+export const classify = (
   gitInternalPrefix: string,
-  filename: string | null | undefined,
-): WatchEventClass {
+  filename: string | null | undefined
+): WatchEventClass => {
   // `fs.watch` omits the name on some events (`null` on macOS, `undefined` on Linux inotify).
   if (typeof filename !== "string") {
     return gitInternalPrefix === "" ? "internal" : "worktree";
@@ -44,9 +49,9 @@ export function classify(
   if (
     internalPath.endsWith(".lock") ||
     DENY_EXACT.has(internalPath) ||
-    DENY_FIRST_SEGMENT.has(internalPath.split(sep)[0] ?? "")
+    DENY_FIRST_SEGMENT.has(internalPath.split(path.sep)[0] ?? "")
   ) {
     return "ignored";
   }
   return "internal";
-}
+};

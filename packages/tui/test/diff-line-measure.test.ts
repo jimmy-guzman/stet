@@ -5,7 +5,9 @@ import { createLineMeasurer } from "@/components/diff/line-measure";
 // Drives the real OpenTUI text engine (the same call the renderable's layout
 // Uses), so these assert rendered wrap behavior, not a reimplemented formula.
 const measurer = createLineMeasurer("unicode");
-afterAll(() => measurer.destroy());
+afterAll(() => {
+  measurer.destroy();
+});
 
 describe("createLineMeasurer", () => {
   test("a line that fits the width is one row", () => {
@@ -13,7 +15,9 @@ describe("createLineMeasurer", () => {
   });
 
   test("a long multi-word line wraps to more than one row at a narrow width", () => {
-    expect(measurer.measure("the quick brown fox jumps over the lazy dog", 12)).toBeGreaterThan(1);
+    expect(
+      measurer.measure("the quick brown fox jumps over the lazy dog", 12)
+    ).toBeGreaterThan(1);
   });
 
   test("wide CJK glyphs count as two columns when wrapping", () => {

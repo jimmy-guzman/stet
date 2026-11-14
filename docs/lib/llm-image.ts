@@ -7,8 +7,7 @@ import { siteUrl } from "./site";
  * outside a browser, so the site-relative `/screenshots/...` path it is authored with is useless
  * once the markdown is read from `llms-full.txt` or a `.md` route.
  */
-export const markdownImage: NonNullable<LLMsOptions["stringify"]> = (node) => {
-  if (node.type !== "image" || !node.url.startsWith("/")) return undefined;
-
-  return `![${node.alt ?? ""}](${siteUrl}${node.url})`;
-};
+export const markdownImage: NonNullable<LLMsOptions["stringify"]> = (node) =>
+  node.type === "image" && node.url.startsWith("/")
+    ? `![${node.alt ?? ""}](${siteUrl}${node.url})`
+    : undefined;

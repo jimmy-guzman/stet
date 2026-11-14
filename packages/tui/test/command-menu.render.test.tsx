@@ -1,14 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { MouseButton } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
 
 describe("context command menu", () => {
   // The menu writes the shared `state` singleton; leaving it open would swallow the
@@ -28,25 +33,34 @@ describe("context command menu", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockMouse } =
+      await testRender(() => <App />, {
+        height: 24,
+        width: 100,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) => frame.includes("a.txt"));
+      await settleUntil("tree shows the files", (frame) =>
+        frame.includes("a.txt")
+      );
 
       // The first file row sits below the header and the sidebar's top border.
       await mockMouse.click(5, 2, MouseButton.RIGHT);
-      const frame = await settleUntil("menu opens with its actions", (current) =>
-        current.includes("Pin as tab"),
+      const frame = await settleUntil(
+        "menu opens with its actions",
+        (current) => current.includes("Pin as tab")
       );
 
       expect(state.commandMenuOpen()).toBe(true);
       expect(state.commandMenuContext()).toBe("tree");
       // Every file action, the selection caret, and the shared footer hint render.
-      for (const label of ["Pin as tab", "Copy path", "Open in editor", "Open in IDE"]) {
+      for (const label of [
+        "Pin as tab",
+        "Copy path",
+        "Open in editor",
+        "Open in IDE",
+      ]) {
         expect(frame).toContain(label);
       }
       expect(frame).toContain("▸");
@@ -62,27 +76,33 @@ describe("context command menu", () => {
       "package.json": `${JSON.stringify({ name: "cmd-fixture" })}\n`,
       "src/a.ts": "const alpha = 1\n",
     });
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const alpha = 1\nconst added = 2\n");
+    writeFileSync(
+      path.join(repoRoot, "src", "a.ts"),
+      "const alpha = 1\nconst added = 2\n"
+    );
 
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 28,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 28,
+        width: 110,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
+      await settleUntil("caret on the added line", (frame) =>
+        /ln 2:1\b/u.test(frame)
+      );
       mockInput.pressTab();
       // A line-level caret, as a gutter click leaves.
       state.setCaretLineLevel(true);
       state.openCommandMenu("viewer");
 
       const frame = await settleUntil("viewer menu open", (current) =>
-        current.includes("Copy reference"),
+        current.includes("Copy reference")
       );
 
       expect(frame).toContain("Copy reference");
@@ -104,14 +124,14 @@ describe("context command menu", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, renderOnce, captureCharFrame, mockMouse, mockInput } = await testRender(
-      () => <App />,
-      { height: 24, width: 100 },
-    );
+    const { renderer, renderOnce, captureCharFrame, mockMouse, mockInput } =
+      await testRender(() => <App />, { height: 24, width: 100 });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) => frame.includes("b.txt"));
+      await settleUntil("tree shows the files", (frame) =>
+        frame.includes("b.txt")
+      );
 
       // Open the menu on the second row (its menu box sits below, leaving the first
       // Row clickable).
@@ -122,7 +142,10 @@ describe("context command menu", () => {
       // Click a different tree row: the focused node drifts, so the menu must close
       // Rather than linger invisibly and keep swallowing keys.
       await mockMouse.click(5, 2);
-      const dismissed = await settleUntil("menu closed", (frame) => !frame.includes("Pin as tab"));
+      const dismissed = await settleUntil(
+        "menu closed",
+        (frame) => !frame.includes("Pin as tab")
+      );
       expect(state.commandMenuOpen()).toBe(false);
       expect(dismissed).not.toContain("↑↓ navigate");
 
@@ -151,14 +174,17 @@ describe("context command menu", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockMouse } =
+      await testRender(() => <App />, {
+        height: 24,
+        width: 100,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) => frame.includes("f01.txt"));
+      await settleUntil("tree shows the files", (frame) =>
+        frame.includes("f01.txt")
+      );
       await mockMouse.click(5, 3, MouseButton.RIGHT);
       await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
       expect(state.commandMenuOpen()).toBe(true);
@@ -166,7 +192,10 @@ describe("context command menu", () => {
       // Scrolling the sidebar moves the anchored row while the focused node stays the
       // Same, so the menu (pinned at a now-stale screen cell) must dismiss.
       state.setSidebarScrollTop(3);
-      await settleUntil("menu closed", (frame) => !frame.includes("Pin as tab"));
+      await settleUntil(
+        "menu closed",
+        (frame) => !frame.includes("Pin as tab")
+      );
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();
@@ -179,29 +208,40 @@ describe("context command menu", () => {
       "package.json": `${JSON.stringify({ name: "cmd-drift" })}\n`,
       "src/a.ts": "const alpha = 1\n",
     });
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const alpha = 1\nconst added = 2\n");
+    writeFileSync(
+      path.join(repoRoot, "src", "a.ts"),
+      "const alpha = 1\nconst added = 2\n"
+    );
 
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 28,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 28,
+        width: 110,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
+      await settleUntil("caret on the added line", (frame) =>
+        /ln 2:1\b/u.test(frame)
+      );
       mockInput.pressTab();
       state.openCommandMenu("viewer");
-      await settleUntil("viewer menu open", (frame) => frame.includes("↑↓ navigate"));
+      await settleUntil("viewer menu open", (frame) =>
+        frame.includes("↑↓ navigate")
+      );
       expect(state.commandMenuOpen()).toBe(true);
 
       // Moving the caret to another line (as a click there would) drifts the guarded
       // Caret, so the menu closes on its own.
       state.setCursorRow(0);
-      await settleUntil("viewer menu closed", (frame) => !frame.includes("↑↓ navigate"));
+      await settleUntil(
+        "viewer menu closed",
+        (frame) => !frame.includes("↑↓ navigate")
+      );
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();
@@ -218,14 +258,14 @@ describe("context command menu", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, renderOnce, captureCharFrame, mockMouse, mockInput } = await testRender(
-      () => <App />,
-      { height: 24, width: 100 },
-    );
+    const { renderer, renderOnce, captureCharFrame, mockMouse, mockInput } =
+      await testRender(() => <App />, { height: 24, width: 100 });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) => frame.includes("b.txt"));
+      await settleUntil("tree shows the files", (frame) =>
+        frame.includes("b.txt")
+      );
       // The seeded selection is the first file, so the viewer shows a.txt.
       expect(state.selectedPath()).toBe("a.txt");
 
@@ -248,7 +288,10 @@ describe("context command menu", () => {
   }, 20_000);
 
   test("opening the viewer menu on an off-screen caret does not trap the keyboard", async () => {
-    const lines = Array.from({ length: 120 }, (_, i) => `const line_${i + 1} = ${i + 1}`);
+    const lines = Array.from(
+      { length: 120 },
+      (_, i) => `const line_${i + 1} = ${i + 1}`
+    );
     const repoRoot = createFixtureRepo("stet-cmd-offscreen-", {
       "long.ts": `${lines.join("\n")}\n`,
     });
@@ -256,15 +299,20 @@ describe("context command menu", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
-      height: 34,
-      useMouse: true,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockMouse } =
+      await testRender(() => <App />, {
+        height: 34,
+        useMouse: true,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("file content", (frame) => frame.includes("line_1 ="), 5);
+      await settleUntil(
+        "file content",
+        (frame) => frame.includes("line_1 ="),
+        5
+      );
 
       // Wheel-scroll deep so the top-line caret leaves the viewport (the wheel moves
       // The window, not the caret, and the follow never snaps it back).
@@ -280,7 +328,10 @@ describe("context command menu", () => {
       // The caret is now off-screen, so the viewer menu cannot anchor: opening it must
       // Not leave it stuck open (which would swallow every key until escape).
       state.openCommandMenu("viewer");
-      await settleUntil("menu did not stay open", () => !state.commandMenuOpen());
+      await settleUntil(
+        "menu did not stay open",
+        () => !state.commandMenuOpen()
+      );
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();

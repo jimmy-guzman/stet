@@ -4,13 +4,17 @@
  * has no content to measure a thumb from). Returns undefined when the content fits: the column then
  * paints nothing but stays reserved, so growth never shifts layout.
  */
-export function scrollbarThumb(rowCount: number, viewport: number, scrollTop: number) {
-  if (viewport <= 0 || rowCount <= viewport) {
-    return undefined;
-  }
+export const scrollbarThumb = (
+  rowCount: number,
+  viewport: number,
+  scrollTop: number
+) => {
   const size = Math.max(1, Math.round((viewport * viewport) / rowCount));
   const maxTop = viewport - size;
   const maxScroll = rowCount - viewport;
-  const top = maxScroll === 0 ? 0 : Math.round((maxTop * scrollTop) / maxScroll);
-  return { size, top: Math.max(0, Math.min(top, maxTop)) };
-}
+  const top =
+    maxScroll === 0 ? 0 : Math.round((maxTop * scrollTop) / maxScroll);
+  return viewport <= 0 || rowCount <= viewport
+    ? undefined
+    : { size, top: Math.max(0, Math.min(top, maxTop)) };
+};

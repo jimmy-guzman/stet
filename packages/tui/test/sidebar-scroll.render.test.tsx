@@ -2,10 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
 
 // The sidebar's scrollbox must not capture keyboard focus: OpenTUI's scrollbox
 // Scrolls itself by a fraction of a viewport on arrow/j/k once focused (e.g. via
@@ -23,10 +28,8 @@ describe("sidebar scroll follow", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, mockMouse, mockInput, renderOnce, captureCharFrame } = await testRender(
-      () => <App />,
-      { height: 16, width: 90 },
-    );
+    const { renderer, mockMouse, mockInput, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, { height: 16, width: 90 });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) => current.includes("f00.txt"));
 

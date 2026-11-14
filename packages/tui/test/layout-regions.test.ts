@@ -22,9 +22,22 @@ const layout = (overrides: Partial<LayoutInput> = {}) =>
 
 // Cells a region actually occupies, so overlap and gaps are both detectable by
 // Counting rather than by comparing edges pair by pair.
-const cells = ({ height, width, x, y }: { height: number; width: number; x: number; y: number }) =>
+const cells = ({
+  height,
+  width,
+  x,
+  y,
+}: {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}) =>
   Array.from({ length: height }, (_row, row) =>
-    Array.from({ length: width }, (_column, column) => `${x + column},${y + row}`),
+    Array.from(
+      { length: width },
+      (_column, column) => `${x + column},${y + row}`
+    )
   ).flat();
 
 const covered = (result: Layout) => [
@@ -46,11 +59,13 @@ test("the regions tile the terminal exactly, for every dock", () => {
           sidebar: pane({ position: sidebarPosition }),
           terminalHeight: height,
           terminalWidth: width,
-        }),
+        })
       );
       const where = `${sidebarPosition} at ${width}x${height}`;
       expect(`${where}: ${painted.length}`).toBe(`${where}: ${width * height}`);
-      expect(`${where}: ${new Set(painted).size}`).toBe(`${where}: ${width * height}`);
+      expect(`${where}: ${new Set(painted).size}`).toBe(
+        `${where}: ${width * height}`
+      );
     }
   }
 });
@@ -108,7 +123,10 @@ test("a manual width is clamped by the terminal but never destroyed by it", () =
 });
 
 test("a docked pane never squeezes the viewer out of the terminal", () => {
-  const result = layout({ sidebar: pane({ position: "bottom" }), terminalHeight: 12 });
+  const result = layout({
+    sidebar: pane({ position: "bottom" }),
+    terminalHeight: 12,
+  });
 
   expect(result.sidebar.height).toBeLessThan(PANE_DEFAULT_HEIGHT);
   expect(result.viewer.height).toBeGreaterThanOrEqual(4);
@@ -125,7 +143,10 @@ test("the right dock swaps the columns and changes no width", () => {
 });
 
 test("docking the tree on top stacks it over the viewer", () => {
-  const result = layout({ sidebar: pane({ position: "top" }), terminalHeight: 40 });
+  const result = layout({
+    sidebar: pane({ position: "top" }),
+    terminalHeight: 40,
+  });
 
   expect(result.sidebar.width).toBe(80);
   expect(result.viewer.width).toBe(80);
@@ -139,16 +160,25 @@ test("a pane honors only the override on the axis it is docked to", () => {
 
   expect(layout({ sidebar: both, terminalHeight: 40 }).sidebar.width).toBe(50);
 
-  const top = layout({ sidebar: { ...both, position: "top" }, terminalHeight: 40 }).sidebar;
+  const top = layout({
+    sidebar: { ...both, position: "top" },
+    terminalHeight: 40,
+  }).sidebar;
   expect(top.height).toBe(20);
   expect(top.width).toBe(80);
 });
 
 test("the default extent belongs to the axis", () => {
-  const onTop = layout({ sidebar: pane({ position: "top" }), terminalHeight: 40 });
+  const onTop = layout({
+    sidebar: pane({ position: "top" }),
+    terminalHeight: 40,
+  });
   expect(onTop.sidebar.height).toBe(PANE_DEFAULT_HEIGHT);
 
-  const onBottom = layout({ sidebar: pane({ position: "bottom" }), terminalHeight: 40 });
+  const onBottom = layout({
+    sidebar: pane({ position: "bottom" }),
+    terminalHeight: 40,
+  });
   expect(onBottom.sidebar.height).toBe(PANE_DEFAULT_HEIGHT);
   expect(onBottom.sidebar.y).toBeGreaterThan(onBottom.viewer.y);
 });

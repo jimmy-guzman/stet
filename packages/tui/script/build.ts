@@ -33,7 +33,9 @@ const allTargets: Target[] = [
 ];
 
 const targets = single
-  ? allTargets.filter((target) => target.os === process.platform && target.arch === process.arch)
+  ? allTargets.filter(
+      (target) => target.os === process.platform && target.arch === process.arch
+    )
   : allTargets;
 
 if (targets.length === 0) {
@@ -46,7 +48,7 @@ await $`rm -rf dist`;
 if (!skipInstall) {
   // Materialize every platform's native @opentui core so any target can embed its library
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`.cwd(
-    "packages/tui",
+    "packages/tui"
   );
 }
 
@@ -69,7 +71,10 @@ for (const target of targets) {
       target: `bun-${target.os}-${target.arch}`,
     },
     conditions: ["bun", "node"],
-    define: target.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify("glibc") } : {},
+    define:
+      target.os === "linux"
+        ? { "process.env.OPENTUI_LIBC": JSON.stringify("glibc") }
+        : {},
     // The app entry is the only entrypoint: OpenTUI discovers its own bundled assets (the
     // Tree-sitter worker, the wasm grammars, the native library) from the literal
     // `import(..., { with: { type: "file" } })` at its call site, and listing one of those
@@ -92,7 +97,9 @@ for (const target of targets) {
     // oxlint-disable-next-line no-await-in-loop -- sequential cross-compilation: each target must complete before the next
     const version = await $`dist/${name}/bin/${pkg.name} --version`.text();
     if (version.trim() !== pkg.version) {
-      console.error(`smoke test failed: expected ${pkg.version}, got ${version.trim()}`);
+      console.error(
+        `smoke test failed: expected ${pkg.version}, got ${version.trim()}`
+      );
       process.exit(1);
     }
     console.log(`smoke test passed: ${version.trim()}`);
@@ -112,8 +119,8 @@ for (const target of targets) {
         version: pkg.version,
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 
   built.push(name);
@@ -130,19 +137,29 @@ if (!single) {
         bugs: "https://github.com/jimmy-guzman/stet/issues",
         description: pkg.description,
         homepage: "https://github.com/jimmy-guzman/stet",
-        keywords: ["tui", "diff", "git", "code-review", "coding-agent", "terminal"],
+        keywords: [
+          "tui",
+          "diff",
+          "git",
+          "code-review",
+          "coding-agent",
+          "terminal",
+        ],
         license: "MIT",
         // Bare unscoped "stet" trips npm's too-similar typosquat filter, so the launcher publishes under the brand scope (the `stet` command is unchanged).
         name: "@jimmy.codes/stet",
         optionalDependencies: Object.fromEntries(
-          allTargets.map((target) => [`${pkg.name}-${target.os}-${target.arch}`, pkg.version]),
+          allTargets.map((target) => [
+            `${pkg.name}-${target.os}-${target.arch}`,
+            pkg.version,
+          ])
         ),
         repository: "github:jimmy-guzman/stet",
         version: pkg.version,
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 }
 

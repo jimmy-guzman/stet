@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import { findMatches } from "@/utils/find";
 
-const lines = ["const findMatches = () => {", "  return MATCHES;", "}", "// find me"];
+const lines = [
+  "const findMatches = () => {",
+  "  return MATCHES;",
+  "}",
+  "// find me",
+];
 
 describe("findMatches", () => {
   test("empty query matches nothing", () => {

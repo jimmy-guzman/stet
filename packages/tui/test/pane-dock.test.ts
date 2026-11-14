@@ -7,12 +7,12 @@ import { state } from "@/state";
 // Docking is what makes axis, step, minimum, and override follow a pane's *edge*
 // Rather than its name, so these drive the public actions and read the rendered
 // Rect back, never the signals. The preload resets state before every test.
-function wide() {
+const wide = () => {
   batch(() => {
     state.setTerminalWidth(80);
     state.setTerminalHeight(40);
   });
-}
+};
 
 test("the move key walks the edges clockwise and four presses return home", () => {
   wide();
@@ -54,7 +54,8 @@ test("a pane keeps a size per axis, so a round trip restores it", () => {
   state.growPane();
   expect(state.layout().sidebar.width).toBe(38);
 
-  state.movePane(); // Left -> top, now sized in rows
+  // Left -> top, now sized in rows
+  state.movePane();
   expect(state.layout().sidebar.height).toBe(10);
   state.growPane();
   state.growPane();
@@ -62,23 +63,27 @@ test("a pane keeps a size per axis, so a round trip restores it", () => {
 
   state.movePane();
   state.movePane();
-  state.movePane(); // Back to left
+  // Back to left
+  state.movePane();
   expect(state.layout().sidebar.width).toBe(38);
 });
 
 test("the step follows the axis", () => {
   wide();
-  state.growPane(); // Left-docked, so it sizes in columns
+  // Left-docked, so it sizes in columns
+  state.growPane();
   expect(state.layout().sidebar.width).toBe(36);
 
-  state.movePane(); // The tree is now top-docked, so it sizes in rows
+  // The tree is now top-docked, so it sizes in rows
+  state.movePane();
   state.growPane();
   expect(state.layout().sidebar.height).toBe(11);
 });
 
 test("the minimum follows the axis: a top-docked tree closes at the row floor", () => {
   wide();
-  state.movePane(); // Top-docked, 10 rows
+  // Top-docked, 10 rows
+  state.movePane();
   expect(state.layout().sidebar.height).toBe(10);
 
   // Five shrinks reach the 5-row floor; the sixth would dip below it.
@@ -94,10 +99,12 @@ test("the minimum follows the axis: a top-docked tree closes at the row floor", 
 
 test("reset clears only the docked axis", () => {
   wide();
-  state.growPane(); // A width the tree should still have when it comes back
+  // A width the tree should still have when it comes back
+  state.growPane();
   expect(state.layout().sidebar.width).toBe(36);
 
-  state.movePane(); // Left -> top
+  // Left -> top
+  state.movePane();
   state.growPane();
   state.resetPane();
   expect(state.layout().sidebar.height).toBe(10);

@@ -1,18 +1,12 @@
-import { Context, Data, Effect, Layer, Result } from "effect";
+import { Context, Effect, Layer, Option, Result } from "effect";
 
 import { loadConfigText } from "./load";
 import type { LoadedConfig } from "./load";
 import { configPaths } from "./paths";
+import { ConfigReadError } from "./read-error";
 import { updateSettingsText } from "./write";
 import type { SettingsSnapshot } from "./write";
-
-class ConfigReadError extends Data.TaggedError("ConfigReadError")<{
-  readonly message: string;
-}> {}
-
-class ConfigWriteError extends Data.TaggedError("ConfigWriteError")<{
-  readonly message: string;
-}> {}
+import { ConfigWriteError } from "./write-error";
 
 export class Config extends Context.Service<
   Config,
@@ -26,20 +20,16 @@ export class Config extends Context.Service<
      *   nothing was written.
      */
     readonly persistSettings: (
-      snapshot: SettingsSnapshot,
+      snapshot: SettingsSnapshot
     ) => Effect.Effect<string[], ConfigWriteError>;
   }
 >()("stet/Config") {}
 
-const firstExistingConfig = Effect.gen(function* findConfig() {
-  for (const candidate of configPaths()) {
-    const exists = yield* Effect.promise(() => Bun.file(candidate).exists());
-    if (exists) {
-      return candidate;
-    }
-  }
-  return undefined;
-});
+const firstExistingConfig = Effect.suspend(() =>
+  Effect.findFirst(configPaths(), (candidate) =>
+    Effect.promise(async () => await Bun.file(candidate).exists())
+  )
+).pipe(Effect.map(Option.getOrUndefined));
 
 export const ConfigLive = Layer.effect(
   Config,
@@ -56,11 +46,15 @@ export const ConfigLive = Layer.effect(
 
         return yield* Effect.tryPromise({
           catch: (cause) =>
-            new ConfigReadError({ message: `could not read config: ${String(cause)}` }),
-          try: () => Bun.file(path).text(),
+            new ConfigReadError({
+              message: `could not read config: ${String(cause)}`,
+            }),
+          try: async () => await Bun.file(path).text(),
         }).pipe(
           Effect.map(loadConfigText),
-          Effect.catch((error) => Effect.succeed({ config: {}, issues: [error.message] })),
+          Effect.catch((error) =>
+            Effect.succeed({ config: {}, issues: [error.message] })
+          )
         );
       }),
     persistSettings: (snapshot) =>
@@ -69,30 +63,37 @@ export const ConfigLive = Layer.effect(
         // No file yet: seed the primary candidate; Bun.write creates its directory.
         const path = existing ?? configPaths()[0];
         if (path === undefined) {
-          return yield* new ConfigWriteError({ message: "no config path available" });
+          return yield* new ConfigWriteError({
+            message: "no config path available",
+          });
         }
         const text =
           existing === undefined
             ? "{}"
             : yield* Effect.tryPromise({
                 catch: (cause) =>
-                  new ConfigWriteError({ message: `could not read config: ${String(cause)}` }),
-                try: () => Bun.file(existing).text(),
+                  new ConfigWriteError({
+                    message: `could not read config: ${String(cause)}`,
+                  }),
+                try: async () => await Bun.file(existing).text(),
               });
         const updated = yield* updateSettingsText(text, snapshot).pipe(
           Result.match({
-            onFailure: (message) => Effect.fail(new ConfigWriteError({ message })),
+            onFailure: (message) =>
+              Effect.fail(new ConfigWriteError({ message })),
             onSuccess: (value) => Effect.succeed(value),
-          }),
+          })
         );
         if (updated.saved.length > 0) {
           yield* Effect.tryPromise({
             catch: (cause) =>
-              new ConfigWriteError({ message: `could not write config: ${String(cause)}` }),
-            try: () => Bun.write(path, updated.text),
+              new ConfigWriteError({
+                message: `could not write config: ${String(cause)}`,
+              }),
+            try: async () => await Bun.write(path, updated.text),
           });
         }
         return updated.saved;
       }),
-  })),
+  }))
 );

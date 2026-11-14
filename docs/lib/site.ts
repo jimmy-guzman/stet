@@ -4,6 +4,9 @@
  * preview URL. The fallback is only used for local dev; the production domain is whatever is
  * attached in Vercel.
  */
-export const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : "https://stet.jimmy.codes";
+const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? "";
+
+export const siteUrl =
+  productionHost === ""
+    ? "https://stet.jimmy.codes"
+    : `https://${productionHost}`;

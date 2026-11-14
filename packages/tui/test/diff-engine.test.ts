@@ -15,6 +15,18 @@ index 1111111..2222222 100644
  const d = 5;
 `;
 
+// Go is not preloaded. Two different files (distinct fingerprints, so no cache/in-flight
+// De-dup) rendered together must both wait for the grammar to attach: neither may race ahead
+// And cache plain-text spans while the attachment is still in flight.
+const goPatch = (name: string, body: string) => `diff --git a/${name} b/${name}
+index 1111111..2222222 100644
+--- a/${name}
++++ b/${name}
+@@ -1,1 +1,1 @@
+-old
++${body}
+`;
+
 describe("renderDiff", () => {
   test("parses, highlights, and builds the unified row model from a real patch", async () => {
     const render = await renderDiff({ full: false, maxLines: 1600, patch });
@@ -27,19 +39,25 @@ describe("renderDiff", () => {
       type: "remove",
     });
 
-    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
     // The reconstructed text is exact, and Shiki colored it (the plain-text fallback is one
     // Uncolored span, so a foreground color is what says the grammar attached).
-    expect(added.spans.map((span) => span.text).join("")).toBe('const b = "three";');
+    expect(added.spans.map((span) => span.text).join("")).toBe(
+      'const b = "three";'
+    );
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
     expect(added.newLine).toBe(2);
   });
 
   test("resolves an empty render for an empty patch", async () => {
-    expect(await renderDiff({ full: false, maxLines: 1600, patch: "" })).toEqual({
+    expect(
+      await renderDiff({ full: false, maxLines: 1600, patch: "" })
+    ).toEqual({
       hiddenLines: 0,
       navigable: [],
       rows: [],
@@ -64,28 +82,25 @@ index 1111111..2222222 100644
 -let total: u32 = 0;
 +let total: u32 = sum(items);
 `;
-    const render = await renderDiff({ full: false, maxLines: 1600, patch: rustPatch });
+    const render = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: rustPatch,
+    });
 
-    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
-    expect(added.spans.map((span) => span.text).join("")).toBe("let total: u32 = sum(items);");
+    expect(added.spans.map((span) => span.text).join("")).toBe(
+      "let total: u32 = sum(items);"
+    );
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 
   test("highlights both files when two diffs of a new language render concurrently", async () => {
-    // Go is not preloaded. Two different files (distinct fingerprints, so no cache/in-flight
-    // De-dup) rendered together must both wait for the grammar to attach: neither may race ahead
-    // And cache plain-text spans while the attachment is still in flight.
-    const goPatch = (name: string, body: string) => `diff --git a/${name} b/${name}
-index 1111111..2222222 100644
---- a/${name}
-+++ b/${name}
-@@ -1,1 +1,1 @@
--old
-+${body}
-`;
     const [first, second] = await Promise.all([
       renderDiff({
         full: false,
@@ -100,7 +115,9 @@ index 1111111..2222222 100644
     ]);
 
     for (const render of [first, second]) {
-      const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+      const added = render.rows
+        .filter(isLineRow)
+        .find((row) => row.type === "add");
       if (added === undefined) {
         throw new Error("expected an addition row");
       }
@@ -119,13 +136,21 @@ index 1111111..2222222 100644
 -FROM node:18
 +FROM oven/bun:1
 `;
-    const render = await renderDiff({ full: false, maxLines: 1600, patch: dockerPatch });
+    const render = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: dockerPatch,
+    });
 
-    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
-    expect(added.spans.map((span) => span.text).join("")).toBe("FROM oven/bun:1");
+    expect(added.spans.map((span) => span.text).join("")).toBe(
+      "FROM oven/bun:1"
+    );
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 
@@ -138,13 +163,21 @@ index 1111111..2222222 100644
 -save-exact=false
 +save-exact=true
 `;
-    const render = await renderDiff({ full: false, maxLines: 1600, patch: npmrcPatch });
+    const render = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: npmrcPatch,
+    });
 
-    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
-    expect(added.spans.map((span) => span.text).join("")).toBe("save-exact=true");
+    expect(added.spans.map((span) => span.text).join("")).toBe(
+      "save-exact=true"
+    );
     expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
   });
 
@@ -157,9 +190,15 @@ index 1111111..2222222 100644
 -old line
 +new line here
 `;
-    const render = await renderDiff({ full: false, maxLines: 1600, patch: unknownPatch });
+    const render = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: unknownPatch,
+    });
 
-    const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
     if (added === undefined) {
       throw new Error("expected an addition row");
     }

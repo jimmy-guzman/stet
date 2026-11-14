@@ -19,14 +19,14 @@ export interface FollowScroll {
   margin: number;
 }
 
-export function followScrollTop({
+export const followScrollTop = ({
   top,
   height,
   viewport,
   current,
   maxScroll,
   margin,
-}: FollowScroll) {
+}: FollowScroll) => {
   // A row taller than the viewport can't be framed with any margin; anchor its
   // Top so repeated runs settle on one offset instead of flipping top/bottom.
   if (height >= viewport) {
@@ -37,15 +37,21 @@ export function followScrollTop({
   // Hold on both edges, and a margin clamped only to the viewport would alternate
   // Between top- and bottom-alignment across runs. `floor((viewport - height) / 2)`
   // Guarantees a non-empty no-op band, so the offset converges.
-  const safeMargin = Math.min(Math.max(0, margin), Math.floor((viewport - height) / 2));
-  const next =
-    top - safeMargin < current
-      ? top - safeMargin
-      : top + height + safeMargin > current + viewport
-        ? top + height + safeMargin - viewport
-        : current;
-  return Math.max(0, Math.min(next, maxScroll));
-}
+  const safeMargin = Math.min(
+    Math.max(0, margin),
+    Math.floor((viewport - height) / 2)
+  );
+  if (top - safeMargin < current) {
+    return Math.max(0, Math.min(top - safeMargin, maxScroll));
+  }
+  if (top + height + safeMargin > current + viewport) {
+    return Math.max(
+      0,
+      Math.min(top + height + safeMargin - viewport, maxScroll)
+    );
+  }
+  return Math.max(0, Math.min(current, maxScroll));
+};
 
 export interface FollowRange {
   /** The kept range's start display column. */
@@ -65,17 +71,27 @@ export interface FollowRange {
 // Horizontal sibling of `followScrollTop`: keep the caret word's display range in
 // View as it hops along the line, with a margin of context columns on each side.
 // A range wider than the viewport anchors its start.
-export function followScrollX({ from, to, viewport, current, maxScroll, margin }: FollowRange) {
+export const followScrollX = ({
+  from,
+  to,
+  viewport,
+  current,
+  maxScroll,
+  margin,
+}: FollowRange) => {
   const width = to - from;
   if (width >= viewport) {
     return Math.max(0, Math.min(from, maxScroll));
   }
-  const safeMargin = Math.min(Math.max(0, margin), Math.floor((viewport - width) / 2));
-  const next =
-    from - safeMargin < current
-      ? from - safeMargin
-      : to + safeMargin > current + viewport
-        ? to + safeMargin - viewport
-        : current;
-  return Math.max(0, Math.min(next, maxScroll));
-}
+  const safeMargin = Math.min(
+    Math.max(0, margin),
+    Math.floor((viewport - width) / 2)
+  );
+  if (from - safeMargin < current) {
+    return Math.max(0, Math.min(from - safeMargin, maxScroll));
+  }
+  if (to + safeMargin > current + viewport) {
+    return Math.max(0, Math.min(to + safeMargin - viewport, maxScroll));
+  }
+  return Math.max(0, Math.min(current, maxScroll));
+};

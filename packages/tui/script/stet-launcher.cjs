@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/// <reference types="node" />
 
 // Npm launcher: resolves the platform-specific stet binary package and execs it.
 // Pattern from opencode's bin launcher (anomalyco/opencode packages/opencode/bin/opencode).
@@ -10,8 +11,11 @@ const os = require("node:os");
 
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"];
 
-function run(target) {
-  const child = childProcess.spawn(target, process.argv.slice(2), { stdio: "inherit" });
+/** @param {string} target path of the platform binary to exec */
+const run = (target) => {
+  const child = childProcess.spawn(target, process.argv.slice(2), {
+    stdio: "inherit",
+  });
 
   child.on("error", (error) => {
     console.error(error.message);
@@ -33,33 +37,33 @@ function run(target) {
       process.kill(process.pid, signal);
       return;
     }
-    process.exit(code === null ? 1 : code);
+    process.exit(code ?? 1);
   });
-}
+};
 
 const packageName = `stet-${os.platform()}-${os.arch()}`;
 
-function findBinary(startDir) {
-  let current = startDir;
-  for (;;) {
-    const candidate = path.join(current, "node_modules", packageName, "bin", "stet");
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return undefined;
-    }
-    current = parent;
+/**
+ * Walks up from `dir` through each ancestor's `node_modules`, the way Node resolves a package.
+ * @param {string} dir directory to start the search from
+ * @returns {string | undefined} the binary's path, or undefined when no ancestor has it
+ */
+const findBinary = (dir) => {
+  const candidate = path.join(dir, "node_modules", packageName, "bin", "stet");
+  if (fs.existsSync(candidate)) {
+    return candidate;
   }
-}
+  const parent = path.dirname(dir);
+  return parent === dir ? undefined : findBinary(parent);
+};
 
-const resolved = process.env.STET_BIN_PATH || findBinary(__dirname);
+const fromEnv = process.env.STET_BIN_PATH;
+const resolved =
+  fromEnv !== undefined && fromEnv !== "" ? fromEnv : findBinary(__dirname);
 
-if (!resolved) {
+if (resolved === undefined) {
   console.error(
-    `Could not find the stet binary for your platform. Your package manager may have skipped optional dependencies; try reinstalling, or install "${packageName}" directly. Supported platforms: darwin/linux on arm64/x64.`,
+    `Could not find the stet binary for your platform. Your package manager may have skipped optional dependencies; try reinstalling, or install "${packageName}" directly. Supported platforms: darwin/linux on arm64/x64.`
   );
   process.exit(1);
 }

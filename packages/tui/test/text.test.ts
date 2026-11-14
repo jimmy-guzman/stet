@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { toCodePoints, truncate, truncateAroundMatch, truncateLeft } from "@/utils/text";
+import {
+  toCodePoints,
+  truncate,
+  truncateAroundMatch,
+  truncateLeft,
+} from "@/utils/text";
 
 const rangeFrom = (start: number, length: number) =>
   Array.from({ length }, (_, offset) => start + offset);
@@ -48,7 +53,13 @@ describe("truncate", () => {
   });
 
   test("never exceeds the budget it was given", () => {
-    for (const text of ["👨‍👩‍👧xyz", "👍🏽xyz", "🇺🇸xyz", "ab🐛cd", "feat/header-repo-anchor"]) {
+    for (const text of [
+      "👨‍👩‍👧xyz",
+      "👍🏽xyz",
+      "🇺🇸xyz",
+      "ab🐛cd",
+      "feat/header-repo-anchor",
+    ]) {
       for (const max of [1, 2, 3, 4, 5, 6]) {
         expect(Bun.stringWidth(truncate(text, max))).toBeLessThanOrEqual(max);
       }
@@ -89,7 +100,11 @@ describe("truncateAroundMatch", () => {
   test("keeps a basename match by anchoring to the tail", () => {
     const text = "src/very/deep/nested/path/to/error-patterns.md";
     const start = text.indexOf("patterns");
-    const result = truncateAroundMatch(text, rangeFrom(start, "patterns".length), 24);
+    const result = truncateAroundMatch(
+      text,
+      rangeFrom(start, "patterns".length),
+      24
+    );
 
     expect(toCodePoints(result.text).length).toBeLessThanOrEqual(24);
     expect(result.text.startsWith("…")).toBe(true);
@@ -118,7 +133,8 @@ describe("truncateAroundMatch", () => {
     // "…aaa/references/error-patterns" style: a leading-dir run and a basename
     // Run too far apart to both fit; the basename-side run must survive.
     const text = "leaddir/aaaaaaaaaaaaaaaaaaaaaa/error-patterns.md";
-    const leadRun = rangeFrom(0, 4); // "lead"
+    // "lead"
+    const leadRun = rangeFrom(0, 4);
     const tailStart = text.indexOf("patterns");
     const tailRun = rangeFrom(tailStart, "patterns".length);
     const result = truncateAroundMatch(text, [...leadRun, ...tailRun], 24);

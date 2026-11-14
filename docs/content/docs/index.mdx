@@ -6,22 +6,28 @@ description: stet is a read-only companion TUI for inspecting an agent's changes
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Callout } from "fumadocs-ui/components/callout";
 import { Card, Cards } from "fumadocs-ui/components/card";
-import { FileText, GitBranch, Palette, PanelsTopLeft, Search } from "lucide-react";
+import {
+  FileText,
+  GitBranch,
+  Palette,
+  PanelsTopLeft,
+  Search,
+} from "lucide-react";
 
 ## Introduction
 
-`stet` is a read-only companion TUI for inspecting an agent's changes. The agent
-runs in one terminal pane; stet sits in the next one and answers the questions
-you would otherwise open an editor for: what files are in this repo, what
-changed, and what was touched most recently.
+`stet` is a read-only companion TUI for inspecting an agent's changes. The agent runs in one terminal pane; stet sits in the next one and answers the questions you would otherwise open an editor for: what files are in this repo, what changed, and what was touched most recently.
 
-It shows you the repo and the diff. It never reviews, approves,
-or talks to the agent. You decide what to say next.
+It shows you the repo and the diff. It never reviews, approves, or talks to the agent. You decide what to say next.
 
 ![stet showing the repository tree beside a diff of a changed file](/screenshots/stet.png)
 
 <Cards>
-  <Card icon={<PanelsTopLeft />} title="Panes & layout" href="/docs/guides/panes-and-layout">
+  <Card
+    icon={<PanelsTopLeft />}
+    title="Panes & layout"
+    href="/docs/guides/panes-and-layout"
+  >
     Move between the tree and viewer, then resize, dock, and zoom them.
   </Card>
   <Card
@@ -29,14 +35,23 @@ or talks to the agent. You decide what to say next.
     title="Reading files & diffs"
     href="/docs/guides/reading-files-and-diffs"
   >
-    Read any file, view changes as diffs, preview images and binaries, fold by structure, and keep
-    your place across tabs.
+    Read any file, view changes as diffs, preview images and binaries, fold by
+    structure, and keep your place across tabs.
   </Card>
-  <Card icon={<Search />} title="Search & navigation" href="/docs/guides/search-and-navigation">
+  <Card
+    icon={<Search />}
+    title="Search & navigation"
+    href="/docs/guides/search-and-navigation"
+  >
     Jump to any file, find within the open file, and search the whole repo.
   </Card>
-  <Card icon={<GitBranch />} title="Scopes & worktrees" href="/docs/guides/scopes-and-worktrees">
-    Choose what the diff compares, and see which worktree an agent is working in.
+  <Card
+    icon={<GitBranch />}
+    title="Scopes & worktrees"
+    href="/docs/guides/scopes-and-worktrees"
+  >
+    Choose what the diff compares, and see which worktree an agent is working
+    in.
   </Card>
   <Card icon={<Palette />} title="Themes" href="/docs/guides/themes">
     Preview and switch themes live, then make one permanent in your config.
@@ -79,9 +94,7 @@ The command prints the installed release number in `X.Y.Z` form.
 
 ## Usage
 
-Run `stet` inside any Git repository. Without arguments, `stet` compares your
-uncommitted changes with the current commit (`HEAD`). Pass a Git ref, such as a
-branch, tag, or commit hash, to compare against another point in history.
+Run `stet` inside any Git repository. Without arguments, `stet` compares your uncommitted changes with the current commit (`HEAD`). Pass a Git ref, such as a branch, tag, or commit hash, to compare against another point in history.
 
 ```sh
 stet            # uncommitted changes vs the current commit
@@ -96,35 +109,24 @@ stet --ide    "code {repo} --goto {file}:{line}" # GUI/IDE for the o key
 
 The repository tree opens beside the file viewer. Changed files open as diffs.
 
-A repository with no commits yet has no `HEAD` to compare against, so `stet`
-compares against the empty tree instead: staged files read as added, and
-untracked files read as untracked the way they always do. The scope shows
-`uncommitted vs no commits yet` until the first commit, after which it compares
-against `HEAD` like any other repository.
+A repository with no commits yet has no `HEAD` to compare against, so `stet` compares against the empty tree instead: staged files read as added, and untracked files read as untracked the way they always do. The scope shows `uncommitted vs no commits yet` until the first commit, after which it compares against `HEAD` like any other repository.
 
 <Callout title="Nerd Font icons">
   The tree shows a file-type icon next to each file. These are [Nerd
-  Font](https://www.nerdfonts.com/) glyphs and only render with a Nerd Font selected in your
-  terminal; without one they appear as empty boxes, so pass `--no-icons` to fall back to a plain
-  tree.
+  Font](https://www.nerdfonts.com/) glyphs and only render with a Nerd Font
+  selected in your terminal; without one they appear as empty boxes, so pass
+  `--no-icons` to fall back to a plain tree.
 </Callout>
 
-Press `?` at any time to see every keybinding and the legend for the marks in
-the tree and the gutter, or read the
-[keybindings reference](/docs/reference/keybindings).
+Press `?` at any time to see every keybinding and the legend for the marks in the tree and the gutter, or read the [keybindings reference](/docs/reference/keybindings).
 
 ## Configure it
 
-stet runs with no configuration. When you do want one, you do not have to write
-it: set things up the way you like them in the app, then press `ctrl-s`.
+stet runs with no configuration. When you do want one, you do not have to write it: set things up the way you like them in the app, then press `ctrl-s`.
 
 ![The status bar confirming ctrl-s saved the changed settings to the config file](/screenshots/save-settings.png)
 
-That saves the session you already have, the theme, wrap, the sidebar, and the
-search toggles, to
-`~/.config/stet/config.jsonc`. Only the settings that differ from the file are
-written, as targeted edits that keep your comments, and the status bar names
-what changed.
+That saves the session you already have, the theme, wrap, the sidebar, and the search toggles, to `~/.config/stet/config.jsonc`. Only the settings that differ from the file are written, as targeted edits that keep your comments, and the status bar names what changed.
 
 The file is yours to edit too, and it does more than the keys can reach:
 
@@ -138,8 +140,7 @@ The file is yours to edit too, and it does more than the keys can reach:
 }
 ```
 
-Themes, editors, keybindings, file associations, and icons all live there. The
-[configuration reference](/docs/reference/configuration) covers every key.
+Themes, editors, keybindings, file associations, and icons all live there. The [configuration reference](/docs/reference/configuration) covers every key.
 
 ## Upgrade
 
@@ -147,20 +148,12 @@ Themes, editors, keybindings, file associations, and icons all live there. The
 stet upgrade
 ```
 
-Updates stet to the latest release using whichever channel it was installed
-through: a standalone install re-runs the install script, an `npm` install runs
-`npm`, and a Homebrew install runs `brew upgrade`. It checks the latest GitHub
-release first and reports `stet X.Y.Z is already up to date` without running
-anything when you are current.
+Updates stet to the latest release using whichever channel it was installed through: a standalone install re-runs the install script, an `npm` install runs `npm`, and a Homebrew install runs `brew upgrade`. It checks the latest GitHub release first and reports `stet X.Y.Z is already up to date` without running anything when you are current.
 
-stet also checks for a newer release in the background while it runs, and prints
-a one-line notice on clean exit when one is available. The check is non-blocking
-and never interrupts the session.
+stet also checks for a newer release in the background while it runs, and prints a one-line notice on clean exit when one is available. The check is non-blocking and never interrupts the session.
 
 ## Requirements
 
 - `git`
-- a clipboard tool for copy (`y`): `pbcopy` on macOS (built in), or `wl-copy`,
-  `xclip`, or `xsel` on Linux
-- a Nerd Font for the tree's file-type icons (optional; use `--no-icons`
-  without one)
+- a clipboard tool for copy (`y`): `pbcopy` on macOS (built in), or `wl-copy`, `xclip`, or `xsel` on Linux
+- a Nerd Font for the tree's file-type icons (optional; use `--no-icons` without one)

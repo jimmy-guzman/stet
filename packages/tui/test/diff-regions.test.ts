@@ -38,7 +38,9 @@ describe("computeFoldRegions", () => {
       nav(4, "}"),
       nav(5, "const top = 1;"),
     ]);
-    expect(regions).toEqual([{ count: 2, endNavIndex: 2, headerNavIndex: 0, key: "fold:n1" }]);
+    expect(regions).toEqual([
+      { count: 2, endNavIndex: 2, headerNavIndex: 0, key: "fold:n1" },
+    ]);
   });
 
   test("emits nested regions, parent before child", () => {
@@ -64,7 +66,9 @@ describe("computeFoldRegions", () => {
       nav(5, ""),
       nav(6, "g = 1"),
     ]);
-    expect(regions).toEqual([{ count: 3, endNavIndex: 3, headerNavIndex: 0, key: "fold:n1" }]);
+    expect(regions).toEqual([
+      { count: 3, endNavIndex: 3, headerNavIndex: 0, key: "fold:n1" },
+    ]);
   });
 
   test("does not head a region for a line with no deeper body", () => {
@@ -94,11 +98,19 @@ describe("applyCollapsedRegions folds", () => {
     });
     expect(result.rows).toEqual([
       line(0, 1, "function foo() {"),
-      { collapsed: true, count: 2, key: "fold:n1", kind: "marker", regionKind: "fold" },
+      {
+        collapsed: true,
+        count: 2,
+        key: "fold:n1",
+        kind: "marker",
+        regionKind: "fold",
+      },
       line(1, 4, "}"),
       line(2, 5, "const top = 1;"),
     ]);
-    expect(result.navigable.map((navigable) => navigable.newLine)).toEqual([1, 4, 5]);
+    expect(result.navigable.map((navigable) => navigable.newLine)).toEqual([
+      1, 4, 5,
+    ]);
   });
 
   test("hides a git gap that sits inside a folded region", () => {
@@ -117,12 +129,20 @@ describe("applyCollapsedRegions folds", () => {
     });
     expect(result.rows).toEqual([
       line(0, 1, "function foo() {"),
-      { collapsed: true, count: 2, key: "fold:n1", kind: "marker", regionKind: "fold" },
+      {
+        collapsed: true,
+        count: 2,
+        key: "fold:n1",
+        kind: "marker",
+        regionKind: "fold",
+      },
       line(1, 7, "}"),
     ]);
-    expect(result.rows.some((row) => row.kind === "marker" && row.regionKind === "gap")).toBe(
-      false,
-    );
+    expect(
+      result.rows.some(
+        (row) => row.kind === "marker" && row.regionKind === "gap"
+      )
+    ).toBe(false);
   });
 
   test("skips a nested fold marker when its parent is folded", () => {
@@ -139,7 +159,13 @@ describe("applyCollapsedRegions folds", () => {
     });
     expect(result.rows).toEqual([
       line(0, 1, "class C {"),
-      { collapsed: true, count: 3, key: "fold:n1", kind: "marker", regionKind: "fold" },
+      {
+        collapsed: true,
+        count: 3,
+        key: "fold:n1",
+        kind: "marker",
+        regionKind: "fold",
+      },
       line(1, 5, "}"),
     ]);
   });
@@ -178,7 +204,9 @@ describe("applyCollapsedRegions gaps", () => {
     });
     // Gap of 3 before new line 10 -> reveals source lines 7, 8, 9 (indices 6..8: "g","h","i").
     expect(
-      result.navigable.map((navigable) => `${navigable.newLine}:${navigable.content}`),
+      result.navigable.map(
+        (navigable) => `${navigable.newLine}:${navigable.content}`
+      )
     ).toEqual(["7:g", "8:h", "9:i", "10:  changed();"]);
   });
 
@@ -187,16 +215,27 @@ describe("applyCollapsedRegions gaps", () => {
       expandedGaps: new Set(["gap:0"]),
       folded: new Set(),
     });
-    expect(result.rows[0]).toMatchObject({ collapsed: true, regionKind: "gap" });
+    expect(result.rows[0]).toMatchObject({
+      collapsed: true,
+      regionKind: "gap",
+    });
   });
 });
 
 describe("remapCursorAfterToggle", () => {
-  const before = [nav(1, "function foo() {"), nav(2, "  a"), nav(3, "  b"), nav(4, "}")];
+  const before = [
+    nav(1, "function foo() {"),
+    nav(2, "  a"),
+    nav(3, "  b"),
+    nav(4, "}"),
+  ];
 
   test("keeps the caret on the same file line when it stays visible", () => {
     const after = navigableLinesFromRows(
-      applyCollapsedRegions([line(0, 1, "function foo() {"), line(1, 4, "}")], empty).rows,
+      applyCollapsedRegions(
+        [line(0, 1, "function foo() {"), line(1, 4, "}")],
+        empty
+      ).rows
     );
     expect(remapCursorAfterToggle(before, 3, after)).toBe(1);
   });
@@ -232,7 +271,9 @@ describe("computeMarkdownFoldRegions", () => {
       nav(4, "```"),
       nav(5, "real text"),
     ]);
-    expect(regions).toEqual([{ count: 4, endNavIndex: 4, headerNavIndex: 0, key: "fold:n1" }]);
+    expect(regions).toEqual([
+      { count: 4, endNavIndex: 4, headerNavIndex: 0, key: "fold:n1" },
+    ]);
   });
 
   test("excludes the trailing blank line before the next heading from the section", () => {
@@ -242,13 +283,21 @@ describe("computeMarkdownFoldRegions", () => {
       nav(3, ""),
       nav(4, "# Next"),
     ]);
-    expect(regions).toEqual([{ count: 1, endNavIndex: 1, headerNavIndex: 0, key: "fold:n1" }]);
+    expect(regions).toEqual([
+      { count: 1, endNavIndex: 1, headerNavIndex: 0, key: "fold:n1" },
+    ]);
   });
 
   test("does not head a region for a heading with no body", () => {
     expect(
-      computeMarkdownFoldRegions([nav(1, "# Title"), nav(2, "text"), nav(3, "## End")]),
-    ).toEqual([{ count: 2, endNavIndex: 2, headerNavIndex: 0, key: "fold:n1" }]);
+      computeMarkdownFoldRegions([
+        nav(1, "# Title"),
+        nav(2, "text"),
+        nav(3, "## End"),
+      ])
+    ).toEqual([
+      { count: 2, endNavIndex: 2, headerNavIndex: 0, key: "fold:n1" },
+    ]);
   });
 
   test("foldRegionsFor dispatches markdown vs indent", () => {
@@ -261,7 +310,11 @@ describe("computeMarkdownFoldRegions", () => {
 
 describe("foldKey", () => {
   test("qualifies by side so an add and a removal cannot collide", () => {
-    expect(foldKey({ content: "x", newLine: 5, oldLine: 5, type: "context" })).toBe("fold:n5");
-    expect(foldKey({ content: "x", oldLine: 5, type: "remove" })).toBe("fold:o5");
+    expect(
+      foldKey({ content: "x", newLine: 5, oldLine: 5, type: "context" })
+    ).toBe("fold:n5");
+    expect(foldKey({ content: "x", oldLine: 5, type: "remove" })).toBe(
+      "fold:o5"
+    );
   });
 });

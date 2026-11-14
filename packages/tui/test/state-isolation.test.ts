@@ -50,7 +50,9 @@ test("a worktree load in flight when a reset lands never writes into the next te
   // The repo has to exist before it can be cleaned up, so its creation is the one step outside the
   // Try; everything that can fail after it (adding the peer worktree, loading, seeding) sits inside,
   // So a setup failure still takes the fixture directories with it.
-  const repoRoot = createFixtureRepo("stet-isolation-", { "README.md": "# Fixture\n" });
+  const repoRoot = createFixtureRepo("stet-isolation-", {
+    "README.md": "# Fixture\n",
+  });
 
   try {
     runGit(repoRoot, ["worktree", "add", "-b", "peer", `${repoRoot}-peer`]);

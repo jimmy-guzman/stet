@@ -11,7 +11,10 @@ import { comboTextsFor } from "@/keys/registry";
  * hint row, not here.
  */
 const KEY_HELP_GROUPS: {
-  entries: { actions: readonly [KeyActionId, ...KeyActionId[]]; description: string }[];
+  entries: {
+    actions: readonly [KeyActionId, ...KeyActionId[]];
+    description: string;
+  }[];
   heading: string;
 }[] = [
   {
@@ -22,7 +25,8 @@ const KEY_HELP_GROUPS: {
       },
       {
         actions: ["collapse", "expand", "caret-prev", "caret-next"],
-        description: "collapse / expand folders (tree) or hop the caret by word (viewer)",
+        description:
+          "collapse / expand folders (tree) or hop the caret by word (viewer)",
       },
       {
         actions: ["switch-pane"],
@@ -30,41 +34,78 @@ const KEY_HELP_GROUPS: {
           "switch focus between the tree and viewer; the search pane's tab cycles its fields",
       },
       { actions: ["open"], description: "open the focused item" },
-      { actions: ["go-to-file"], description: "go to file: fuzzy-search the whole repo" },
-      { actions: ["latest-file"], description: "jump to the most recently changed file" },
+      {
+        actions: ["go-to-file"],
+        description: "go to file: fuzzy-search the whole repo",
+      },
+      {
+        actions: ["latest-file"],
+        description: "jump to the most recently changed file",
+      },
     ],
     heading: "navigation",
   },
   {
     entries: [
-      { actions: ["find"], description: "find in the viewer; n/N cycle matches, esc clears" },
-      { actions: ["search"], description: "project search pane; regex/case/scope/glob toggles" },
-      { actions: ["toggle-view"], description: "toggle diff ↔ full file view for a changed file" },
-      { actions: ["fold"], description: "fold / unfold the region at the caret" },
-      { actions: ["toggle-wrap"], description: "toggle long-line wrap in the viewer" },
-      { actions: ["load-full"], description: "load full content when truncated" },
+      {
+        actions: ["find"],
+        description: "find in the viewer; n/N cycle matches, esc clears",
+      },
+      {
+        actions: ["search"],
+        description: "project search pane; regex/case/scope/glob toggles",
+      },
+      {
+        actions: ["toggle-view"],
+        description: "toggle diff ↔ full file view for a changed file",
+      },
+      {
+        actions: ["fold"],
+        description: "fold / unfold the region at the caret",
+      },
+      {
+        actions: ["toggle-wrap"],
+        description: "toggle long-line wrap in the viewer",
+      },
+      {
+        actions: ["load-full"],
+        description: "load full content when truncated",
+      },
       {
         actions: ["half-page-down", "half-page-up"],
         description: "half-page cursor movement in the viewer",
       },
-      { actions: ["first-line", "last-line"], description: "jump to first / last line" },
-      { actions: ["back", "forward"], description: "back / forward through viewer history" },
+      {
+        actions: ["first-line", "last-line"],
+        description: "jump to first / last line",
+      },
+      {
+        actions: ["back", "forward"],
+        description: "back / forward through viewer history",
+      },
       {
         actions: ["copy-reference"],
-        description: "copy path (tree), path:line:col (viewer), or the selected result",
+        description:
+          "copy path (tree), path:line:col (viewer), or the selected result",
       },
       { actions: ["copy-file"], description: "copy the file" },
       {
         actions: ["select-up", "select-down"],
         description: "extend a line selection (drag also selects)",
       },
-      { actions: ["copy-selection"], description: "copy the selected lines (or the caret line)" },
+      {
+        actions: ["copy-selection"],
+        description: "copy the selected lines (or the caret line)",
+      },
     ],
     heading: "viewer",
   },
   {
     entries: [
-      { actions: ["pin-tab"], description: "pin / unpin the current file as a tab" },
+      {
+        actions: ["pin-tab"],
+        description: "pin / unpin the current file as a tab",
+      },
       { actions: ["close-tab"], description: "close the active tab" },
       { actions: ["prev-tab", "next-tab"], description: "previous / next tab" },
     ],
@@ -72,17 +113,32 @@ const KEY_HELP_GROUPS: {
   },
   {
     entries: [
-      { actions: ["scope"], description: "scope picker: kinds, or drill into recent commits" },
-      { actions: ["theme"], description: "theme switcher: filter, live-preview, apply" },
+      {
+        actions: ["scope"],
+        description: "scope picker: kinds, or drill into recent commits",
+      },
+      {
+        actions: ["theme"],
+        description: "theme switcher: filter, live-preview, apply",
+      },
       { actions: ["worktrees"], description: "switch to another git worktree" },
-      { actions: ["changes-only"], description: "toggle changes-only filter for the tree" },
-      { actions: ["save-settings"], description: "save current settings to config" },
+      {
+        actions: ["changes-only"],
+        description: "toggle changes-only filter for the tree",
+      },
+      {
+        actions: ["save-settings"],
+        description: "save current settings to config",
+      },
     ],
     heading: "workspace",
   },
   {
     entries: [
-      { actions: ["toggle-sidebar"], description: "toggle the file tree sidebar" },
+      {
+        actions: ["toggle-sidebar"],
+        description: "toggle the file tree sidebar",
+      },
       {
         actions: ["shrink-pane", "grow-pane", "reset-pane"],
         description: "shrink (closes past min) / grow / reset the tree",
@@ -102,7 +158,8 @@ const KEY_HELP_GROUPS: {
     entries: [
       {
         actions: ["open-editor"],
-        description: "open in terminal editor (suspends TUI, --editor template)",
+        description:
+          "open in terminal editor (suspends TUI, --editor template)",
       },
       {
         actions: ["open-ide"],
@@ -110,13 +167,18 @@ const KEY_HELP_GROUPS: {
       },
       {
         actions: ["open-external"],
-        description: "open externally in the OS default app (images, PDFs, binaries)",
+        description:
+          "open externally in the OS default app (images, PDFs, binaries)",
       },
       {
         actions: ["context-menu"],
-        description: "context menu for the focused row or caret (or right-click)",
+        description:
+          "context menu for the focused row or caret (or right-click)",
       },
-      { actions: ["help"], description: "show all keybindings and the marks legend" },
+      {
+        actions: ["help"],
+        description: "show all keybindings and the marks legend",
+      },
       { actions: ["quit"], description: "quit (confirm with y)" },
     ],
     heading: "app",
@@ -128,15 +190,15 @@ const KEY_HELP_GROUPS: {
  *   primary (first) combo of each referenced action, deduped and joined `g / G` style. Rows whose
  *   actions are all unbound are dropped.
  */
-export function keyHelpGroups() {
-  return KEY_HELP_GROUPS.map((group) => ({
+export const keyHelpGroups = () =>
+  KEY_HELP_GROUPS.map((group) => ({
     entries: group.entries
       .map((entry) => ({
         combo: joinCombos([
           ...new Set(
             entry.actions
               .map((id) => comboTextsFor(id)[0])
-              .filter((text): text is string => text !== undefined),
+              .filter((text): text is string => text !== undefined)
           ),
         ]),
         description: entry.description,
@@ -145,19 +207,22 @@ export function keyHelpGroups() {
       .filter((entry) => entry.combo !== ""),
     heading: group.heading,
   }));
-}
 
 // A row whose combos all share one modifier prefix compresses it out of the
 // Tail ("Shift+↑ / Shift+↓" reads as "Shift+↑ / ↓"), keeping the combo column
 // Narrow; mixed rows join in full.
-function joinCombos(texts: string[]) {
-  const parts = texts.map((text) => /^(?<mod>(?:ctrl|shift)[+-])(?<key>.+)$/i.exec(text));
+const joinCombos = (texts: string[]) => {
+  const parts = texts.map((text) =>
+    /^(?<mod>(?:ctrl|shift)[+-])(?<key>.+)$/iu.exec(text)
+  );
   const mod = parts[0]?.groups?.mod;
   const compressible =
     texts.length > 1 &&
     mod !== undefined &&
-    parts.every((part) => part?.groups?.mod === mod && part.groups.key !== undefined);
+    parts.every(
+      (part) => part?.groups?.mod === mod && part.groups.key !== undefined
+    );
   return compressible
     ? `${mod}${parts.map((part) => part?.groups?.key ?? "").join(" / ")}`
     : texts.join(" / ");
-}
+};

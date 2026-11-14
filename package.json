@@ -15,24 +15,26 @@
     "docs:build": "bun run --cwd docs build",
     "docs:check": "bun run gen:keys --check && bun run --cwd docs typecheck",
     "docs:dev": "bun run --cwd docs dev",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check",
+    "fmt": "bun --bun x oxfmt",
+    "fmt:check": "bun --bun x oxfmt --check",
     "gen:keys": "bun run --cwd packages/tui gen:keys",
     "knip": "knip",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "bun --bun x oxlint",
+    "lint:fix": "bun --bun x oxlint --fix",
     "prepare": "effect-language-service patch",
     "screenshots": "bun run --cwd packages/tui screenshots",
     "stet": "bun run --cwd packages/tui stet",
     "test": "bun run --cwd packages/tui test",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "fix": "bun --bun x ultracite fix"
   },
   "devDependencies": {
     "@effect/language-service": "0.87.3",
     "knip": "6.39.0",
-    "lefthook": "2.1.17",
-    "oxfmt": "0.72.0",
-    "oxlint": "1.87.0",
-    "oxlint-tsgolint": "7.0.2003"
+    "lefthook": "2.2.2",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2007",
+    "ultracite": "8.2.0"
   }
 }

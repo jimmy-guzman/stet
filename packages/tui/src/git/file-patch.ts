@@ -12,7 +12,10 @@ import type { ChangedFile } from "./model";
  * One endpoint of a per-file comparison: a git object (`ref:path` / `:path`), the worktree file, or
  * nothing (the fabricated side of an add or delete).
  */
-export type PatchSide = { kind: "git"; spec: string } | { kind: "worktree" } | { kind: "empty" };
+export type PatchSide =
+  | { kind: "git"; spec: string }
+  | { kind: "worktree" }
+  | { kind: "empty" };
 
 export type SideContent =
   | { kind: "text"; text: string }
@@ -41,9 +44,10 @@ export interface BinaryDiff {
  * A fetched side's binary metadata, or `undefined` when the side is not binary (the fabricated
  * empty side of an add/delete, which classifies as empty text, and thus has no size to show).
  */
-export function sideMeta(content: SideContent): SideMeta | undefined {
-  return content.kind === "binary" ? { bytes: content.bytes, image: content.image } : undefined;
-}
+export const sideMeta = (content: SideContent): SideMeta | undefined =>
+  content.kind === "binary"
+    ? { bytes: content.bytes, image: content.image }
+    : undefined;
 
 // Sides above this size are not decoded or diffed in-process; the git fallback
 // Handles them as it always has. 10x the viewer's own file cap: generous enough
@@ -60,10 +64,10 @@ const DIFF_TIMEOUT_MS = 1000;
  * is deliberately not consulted: membership in the scope's changed set (built from the same `git
  * diff` arguments) already encodes it, exactly as the pathspec invocation relied on.
  */
-export function fileDiffSides(
+export const fileDiffSides = (
   scope: DiffScope,
-  file: ChangedFile,
-): { oldSide: PatchSide; newSide: PatchSide } {
+  file: ChangedFile
+): { oldSide: PatchSide; newSide: PatchSide } => {
   const base = (path: string): PatchSide =>
     scope.kind === "unstaged"
       ? { kind: "git", spec: `:${path}` }
@@ -86,7 +90,7 @@ export function fileDiffSides(
         ? { kind: "empty" }
         : base(file.oldPath ?? file.path),
   };
-}
+};
 
 const decoder = new TextDecoder();
 
@@ -96,7 +100,7 @@ const decoder = new TextDecoder();
  * content (a truncated side reads as deletions, a stripped newline breaks the `\ No newline at end
  * of file` marker).
  */
-export function classifySideBytes(bytes: Uint8Array): SideContent {
+export const classifySideBytes = (bytes: Uint8Array): SideContent => {
   if (bytes.byteLength > MAX_SIDE_BYTES) {
     return { kind: "too-large" };
   }
@@ -106,13 +110,16 @@ export function classifySideBytes(bytes: Uint8Array): SideContent {
   }
 
   return { kind: "text", text: decoder.decode(bytes) };
-}
+};
 
 /**
  * The worktree endpoint, read raw. A symlink reads as its target path text (git's blob form for a
  * link); a directory or vanished path is `missing`, which sends the caller to the git fallback.
  */
-export async function readWorktreeSide(repoRoot: string, path: string): Promise<SideContent> {
+export const readWorktreeSide = async (
+  repoRoot: string,
+  path: string
+): Promise<SideContent> => {
   const absolutePath = `${repoRoot}/${path}`;
   try {
     const stat = await lstat(absolutePath);
@@ -129,7 +136,7 @@ export async function readWorktreeSide(repoRoot: string, path: string): Promise<
   } catch {
     return { kind: "missing" };
   }
-}
+};
 
 /**
  * Build the git-shaped unified patch for one changed file from its two sides' contents, or signal
@@ -140,11 +147,11 @@ export async function readWorktreeSide(repoRoot: string, path: string): Promise<
  * empty patch: the render is a model-driven placeholder either way, same as git's `Binary files
  * differ` line.
  */
-export function buildFilePatch(
+export const buildFilePatch = (
   file: ChangedFile,
   oldContent: SideContent,
-  newContent: SideContent,
-): FilePatch {
+  newContent: SideContent
+): FilePatch => {
   if (oldContent.kind === "binary" || newContent.kind === "binary") {
     return { kind: "patch", patch: "" };
   }
@@ -169,7 +176,7 @@ export function buildFilePatch(
     newContent.text,
     undefined,
     undefined,
-    { context: 3, timeout: DIFF_TIMEOUT_MS },
+    { context: 3, timeout: DIFF_TIMEOUT_MS }
   );
 
   if (patch === undefined) {
@@ -190,4 +197,4 @@ export function buildFilePatch(
       isRename: file.oldPath !== undefined,
     }),
   };
-}
+};

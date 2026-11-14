@@ -40,7 +40,7 @@ describe("fuzzyMatch", () => {
   test("an early stray first char does not eat the real match", () => {
     // Greedy-from-first-occurrence would match the c in "src" and ruin the score
     expect(fuzzyMatch("cli", "src/cli.ts") ?? 0).toBeGreaterThan(
-      fuzzyMatch("cli", "test/cli.test.ts") ?? 0,
+      fuzzyMatch("cli", "test/cli.test.ts") ?? 0
     );
   });
 
@@ -72,7 +72,9 @@ describe("multi-term queries", () => {
   });
 
   test("term order does not change the score", () => {
-    expect(fuzzyMatch("agents keymap", docPath)).toBe(fuzzyMatch("keymap agents", docPath));
+    expect(fuzzyMatch("agents keymap", docPath)).toBe(
+      fuzzyMatch("keymap agents", docPath)
+    );
   });
 
   test("one non-matching term rejects the whole query", () => {
@@ -89,7 +91,7 @@ describe("multi-term queries", () => {
 
   test("a second matching term increases the score", () => {
     expect(fuzzyMatch("agents keymap", docPath) ?? 0).toBeGreaterThan(
-      fuzzyMatch("keymap", docPath) ?? 0,
+      fuzzyMatch("keymap", docPath) ?? 0
     );
   });
 
@@ -127,18 +129,21 @@ describe("matchIndices", () => {
   });
 
   test("resolves a directory-only match to that directory", () => {
-    const path = ".agents/skills/effect-best-practices/references/error-patterns.md";
+    const path =
+      ".agents/skills/effect-best-practices/references/error-patterns.md";
     const indices = matchIndices("references", path);
     const start = path.indexOf("references");
     expect(indices).toEqual(
-      Array.from({ length: "references".length }, (_, offset) => start + offset),
+      Array.from({ length: "references".length }, (_, offset) => start + offset)
     );
   });
 
   test("returns ascending offsets for a non-contiguous match", () => {
     const indices = matchIndices("ep", "error-patterns.md");
     expect(indices).toEqual(indices.toSorted((a, b) => a - b));
-    expect(indices.map((index) => "error-patterns.md"[index]).join("")).toBe("ep");
+    expect(indices.map((index) => "error-patterns.md"[index]).join("")).toBe(
+      "ep"
+    );
   });
 
   test("unions the offsets of every whitespace term", () => {
@@ -150,7 +155,13 @@ describe("matchIndices", () => {
 });
 
 describe("rankFiles", () => {
-  const paths = ["src/App.tsx", "src/git.ts", "src/tree.ts", "test/git.test.ts", "README.md"];
+  const paths = [
+    "src/App.tsx",
+    "src/git.ts",
+    "src/tree.ts",
+    "test/git.test.ts",
+    "README.md",
+  ];
 
   test("ranks by fuzzy score and respects the limit", () => {
     const results = rankFiles("git", paths, noContext);
@@ -160,13 +171,15 @@ describe("rankFiles", () => {
   });
 
   test("the exact basename wins over its test file", () => {
-    expect(rankFiles("git", ["test/git.test.ts", "src/git.ts"], noContext)[0]).toBe("src/git.ts");
+    expect(
+      rankFiles("git", ["test/git.test.ts", "src/git.ts"], noContext)[0]
+    ).toBe("src/git.ts");
   });
 
   test("ranks matches found after many candidate starts", () => {
-    expect(rankFiles("abc", ["aaaaaaaaaa/src/abc.ts", "src/a-b-c.ts"], noContext)[0]).toBe(
-      "aaaaaaaaaa/src/abc.ts",
-    );
+    expect(
+      rankFiles("abc", ["aaaaaaaaaa/src/abc.ts", "src/a-b-c.ts"], noContext)[0]
+    ).toBe("aaaaaaaaaa/src/abc.ts");
   });
 
   test("drops non-matching paths", () => {
@@ -183,7 +196,11 @@ describe("rankFiles", () => {
       limit: 50,
     });
 
-    expect(results.slice(0, 3)).toEqual(["src/tree.ts", "src/git.ts", "test/git.test.ts"]);
+    expect(results.slice(0, 3)).toEqual([
+      "src/tree.ts",
+      "src/git.ts",
+      "test/git.test.ts",
+    ]);
     expect(results.slice(3)).toEqual(["README.md", "src/App.tsx"]);
   });
 
@@ -206,13 +223,15 @@ describe("rankFiles", () => {
 
   test("empty query over more paths than the limit equals the full-sort head", () => {
     const manyPaths = Array.from({ length: 500 }, (_, index) => {
-      const dir = index % 3 === 0 ? "src" : index % 3 === 1 ? "test" : "docs";
+      const dir = ["src", "test", "docs"][index % 3];
       return `${dir}/f${String(index).padStart(3, "0")}.ts`;
     });
     const options = {
       changed: new Set(manyPaths.filter((_, index) => index % 7 === 0)),
       lastChangedAt: new Map(
-        manyPaths.filter((_, index) => index % 5 === 0).map((path, index) => [path, 1000 + index]),
+        manyPaths
+          .filter((_, index) => index % 5 === 0)
+          .map((path, index) => [path, 1000 + index])
       ),
       limit: 50,
     };
@@ -220,11 +239,13 @@ describe("rankFiles", () => {
     const fullSort = [...manyPaths]
       .toSorted((a, b) => {
         const recencyDelta =
-          (options.lastChangedAt.get(b) ?? 0) - (options.lastChangedAt.get(a) ?? 0);
+          (options.lastChangedAt.get(b) ?? 0) -
+          (options.lastChangedAt.get(a) ?? 0);
         if (recencyDelta !== 0) {
           return recencyDelta;
         }
-        const changedDelta = (options.changed.has(b) ? 1 : 0) - (options.changed.has(a) ? 1 : 0);
+        const changedDelta =
+          (options.changed.has(b) ? 1 : 0) - (options.changed.has(a) ? 1 : 0);
         if (changedDelta !== 0) {
           return changedDelta;
         }
@@ -242,6 +263,8 @@ describe("rankFiles", () => {
       limit: 50,
     };
 
-    expect(rankFiles("   ", paths, options)).toEqual(rankFiles("", paths, options));
+    expect(rankFiles("   ", paths, options)).toEqual(
+      rankFiles("", paths, options)
+    );
   });
 });

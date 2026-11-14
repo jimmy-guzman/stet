@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import path from "node:path";
 
 import { Effect, Layer } from "effect";
 
@@ -19,30 +19,39 @@ import { createFixtureRepo, loadFileDiff, loadModel, runGit } from "./helpers";
 
 const sha256 = { objectFormat: "sha256" };
 
-const runGitService = <A>(effect: Effect.Effect<A, unknown, Git>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))));
+const runGitService = async <A>(effect: Effect.Effect<A, unknown, Git>) =>
+  await Effect.runPromise(
+    effect.pipe(Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))))
+  );
 
-const repoContext = (repoRoot: string) =>
-  runGitService(Git.pipe(Effect.flatMap((git) => git.repoContext(repoRoot))));
+const repoContext = async (repoRoot: string) =>
+  await runGitService(
+    Git.pipe(Effect.flatMap((git) => git.repoContext(repoRoot)))
+  );
 
 // What git itself computes for this repository, so the expectation is pinned against git rather
 // Than against a hash copied into the test.
-function gitEmptyTree(repoRoot: string) {
-  return execFileSync("git", ["hash-object", "-t", "tree", "--stdin"], {
+const gitEmptyTree = (repoRoot: string) =>
+  execFileSync("git", ["hash-object", "-t", "tree", "--stdin"], {
     cwd: repoRoot,
-    encoding: "utf8",
+    encoding: "utf-8",
     env: stripGitEnv(process.env),
     input: "",
   }).trim();
-}
 
 test("Git.repoContext reads a SHA-256 repository's own empty tree", async () => {
-  const repo = createFixtureRepo("git-sha256-context-", { "a.txt": "one\n" }, sha256);
+  const repo = createFixtureRepo(
+    "git-sha256-context-",
+    { "a.txt": "one\n" },
+    sha256
+  );
 
   const context = await repoContext(repo);
 
   expect(context.emptyTree).toBe(gitEmptyTree(repo));
-  expect(context.emptyTree).not.toBe("4b825dc642cb6eb9a060e54bf8d69288fbee4904");
+  expect(context.emptyTree).not.toBe(
+    "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+  );
 });
 
 // #349: against the hardcoded SHA-1 empty tree this load died with
@@ -51,20 +60,28 @@ test("a commitless SHA-256 repository loads against its empty tree", async () =>
   const repo = createFixtureRepo(
     "git-sha256-unborn-",
     { "loose.txt": "two\n", "staged.txt": "one\n" },
-    { ...sha256, commit: false },
+    { ...sha256, commit: false }
   );
   runGit(repo, ["add", "staged.txt"]);
 
   const { emptyTree } = await repoContext(repo);
   const model = await loadModel(repo, { kind: "all", ref: emptyTree });
 
-  expect(model.changed.find((entry) => entry.path === "staged.txt")?.kind).toBe("added");
-  expect(model.changed.find((entry) => entry.path === "loose.txt")?.kind).toBe("untracked");
+  expect(model.changed.find((entry) => entry.path === "staged.txt")?.kind).toBe(
+    "added"
+  );
+  expect(model.changed.find((entry) => entry.path === "loose.txt")?.kind).toBe(
+    "untracked"
+  );
   expect(model.repoFiles.map((file) => file.path)).toContain("staged.txt");
 });
 
 test("a commitless SHA-256 repository with no files loads to an empty changed set", async () => {
-  const repo = createFixtureRepo("git-sha256-empty-", {}, { ...sha256, commit: false });
+  const repo = createFixtureRepo(
+    "git-sha256-empty-",
+    {},
+    { ...sha256, commit: false }
+  );
 
   const { emptyTree } = await repoContext(repo);
   const model = await loadModel(repo, { kind: "all", ref: emptyTree });
@@ -74,14 +91,24 @@ test("a commitless SHA-256 repository with no files loads to an empty changed se
 });
 
 test("a SHA-256 root commit reports no parent and diffs against the empty tree", async () => {
-  const repo = createFixtureRepo("git-sha256-root-", { "a.txt": "one\n" }, sha256);
+  const repo = createFixtureRepo(
+    "git-sha256-root-",
+    { "a.txt": "one\n" },
+    sha256
+  );
 
-  const parent = await runGitService(Git.pipe(Effect.flatMap((git) => git.parentRef(repo))));
+  const parent = await runGitService(
+    Git.pipe(Effect.flatMap((git) => git.parentRef(repo)))
+  );
   expect(parent).toBeUndefined();
 
   // What `selectScope` and `selectCommit` build once the parent comes back absent.
   const { emptyTree } = await repoContext(repo);
-  const scope = { headRef: "HEAD", kind: "last-commit", ref: parent ?? emptyTree } as const;
+  const scope = {
+    headRef: "HEAD",
+    kind: "last-commit",
+    ref: parent ?? emptyTree,
+  } as const;
   const model = await loadModel(repo, scope);
 
   const added = model.changedByPath.get("a.txt");
@@ -95,8 +122,12 @@ test("a SHA-256 root commit reports no parent and diffs against the empty tree",
 // The empty tree is resolved once at startup and never again, which is only sound because every
 // Linked worktree reads the same object database.
 test("a linked worktree of a SHA-256 repository reports the same empty tree", async () => {
-  const repo = createFixtureRepo("git-sha256-worktree-", { "a.txt": "one\n" }, sha256);
-  const linked = join(repo, "linked");
+  const repo = createFixtureRepo(
+    "git-sha256-worktree-",
+    { "a.txt": "one\n" },
+    sha256
+  );
+  const linked = path.join(repo, "linked");
   runGit(repo, ["worktree", "add", "-b", "feature", linked]);
 
   const main = await repoContext(repo);

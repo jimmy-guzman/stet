@@ -16,25 +16,27 @@ export interface Commit {
 // ASCII Unit Separator (0x1F), which never appears in a sha, a digit, an author
 // Name, or a one-line subject. A bare `-z` with %x00 field separators could not
 // Tell a field break from a commit break; 0x1F keeps the two unambiguous.
-const FIELD = "\x1f";
+const FIELD = "\u001F";
 
-export function logArgs(limit: number) {
-  return [
-    "git",
-    "log",
-    "-z",
-    `--max-count=${limit}`,
-    `--format=%H${FIELD}%h${FIELD}%P${FIELD}%an${FIELD}%at${FIELD}%s`,
-  ];
-}
+export const logArgs = (limit: number) => [
+  "git",
+  "log",
+  "-z",
+  `--max-count=${limit}`,
+  `--format=%H${FIELD}%h${FIELD}%P${FIELD}%an${FIELD}%at${FIELD}%s`,
+];
 
-export function parseLog(stdout: string): Commit[] {
-  return stdout
+export const parseLog = (stdout: string): Commit[] =>
+  stdout
     .split("\0")
     .filter((record) => record !== "")
     .flatMap((record) => {
-      const [sha, shortSha, parents, author, authorTime, ...subject] = record.split(FIELD);
-      const time = Number.parseInt(authorTime ?? "", 10);
+      const [sha, shortSha, parents, author, authorTime, ...subject] =
+        record.split(FIELD);
+      const time =
+        authorTime === undefined || authorTime === ""
+          ? Number.NaN
+          : Number(authorTime);
       if (sha === undefined || Number.isNaN(time)) {
         return [];
       }
@@ -42,11 +44,13 @@ export function parseLog(stdout: string): Commit[] {
         {
           author: author ?? "",
           authorTime: time,
-          parent: parents === undefined || parents === "" ? undefined : parents.split(" ")[0],
+          parent:
+            parents === undefined || parents === ""
+              ? undefined
+              : parents.split(" ")[0],
           sha,
           shortSha: shortSha ?? "",
           subject: subject.join(FIELD),
         },
       ];
     });
-}

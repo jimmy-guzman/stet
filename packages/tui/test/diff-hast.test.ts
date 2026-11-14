@@ -2,17 +2,18 @@ import { describe, expect, test } from "bun:test";
 
 import { flattenLineSpans } from "@/diff/hast";
 
-function span(color: string, value: string) {
-  return {
-    children: [{ type: "text", value }],
-    properties: { style: `color:${color}` },
-    type: "element",
-  };
-}
+const span = (color: string, value: string) => ({
+  children: [{ type: "text", value }],
+  properties: { style: `color:${color}` },
+  type: "element",
+});
 
 describe("flattenLineSpans", () => {
   test("flattens a line div of colored token spans into ordered spans", () => {
-    const line = { children: [span("#F97583", "const"), span("#79B8FF", " b")], type: "element" };
+    const line = {
+      children: [span("#F97583", "const"), span("#79B8FF", " b")],
+      type: "element",
+    };
     expect(flattenLineSpans(line)).toEqual([
       { fg: "#F97583", text: "const" },
       { fg: "#79B8FF", text: " b" },
@@ -34,7 +35,10 @@ describe("flattenLineSpans", () => {
   });
 
   test("emits an uncolored span for plain text without a color style", () => {
-    const line = { children: [{ type: "text", value: "plain" }], type: "element" };
+    const line = {
+      children: [{ type: "text", value: "plain" }],
+      type: "element",
+    };
     expect(flattenLineSpans(line)).toEqual([{ text: "plain" }]);
   });
 

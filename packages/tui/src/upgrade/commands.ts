@@ -1,6 +1,7 @@
 import type { InstallMethod } from "./install-method";
 
-const installScriptUrl = "https://raw.githubusercontent.com/jimmy-guzman/stet/main/install.sh";
+const installScriptUrl =
+  "https://raw.githubusercontent.com/jimmy-guzman/stet/main/install.sh";
 
 export interface UpgradeInvocation {
   /** Shown before the child runs, so the user knows which channel is being used. */
@@ -13,7 +14,9 @@ export interface UpgradeInvocation {
  * (reusing its checksum verify + atomic swap); npm/brew defer to the package manager. `unknown` has
  * no safe command, so the caller prints guidance instead.
  */
-export function upgradeInvocation(method: InstallMethod): UpgradeInvocation | undefined {
+export const upgradeInvocation = (
+  method: InstallMethod
+): UpgradeInvocation | undefined => {
   if (method === "standalone") {
     return {
       argv: ["bash", "-c", `curl -fsSL ${installScriptUrl} | bash`],
@@ -36,4 +39,4 @@ export function upgradeInvocation(method: InstallMethod): UpgradeInvocation | un
   }
 
   return undefined;
-}
+};

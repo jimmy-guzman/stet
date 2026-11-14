@@ -5,22 +5,19 @@ description: Jump to any file, find within the open file, search the whole repo,
 
 ## Go to file
 
-Press `ctrl-p` to fuzzy-search the whole repo and open any file, tracked or
-untracked.
+Press `ctrl-p` to fuzzy-search the whole repo and open any file, tracked or untracked.
 
 ![The go-to-file overlay fuzzy-matching paths across the repo](/screenshots/go-to-file.png)
 
 ## Find in the viewer
 
-Press `/` to search within the open file. `n` and `N` cycle through matches, a
-counter tracks your place, and `esc` clears the search.
+Press `/` to search within the open file. `n` and `N` cycle through matches, a counter tracks your place, and `esc` clears the search.
 
 ![Find-in-viewer highlighting matches in the open file with a match counter](/screenshots/find.png)
 
 ## Search file contents
 
-Press `ctrl-f` to open the project search pane. Results group by file with
-syntax-highlighted context around each match.
+Press `ctrl-f` to open the project search pane. Results group by file with syntax-highlighted context around each match.
 
 | Control      | Action                                              |
 | ------------ | --------------------------------------------------- |
@@ -30,17 +27,14 @@ syntax-highlighted context around each match.
 | `ctrl-g`     | search changed files or the whole tree              |
 | `ctrl-o`     | choose a diff scope without leaving the pane        |
 
-Open a match to jump to its file. stet keeps the query and results, so
-`ctrl-f` restores the same search.
+Open a match to jump to its file. stet keeps the query and results, so `ctrl-f` restores the same search.
 
 ![Project content search listing matches for a term across several files](/screenshots/search.png)
 
 ## Follow recent activity
 
-stet marks recently changed files as the agent works. Press `.` to jump to the
-most recently changed file.
+stet marks recently changed files as the agent works. Press `.` to jump to the most recently changed file.
 
-The mark beside a file fades as the change ages, so the brightest one is the
-newest.
+The mark beside a file fades as the change ages, so the brightest one is the newest.
 
 ![The repository tree marking three just-changed files, each dot dimmer as its change ages](/screenshots/recent-activity.png)

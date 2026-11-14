@@ -1,13 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
+
+const thumbRowAnywhere = (frame: string) =>
+  frame.split("\n").findIndex((line) => line.includes("▐"));
+
+const thumbRow = (frame: string) =>
+  frame
+    .split("\n")
+    .map((line) => line.split("││")[0])
+    .findIndex((line) => line.includes("▐"));
 
 // The windowed lists mount only their visible slice, so the scroll indicator is
 // Hand-drawn: a width-1 thumb column derived from (rowCount, viewport, scrollTop).
@@ -16,14 +30,6 @@ import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./help
 // Sidebar small (one file) so the only thumb in the frame belongs to the list
 // Under test, which is what proves that list wired its own scroll signal in.
 describe("list scrollbar", () => {
-  const thumbRow = (frame: string) =>
-    frame
-      .split("\n")
-      .map((line) => line.split("││")[0])
-      .findIndex((line) => line.includes("▐"));
-  const thumbRowAnywhere = (frame: string) =>
-    frame.split("\n").findIndex((line) => line.includes("▐"));
-
   test("shows a thumb only when the tree overflows, and it tracks scroll", async () => {
     const files: Record<string, string> = {};
     for (let i = 0; i < 300; i += 1) {
@@ -34,12 +40,15 @@ describe("list scrollbar", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, mockInput, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 16,
-      width: 90,
-    });
+    const { renderer, mockInput, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, {
+        height: 16,
+        width: 90,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-    await settleUntil("first render", (current) => current.includes("f000.txt"));
+    await settleUntil("first render", (current) =>
+      current.includes("f000.txt")
+    );
 
     // The 300-file directory far exceeds the ~10-row sidebar viewport, so the
     // Thumb paints near the top.
@@ -71,17 +80,23 @@ describe("list scrollbar", () => {
   });
 
   test("shows a thumb in the search results and tracks scroll", async () => {
-    const repoRoot = createFixtureRepo("stet-scrollbar-search-", { "src/many.ts": "seed\n" });
-    const lines = Array.from({ length: 60 }, (_, index) => `const needle${index} = ${index}`);
-    writeFileSync(join(repoRoot, "src", "many.ts"), `${lines.join("\n")}\n`);
+    const repoRoot = createFixtureRepo("stet-scrollbar-search-", {
+      "src/many.ts": "seed\n",
+    });
+    const lines = Array.from(
+      { length: 60 },
+      (_, index) => `const needle${index} = ${index}`
+    );
+    writeFileSync(
+      path.join(repoRoot, "src", "many.ts"),
+      `${lines.join("\n")}\n`
+    );
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } = await testRender(
-      () => <App />,
-      { height: 34, width: 120 },
-    );
+    const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, { height: 34, width: 120 });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -89,7 +104,9 @@ describe("list scrollbar", () => {
       mockInput.pressKey("f", { ctrl: true });
       await settleUntil("search pane", (frame) => frame.includes("search…"));
       await mockInput.typeText("needle");
-      await settleUntil("results", (frame) => frame.includes("60 matches in 1 file"));
+      await settleUntil("results", (frame) =>
+        frame.includes("60 matches in 1 file")
+      );
 
       // 60 matches overflow the results band; the sidebar has one file, so the
       // Only thumb in the frame is the search pane's.

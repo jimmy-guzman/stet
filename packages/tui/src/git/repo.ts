@@ -2,7 +2,12 @@
  * Why stet cannot start here. Every branch maps to one actionable line, so a launch outside a
  * repository never prints the internal `rev-parse` invocation and git's raw stderr.
  */
-export type RepoFailure = "missing-git" | "not-a-repo" | "bare-repo" | "unsupported-git" | "other";
+export type RepoFailure =
+  | "missing-git"
+  | "not-a-repo"
+  | "bare-repo"
+  | "unsupported-git"
+  | "other";
 
 export interface RepoContext {
   repoRoot: string;
@@ -28,7 +33,8 @@ export interface RepoContext {
 // The only way anything should name one: a caller that reaches for a bare constant is a caller that
 // Has stopped asking the repository.
 const SHA1_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-const SHA256_EMPTY_TREE = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+const SHA256_EMPTY_TREE =
+  "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 
 /**
  * The empty tree object for a `rev-parse --show-object-format` answer.
@@ -38,25 +44,22 @@ const SHA256_EMPTY_TREE = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939d
  * there is no third channel here: a fallback that shelled out to `git hash-object` could not be
  * tested against any git that exists.
  */
-export function emptyTreeForFormat(format: string) {
-  return format === "sha256" ? SHA256_EMPTY_TREE : SHA1_EMPTY_TREE;
-}
+export const emptyTreeForFormat = (format: string) =>
+  format === "sha256" ? SHA256_EMPTY_TREE : SHA1_EMPTY_TREE;
 
 // One rev-parse yields both paths and the hash algorithm, so the preflight stays a single spawn
 // Ahead of the first paint. `--path-format=absolute` is what makes the common dir absolute;
 // `--show-toplevel` is absolute either way, and `--show-object-format` is unaffected by it.
 // Folding the format in is safe at stet's git floor: `--show-object-format` landed in 2.29 and
 // `--path-format` in 2.31, so a git that accepts the latter always understands the former.
-export function repoContextArgs() {
-  return [
-    "git",
-    "rev-parse",
-    "--path-format=absolute",
-    "--show-toplevel",
-    "--git-common-dir",
-    "--show-object-format",
-  ];
-}
+export const repoContextArgs = () => [
+  "git",
+  "rev-parse",
+  "--path-format=absolute",
+  "--show-toplevel",
+  "--git-common-dir",
+  "--show-object-format",
+];
 
 /**
  * The repo root, main worktree, and empty tree, or `undefined` when the output is not two absolute
@@ -67,14 +70,12 @@ export function repoContextArgs() {
  * lines, two of them absolute paths and none of them an option, is what catches that, which is why
  * the caller classifies `undefined` rather than trusting the exit code.
  */
-export function parseRepoContext(stdout: string): RepoContext | undefined {
+export const parseRepoContext = (stdout: string): RepoContext | undefined => {
   const lines = stdout
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "");
-  const repoRoot = lines[0];
-  const commonDir = lines[1];
-  const objectFormat = lines[2];
+  const [repoRoot, commonDir, objectFormat] = lines;
   if (
     lines.length !== 3 ||
     repoRoot === undefined ||
@@ -83,36 +84,41 @@ export function parseRepoContext(stdout: string): RepoContext | undefined {
   ) {
     return undefined;
   }
-  if (!repoRoot.startsWith("/") || !commonDir.startsWith("/") || objectFormat.startsWith("-")) {
+  if (
+    !repoRoot.startsWith("/") ||
+    !commonDir.startsWith("/") ||
+    objectFormat.startsWith("-")
+  ) {
     return undefined;
   }
 
   const suffix = "/.git";
   return {
     emptyTree: emptyTreeForFormat(objectFormat),
-    mainWorktreePath: commonDir.endsWith(suffix) ? commonDir.slice(0, -suffix.length) : repoRoot,
+    mainWorktreePath: commonDir.endsWith(suffix)
+      ? commonDir.slice(0, -suffix.length)
+      : repoRoot,
     repoRoot,
   };
-}
+};
 
 /**
  * Why a `rev-parse` that exited 0 produced no usable answer. An echoed option is the old-git
  * signature (see `parseRepoContext`); anything else is a git whose output stet cannot read.
  */
-export function classifyRepoOutput(stdout: string): RepoFailure {
-  return stdout.split("\n").some((line) => line.trimStart().startsWith("-"))
+export const classifyRepoOutput = (stdout: string): RepoFailure =>
+  stdout.split("\n").some((line) => line.trimStart().startsWith("-"))
     ? "unsupported-git"
     : "other";
-}
 
 /**
  * Whether git spawned at all. `Bun.spawn` throws before there is an exit code when the executable
  * is missing, and `Process` reports that as exit `-1` with its own (untranslated) message, so this
  * is the one classification that can read text safely.
  */
-export function isMissingGit(error: { exitCode: number; message: string }) {
-  return error.exitCode === -1 && /not found|ENOENT|no such file/i.test(error.message);
-}
+export const isMissingGit = (error: { exitCode: number; message: string }) =>
+  error.exitCode === -1 &&
+  /not found|ENOENT|no such file/iu.test(error.message);
 
 /**
  * The follow-up that separates "no repository here" from "a repository with no working tree here",
@@ -122,24 +128,26 @@ export function isMissingGit(error: { exitCode: number; message: string }) {
  * an English user and silently drops every other one into the unclassified branch. An exit code and
  * a `true`/`false` are the same in every locale.
  */
-export function bareCheckArgs() {
-  return ["git", "rev-parse", "--is-bare-repository"];
-}
+export const bareCheckArgs = () => ["git", "rev-parse", "--is-bare-repository"];
 
 /**
  * Why the repository could not be read, from the bare check's outcome. Exiting non-zero means git
  * found no repository at all; exiting cleanly means it found one whose working tree is not here,
  * which covers both a bare repository and the inside of a `.git` directory.
  */
-export function classifyRepoFailure(bareCheck: { exitCode: number }): RepoFailure {
-  return bareCheck.exitCode === 0 ? "bare-repo" : "not-a-repo";
-}
+export const classifyRepoFailure = (bareCheck: {
+  exitCode: number;
+}): RepoFailure => (bareCheck.exitCode === 0 ? "bare-repo" : "not-a-repo");
 
 /**
  * The line the user sees. `detail` is git's own stderr, used only by `other`, where stet has
  * nothing better to say than what git said.
  */
-export function repoFailureMessage(failure: RepoFailure, cwd: string, detail: string) {
+export const repoFailureMessage = (
+  failure: RepoFailure,
+  cwd: string,
+  detail: string
+) => {
   if (failure === "missing-git") {
     return "git is not installed, or not on PATH";
   }
@@ -159,11 +167,9 @@ export function repoFailureMessage(failure: RepoFailure, cwd: string, detail: st
   return first === ""
     ? `could not read the git repository at ${cwd}`
     : `could not read the git repository at ${cwd}: ${first}`;
-}
+};
 
-export function unknownRefMessage(ref: string) {
-  return `unknown git ref: ${ref}`;
-}
+export const unknownRefMessage = (ref: string) => `unknown git ref: ${ref}`;
 
 /**
  * Whether a ref is a side `git diff` can take, asked **only to explain a diff that already
@@ -175,15 +181,18 @@ export function unknownRefMessage(ref: string) {
  * diff knows what the diff accepts, so it runs first and this names the argument afterwards.
  * `^{tree}` is what rejects a blob; `--quiet` drops the "Needed a single revision" noise.
  */
-export function refTreeArgs(ref: string) {
-  return ["git", "rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{tree}`];
-}
+export const refTreeArgs = (ref: string) => [
+  "git",
+  "rev-parse",
+  "--verify",
+  "--quiet",
+  "--end-of-options",
+  `${ref}^{tree}`,
+];
 
 /**
  * A revision range (`a..b`, `a...b`), which `git diff` takes as a whole and `rev-parse --verify`
  * cannot resolve. It is exempt from the tree check rather than failing it, so a range is never
  * accused of being the reason a diff failed.
  */
-export function isRevisionRange(ref: string) {
-  return ref.includes("..");
-}
+export const isRevisionRange = (ref: string) => ref.includes("..");

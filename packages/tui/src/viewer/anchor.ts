@@ -35,7 +35,7 @@ export interface CaretCell {
 // Scroll. Off-screen on either axis (above the fold or past the bottom; scrolled
 // Left of the content or past the right edge) yields undefined so the decoration
 // Hides rather than anchoring to a cell the user can't see.
-export function caretCell({
+export const caretCell = ({
   cursorTop,
   scrollTop,
   viewportHeight,
@@ -43,7 +43,7 @@ export function caretCell({
   contentLeft,
   caretFrom,
   scrollX,
-}: CaretAnchorInput): CaretCell | undefined {
+}: CaretAnchorInput): CaretCell | undefined => {
   const row = cursorTop - scrollTop;
   if (row < 0 || row >= viewportHeight) {
     return undefined;
@@ -53,7 +53,7 @@ export function caretCell({
     return undefined;
   }
   return { col, row };
-}
+};
 
 export interface CardPlacementInput {
   /** The caret cell to anchor against (0-based within the viewer content area). */
@@ -79,16 +79,16 @@ export interface CardPlacement {
 // Flip to end just above the caret when the card would overflow the bottom edge. The
 // Left edge tracks the caret column, clamped so the card stays fully on screen (and
 // Pinned to 0 when it is wider than the viewport).
-export function placeCard({
+export const placeCard = ({
   anchor,
   cardWidth,
   cardHeight,
   viewportWidth,
   viewportHeight,
-}: CardPlacementInput): CardPlacement {
+}: CardPlacementInput): CardPlacement => {
   const below = anchor.row + 1;
   const flipped = below + cardHeight > viewportHeight;
   const top = flipped ? Math.max(0, anchor.row - cardHeight) : below;
   const left = Math.max(0, Math.min(anchor.col, viewportWidth - cardWidth));
   return { flipped, left, top };
-}
+};

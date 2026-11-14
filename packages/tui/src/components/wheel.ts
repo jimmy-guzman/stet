@@ -9,13 +9,14 @@ const WHEEL_STEP = 3;
  * wrap gating, its own steps). Callers pass `state` accessors as closures, the same shape as an
  * inline handler.
  */
-export function windowWheelHandler(view: {
-  rowCount: () => number;
-  viewport: () => number;
-  scrollTop: () => number;
-  setScrollTop: (next: number) => void;
-}) {
-  return (event: MouseEvent) => {
+export const windowWheelHandler =
+  (view: {
+    rowCount: () => number;
+    viewport: () => number;
+    scrollTop: () => number;
+    setScrollTop: (next: number) => void;
+  }) =>
+  (event: MouseEvent) => {
     const direction = event.scroll?.direction;
     if (direction !== "up" && direction !== "down") {
       return;
@@ -26,13 +27,13 @@ export function windowWheelHandler(view: {
       Math.max(
         0,
         Math.min(
-          view.scrollTop() + (direction === "down" ? 1 : -1) * delta * WHEEL_STEP,
-          maxScroll,
-        ),
-      ),
+          view.scrollTop() +
+            (direction === "down" ? 1 : -1) * delta * WHEEL_STEP,
+          maxScroll
+        )
+      )
     );
     if (event.scroll !== undefined) {
       event.scroll.delta = 0;
     }
   };
-}

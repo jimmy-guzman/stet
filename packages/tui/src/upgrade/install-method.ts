@@ -5,7 +5,7 @@ export type InstallMethod = "standalone" | "npm" | "brew" | "unknown";
  * right channel. The npm launcher (script/stet-launcher.cjs) spawns the compiled binary under
  * node_modules, so the running process's execPath carries that marker directly.
  */
-export function classifyInstall(execPath: string): InstallMethod {
+export const classifyInstall = (execPath: string): InstallMethod => {
   // Checked before Homebrew so a global npm install on a Homebrew-managed Node (which lives
   // Under the Homebrew prefix, e.g. /opt/homebrew/lib/node_modules/...) is not caught by the
   // Brew markers. A genuine Homebrew install is under /Cellar/ with no node_modules.
@@ -22,4 +22,4 @@ export function classifyInstall(execPath: string): InstallMethod {
   }
 
   return "unknown";
-}
+};

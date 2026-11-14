@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 
+import { CommandError } from "@/command-error";
 import { stripGitEnv } from "@/utils/env";
 
 export interface CommandResult {
@@ -11,22 +12,15 @@ export interface CommandResult {
   stderr: string;
 }
 
-export class CommandError extends Data.TaggedError("CommandError")<{
-  readonly command: readonly string[];
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly message: string;
-}> {}
-
 interface RunOptions {
   allowedExitCodes?: readonly number[];
   stdin?: string;
 }
 
-function renderCommand(command: readonly string[]) {
-  return command.map((part) => (part.includes(" ") ? JSON.stringify(part) : part)).join(" ");
-}
+const renderCommand = (command: readonly string[]) =>
+  command
+    .map((part) => (part.includes(" ") ? JSON.stringify(part) : part))
+    .join(" ");
 
 export class Process extends Context.Service<
   Process,
@@ -34,7 +28,7 @@ export class Process extends Context.Service<
     readonly run: (
       command: readonly string[],
       cwd: string,
-      options?: RunOptions,
+      options?: RunOptions
     ) => Effect.Effect<CommandResult, CommandError>;
   }
 >()("stet/Process") {}
@@ -74,7 +68,9 @@ export const ProcessLive = Layer.succeed(Process)({
             env: { ...stripGitEnv(Bun.env), GIT_OPTIONAL_LOCKS: "0" },
             stderr: "pipe",
             stdout: "pipe",
-            ...(options?.stdin === undefined ? {} : { stdin: new Blob([options.stdin]) }),
+            ...(options?.stdin === undefined
+              ? {}
+              : { stdin: new Blob([options.stdin]) }),
           });
         },
       }),
@@ -88,14 +84,20 @@ export const ProcessLive = Layer.succeed(Process)({
               stderr: "",
               stdout: "",
             }),
-          try: (signal) => {
-            signal.addEventListener("abort", () => child.kill(), { once: true });
+          try: async (signal) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                child.kill();
+              },
+              { once: true }
+            );
             // ArrayBuffer() + an explicit Uint8Array view, never `.bytes()`: Bun
             // 1.3.14's runtime returns an ArrayBuffer from `bytes()` on a stream
             // (despite the Uint8Array typing, and unlike `bun test`, whose
             // Spec-correct Response masks it), which silently breaks every
             // Byte-level consumer downstream.
-            return Promise.all([
+            return await Promise.all([
               new Response(child.stdout).arrayBuffer(),
               new Response(child.stderr).text(),
               child.exited,
@@ -120,15 +122,15 @@ export const ProcessLive = Layer.succeed(Process)({
                 message: `${renderCommand(command)} failed with exit ${exitCode}${detail === "" ? "" : `\n${detail}`}`,
                 stderr,
                 stdout,
-              }),
+              })
             );
-          }),
+          })
         ),
       (child) =>
         Effect.sync(() => {
           if (!child.killed) {
             child.kill();
           }
-        }),
+        })
     ),
 });

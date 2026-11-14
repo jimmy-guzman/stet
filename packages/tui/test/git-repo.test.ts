@@ -11,7 +11,8 @@ import {
 } from "@/git/repo";
 
 const SHA1_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-const SHA256_EMPTY_TREE = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+const SHA256_EMPTY_TREE =
+  "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 
 describe("emptyTreeForFormat", () => {
   test("names the empty tree for each of git's hash algorithms", () => {
@@ -38,11 +39,15 @@ describe("parseRepoContext", () => {
   // The whole point of reading the format: a SHA-256 repository's empty tree is a different object,
   // And naming the SHA-1 one hands git something its database does not contain.
   test("reads the empty tree from the repository's object format", () => {
-    expect(parseRepoContext("/repo\n/repo/.git\nsha256\n")?.emptyTree).toBe(SHA256_EMPTY_TREE);
+    expect(parseRepoContext("/repo\n/repo/.git\nsha256\n")?.emptyTree).toBe(
+      SHA256_EMPTY_TREE
+    );
   });
 
   test("resolves a linked worktree's main worktree from the shared common dir", () => {
-    expect(parseRepoContext("/repo/.worktrees/feature\n/repo/.git\nsha1\n")).toEqual({
+    expect(
+      parseRepoContext("/repo/.worktrees/feature\n/repo/.git\nsha1\n")
+    ).toEqual({
       emptyTree: SHA1_EMPTY_TREE,
       mainWorktreePath: "/repo",
       repoRoot: "/repo/.worktrees/feature",
@@ -62,13 +67,17 @@ describe("parseRepoContext", () => {
   // Git before an option echoes it back and exits 0, so a successful command can still carry an
   // Unusable answer.
   test("rejects output whose first line is an echoed option", () => {
-    expect(parseRepoContext("--path-format=absolute\n/repo\n.git\n")).toBeUndefined();
+    expect(
+      parseRepoContext("--path-format=absolute\n/repo\n.git\n")
+    ).toBeUndefined();
   });
 
   // The same signal in the format's slot, where there is no absolute-path check to catch it: an
   // Echoed option must never be read as the name of a hash algorithm.
   test("rejects an echoed option in place of the object format", () => {
-    expect(parseRepoContext("/repo\n/repo/.git\n--show-object-format\n")).toBeUndefined();
+    expect(
+      parseRepoContext("/repo\n/repo/.git\n--show-object-format\n")
+    ).toBeUndefined();
   });
 
   test("rejects a relative common dir", () => {
@@ -84,7 +93,9 @@ describe("parseRepoContext", () => {
 
 describe("classifyRepoOutput", () => {
   test("reads an echoed option as a git too old to understand it", () => {
-    expect(classifyRepoOutput("--path-format=absolute\n/repo\n.git\n")).toBe("unsupported-git");
+    expect(classifyRepoOutput("--path-format=absolute\n/repo\n.git\n")).toBe(
+      "unsupported-git"
+    );
   });
 
   test("reads anything else unusable as an unclassified failure", () => {
@@ -94,22 +105,31 @@ describe("classifyRepoOutput", () => {
 
 describe("isMissingGit", () => {
   test("reads a spawn failure with no exit code as a missing git", () => {
-    expect(isMissingGit({ exitCode: -1, message: 'Executable not found in $PATH: "git"' })).toBe(
-      true,
-    );
+    expect(
+      isMissingGit({
+        exitCode: -1,
+        message: 'Executable not found in $PATH: "git"',
+      })
+    ).toBe(true);
   });
 
   // Process reports a vanished cwd the same way, and that is not a missing binary.
   test("does not claim a non-ENOENT spawn failure", () => {
     expect(
-      isMissingGit({ exitCode: -1, message: "working directory no longer exists: /gone" }),
+      isMissingGit({
+        exitCode: -1,
+        message: "working directory no longer exists: /gone",
+      })
     ).toBe(false);
   });
 
   test("does not claim a git that ran and exited non-zero", () => {
-    expect(isMissingGit({ exitCode: 128, message: "git rev-parse ... failed with exit 128" })).toBe(
-      false,
-    );
+    expect(
+      isMissingGit({
+        exitCode: 128,
+        message: "git rev-parse ... failed with exit 128",
+      })
+    ).toBe(false);
   });
 });
 
@@ -128,12 +148,16 @@ describe("classifyRepoFailure", () => {
 describe("repoFailureMessage", () => {
   test("names each failure without quoting stet's own invocation", () => {
     expect(repoFailureMessage("missing-git", "/work", "")).toBe(
-      "git is not installed, or not on PATH",
+      "git is not installed, or not on PATH"
     );
-    expect(repoFailureMessage("not-a-repo", "/work", "")).toBe("not a git repository: /work");
-    expect(repoFailureMessage("bare-repo", "/work", "")).toBe("no git working tree at /work");
+    expect(repoFailureMessage("not-a-repo", "/work", "")).toBe(
+      "not a git repository: /work"
+    );
+    expect(repoFailureMessage("bare-repo", "/work", "")).toBe(
+      "no git working tree at /work"
+    );
     expect(repoFailureMessage("unsupported-git", "/work", "")).toBe(
-      'this git is too old for stet: it does not support "git rev-parse --path-format"',
+      'this git is too old for stet: it does not support "git rev-parse --path-format"'
     );
   });
 
@@ -141,13 +165,19 @@ describe("repoFailureMessage", () => {
   // The "use '--' to separate paths" boilerplate that made the original report unreadable.
   test("quotes only git's first stderr line when it has nothing better to say", () => {
     expect(
-      repoFailureMessage("other", "/work", "fatal: bad object HEAD\nUse '--' to separate paths\n"),
-    ).toBe("could not read the git repository at /work: fatal: bad object HEAD");
+      repoFailureMessage(
+        "other",
+        "/work",
+        "fatal: bad object HEAD\nUse '--' to separate paths\n"
+      )
+    ).toBe(
+      "could not read the git repository at /work: fatal: bad object HEAD"
+    );
   });
 
   test("says only what it knows when git said nothing", () => {
     expect(repoFailureMessage("other", "/work", "   \n")).toBe(
-      "could not read the git repository at /work",
+      "could not read the git repository at /work"
     );
   });
 });

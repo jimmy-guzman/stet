@@ -1,18 +1,21 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { Effect, Fiber } from "effect";
 
-import { CommandError, Process, ProcessLive } from "@/process";
+import { CommandError } from "@/command-error";
+import { Process, ProcessLive } from "@/process";
 
 test("Process.run returns stdout for a successful command", async () => {
   const result = await Effect.runPromise(
     Process.pipe(
-      Effect.flatMap((process) => process.run(["git", "--version"], import.meta.dir)),
-      Effect.provide(ProcessLive),
-    ),
+      Effect.flatMap((process) =>
+        process.run(["git", "--version"], import.meta.dir)
+      ),
+      Effect.provide(ProcessLive)
+    )
   );
 
   expect(result.stdout).toContain("git version");
@@ -23,11 +26,14 @@ test("Process.run fails with CommandError on a disallowed exit code", async () =
   const error = await Effect.runPromise(
     Process.pipe(
       Effect.flatMap((process) =>
-        process.run(["git", "rev-parse", "--verify", "no-such-ref"], import.meta.dir),
+        process.run(
+          ["git", "rev-parse", "--verify", "no-such-ref"],
+          import.meta.dir
+        )
       ),
       Effect.flip,
-      Effect.provide(ProcessLive),
-    ),
+      Effect.provide(ProcessLive)
+    )
   );
 
   expect(error).toBeInstanceOf(CommandError);
@@ -39,10 +45,12 @@ test("Process.run fails with CommandError when the executable is missing", async
   // Surfaces as a typed failure rather than an escaping defect.
   const error = await Effect.runPromise(
     Process.pipe(
-      Effect.flatMap((process) => process.run(["stet-no-such-binary"], import.meta.dir)),
+      Effect.flatMap((process) =>
+        process.run(["stet-no-such-binary"], import.meta.dir)
+      ),
       Effect.flip,
-      Effect.provide(ProcessLive),
-    ),
+      Effect.provide(ProcessLive)
+    )
   );
 
   expect(error).toBeInstanceOf(CommandError);
@@ -52,19 +60,21 @@ test("Process.run fails with a clear message when the cwd no longer exists", asy
   // A deleted worktree leaves repoRoot pointing at a missing dir. The guard fails
   // With a readable cause instead of the raw "ENOENT ... posix_spawn" syscall text.
   // Create then remove a temp dir so the path is guaranteed missing in any env.
-  const missingDir = mkdtempSync(join(tmpdir(), "stet-missing-"));
+  const missingDir = mkdtempSync(path.join(tmpdir(), "stet-missing-"));
   rmSync(missingDir, { force: true, recursive: true });
 
   const error = await Effect.runPromise(
     Process.pipe(
       Effect.flatMap((process) => process.run(["git", "status"], missingDir)),
       Effect.flip,
-      Effect.provide(ProcessLive),
-    ),
+      Effect.provide(ProcessLive)
+    )
   );
 
   expect(error).toBeInstanceOf(CommandError);
-  expect(error.message).toBe(`working directory no longer exists: ${missingDir}`);
+  expect(error.message).toBe(
+    `working directory no longer exists: ${missingDir}`
+  );
   expect(error.message).not.toContain("posix_spawn");
 });
 
@@ -73,11 +83,11 @@ test("Process.run kills the child when the fiber is interrupted", async () => {
   const fiber = Effect.runFork(
     Process.pipe(
       Effect.flatMap((process) => process.run(["sleep", "5"], import.meta.dir)),
-      Effect.provide(ProcessLive),
-    ),
+      Effect.provide(ProcessLive)
+    )
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await Bun.sleep(100);
   await Effect.runPromise(Fiber.interrupt(fiber));
 
   // The child is killed on interrupt, so we never wait the full 5s

@@ -15,14 +15,18 @@ describe("loadConfigText", () => {
   });
 
   test("accepts an appearance-keyed selection pair", () => {
-    const { config, issues } = loadConfigText(`{ "theme": { "dark": "a", "light": "b" } }`);
+    const { config, issues } = loadConfigText(
+      `{ "theme": { "dark": "a", "light": "b" } }`
+    );
 
     expect(issues).toEqual([]);
     expect(config.theme).toEqual({ dark: "a", light: "b" });
   });
 
   test("accepts a full theme object", () => {
-    const { config, issues } = loadConfigText(JSON.stringify({ themes: { mine: darkTheme } }));
+    const { config, issues } = loadConfigText(
+      JSON.stringify({ themes: { mine: darkTheme } })
+    );
 
     expect(issues).toEqual([]);
     expect(config.themes?.mine).toEqual(darkTheme);
@@ -35,7 +39,10 @@ describe("loadConfigText", () => {
   test("a document with no value means defaults", () => {
     expect(loadConfigText("")).toEqual({ config: {}, issues: [] });
     expect(loadConfigText("\n")).toEqual({ config: {}, issues: [] });
-    expect(loadConfigText(`// "theme": "dark"`)).toEqual({ config: {}, issues: [] });
+    expect(loadConfigText(`// "theme": "dark"`)).toEqual({
+      config: {},
+      issues: [],
+    });
   });
 
   test("an unterminated comment is malformed, not empty", () => {
@@ -109,7 +116,7 @@ describe("loadConfigText", () => {
 
   test("registry entries load raw; their resolvers validate them later", () => {
     const { config, issues } = loadConfigText(
-      `{ "files": { "lua": { "extensions": ["lua"], "syntax": "lua" } }, "icons": { "glyphs": { "lua": "" } } }`,
+      `{ "files": { "lua": { "extensions": ["lua"], "syntax": "lua" } }, "icons": { "glyphs": { "lua": "" } } }`
     );
 
     expect(issues).toEqual([]);
@@ -127,22 +134,37 @@ describe("loadConfigText", () => {
     }`);
 
     expect(issues).toEqual([]);
-    expect(config.icons).toEqual({ enabled: false, glyphs: { typescript: "" } });
+    expect(config.icons).toEqual({
+      enabled: false,
+      glyphs: { typescript: "" },
+    });
     expect(config.viewer).toEqual({ wrap: true });
-    expect(config.sidebar).toEqual({ changesOnly: true, open: false, width: 40 });
+    expect(config.sidebar).toEqual({
+      changesOnly: true,
+      open: false,
+      width: 40,
+    });
     expect(config.update).toEqual({ check: false });
-    expect(config.search).toEqual({ caseSensitive: true, regex: true, scope: "repo" });
+    expect(config.search).toEqual({
+      caseSensitive: true,
+      regex: true,
+      scope: "repo",
+    });
   });
 
   test("an unknown top-level key is reported and the rest still loads", () => {
-    const { config, issues } = loadConfigText(`{ "them": "gruvbox", "theme": "gruvbox" }`);
+    const { config, issues } = loadConfigText(
+      `{ "them": "gruvbox", "theme": "gruvbox" }`
+    );
 
     expect(config.theme).toBe("gruvbox");
     expect(issues).toEqual(['config: unknown key "them"']);
   });
 
   test("an unknown key inside a section is reported and the rest of it kept", () => {
-    const { config, issues } = loadConfigText(`{ "viewer": { "warp": true, "wrap": true } }`);
+    const { config, issues } = loadConfigText(
+      `{ "viewer": { "warp": true, "wrap": true } }`
+    );
 
     expect(config.viewer).toEqual({ wrap: true });
     expect(issues).toEqual(['config viewer: unknown key "warp"']);
@@ -150,7 +172,7 @@ describe("loadConfigText", () => {
 
   test("a bad value drops only its own section", () => {
     const { config, issues } = loadConfigText(
-      `{ "viewer": { "wrap": "yes" }, "theme": "gruvbox" }`,
+      `{ "viewer": { "wrap": "yes" }, "theme": "gruvbox" }`
     );
 
     expect(config.theme).toBe("gruvbox");
@@ -159,7 +181,9 @@ describe("loadConfigText", () => {
   });
 
   test("pre-restructure flat icon glyphs point at icons.glyphs", () => {
-    const { config, issues } = loadConfigText(`{ "icons": { "typescript": "" } }`);
+    const { config, issues } = loadConfigText(
+      `{ "icons": { "typescript": "" } }`
+    );
 
     expect(config.icons).toEqual({});
     expect(issues).toEqual([
@@ -170,12 +194,13 @@ describe("loadConfigText", () => {
   test("every dock edge decodes, and an unknown one drops only its section", () => {
     for (const edge of ["left", "top", "right", "bottom"] as const) {
       expect(
-        loadConfigText(`{ "sidebar": { "position": "${edge}" } }`).config.sidebar?.position,
+        loadConfigText(`{ "sidebar": { "position": "${edge}" } }`).config
+          .sidebar?.position
       ).toBe(edge);
     }
 
     const { config, issues } = loadConfigText(
-      `{ "sidebar": { "position": "middle" }, "viewer": { "wrap": true } }`,
+      `{ "sidebar": { "position": "middle" }, "viewer": { "wrap": true } }`
     );
     expect(issues).toHaveLength(1);
     expect(config.sidebar).toBeUndefined();
@@ -183,20 +208,32 @@ describe("loadConfigText", () => {
   });
 
   test("sidebar height must be a positive integer", () => {
-    expect(loadConfigText(`{ "sidebar": { "height": 0 } }`).issues).toHaveLength(1);
-    expect(loadConfigText(`{ "sidebar": { "height": 8.5 } }`).issues).toHaveLength(1);
-    expect(loadConfigText(`{ "sidebar": { "height": 8 } }`).config.sidebar?.height).toBe(8);
+    expect(
+      loadConfigText(`{ "sidebar": { "height": 0 } }`).issues
+    ).toHaveLength(1);
+    expect(
+      loadConfigText(`{ "sidebar": { "height": 8.5 } }`).issues
+    ).toHaveLength(1);
+    expect(
+      loadConfigText(`{ "sidebar": { "height": 8 } }`).config.sidebar?.height
+    ).toBe(8);
   });
 
   test("sidebar width must be a positive integer", () => {
-    expect(loadConfigText(`{ "sidebar": { "width": 0 } }`).issues).toHaveLength(1);
-    expect(loadConfigText(`{ "sidebar": { "width": 40.5 } }`).issues).toHaveLength(1);
-    expect(loadConfigText(`{ "sidebar": { "width": 40 } }`).config.sidebar?.width).toBe(40);
+    expect(loadConfigText(`{ "sidebar": { "width": 0 } }`).issues).toHaveLength(
+      1
+    );
+    expect(
+      loadConfigText(`{ "sidebar": { "width": 40.5 } }`).issues
+    ).toHaveLength(1);
+    expect(
+      loadConfigText(`{ "sidebar": { "width": 40 } }`).config.sidebar?.width
+    ).toBe(40);
   });
 
   test("a stray key on a theme selection pair is reported", () => {
     const { config, issues } = loadConfigText(
-      `{ "theme": { "dark": "a", "light": "b", "darkk": "c" } }`,
+      `{ "theme": { "dark": "a", "light": "b", "darkk": "c" } }`
     );
 
     expect(config.theme).toEqual({ dark: "a", light: "b" });

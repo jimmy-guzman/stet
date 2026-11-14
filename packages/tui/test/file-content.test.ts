@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { structureDiff } from "@/diff/engine";
 import {
@@ -32,9 +32,10 @@ describe("textContent", () => {
   });
 
   test("truncates long files unless full is requested", () => {
-    const long = Array.from({ length: MAX_FILE_LINES + 10 }, (_, index) => `line ${index}`).join(
-      "\n",
-    );
+    const long = Array.from(
+      { length: MAX_FILE_LINES + 10 },
+      (_, index) => `line ${index}`
+    ).join("\n");
     const truncated = textContent(long, false);
     expect(truncated).toMatchObject({
       kind: "text",
@@ -47,7 +48,11 @@ describe("textContent", () => {
 
 describe("classifyFileBytes", () => {
   test("flags bytes with a NUL in the first 8000 as binary", () => {
-    expect(classifyFileBytes(new Uint8Array([0x89, 0x50, 0x00, 0x47]), { full: false })).toEqual({
+    expect(
+      classifyFileBytes(new Uint8Array([0x89, 0x50, 0x00, 0x47]), {
+        full: false,
+      })
+    ).toEqual({
       bytes: 4,
       kind: "binary",
     });
@@ -56,8 +61,8 @@ describe("classifyFileBytes", () => {
   test("carries size and image dimensions for a recognized image", () => {
     // A minimal PNG header: the NUL bytes in the IHDR length flag it binary.
     const png = Uint8Array.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0,
-      16, 0, 0, 0, 8,
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 16, 0, 0, 0, 8,
     ]);
     expect(classifyFileBytes(png, { full: false })).toEqual({
       bytes: 24,
@@ -67,7 +72,11 @@ describe("classifyFileBytes", () => {
   });
 
   test("decodes text bytes", () => {
-    expect(classifyFileBytes(new TextEncoder().encode("const a = 1\n"), { full: false })).toEqual({
+    expect(
+      classifyFileBytes(new TextEncoder().encode("const a = 1\n"), {
+        full: false,
+      })
+    ).toEqual({
       content: "const a = 1",
       kind: "text",
       lineCount: 1,
@@ -81,7 +90,9 @@ describe("classifyFileBytes", () => {
       bytes: 1_000_001,
       kind: "too-large",
     });
-    expect(classifyFileBytes(big, { full: true })).toMatchObject({ kind: "binary" });
+    expect(classifyFileBytes(big, { full: true })).toMatchObject({
+      kind: "binary",
+    });
   });
 });
 
@@ -97,15 +108,17 @@ describe("contentToContextPatch", () => {
 
   test("renders empty content as a patch with no navigable lines", () => {
     const patch = contentToContextPatch("src/a.ts", "");
-    expect(structureDiff({ full: true, maxLines: 100, patch }).navigable).toEqual([]);
+    expect(
+      structureDiff({ full: true, maxLines: 100, patch }).navigable
+    ).toEqual([]);
   });
 });
 
 describe("loadFileContent", () => {
-  const dir = mkdtempSync(join(tmpdir(), "stet-file-view-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "stet-file-view-"));
 
   test("reads text files from disk", () => {
-    writeFileSync(join(dir, "a.ts"), "const a = 1\n");
+    writeFileSync(path.join(dir, "a.ts"), "const a = 1\n");
     expect(loadFileContent(dir, "a.ts", { full: false })).toEqual({
       content: "const a = 1",
       kind: "text",
@@ -115,17 +128,25 @@ describe("loadFileContent", () => {
   });
 
   test("detects binary files", () => {
-    writeFileSync(join(dir, "blob.bin"), Buffer.from([0x89, 0x50, 0x00, 0x47]));
-    expect(loadFileContent(dir, "blob.bin", { full: false })).toEqual({ bytes: 4, kind: "binary" });
+    writeFileSync(
+      path.join(dir, "blob.bin"),
+      Buffer.from([0x89, 0x50, 0x00, 0x47])
+    );
+    expect(loadFileContent(dir, "blob.bin", { full: false })).toEqual({
+      bytes: 4,
+      kind: "binary",
+    });
   });
 
   test("reports missing files", () => {
-    expect(loadFileContent(dir, "nope.ts", { full: false })).toEqual({ kind: "missing" });
+    expect(loadFileContent(dir, "nope.ts", { full: false })).toEqual({
+      kind: "missing",
+    });
   });
 
   test("reads a symlink as its target path text, matching git", () => {
-    writeFileSync(join(dir, "target.ts"), "const real = 1\n");
-    symlinkSync("target.ts", join(dir, "to-file"));
+    writeFileSync(path.join(dir, "target.ts"), "const real = 1\n");
+    symlinkSync("target.ts", path.join(dir, "to-file"));
     expect(loadFileContent(dir, "to-file", { full: false })).toEqual({
       content: "target.ts",
       kind: "text",
@@ -135,8 +156,8 @@ describe("loadFileContent", () => {
   });
 
   test("reads a directory symlink as text, not binary", () => {
-    mkdirSync(join(dir, "pkg"));
-    symlinkSync("pkg", join(dir, "to-dir"));
+    mkdirSync(path.join(dir, "pkg"));
+    symlinkSync("pkg", path.join(dir, "to-dir"));
     expect(loadFileContent(dir, "to-dir", { full: false })).toMatchObject({
       content: "pkg",
       kind: "text",
@@ -144,7 +165,7 @@ describe("loadFileContent", () => {
   });
 
   test("reads a dangling symlink as its target path, not missing", () => {
-    symlinkSync("../nowhere", join(dir, "broken"));
+    symlinkSync("../nowhere", path.join(dir, "broken"));
     expect(loadFileContent(dir, "broken", { full: false })).toMatchObject({
       content: "../nowhere",
       kind: "text",

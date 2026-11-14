@@ -6,7 +6,11 @@ import { batch } from "solid-js";
 import { createKeyHandler } from "@/keymap";
 import { state } from "@/state";
 
-const keyEvent = (overrides: { ctrl?: boolean; name: string; shift?: boolean }) =>
+const keyEvent = (overrides: {
+  ctrl?: boolean;
+  name: string;
+  shift?: boolean;
+}) =>
   new KeyEvent({
     ctrl: false,
     eventType: "press",
@@ -20,9 +24,36 @@ const keyEvent = (overrides: { ctrl?: boolean; name: string; shift?: boolean }) 
     ...overrides,
   });
 
-describe("createKeyHandler", () => {
-  const noop = async () => {};
+const noop = () => {};
+const noopOpen = async () => {};
 
+/**
+ * Count which action each key reached, without the clipboard subprocess
+ * (pbcopy/xclip, absent on CI).
+ */
+const countCopyDispatches = (
+  press: (handle: (key: KeyEvent) => void) => void
+) => {
+  const calls: string[] = [];
+  const real = {
+    copyFileContents: state.copyFileContents,
+    copySelection: state.copySelection,
+  };
+  state.copyFileContents = () => {
+    calls.push("copyFileContents");
+  };
+  state.copySelection = () => {
+    calls.push("copySelection");
+  };
+  try {
+    press(createKeyHandler({ openInEditor: noopOpen, quit: noop }));
+  } finally {
+    Object.assign(state, real);
+  }
+  return calls;
+};
+
+describe("createKeyHandler", () => {
   afterEach(() => {
     state.closeCommandMenu();
     state.setQuitConfirmOpen(false);
@@ -32,7 +63,12 @@ describe("createKeyHandler", () => {
 
   test("ctrl-c quits", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    const handle = createKeyHandler({
+      openInEditor: noopOpen,
+      quit: () => {
+        quitCount += 1;
+      },
+    });
 
     handle(keyEvent({ ctrl: true, name: "c" }));
 
@@ -41,7 +77,12 @@ describe("createKeyHandler", () => {
 
   test("a plain c does not quit", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    const handle = createKeyHandler({
+      openInEditor: noopOpen,
+      quit: () => {
+        quitCount += 1;
+      },
+    });
 
     handle(keyEvent({ name: "c" }));
 
@@ -49,11 +90,14 @@ describe("createKeyHandler", () => {
   });
 
   test("e opens the selected file in terminal editor", () => {
-    batch(() => state.seedNav("src/foo.ts"));
+    batch(() => {
+      state.seedNav("src/foo.ts");
+    });
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
+        await Promise.resolve();
       },
       quit: noop,
     });
@@ -68,6 +112,7 @@ describe("createKeyHandler", () => {
     const handle = createKeyHandler({
       openInEditor: async (...args) => {
         calls.push(args);
+        await Promise.resolve();
       },
       quit: noop,
     });
@@ -78,11 +123,14 @@ describe("createKeyHandler", () => {
   });
 
   test("o opens the selected file in IDE", () => {
-    batch(() => state.seedNav("src/bar.ts"));
+    batch(() => {
+      state.seedNav("src/bar.ts");
+    });
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
+        await Promise.resolve();
       },
       quit: noop,
     });
@@ -97,6 +145,7 @@ describe("createKeyHandler", () => {
     const handle = createKeyHandler({
       openInEditor: async (...args) => {
         calls.push(args);
+        await Promise.resolve();
       },
       quit: noop,
     });
@@ -109,7 +158,7 @@ describe("createKeyHandler", () => {
   test("< steps back and > steps forward through history", () => {
     state.selectFile("a.ts");
     state.selectFile("b.ts");
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
 
     handle(keyEvent({ name: "<" }));
     expect(state.selectedPath()).toBe("a.ts");
@@ -119,9 +168,10 @@ describe("createKeyHandler", () => {
   });
 
   test("] re-opens a collapsed sidebar", () => {
-    state.toggleSidebar(); // Collapsed, the same path a shrink past the minimum takes
+    // Collapsed, the same path a shrink past the minimum takes
+    state.toggleSidebar();
     expect(state.sidebarOpen()).toBe(false);
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
 
     handle(keyEvent({ name: "]" }));
 
@@ -130,18 +180,22 @@ describe("createKeyHandler", () => {
 
   test("ctrl-t pins; a later navigation opens a fresh preview; { } cycle; ctrl-w closes", () => {
     state.selectFile("a.ts");
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
 
-    handle(keyEvent({ ctrl: true, name: "t" })); // Pin a.ts (no new tab yet)
+    // Pin a.ts (no new tab yet)
+    handle(keyEvent({ ctrl: true, name: "t" }));
     expect(state.tabItems().length).toBe(1);
     expect(state.tabItems()[0].preview).toBe(false);
 
-    state.selectFile("b.ts"); // Fresh preview -> two tabs
+    // Fresh preview -> two tabs
+    state.selectFile("b.ts");
     expect(state.tabItems().length).toBe(2);
 
     const activeBefore = state.tabItems().findIndex((tab) => tab.active);
     handle(keyEvent({ name: "{" }));
-    expect(state.tabItems().findIndex((tab) => tab.active)).not.toBe(activeBefore);
+    expect(state.tabItems().findIndex((tab) => tab.active)).not.toBe(
+      activeBefore
+    );
 
     handle(keyEvent({ ctrl: true, name: "w" }));
     expect(state.tabItems().length).toBe(1);
@@ -149,7 +203,7 @@ describe("createKeyHandler", () => {
 
   test("ctrl-t does not fall through to the theme picker", () => {
     state.selectFile("a.ts");
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
 
     handle(keyEvent({ ctrl: true, name: "t" }));
 
@@ -157,7 +211,7 @@ describe("createKeyHandler", () => {
   });
 
   test("plain s still opens the scope picker", () => {
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
     try {
       handle(keyEvent({ name: "s" }));
       expect(state.scopeMenuOpen()).toBe(true);
@@ -167,7 +221,7 @@ describe("createKeyHandler", () => {
   });
 
   test("Shift+S outside the file view is a no-op, never the scope picker", () => {
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
     try {
       // Combos match modifiers exactly: Shift+S is the symbols binding, gated on
       // The file view, and it never falls through to the plain-s scope picker
@@ -190,13 +244,15 @@ describe("createKeyHandler", () => {
       state.seedNav("src/foo.ts");
       state.setFocusedPane("diff");
     });
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
 
     handle(keyEvent({ name: "f10", shift: true }));
 
     expect(state.commandMenuOpen()).toBe(true);
     expect(state.commandMenuContext()).toBe("viewer");
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy reference");
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe(
+      "Copy reference"
+    );
   });
 
   test("the command menu owns the keyboard: j moves the highlight, esc closes, keys don't fall through", () => {
@@ -205,7 +261,12 @@ describe("createKeyHandler", () => {
       state.setFocusedPane("diff");
     });
     let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    const handle = createKeyHandler({
+      openInEditor: noopOpen,
+      quit: () => {
+        quitCount += 1;
+      },
+    });
     handle(keyEvent({ name: "f10", shift: true }));
 
     // A plain q is swallowed while the menu is open (no fall-through to global quit).
@@ -214,7 +275,9 @@ describe("createKeyHandler", () => {
     expect(state.commandMenuOpen()).toBe(true);
 
     handle(keyEvent({ name: "j" }));
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Copy file contents");
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe(
+      "Copy file contents"
+    );
 
     handle(keyEvent({ name: "escape" }));
     expect(state.commandMenuOpen()).toBe(false);
@@ -229,6 +292,7 @@ describe("createKeyHandler", () => {
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
+        await Promise.resolve();
       },
       quit: noop,
     });
@@ -237,7 +301,9 @@ describe("createKeyHandler", () => {
     // Step from "Copy reference" (0) to "Open in editor" (2).
     handle(keyEvent({ name: "j" }));
     handle(keyEvent({ name: "j" }));
-    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe("Open in editor");
+    expect(state.commandMenuItems()[state.commandMenuIndex()]?.label).toBe(
+      "Open in editor"
+    );
 
     handle(keyEvent({ name: "return" }));
 
@@ -247,7 +313,12 @@ describe("createKeyHandler", () => {
 
   test("q opens the quit confirm instead of quitting immediately", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    const handle = createKeyHandler({
+      openInEditor: noopOpen,
+      quit: () => {
+        quitCount += 1;
+      },
+    });
 
     handle(keyEvent({ name: "q" }));
 
@@ -257,7 +328,12 @@ describe("createKeyHandler", () => {
 
   test("escape from a clean state does nothing: never opens the confirm, never quits", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    const handle = createKeyHandler({
+      openInEditor: noopOpen,
+      quit: () => {
+        quitCount += 1;
+      },
+    });
 
     handle(keyEvent({ name: "escape" }));
 
@@ -267,7 +343,12 @@ describe("createKeyHandler", () => {
 
   test("the quit confirm owns the keyboard: y and enter quit, esc and n cancel, other keys are swallowed", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    const handle = createKeyHandler({
+      openInEditor: noopOpen,
+      quit: () => {
+        quitCount += 1;
+      },
+    });
 
     state.setQuitConfirmOpen(true);
     handle(keyEvent({ name: "y" }));
@@ -296,7 +377,12 @@ describe("createKeyHandler", () => {
 
   test("ctrl-c quits instantly even while the quit confirm is open", () => {
     let quitCount = 0;
-    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
+    const handle = createKeyHandler({
+      openInEditor: noopOpen,
+      quit: () => {
+        quitCount += 1;
+      },
+    });
 
     state.setQuitConfirmOpen(true);
     handle(keyEvent({ ctrl: true, name: "c" }));
@@ -305,41 +391,27 @@ describe("createKeyHandler", () => {
   });
 
   describe("copy keys in the viewer", () => {
-    // Count which action each key reached, without the clipboard subprocess
-    // (pbcopy/xclip, absent on CI).
-    const countCopyDispatches = (press: (handle: (key: KeyEvent) => void) => void) => {
-      const calls: string[] = [];
-      const real = {
-        copyFileContents: state.copyFileContents,
-        copySelection: state.copySelection,
-      };
-      state.copyFileContents = () => calls.push("copyFileContents");
-      state.copySelection = () => calls.push("copySelection");
-      try {
-        press(createKeyHandler({ openInEditor: noop, quit: noop }));
-      } finally {
-        Object.assign(state, real);
-      }
-      return calls;
-    };
-
     test("Y copies the file and C the selection", () => {
       batch(() => {
         state.seedNav("src/foo.ts");
         state.setFocusedPane("diff");
       });
 
-      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "Y", shift: true })))).toEqual(
-        ["copyFileContents"],
-      );
-      expect(countCopyDispatches((handle) => handle(keyEvent({ name: "C", shift: true })))).toEqual(
-        ["copySelection"],
-      );
+      expect(
+        countCopyDispatches((handle) => {
+          handle(keyEvent({ name: "Y", shift: true }));
+        })
+      ).toEqual(["copyFileContents"]);
+      expect(
+        countCopyDispatches((handle) => {
+          handle(keyEvent({ name: "C", shift: true }));
+        })
+      ).toEqual(["copySelection"]);
     });
   });
 
   test("escape only ever closes the search view, never quits", () => {
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
 
     handle(keyEvent({ name: "escape" }));
     expect(state.quitConfirmOpen()).toBe(false);

@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import path from "node:path";
 
 /**
  * Templates for editors whose line-number argument format is known, keyed by the editor binary
@@ -29,13 +29,13 @@ const KNOWN_EDITOR_TEMPLATES: Record<string, string> = {
  * KNOWN_EDITOR_TEMPLATES; an unrecognised name gets `defaultSuffix` appended so `{file}` is always
  * present in the result.
  */
-function normalizeTemplate(value: string, defaultSuffix: string): string {
+const normalizeTemplate = (value: string, defaultSuffix: string): string => {
   if (value.includes("{file}")) {
     return value;
   }
-  const bin = basename(value.split(/\s+/)[0] ?? value);
+  const bin = path.basename(value.split(/\s+/u)[0] ?? value);
   return KNOWN_EDITOR_TEMPLATES[bin] ?? `${value} ${defaultSuffix}`;
-}
+};
 
 /**
  * Resolves the editor command template from (in priority order):
@@ -48,7 +48,7 @@ function normalizeTemplate(value: string, defaultSuffix: string): string {
  * A bare editor name (no `{file}` placeholder) is expanded through KNOWN_EDITOR_TEMPLATES before
  * being returned, so `--editor code` works the same as `--editor "code --goto {file}:{line}"`.
  */
-export function resolveEditorTemplate(explicit: string | undefined): string {
+export const resolveEditorTemplate = (explicit: string | undefined): string => {
   if (explicit !== undefined) {
     return normalizeTemplate(explicit, "+{line} {file}");
   }
@@ -68,7 +68,7 @@ export function resolveEditorTemplate(explicit: string | undefined): string {
   }
 
   return "vim +{line} {file}";
-}
+};
 
 /**
  * Resolves the IDE command template from (in priority order):
@@ -81,7 +81,9 @@ export function resolveEditorTemplate(explicit: string | undefined): string {
  *
  * A bare editor name is expanded the same way as in `resolveEditorTemplate`.
  */
-export function resolveIdeTemplate(explicit: string | undefined): string | undefined {
+export const resolveIdeTemplate = (
+  explicit: string | undefined
+): string | undefined => {
   if (explicit !== undefined) {
     return normalizeTemplate(explicit, "{file}:{line}");
   }
@@ -98,7 +100,7 @@ export function resolveIdeTemplate(explicit: string | undefined): string | undef
   }
 
   return undefined;
-}
+};
 
 /**
  * The OS "open with the default application" command for a path: `open` on macOS, `xdg-open` on
@@ -106,15 +108,21 @@ export function resolveIdeTemplate(explicit: string | undefined): string | undef
  * the caller surfaces a notice instead. `platform` is a parameter so every branch is
  * unit-testable.
  */
-export function openExternalCommand(path: string, platform: string = process.platform) {
+export const openExternalCommand = (
+  filePath: string,
+  platform: string = process.platform
+) => {
   if (platform === "darwin") {
-    return ["open", path];
+    return ["open", filePath];
   }
-  if (platform === "linux") {
-    return ["xdg-open", path];
-  }
-  return undefined;
-}
+  return platform === "linux" ? ["xdg-open", filePath] : undefined;
+};
+
+const isLoneLine = (token: string | undefined) =>
+  token !== undefined &&
+  token.includes("{line}") &&
+  !token.includes("{file}") &&
+  !token.includes("{repo}");
 
 /**
  * Expands a template string into an argv array ready to pass to `Bun.spawn`. `{file}` becomes the
@@ -127,19 +135,14 @@ export function openExternalCommand(path: string, platform: string = process.pla
  * `{line}` token (e.g. `+{line}`) is dropped, and a bare option flag whose only value is that lone
  * token (JetBrains' `--line {line}`) is dropped along with it.
  */
-export function buildEditorCommand(
+export const buildEditorCommand = (
   template: string,
   file: string,
   line: number | undefined,
-  repo: string,
-): string[] {
-  const tokens = template.split(/\s+/).filter((token) => token !== "");
+  repo: string
+): string[] => {
+  const tokens = template.split(/\s+/u).filter((token) => token !== "");
   const noLine = line === undefined;
-  const isLoneLine = (token: string | undefined) =>
-    token !== undefined &&
-    token.includes("{line}") &&
-    !token.includes("{file}") &&
-    !token.includes("{repo}");
   return tokens
     .filter((token, index) => {
       if (!noLine) {
@@ -150,14 +153,22 @@ export function buildEditorCommand(
       }
       return !(
         token.startsWith("-") &&
-        !/\{(?:file|line|repo)\}/.test(token) &&
+        !/\{(?:file|line|repo)\}/u.test(token) &&
         isLoneLine(tokens[index + 1])
       );
     })
     .map((token) =>
-      (noLine ? token.replace(/:\{line\}|\{line\}/g, "") : token).replace(
-        /\{(?<key>file|line|repo)\}/g,
-        (_, key) => (key === "file" ? file : key === "repo" ? repo : String(line)),
-      ),
+      (noLine
+        ? token.replaceAll(/:\{line\}|\{line\}/gu, "")
+        : token
+      ).replaceAll(/\{(?<key>file|line|repo)\}/gu, (_, key) => {
+        if (key === "file") {
+          return file;
+        }
+        if (key === "repo") {
+          return repo;
+        }
+        return String(line);
+      })
     );
-}
+};

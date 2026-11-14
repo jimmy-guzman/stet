@@ -9,16 +9,16 @@ interface RouteProps {
 
 export const revalidate = false;
 
-export async function GET(_request: Request, props: RouteProps) {
+export const GET = async (_request: Request, props: RouteProps) => {
   const params = await props.params;
   const page = source.getPage(params.slug);
-  if (!page) notFound();
+  if (!page) {
+    notFound();
+  }
 
   return new Response(await getLLMText(page), {
     headers: { "Content-Type": "text/markdown; charset=utf-8" },
   });
-}
+};
 
-export function generateStaticParams() {
-  return source.generateParams();
-}
+export const generateStaticParams = () => source.generateParams();

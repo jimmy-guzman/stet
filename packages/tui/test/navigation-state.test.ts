@@ -6,19 +6,17 @@ import type { GitModel } from "@/git/model";
 import { state } from "@/state";
 import { recall } from "@/viewer/navigation";
 
-function modelWith(paths: string[]): GitModel {
-  return {
-    branch: undefined,
-    changed: [],
-    changedByPath: new Map(),
-    repoFiles: paths.map((path) => ({ path, symlink: false, tracked: true })),
-    repoFilesKey: "k",
-    repoRoot: "/x",
-    scopeKey: "all:HEAD",
-  };
-}
+const modelWith = (paths: string[]): GitModel => ({
+  branch: undefined,
+  changed: [],
+  changedByPath: new Map(),
+  repoFiles: paths.map((path) => ({ path, symlink: false, tracked: true })),
+  repoFilesKey: "k",
+  repoRoot: "/x",
+  scopeKey: "all:HEAD",
+});
 
-function seed(paths: string[]) {
+const seed = (paths: string[]) => {
   batch(() => {
     state.setChangesOnly(false);
     state.setExpandedDirectories(new Set<string>());
@@ -26,7 +24,7 @@ function seed(paths: string[]) {
     state.setFocusedNodeId(`file:${paths[0]}`);
     state.seedNav(undefined);
   });
-}
+};
 
 afterEach(() => {
   batch(() => {
@@ -113,14 +111,17 @@ test("a jump seeds the target line, so back restores it rather than the first ch
 test("a line jump into an already-pinned file seeds its history so back restores the prior line", () => {
   seed(["a.ts", "b.ts"]);
   state.selectFile("a.ts");
-  state.selectFile("b.ts", { escalate: true, line: 10 }); // Preview history a -> b@10
-  state.togglePinActiveTab(); // Pin b (its current entry is b@10)
+  // Preview history a -> b@10
+  state.selectFile("b.ts", { escalate: true, line: 10 });
+  // Pin b (its current entry is b@10)
+  state.togglePinActiveTab();
 
   // Jump to b again at a different line; b is the pinned tab's current entry.
   state.selectFile("b.ts", { escalate: true, line: 42 });
   expect(state.selectedPath()).toBe("b.ts");
   expect(state.pendingRestore()?.cursorLine).toBe(42);
-  expect(state.tabItems()).toHaveLength(1); // Still the one pinned tab, no dup
+  // Still the one pinned tab, no dup
+  expect(state.tabItems()).toHaveLength(1);
 
   // Back within the pinned tab returns to the pre-jump line, not the stale entry.
   state.goBack();
@@ -130,12 +131,16 @@ test("a line jump into an already-pinned file seeds its history so back restores
 
 test("re-focusing an already-pinned file with no line target keeps its own remembered spot", () => {
   seed(["a.ts", "b.ts"]);
-  state.selectFile("a.ts", { escalate: true, line: 7 }); // Remember a.ts at line 7
-  state.togglePinActiveTab(); // Pin a.ts
-  state.selectFile("b.ts"); // Fresh preview on b.ts
+  // Remember a.ts at line 7
+  state.selectFile("a.ts", { escalate: true, line: 7 });
+  // Pin a.ts
+  state.togglePinActiveTab();
+  // Fresh preview on b.ts
+  state.selectFile("b.ts");
   expect(state.tabItems()).toHaveLength(2);
 
-  state.selectFile("a.ts"); // Already pinned, no line -> just refocus, no new tab
+  // Already pinned, no line -> just refocus, no new tab
+  state.selectFile("a.ts");
   expect(state.tabItems()).toHaveLength(2);
   expect(state.selectedPath()).toBe("a.ts");
   expect(state.tabItems().find((tab) => tab.active)?.preview).toBe(false);
@@ -191,7 +196,8 @@ test("togglePinActiveTab pins, then the next navigation opens a fresh preview", 
   expect(state.tabItems().length).toBe(1);
   expect(state.tabItems()[0].preview).toBe(false);
 
-  state.selectFile("b.ts"); // Opens a new preview tab, leaving a.ts pinned
+  // Opens a new preview tab, leaving a.ts pinned
+  state.selectFile("b.ts");
   expect(state.tabItems().length).toBe(2);
   expect(state.selectedPath()).toBe("b.ts");
   expect(state.tabItems().filter((tab) => tab.preview)).toHaveLength(1);
@@ -200,10 +206,12 @@ test("togglePinActiveTab pins, then the next navigation opens a fresh preview", 
 test("togglePinActiveTab unpins a pinned tab back to the calm preview", () => {
   seed(["a.ts"]);
   state.selectFile("a.ts");
-  state.togglePinActiveTab(); // Pin
+  // Pin
+  state.togglePinActiveTab();
   expect(state.tabItems()[0].preview).toBe(false);
 
-  state.togglePinActiveTab(); // Unpin -> back to a single preview, no file change
+  // Unpin -> back to a single preview, no file change
+  state.togglePinActiveTab();
   expect(state.tabItems().length).toBe(1);
   expect(state.tabItems()[0].preview).toBe(true);
   expect(state.selectedPath()).toBe("a.ts");
@@ -212,11 +220,14 @@ test("togglePinActiveTab unpins a pinned tab back to the calm preview", () => {
 test("navigating to a pinned file focuses its tab, never duplicating", () => {
   seed(["a.ts", "b.ts"]);
   state.selectFile("a.ts");
-  state.togglePinActiveTab(); // Pin a.ts
-  state.selectFile("b.ts"); // Preview b.ts, two tabs
+  // Pin a.ts
+  state.togglePinActiveTab();
+  // Preview b.ts, two tabs
+  state.selectFile("b.ts");
   expect(state.tabItems().length).toBe(2);
 
-  state.selectFile("a.ts"); // Already pinned -> focus it, no new tab
+  // Already pinned -> focus it, no new tab
+  state.selectFile("a.ts");
   expect(state.tabItems().length).toBe(2);
   expect(state.selectedPath()).toBe("a.ts");
   expect(state.tabItems().find((tab) => tab.active)?.preview).toBe(false);
@@ -225,13 +236,17 @@ test("navigating to a pinned file focuses its tab, never duplicating", () => {
 test("each tab keeps its own history; back/forward stay within the active tab", () => {
   seed(["a.ts", "b.ts", "c.ts"]);
   state.selectFile("a.ts");
-  state.selectFile("b.ts"); // Preview history: a -> b
-  state.togglePinActiveTab(); // Pin b
-  state.selectFile("c.ts"); // Fresh preview on c
+  // Preview history: a -> b
+  state.selectFile("b.ts");
+  // Pin b
+  state.togglePinActiveTab();
+  // Fresh preview on c
+  state.selectFile("c.ts");
 
   state.activateTab(state.tabItems().find((tab) => !tab.preview)?.id ?? "");
   expect(state.selectedPath()).toBe("b.ts");
-  state.goBack(); // Within the pinned tab's own history
+  // Within the pinned tab's own history
+  state.goBack();
   expect(state.selectedPath()).toBe("a.ts");
 
   state.activateTab(state.tabItems().find((tab) => tab.preview)?.id ?? "");
@@ -242,15 +257,18 @@ test("closeActiveTab returns to a neighbor; closing the sole tab reverts to prev
   seed(["a.ts", "b.ts"]);
   state.selectFile("a.ts");
   state.togglePinActiveTab();
-  state.selectFile("b.ts"); // Tab 1 preview on b, tab 0 pinned a
+  // Tab 1 preview on b, tab 0 pinned a
+  state.selectFile("b.ts");
   expect(state.tabItems().length).toBe(2);
 
-  state.closeActiveTab(); // Closes the preview (b) -> neighbor pinned a
+  // Closes the preview (b) -> neighbor pinned a
+  state.closeActiveTab();
   expect(state.tabItems().length).toBe(1);
   expect(state.tabItems()[0].preview).toBe(false);
   expect(state.selectedPath()).toBe("a.ts");
 
-  state.closeActiveTab(); // Sole tab -> reverts to preview (exits tab mode)
+  // Sole tab -> reverts to preview (exits tab mode)
+  state.closeActiveTab();
   expect(state.tabItems().length).toBe(1);
   expect(state.tabItems()[0].preview).toBe(true);
   expect(state.selectedPath()).toBe("a.ts");

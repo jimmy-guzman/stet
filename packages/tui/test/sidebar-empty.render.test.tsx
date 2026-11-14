@@ -2,11 +2,16 @@ import { expect, test } from "bun:test";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import type { GitModel } from "@/git/model";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
 
 const allScope = { kind: "all", ref: "HEAD" } as const;
 
@@ -28,14 +33,17 @@ test("shows the changes-only empty state when nothing changed", async () => {
   seedState(model, allScope);
   state.setChangesOnly(true);
 
-  const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-    height: 24,
-    width: 100,
-  });
+  const { renderer, renderOnce, captureCharFrame } = await testRender(
+    () => <App />,
+    {
+      height: 24,
+      width: 100,
+    }
+  );
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const frame = await settleUntil("empty sidebar", (current) =>
-      sidebarOf(current).includes("no changes"),
+      sidebarOf(current).includes("no changes")
     );
     const sidebar = sidebarOf(frame);
     expect(sidebar).toContain("no changes");
@@ -66,14 +74,17 @@ test("shows the empty-repo state when there are no files", async () => {
   // Wide enough that the subtitle stays on one line in the sidebar column, so the
   // Assertion proves the sidebar's own copy rather than the viewer's identical
   // Empty-repo line (which sidebarOf strips out anyway).
-  const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-    height: 24,
-    width: 120,
-  });
+  const { renderer, renderOnce, captureCharFrame } = await testRender(
+    () => <App />,
+    {
+      height: 24,
+      width: 120,
+    }
+  );
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const frame = await settleUntil("empty repo sidebar", (current) =>
-      sidebarOf(current).includes("no files"),
+      sidebarOf(current).includes("no files")
     );
     const sidebar = sidebarOf(frame);
     expect(sidebar).toContain("no files");

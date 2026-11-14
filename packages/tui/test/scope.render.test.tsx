@@ -1,25 +1,34 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { emptyTreeForFormat } from "@/git/repo";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  runGit,
+  seedState,
+} from "./helpers";
 
 describe("scope switching", () => {
   test("the kinds list is whole on the frame it opens, down to the commits row", async () => {
-    const repoRoot = createFixtureRepo("stet-scope-height-", { "src/a.ts": "const a = 1\n" });
+    const repoRoot = createFixtureRepo("stet-scope-height-", {
+      "src/a.ts": "const a = 1\n",
+    });
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -34,7 +43,7 @@ describe("scope switching", () => {
       // Drill-down one reaches the commits view by counting `j` presses, which move `scopeMenuIndex`
       // Whether or not the row was ever painted.
       const menu = await settleUntil("scope kinds", (frame) =>
-        frame.includes("since session start"),
+        frame.includes("since session start")
       );
       expect(menu).toContain("last commit");
       expect(menu).toContain("commits");
@@ -50,14 +59,15 @@ describe("scope switching", () => {
       "src/a.ts": "const a = 1\n",
     });
     // An unstaged edit: the default `all` scope sees it, the `staged` scope does not.
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -66,7 +76,7 @@ describe("scope switching", () => {
         "all scope shows the unstaged change",
         (frame) => frame.includes("+1 -1"),
         5,
-        400,
+        400
       );
 
       // `s` opens the picker on the active scope (uncommitted, index 0); `j` moves
@@ -74,7 +84,9 @@ describe("scope switching", () => {
       // Changed set is empty: the change indicator
       // Must disappear, which a stale uncommitted-scope frame cannot satisfy.
       mockInput.pressKey("s");
-      await settleUntil("scope picker opens", (frame) => frame.includes("switch scope"));
+      await settleUntil("scope picker opens", (frame) =>
+        frame.includes("switch scope")
+      );
       mockInput.pressKey("j");
       // Let the cursor move commit before enter, as a real key cadence would.
       await settleUntil("picker cursor moved", () => true, 2);
@@ -83,7 +95,7 @@ describe("scope switching", () => {
         "staged scope drops the unstaged change",
         (frame) => frame.includes("staged vs HEAD") && !frame.includes("+1 -1"),
         1,
-        400,
+        400
       );
       expect(after).toContain("staged vs HEAD");
       expect(after).not.toContain("+1 -1");
@@ -100,10 +112,11 @@ describe("scope switching", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -114,12 +127,12 @@ describe("scope switching", () => {
           frame.includes("uncommitted") &&
           frame.includes("unstaged") &&
           // Word-bounded so the "unstaged" row can't satisfy the staged check.
-          /\bstaged\b/.test(frame) &&
+          /\bstaged\b/u.test(frame) &&
           frame.includes("since session start") &&
           frame.includes("last commit") &&
           // The two group headers.
           frame.includes("changes") &&
-          frame.includes("history"),
+          frame.includes("history")
       );
       // The active scope (uncommitted) carries the ● marker.
       expect(open).toContain("● uncommitted");
@@ -127,7 +140,7 @@ describe("scope switching", () => {
       mockInput.pressEscape();
       const closed = await settleUntil(
         "escape closes the picker",
-        (frame) => !frame.includes("● uncommitted"),
+        (frame) => !frame.includes("● uncommitted")
       );
       expect(closed).not.toContain("since session start");
     } finally {
@@ -141,22 +154,27 @@ describe("scope switching", () => {
       "package.json": `${JSON.stringify({ name: "scope-session-fixture" })}\n`,
       "src/a.ts": "const a = 1\n",
     });
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("all scope is active", (frame) => frame.includes("uncommitted vs HEAD"));
+      await settleUntil("all scope is active", (frame) =>
+        frame.includes("uncommitted vs HEAD")
+      );
 
       // From uncommitted (index 0), `j` three times reaches session (index 3); `return` selects.
       mockInput.pressKey("s");
-      await settleUntil("scope picker opens", (frame) => frame.includes("since session start"));
+      await settleUntil("scope picker opens", (frame) =>
+        frame.includes("since session start")
+      );
       mockInput.pressKey("j");
       mockInput.pressKey("j");
       mockInput.pressKey("j");
@@ -165,7 +183,9 @@ describe("scope switching", () => {
       mockInput.pressEnter();
       const after = await settleUntil(
         "header shows the session scope",
-        (frame) => frame.includes("since session start") && !frame.includes("uncommitted vs HEAD"),
+        (frame) =>
+          frame.includes("since session start") &&
+          !frame.includes("uncommitted vs HEAD")
       );
       // Session base defaults to HEAD here, so the unstaged change is still in view.
       expect(after).toContain("since session start");
@@ -183,24 +203,29 @@ describe("scope switching", () => {
     });
     // A second commit: last-commit must diff it against its parent (the root commit),
     // Not fold in any working-tree state. The tree is otherwise clean.
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
     runGit(repoRoot, ["commit", "-am", "second"]);
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       // The working tree is clean, so all shows nothing changed.
-      await settleUntil("all scope is active", (frame) => frame.includes("uncommitted vs HEAD"));
+      await settleUntil("all scope is active", (frame) =>
+        frame.includes("uncommitted vs HEAD")
+      );
 
       // From uncommitted (index 0), `j` four times reaches last-commit (index 4); `return` selects.
       mockInput.pressKey("s");
-      await settleUntil("scope picker opens", (frame) => frame.includes("last commit"));
+      await settleUntil("scope picker opens", (frame) =>
+        frame.includes("last commit")
+      );
       mockInput.pressKey("j");
       mockInput.pressKey("j");
       mockInput.pressKey("j");
@@ -209,7 +234,7 @@ describe("scope switching", () => {
       mockInput.pressEnter();
       const after = await settleUntil(
         "last-commit reveals the second commit's change",
-        (frame) => frame.includes("last commit") && frame.includes("+1 -1"),
+        (frame) => frame.includes("last commit") && frame.includes("+1 -1")
       );
       expect(after).toContain("last commit");
       expect(after).toContain("+1 -1");
@@ -233,26 +258,39 @@ describe("scope switching", () => {
 // The guard under test ran. `repairBase` is not part of this: it is gated on `headUnborn`, which is
 // False here because the repository has a commit.
 test("a root commit holds its last-commit scope across refresh drains", async () => {
-  const repoRoot = createFixtureRepo("stet-root-commit-scope-", { "a.txt": "one\ntwo\nthree\n" });
+  const repoRoot = createFixtureRepo("stet-root-commit-scope-", {
+    "a.txt": "one\ntwo\nthree\n",
+  });
   // The fixture is a plain `git init`, so this is the base the drain resolves to as well.
-  const scope = { headRef: "HEAD", kind: "last-commit", ref: emptyTreeForFormat("sha1") } as const;
+  const scope = {
+    headRef: "HEAD",
+    kind: "last-commit",
+    ref: emptyTreeForFormat("sha1"),
+  } as const;
   try {
     seedState(await loadModel(repoRoot, scope), scope);
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 24,
+        width: 100,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("the root commit renders as all-added", (frame) => frame.includes("+3 -0"));
+      await settleUntil("the root commit renders as all-added", (frame) =>
+        frame.includes("+3 -0")
+      );
       const before = state.scope();
 
       // Two drains, so a scope re-set has to survive being wrong twice rather than once.
       for (const branch of ["drain-one", "drain-two"]) {
         runGit(repoRoot, ["branch", "-m", branch]);
         // oxlint-disable-next-line no-await-in-loop -- each drain must land before the next rename
-        await settleUntil(`the drain that picked up ${branch}`, (frame) => frame.includes(branch));
+        await settleUntil(`the drain that picked up ${branch}`, (frame) =>
+          frame.includes(branch)
+        );
         // Identity, not equality: a re-set carrying the same ref is still a new object, and a new
         // Object is what re-keys the diff pipeline.
         expect(state.scope()).toBe(before);

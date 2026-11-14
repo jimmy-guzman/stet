@@ -6,7 +6,12 @@ type DiffLineType = "context" | "add" | "remove";
 // Reads. The real metadata satisfies this, and the narrower shape keeps this
 // Module dependency-free and directly testable.
 type HunkContentInput =
-  | { type: "context"; lines: number; additionLineIndex: number; deletionLineIndex: number }
+  | {
+      type: "context";
+      lines: number;
+      additionLineIndex: number;
+      deletionLineIndex: number;
+    }
   | {
       type: "change";
       additions: number;
@@ -65,26 +70,27 @@ export interface BuiltDiff {
   hiddenLines: number;
 }
 
-export function isLineRow(row: DiffRow): row is DiffLineRow {
-  return row.kind === "line";
-}
+export const isLineRow = (row: DiffRow): row is DiffLineRow =>
+  row.kind === "line";
 
-function stripNewline(text: string) {
-  return text.endsWith("\n") ? text.slice(0, -1) : text;
-}
+const stripNewline = (text: string) =>
+  text.endsWith("\n") ? text.slice(0, -1) : text;
 
-function collapsedLabel(count: number) {
-  return count === 1 ? "1 unmodified line" : `${count} unmodified lines`;
-}
+const collapsedLabel = (count: number) =>
+  count === 1 ? "1 unmodified line" : `${count} unmodified lines`;
 
-function spansAt(spans: RenderSpan[][], lines: string[], index: number): RenderSpan[] {
+const spansAt = (
+  spans: RenderSpan[][],
+  lines: string[],
+  index: number
+): RenderSpan[] => {
   const highlighted = spans[index];
   if (highlighted !== undefined && highlighted.length > 0) {
     return highlighted;
   }
 
   return [{ text: stripNewline(lines[index] ?? "") }];
-}
+};
 
 /**
  * Build the unified row stream from `@pierre/diffs` metadata plus the flattened per-line spans
@@ -92,12 +98,12 @@ function spansAt(spans: RenderSpan[][], lines: string[], index: number): RenderS
  * so the cursor and find can index navigable lines exactly as the old parsed-patch model did. Body
  * (line) rows are capped at `maxLines` unless `full`, mirroring the previous viewer.
  */
-export function buildDiffRows(
+export const buildDiffRows = (
   meta: DiffMetaInput,
   addSpans: RenderSpan[][],
   delSpans: RenderSpan[][],
-  options: { full: boolean; maxLines: number },
-): BuiltDiff {
+  options: { full: boolean; maxLines: number }
+): BuiltDiff => {
   const rows: DiffRow[] = [];
   let navIndex = 0;
 
@@ -105,7 +111,7 @@ export function buildDiffRows(
     type: DiffLineType,
     oldLine: number | undefined,
     newLine: number | undefined,
-    spans: RenderSpan[],
+    spans: RenderSpan[]
   ) => {
     rows.push({ kind: "line", navIndex, newLine, oldLine, spans, type });
     navIndex += 1;
@@ -129,7 +135,12 @@ export function buildDiffRows(
       if (content.type === "context") {
         for (let offset = 0; offset < content.lines; offset += 1) {
           const index = content.additionLineIndex + offset;
-          pushLine("context", oldLine, newLine, spansAt(addSpans, meta.additionLines, index));
+          pushLine(
+            "context",
+            oldLine,
+            newLine,
+            spansAt(addSpans, meta.additionLines, index)
+          );
           oldLine += 1;
           newLine += 1;
         }
@@ -138,13 +149,23 @@ export function buildDiffRows(
 
       for (let offset = 0; offset < content.deletions; offset += 1) {
         const index = content.deletionLineIndex + offset;
-        pushLine("remove", oldLine, undefined, spansAt(delSpans, meta.deletionLines, index));
+        pushLine(
+          "remove",
+          oldLine,
+          undefined,
+          spansAt(delSpans, meta.deletionLines, index)
+        );
         oldLine += 1;
       }
 
       for (let offset = 0; offset < content.additions; offset += 1) {
         const index = content.additionLineIndex + offset;
-        pushLine("add", undefined, newLine, spansAt(addSpans, meta.additionLines, index));
+        pushLine(
+          "add",
+          undefined,
+          newLine,
+          spansAt(addSpans, meta.additionLines, index)
+        );
         newLine += 1;
       }
     }
@@ -162,21 +183,21 @@ export function buildDiffRows(
     body += 1;
     if (body > options.maxLines) {
       return {
-        hiddenLines: rows.slice(index).filter((row) => row.kind === "line").length,
+        hiddenLines: rows.slice(index).filter((row) => row.kind === "line")
+          .length,
         rows: rows.slice(0, index),
       };
     }
   }
 
   return { hiddenLines: 0, rows };
-}
+};
 
 /** The navigable (cursorable) lines in order; `navIndex` equals array position. */
-export function navigableLinesFromRows(rows: DiffRow[]): NavigableLine[] {
-  return rows.filter(isLineRow).map((row) => ({
+export const navigableLinesFromRows = (rows: DiffRow[]): NavigableLine[] =>
+  rows.filter(isLineRow).map((row) => ({
     content: row.spans.map((span) => span.text).join(""),
     newLine: row.newLine,
     oldLine: row.oldLine,
     type: row.type,
   }));
-}

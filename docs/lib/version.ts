@@ -4,25 +4,27 @@
  * shape of stet's own `src/upgrade/release.ts`.
  */
 
-function isVersionPayload(value: unknown): value is { version: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "version" in value &&
-    typeof value.version === "string"
-  );
-}
+const isVersionPayload = (value: unknown): value is { version: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "version" in value &&
+  typeof value.version === "string";
 
-export async function getStetVersion(): Promise<string | undefined> {
+export const getStetVersion = async (): Promise<string | undefined> => {
   try {
-    const res = await fetch("https://registry.npmjs.org/@jimmy.codes/stet/latest", {
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) return undefined;
+    const res = await fetch(
+      "https://registry.npmjs.org/@jimmy.codes/stet/latest",
+      {
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(3000),
+      }
+    );
+    if (!res.ok) {
+      return undefined;
+    }
     const data: unknown = await res.json();
     return isVersionPayload(data) ? data.version : undefined;
   } catch {
     return undefined;
   }
-}
+};

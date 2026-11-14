@@ -9,19 +9,20 @@ export interface RenderSpan {
   fg?: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
-function colorFromStyle(style: unknown) {
-  if (typeof style !== "string") {
-    return undefined;
-  }
-  const match = /color:\s*(?<color>#[0-9a-fA-F]{3,8}|[a-zA-Z]+)/.exec(style);
-  return match?.groups?.color;
-}
+const colorFromStyle = (style: unknown) =>
+  typeof style === "string"
+    ? /color:\s*(?<color>#[0-9a-fA-F]{3,8}|[a-zA-Z]+)/u.exec(style)?.groups
+        ?.color
+    : undefined;
 
-function walk(node: unknown, inheritedFg: string | undefined, out: RenderSpan[]) {
+const walk = (
+  node: unknown,
+  inheritedFg: string | undefined,
+  out: RenderSpan[]
+) => {
   if (!isRecord(node)) {
     return;
   }
@@ -29,7 +30,9 @@ function walk(node: unknown, inheritedFg: string | undefined, out: RenderSpan[])
   if (node.type === "text") {
     if (typeof node.value === "string" && node.value !== "") {
       out.push(
-        inheritedFg === undefined ? { text: node.value } : { fg: inheritedFg, text: node.value },
+        inheritedFg === undefined
+          ? { text: node.value }
+          : { fg: inheritedFg, text: node.value }
       );
     }
     return;
@@ -44,13 +47,13 @@ function walk(node: unknown, inheritedFg: string | undefined, out: RenderSpan[])
   for (const child of node.children) {
     walk(child, fg, out);
   }
-}
+};
 
 /**
  * Flatten one line node into ordered spans. A missing node (line absent from the highlighted
  * result) yields no spans so the caller can fall back to plain text.
  */
-export function flattenLineSpans(line: unknown): RenderSpan[] {
+export const flattenLineSpans = (line: unknown): RenderSpan[] => {
   const out: RenderSpan[] = [];
   if (isRecord(line) && Array.isArray(line.children)) {
     for (const child of line.children) {
@@ -64,4 +67,4 @@ export function flattenLineSpans(line: unknown): RenderSpan[] {
   }
 
   return out;
-}
+};

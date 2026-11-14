@@ -16,25 +16,24 @@ export interface VisibleWindow {
   bottomSpacer: number;
 }
 
-const EMPTY: VisibleWindow = { bottomSpacer: 0, end: 0, start: 0, topSpacer: 0 };
+const EMPTY: VisibleWindow = {
+  bottomSpacer: 0,
+  end: 0,
+  start: 0,
+  topSpacer: 0,
+};
 
 /** Cumulative terminal-row end offset for each source row. */
-export function cumulativeRowEnds(heights: readonly number[]) {
+export const cumulativeRowEnds = (heights: readonly number[]) => {
   let total = 0;
   return heights.map((height) => {
     total += Math.max(0, height);
     return total;
   });
-}
+};
 
-/** Row containing a zero-based terminal-cell offset, or undefined outside the content. */
-export function rowIndexAtOffset(ends: readonly number[], offset: number) {
-  const total = ends.at(-1) ?? 0;
-  if (!Number.isFinite(offset) || offset < 0 || offset >= total) {
-    return undefined;
-  }
-
-  const cell = Math.floor(offset);
+/** Binary search for the first row whose end offset is past `cell`. */
+const firstRowEndingAfter = (ends: readonly number[], cell: number) => {
   let low = 0;
   let high = ends.length - 1;
   while (low < high) {
@@ -46,15 +45,23 @@ export function rowIndexAtOffset(ends: readonly number[], offset: number) {
     }
   }
   return low;
-}
+};
+
+/** Row containing a zero-based terminal-cell offset, or undefined outside the content. */
+export const rowIndexAtOffset = (ends: readonly number[], offset: number) => {
+  const total = ends.at(-1) ?? 0;
+  return Number.isFinite(offset) && offset >= 0 && offset < total
+    ? firstRowEndingAfter(ends, Math.floor(offset))
+    : undefined;
+};
 
 /** Fast path: every row is one terminal row tall (unified, no wrap). */
-export function visibleWindow(
+export const visibleWindow = (
   rowCount: number,
   scrollTop: number,
   viewportHeight: number,
-  overscan = 0,
-): VisibleWindow {
+  overscan = 0
+): VisibleWindow => {
   if (rowCount <= 0) {
     return EMPTY;
   }
@@ -70,15 +77,15 @@ export function visibleWindow(
     start,
     topSpacer: start,
   };
-}
+};
 
 /** Variable path: `heights[i]` is row i's terminal-row height (wrap mode). */
-export function visibleWindowVariable(
+export const visibleWindowVariable = (
   heights: number[],
   scrollTop: number,
   viewportHeight: number,
-  overscan = 0,
-): VisibleWindow {
+  overscan = 0
+): VisibleWindow => {
   const count = heights.length;
   if (count <= 0) {
     return EMPTY;
@@ -91,7 +98,10 @@ export function visibleWindowVariable(
     total += Math.max(0, height);
   }
 
-  const top = Math.max(0, Math.min(Math.floor(scrollTop), Math.max(0, total - 1)));
+  const top = Math.max(
+    0,
+    Math.min(Math.floor(scrollTop), Math.max(0, total - 1))
+  );
   const bottom = top + Math.max(0, viewportHeight);
 
   let first = -1;
@@ -125,4 +135,4 @@ export function visibleWindowVariable(
     start,
     topSpacer: tops[start] ?? 0,
   };
-}
+};

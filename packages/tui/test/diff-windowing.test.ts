@@ -40,7 +40,12 @@ describe("visibleWindow (fixed height)", () => {
   });
 
   test("clamps the window to the row range at the top and bottom", () => {
-    expect(visibleWindow(100, 0, 5)).toEqual({ bottomSpacer: 95, end: 5, start: 0, topSpacer: 0 });
+    expect(visibleWindow(100, 0, 5)).toEqual({
+      bottomSpacer: 95,
+      end: 5,
+      start: 0,
+      topSpacer: 0,
+    });
     expect(visibleWindow(100, 98, 5)).toEqual({
       bottomSpacer: 0,
       end: 100,
@@ -65,7 +70,12 @@ describe("visibleWindow (fixed height)", () => {
   });
 
   test("returns an empty window for no rows", () => {
-    expect(visibleWindow(0, 0, 10)).toEqual({ bottomSpacer: 0, end: 0, start: 0, topSpacer: 0 });
+    expect(visibleWindow(0, 0, 10)).toEqual({
+      bottomSpacer: 0,
+      end: 0,
+      start: 0,
+      topSpacer: 0,
+    });
   });
 });
 

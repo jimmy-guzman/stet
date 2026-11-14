@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "@/status/model";
+import {
+  buildStatusBarModel,
+  clearAlertSource,
+  latestAlert,
+  raiseAlert,
+} from "@/status/model";
 import type { StatusBarModelInput } from "@/status/model";
 
 const baseInput = {
@@ -12,7 +17,11 @@ const baseInput = {
   width: 80,
 } satisfies StatusBarModelInput;
 
-const activity = { at: 1000, changeKind: "modified", path: "src/state.ts" } as const;
+const activity = {
+  at: 1000,
+  changeKind: "modified",
+  path: "src/state.ts",
+} as const;
 
 describe("status bar guidance", () => {
   test("an idle bar falls back to guidance", () => {
@@ -25,12 +34,15 @@ describe("status bar guidance", () => {
 
   test("guidance renders whatever mode text it is handed", () => {
     expect(
-      buildStatusBarModel({ ...baseInput, guidance: "enter find · esc cancel" }),
+      buildStatusBarModel({ ...baseInput, guidance: "enter find · esc cancel" })
     ).toMatchObject({ kind: "guidance", text: "enter find · esc cancel" });
   });
 
   test("live content displaces guidance, and clearing it restores guidance", () => {
-    const busy = buildStatusBarModel({ ...baseInput, foregroundProgress: "switching…" });
+    const busy = buildStatusBarModel({
+      ...baseInput,
+      foregroundProgress: "switching…",
+    });
     expect(busy).toMatchObject({ kind: "message", message: "switching…" });
 
     // The model is a pure function of its inputs, so "the switch finished" is the absent input.
@@ -47,7 +59,7 @@ describe("status bar priority", () => {
         ...baseInput,
         foregroundProgress: "switching to feat/status…",
         notification: { level: "success", text: "copied src/state.ts" },
-      }),
+      })
     ).toMatchObject({
       category: "foreground-progress",
       level: "info",
@@ -59,10 +71,18 @@ describe("status bar priority", () => {
     expect(
       buildStatusBarModel({
         ...baseInput,
-        alert: { level: "error", source: "worktree-switch", text: "missing worktree" },
+        alert: {
+          level: "error",
+          source: "worktree-switch",
+          text: "missing worktree",
+        },
         notification: { level: "success", text: "copied src/state.ts" },
-      }),
-    ).toMatchObject({ category: "notification", level: "success", message: "copied src/state.ts" });
+      })
+    ).toMatchObject({
+      category: "notification",
+      level: "success",
+      message: "copied src/state.ts",
+    });
   });
 
   test("recent activity outranks guidance", () => {
@@ -95,7 +115,9 @@ describe("status bar alerts", () => {
   });
 
   test("clearing a source with no alert is a no-op", () => {
-    expect(clearAlertSource([switchFail], "worktree-list")).toEqual([switchFail]);
+    expect(clearAlertSource([switchFail], "worktree-list")).toEqual([
+      switchFail,
+    ]);
   });
 
   test("a source raising again replaces its own alert rather than stacking", () => {
@@ -107,8 +129,12 @@ describe("status bar alerts", () => {
   // One row cannot rank one failure against another, so recency decides: the problem the user
   // Just provoked is the one they are waiting on.
   test("the newest alert is the one the bar shows", () => {
-    expect(latestAlert(raiseAlert(raiseAlert([], switchFail), listFail))).toEqual(listFail);
-    expect(latestAlert(raiseAlert(raiseAlert([], listFail), switchFail))).toEqual(switchFail);
+    expect(
+      latestAlert(raiseAlert(raiseAlert([], switchFail), listFail))
+    ).toEqual(listFail);
+    expect(
+      latestAlert(raiseAlert(raiseAlert([], listFail), switchFail))
+    ).toEqual(switchFail);
   });
 
   test("a re-raised source becomes the newest", () => {
@@ -145,7 +171,10 @@ describe("status bar fitting", () => {
   test("a long activity path truncates from the front, keeping the filename", () => {
     const model = buildStatusBarModel({
       ...baseInput,
-      activity: { ...activity, path: `src/${"components/".repeat(20)}DiffView.tsx` },
+      activity: {
+        ...activity,
+        path: `src/${"components/".repeat(20)}DiffView.tsx`,
+      },
       width: 40,
     });
 
@@ -166,7 +195,7 @@ describe("status bar fitting", () => {
         ...baseInput,
         activity: { ...activity, path: "src/components/StatusBar.tsx" },
         width: 5,
-      }),
+      })
     ).toMatchObject({ kind: "guidance" });
   });
 
@@ -187,6 +216,8 @@ describe("status bar fitting", () => {
   test("guidance itself truncates rather than overflowing a narrow row", () => {
     const model = buildStatusBarModel({ ...baseInput, width: 10 });
 
-    expect(Bun.stringWidth(model.kind === "guidance" ? model.text : "")).toBeLessThanOrEqual(8);
+    expect(
+      Bun.stringWidth(model.kind === "guidance" ? model.text : "")
+    ).toBeLessThanOrEqual(8);
   });
 });

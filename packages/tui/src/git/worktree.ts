@@ -35,33 +35,44 @@ export const WORKTREE_ACTIVE_MS = 5 * 60_000;
 
 // -uall so an untracked directory is not collapsed to `dir/`, whose own mtime would not move when a
 // File deep inside it is written.
-export const worktreeStatusArgs = ["git", "status", "--porcelain=v1", "-uall", "-z"];
+export const worktreeStatusArgs = [
+  "git",
+  "status",
+  "--porcelain=v1",
+  "-uall",
+  "-z",
+];
 
 /** One call for every worktree's HEAD, since they all share the repository's object database. */
-export function commitTimeArgs(heads: readonly string[]) {
-  return ["git", "show", "-s", "--format=%H %ct", ...heads];
-}
+export const commitTimeArgs = (heads: readonly string[]) => [
+  "git",
+  "show",
+  "-s",
+  "--format=%H %ct",
+  ...heads,
+];
 
-export function parseCommitTimes(output: string) {
-  return new Map(
+export const parseCommitTimes = (output: string) =>
+  new Map(
     output
       .split("\n")
       .map((line) => line.split(" "))
       .filter((parts) => parts.length === 2)
       .flatMap(([sha, seconds]) => {
         const at = Number(seconds);
-        return sha === undefined || !Number.isFinite(at) ? [] : [[sha, at * 1000] as const];
-      }),
+        return sha === undefined || !Number.isFinite(at)
+          ? []
+          : [[sha, at * 1000] as const];
+      })
   );
-}
 
-export function parseWorktreeList(output: string): Worktree[] {
+export const parseWorktreeList = (output: string): Worktree[] => {
   const worktrees: Worktree[] = [];
 
   // With -z every attribute line ends in NUL and each record ends in an extra NUL
   for (const record of output.split("\0\0")) {
     const attributes = record.split("\0").filter((line) => line !== "");
-    const first = attributes[0];
+    const [first] = attributes;
     if (first === undefined || !first.startsWith("worktree ")) {
       continue;
     }
@@ -80,14 +91,19 @@ export function parseWorktreeList(output: string): Worktree[] {
         worktree.head = attribute.slice("HEAD ".length);
       } else if (attribute.startsWith("branch ")) {
         const ref = attribute.slice("branch ".length);
-        worktree.branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref;
+        worktree.branch = ref.startsWith("refs/heads/")
+          ? ref.slice("refs/heads/".length)
+          : ref;
       } else if (attribute === "bare") {
         worktree.bare = true;
       } else if (attribute === "detached") {
         worktree.detached = true;
       } else if (attribute === "locked" || attribute.startsWith("locked ")) {
         worktree.locked = true;
-      } else if (attribute === "prunable" || attribute.startsWith("prunable ")) {
+      } else if (
+        attribute === "prunable" ||
+        attribute.startsWith("prunable ")
+      ) {
         worktree.prunable = true;
       }
     }
@@ -96,14 +112,14 @@ export function parseWorktreeList(output: string): Worktree[] {
   }
 
   return worktrees;
-}
+};
 
 /**
  * One path per changed file. A rename/copy record's trailing original path is consumed rather than
  * counted, so a rename is one changed file: `parsePorcelainStatus` deliberately maps that original
  * as a second key (it needs the stage state under both names), which would double-count here.
  */
-export function parseWorktreeStatusPaths(output: string) {
+export const parseWorktreeStatusPaths = (output: string) => {
   const tokens = output.split("\0");
   const paths: string[] = [];
 
@@ -115,30 +131,37 @@ export function parseWorktreeStatusPaths(output: string) {
 
     paths.push(token.slice(3));
 
-    if (token.startsWith("R") || token.startsWith("C") || token[1] === "R" || token[1] === "C") {
+    if (
+      token.startsWith("R") ||
+      token.startsWith("C") ||
+      token[1] === "R" ||
+      token[1] === "C"
+    ) {
       index += 1;
     }
   }
 
   return paths;
-}
+};
 
 /**
  * A worktree's git dir, without spawning git: it is `<worktree>/.git` in the main worktree, and in
  * a linked one that `.git` is a file naming the real dir (`<main>/.git/worktrees/<name>`).
  */
-function gitDirOf(worktreePath: string) {
+const gitDirOf = (worktreePath: string): string | undefined => {
   const dotGit = `${worktreePath}/.git`;
   try {
     if (statSync(dotGit).isDirectory()) {
       return dotGit;
     }
-    const pointer = readFileSync(dotGit, "utf8").trim();
-    return pointer.startsWith("gitdir: ") ? pointer.slice("gitdir: ".length) : undefined;
+    const pointer = readFileSync(dotGit, "utf-8").trim();
+    return pointer.startsWith("gitdir: ")
+      ? pointer.slice("gitdir: ".length)
+      : undefined;
   } catch {
     return undefined;
   }
-}
+};
 
 /**
  * When git last moved HEAD here: a commit, checkout, reset, rebase, or the worktree's own creation.
@@ -146,7 +169,7 @@ function gitDirOf(worktreePath: string) {
  * rewritten by a `git status`, so stet's own polling cannot fake activity into it. Zero when the
  * repository has reflogs turned off, where the HEAD commit time is the floor instead.
  */
-function reflogMtime(worktreePath: string) {
+const reflogMtime = (worktreePath: string) => {
   const gitDir = gitDirOf(worktreePath);
   if (gitDir === undefined) {
     return 0;
@@ -156,7 +179,7 @@ function reflogMtime(worktreePath: string) {
   } catch {
     return 0;
   }
-}
+};
 
 /**
  * The most recent of everything that counts as work in a worktree: an uncommitted edit (a changed
@@ -164,34 +187,40 @@ function reflogMtime(worktreePath: string) {
  * Edits alone are not enough: they go to zero the moment an agent commits, which is exactly when it
  * was busiest.
  */
-export function summarizeWorktree(
+export const summarizeWorktree = (
   path: string,
   statusOutput: string,
-  commitTimeMs: number | undefined,
-): WorktreeSummary {
+  commitTimeMs: number | undefined
+): WorktreeSummary => {
   // A deleted (or vanished-mid-scan) file stats to 0 and so drops out of the max on its own.
-  const newest = parseWorktreeStatusPaths(statusOutput).reduce(
-    (max, entry) => Math.max(max, fileMtime(path, entry)),
-    Math.max(reflogMtime(path), commitTimeMs ?? 0),
-  );
+  const entries = parseWorktreeStatusPaths(statusOutput);
+  let newest = Math.max(reflogMtime(path), commitTimeMs ?? 0);
+  for (const entry of entries) {
+    newest = Math.max(newest, fileMtime(path, entry));
+  }
   return { lastActivityAt: newest === 0 ? undefined : newest, path };
-}
+};
 
 /**
  * Keeps the previous map when nothing moved, so an idle repo's poll is inert: the summaries feed
  * the recency clock, and a fresh map every tick would wake every dot on the screen to redraw itself
  * unchanged.
  */
-export function mergeWorktreeSummaries(
+export const mergeWorktreeSummaries = (
   previous: Map<string, WorktreeSummary>,
-  next: readonly WorktreeSummary[],
-) {
+  next: readonly WorktreeSummary[]
+) => {
   const unchanged =
     previous.size === next.length &&
-    next.every((summary) => previous.get(summary.path)?.lastActivityAt === summary.lastActivityAt);
+    next.every(
+      (summary) =>
+        previous.get(summary.path)?.lastActivityAt === summary.lastActivityAt
+    );
 
-  return unchanged ? previous : new Map(next.map((summary) => [summary.path, summary]));
-}
+  return unchanged
+    ? previous
+    : new Map(next.map((summary) => [summary.path, summary]));
+};
 
 /**
  * Picker order: whatever was touched most recently, so the worktree an agent is working in is the
@@ -199,14 +228,17 @@ export function mergeWorktreeSummaries(
  * actually is. Computed once when the picker opens, never on a summary refresh, so the list cannot
  * reorder under the cursor while it is open.
  */
-export function orderWorktrees(
+export const orderWorktrees = (
   worktrees: readonly Worktree[],
-  summaries: ReadonlyMap<string, WorktreeSummary>,
-) {
-  const activity = (worktree: Worktree) => summaries.get(worktree.path)?.lastActivityAt ?? 0;
+  summaries: ReadonlyMap<string, WorktreeSummary>
+) => {
+  const activity = (worktree: Worktree) =>
+    summaries.get(worktree.path)?.lastActivityAt ?? 0;
 
-  return worktrees.toSorted((a, b) => activity(b) - activity(a) || a.path.localeCompare(b.path));
-}
+  return worktrees.toSorted(
+    (a, b) => activity(b) - activity(a) || a.path.localeCompare(b.path)
+  );
+};
 
 /**
  * Each worktree's path keyed to the part that actually tells it apart: the segments after the
@@ -218,17 +250,22 @@ export function orderWorktrees(
  * main one, when the others are nested under it) has no distinguishing text and gets an empty
  * tail.
  */
-export function worktreePathTails(worktrees: readonly Worktree[]) {
+export const worktreePathTails = (worktrees: readonly Worktree[]) => {
   const paths = worktrees.map((worktree) => worktree.path.split("/"));
-  const first = paths[0];
+  const [first] = paths;
   if (first === undefined) {
     return new Map<string, string>();
   }
 
   const mismatch = first.findIndex((segment, index) =>
-    paths.some((other) => other[index] !== segment),
+    paths.some((other) => other[index] !== segment)
   );
   const shared = mismatch === -1 ? first.length : mismatch;
 
-  return new Map(paths.map((segments) => [segments.join("/"), segments.slice(shared).join("/")]));
-}
+  return new Map(
+    paths.map((segments) => [
+      segments.join("/"),
+      segments.slice(shared).join("/"),
+    ])
+  );
+};

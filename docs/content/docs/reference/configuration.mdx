@@ -5,9 +5,7 @@ description: Configure features, themes, editors, file associations, and icons.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Configuration is optional. Without it, stet uses its built-in `dark` or `light`
-theme to match your terminal and reads editor commands from environment
-variables, with `vim` as the terminal-editor fallback.
+Configuration is optional. Without it, stet uses its built-in `dark` or `light` theme to match your terminal and reads editor commands from environment variables, with `vim` as the terminal-editor fallback.
 
 ## Location
 
@@ -17,20 +15,19 @@ stet reads its config once at startup from:
 ~/.config/stet/config.jsonc
 ```
 
-`$XDG_CONFIG_HOME` is honored, and `config.json` works too. Both are parsed as
-JSONC, so comments and trailing commas are allowed.
+`$XDG_CONFIG_HOME` is honored, and `config.json` works too. Both are parsed as JSONC, so comments and trailing commas are allowed.
 
 <Callout>
-  Config problems never block startup. An invalid value drops only its own section, the rest of the
-  config still applies, and the issue shows as a notice; unknown keys are reported too, so a typo'd
-  key never fails silently. A document that is not valid JSONC cannot be read at all, so stet runs
-  on the built-in defaults and reports the parse error the same way.
+  Config problems never block startup. An invalid value drops only its own
+  section, the rest of the config still applies, and the issue shows as a
+  notice; unknown keys are reported too, so a typo'd key never fails silently. A
+  document that is not valid JSONC cannot be read at all, so stet runs on the
+  built-in defaults and reports the parse error the same way.
 </Callout>
 
 ## Features
 
-Config is shaped by feature: each section owns its settings, including its off switch. Everything
-here is optional and shown with its default:
+Config is shaped by feature: each section owns its settings, including its off switch. Everything here is optional and shown with its default:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -42,44 +39,31 @@ here is optional and shown with its default:
 }
 ```
 
-| Key                    | Default     | Effect                                                                                                 |
-| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `icons.enabled`        | `true`      | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run)                   |
-| `viewer.wrap`          | `false`     | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there)                  |
-| `sidebar.open`         | `true`      | show the file tree at startup (`ctrl-b` toggles)                                                       |
-| `sidebar.position`     | `"left"`    | which edge the file tree docks to: `left`, `top`, `right`, or `bottom` (`d` cycles clockwise)          |
-| `sidebar.width`        | responsive  | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets) |
-| `sidebar.height`       | `10`        | tree height in rows while docked top or bottom; each axis keeps its own size                           |
-| `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                        |
-| `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                           |
-| `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                 |
-| `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                |
-| `search.scope`         | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles)                      |
+| Key | Default | Effect |
+| --- | --- | --- |
+| `icons.enabled` | `true` | Nerd Font icons in the tree, pickers, and header (`--no-icons` forces off for a run) |
+| `viewer.wrap` | `false` | wrap long lines in the viewer (`--wrap` starts a run wrapped; `x` toggles from there) |
+| `sidebar.open` | `true` | show the file tree at startup (`ctrl-b` toggles) |
+| `sidebar.position` | `"left"` | which edge the file tree docks to: `left`, `top`, `right`, or `bottom` (`d` cycles clockwise) |
+| `sidebar.width` | responsive | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets) |
+| `sidebar.height` | `10` | tree height in rows while docked top or bottom; each axis keeps its own size |
+| `sidebar.changesOnly` | `false` | the tree lists only changed files (`c` toggles) |
+| `update.check` | `true` | check GitHub for a newer release in the background at launch |
+| `search.regex` | `false` | project search starts in regex mode (`ctrl-r` toggles) |
+| `search.caseSensitive` | `false` | project search starts case-sensitive (`ctrl-x` toggles) |
+| `search.scope` | `"changed"` | project search starts over changed files or the whole `"repo"` (`ctrl-g` toggles) |
 
 A CLI flag wins over its config key for the run it was passed on.
 
-Keyboard shortcuts are configurable the same way: a `keybindings` section maps
-action ids to combos (`{ "toggle-sidebar": "ctrl+e" }`), with `false` unbinding
-an action. The ids, the combo grammar, and the fixed exceptions live in the
-[keybindings reference](/docs/reference/keybindings#custom-keybindings).
+Keyboard shortcuts are configurable the same way: a `keybindings` section maps action ids to combos (`{ "toggle-sidebar": "ctrl+e" }`), with `false` unbinding an action. The ids, the combo grammar, and the fixed exceptions live in the [keybindings reference](/docs/reference/keybindings#custom-keybindings).
 
-You never have to edit the file by hand for these: press `ctrl-s` anywhere to
-save your current session settings (theme, icons, wrap, sidebar, changes-only, search toggles, plus any `--editor`/`--ide` passed this run) back
-to the config. Only keys that differ from the file are written, as targeted
-edits that keep your comments, and the notice names what changed; an editor
-resolved from `$EDITOR`-style environment fallbacks is never written, only a
-literal flag. With no config file yet, `ctrl-s` creates one.
+You never have to edit the file by hand for these: press `ctrl-s` anywhere to save your current session settings (theme, icons, wrap, sidebar, changes-only, search toggles, plus any `--editor`/`--ide` passed this run) back to the config. Only keys that differ from the file are written, as targeted edits that keep your comments, and the notice names what changed; an editor resolved from `$EDITOR`-style environment fallbacks is never written, only a literal flag. With no config file yet, `ctrl-s` creates one.
 
 ![The status bar confirming ctrl-s saved the changed settings to the config file](/screenshots/save-settings.png)
 
 ## Editor and IDE
 
-Use `editor` and `ide` to set persistent command templates for the `e` key
-(terminal editor) and the `o` key (GUI / IDE). Both accept `{file}`, `{line}`,
-and `{repo}` (the repo root); `{line}` is omitted automatically when no cursor
-line is available. `{repo}` matters most in an `ide` template, where passing the
-folder makes the IDE open the file as a workspace instead of a bare single-file
-window.
+Use `editor` and `ide` to set persistent command templates for the `e` key (terminal editor) and the `o` key (GUI / IDE). Both accept `{file}`, `{line}`, and `{repo}` (the repo root); `{line}` is omitted automatically when no cursor line is available. `{repo}` matters most in an `ide` template, where passing the folder makes the IDE open the file as a workspace instead of a bare single-file window.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -91,38 +75,19 @@ window.
 Without a config value, the two keys fall back differently:
 
 - `editor` falls back to `STET_EDITOR`, then `$EDITOR` or `$VISUAL`, then `vim`.
-- `ide` falls back to `STET_IDE`, then `$VISUAL` but only when it differs from
-  `$EDITOR`, following the convention that `$VISUAL` names a GUI editor where
-  `$EDITOR` names a terminal one. If nothing is configured, `o` does nothing.
+- `ide` falls back to `STET_IDE`, then `$VISUAL` but only when it differs from `$EDITOR`, following the convention that `$VISUAL` names a GUI editor where `$EDITOR` names a terminal one. If nothing is configured, `o` does nothing.
 
-A bare editor name with no `{file}` is expanded to a known template: `nvim`
-becomes `nvim +{line} {file}`, `code` becomes `code {repo} --goto {file}:{line}`.
-The recognized names are `code`, `cursor`, `emacs`, `helix`, `hx`, `idea`, `kak`,
-`micro`, `nano`, `nvim`, `subl`, `vi`, `vim`, and `zed`; the GUI editors among
-them (`code`, `cursor`, `idea`, `zed`) carry `{repo}` and open a workspace, the
-rest a terminal `{line}`/`{file}`. An unrecognized bare name gets `+{line} {file}`
-appended, and a value that already contains `{file}` is used verbatim as a full
-template. Templates are split on whitespace, so an editor binary path with spaces
-is not supported.
+A bare editor name with no `{file}` is expanded to a known template: `nvim` becomes `nvim +{line} {file}`, `code` becomes `code {repo} --goto {file}:{line}`. The recognized names are `code`, `cursor`, `emacs`, `helix`, `hx`, `idea`, `kak`, `micro`, `nano`, `nvim`, `subl`, `vi`, `vim`, and `zed`; the GUI editors among them (`code`, `cursor`, `idea`, `zed`) carry `{repo}` and open a workspace, the rest a terminal `{line}`/`{file}`. An unrecognized bare name gets `+{line} {file}` appended, and a value that already contains `{file}` is used verbatim as a full template. Templates are split on whitespace, so an editor binary path with spaces is not supported.
 
-The `O` key opens the current file in your OS default app (`open` on macOS,
-`xdg-open` on Linux). It uses the system handler, so it needs no template or
-config.
+The `O` key opens the current file in your OS default app (`open` on macOS, `xdg-open` on Linux). It uses the system handler, so it needs no template or config.
 
 ## Themes
 
-Define themes under `themes` and pick one with `theme`. `theme` is either a
-single theme name, or a `{ "dark": ..., "light": ... }` pair that follows the
-terminal live: flip your terminal's appearance and stet re-themes.
+Define themes under `themes` and pick one with `theme`. `theme` is either a single theme name, or a `{ "dark": ..., "light": ... }` pair that follows the terminal live: flip your terminal's appearance and stet re-themes.
 
-A theme is a full set of `#rrggbb` tokens, or `{ "base": <name>, ... }` that
-inherits another theme and overrides only the tokens you name. Its `"syntax"` is
-a bundled [Shiki](https://shiki.style/) theme name, or an object overriding
-individual tokens (`keyword`, `string`, and so on).
+A theme is a full set of `#rrggbb` tokens, or `{ "base": <name>, ... }` that inherits another theme and overrides only the tokens you name. Its `"syntax"` is a bundled [Shiki](https://shiki.style/) theme name, or an object overriding individual tokens (`keyword`, `string`, and so on).
 
-The dynamic `icon` token map colors named icons. It accepts built-in and user-defined icon names.
-The built-in themes color recognizable file types while structural and generic icons stay muted; an
-icon with no color entry falls back to `text.muted`.
+The dynamic `icon` token map colors named icons. It accepts built-in and user-defined icon names. The built-in themes color recognizable file types while structural and generic icons stay muted; an icon with no color entry falls back to `text.muted`.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -137,18 +102,7 @@ icon with no color entry falls back to `text.muted`.
 }
 ```
 
-The built-in themes are `dark`, `light`, and a monochrome pair, `mono-dark` and
-`mono-light`, where every token is a pure grey. When `NO_COLOR` is non-empty
-([no-color.org](https://no-color.org)), stet ignores the configured `theme` and
-starts on the monochrome pair; change indicators keep working without hue (the
-diff's change bar renders `+`/`-` under any all-grey theme), and an explicit
-pick in the theme switcher still applies. Press `t` in the app to open the
-theme switcher and try any theme without editing the config: filter by name,
-move or hover to preview the whole UI live, `enter` (or click) to apply, `esc`
-to revert. The switch lasts the session; `ctrl-s` makes it permanent, writing
-the previewed theme (with any other changed settings) to the config. When the
-file holds a `{ "dark": ..., "light": ... }` pair, only the current
-appearance's half is rewritten, and saving `auto` removes the `theme` key.
+The built-in themes are `dark`, `light`, and a monochrome pair, `mono-dark` and `mono-light`, where every token is a pure grey. When `NO_COLOR` is non-empty ([no-color.org](https://no-color.org)), stet ignores the configured `theme` and starts on the monochrome pair; change indicators keep working without hue (the diff's change bar renders `+`/`-` under any all-grey theme), and an explicit pick in the theme switcher still applies. Press `t` in the app to open the theme switcher and try any theme without editing the config: filter by name, move or hover to preview the whole UI live, `enter` (or click) to apply, `esc` to revert. The switch lasts the session; `ctrl-s` makes it permanent, writing the previewed theme (with any other changed settings) to the config. When the file holds a `{ "dark": ..., "light": ... }` pair, only the current appearance's half is rewritten, and saving `auto` removes the `theme` key.
 
 ## File support
 
@@ -157,11 +111,7 @@ File support is two named registries layered over stet's built-ins:
 - `files` matches paths and selects syntax and icon facets.
 - `icons.glyphs` maps icon names to Nerd Font glyphs.
 
-Each registry has its own entry shape, but they share the same named layering behavior. An object
-with an existing name inherits fields it does not set, a new name adds an entry, and `false` removes
-an entry. Arrays replace inherited arrays. Icon entries are glyph strings rather than objects. An
-invalid entry reports a notice and leaves its built-in unchanged; an unknown icon or syntax
-referenced by a file association drops only that facet.
+Each registry has its own entry shape, but they share the same named layering behavior. An object with an existing name inherits fields it does not set, a new name adds an entry, and `false` removes an entry. Arrays replace inherited arrays. Icon entries are glyph strings rather than objects. An invalid entry reports a notice and leaves its built-in unchanged; an unknown icon or syntax referenced by a file association drops only that facet.
 
 ### Add a file type
 
@@ -180,15 +130,9 @@ This example highlights `.lua` files with the Lua grammar and gives them their o
 
 ### Match files
 
-A file association accepts `filenames`, `globs`, `extensions`, and `dotfiles`. Extensions are bare
-suffixes without a leading dot. A glob containing `/` matches the full repo-relative POSIX path; any
-other glob matches only the basename. Matching is case-insensitive unless `caseSensitive` is `true`.
+A file association accepts `filenames`, `globs`, `extensions`, and `dotfiles`. Extensions are bare suffixes without a leading dot. A glob containing `/` matches the full repo-relative POSIX path; any other glob matches only the basename. Matching is case-insensitive unless `caseSensitive` is `true`.
 
-Each association may set `syntax` and `icon`. Built-in and user associations
-participate in the same cascade, and each facet resolves independently by specificity: exact
-filename, glob, extension, then dotfile fallback. At the same specificity, a later association wins;
-user entries are registered after built-ins. Setting a facet to `false` blocks lower matches for
-that facet: syntax becomes plain text, or icon becomes the generic file glyph.
+Each association may set `syntax` and `icon`. Built-in and user associations participate in the same cascade, and each facet resolves independently by specificity: exact filename, glob, extension, then dotfile fallback. At the same specificity, a later association wins; user entries are registered after built-ins. Setting a facet to `false` blocks lower matches for that facet: syntax becomes plain text, or icon becomes the generic file glyph.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -207,22 +151,21 @@ that facet: syntax becomes plain text, or icon becomes the generic file glyph.
 }
 ```
 
-Without a matching syntax facet, stet asks its bundled filename inference for a Shiki grammar.
-Bare dotfiles do not masquerade as extensions. Without an icon match it uses `file`.
+Without a matching syntax facet, stet asks its bundled filename inference for a Shiki grammar. Bare dotfiles do not masquerade as extensions. Without an icon match it uses `file`.
 
 <Callout>
-  An entry that does not validate is reported in a notice; the rest of the config still applies.
-  Invalid whole-entry overrides retain their built-in, while invalid references on a file
-  association drop only the affected facet.
+  An entry that does not validate is reported in a notice; the rest of the
+  config still applies. Invalid whole-entry overrides retain their built-in,
+  while invalid references on a file association drop only the affected facet.
 </Callout>
 
 ## Environment variables
 
-| Variable            | Effect                                                                                                            |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `STET_EDITOR`       | fallback command template for the `e` key                                                                         |
-| `STET_IDE`          | fallback command template for the `o` key                                                                         |
+| Variable | Effect |
+| --- | --- |
+| `STET_EDITOR` | fallback command template for the `e` key |
+| `STET_IDE` | fallback command template for the `o` key |
 | `EDITOR` / `VISUAL` | consulted after the `STET_*` variables; the two keys read them differently, see [Editor and IDE](#editor-and-ide) |
-| `NO_COLOR`          | any non-empty value starts stet on the monochrome `mono-dark` / `mono-light` themes instead of the configured one |
-| `FORCE_COLOR`       | overrides `NO_COLOR`; `0` or `false` force monochrome, any other value keeps the configured theme                 |
-| `XDG_CONFIG_HOME`   | base directory for the config file                                                                                |
+| `NO_COLOR` | any non-empty value starts stet on the monochrome `mono-dark` / `mono-light` themes instead of the configured one |
+| `FORCE_COLOR` | overrides `NO_COLOR`; `0` or `false` force monochrome, any other value keeps the configured theme |
+| `XDG_CONFIG_HOME` | base directory for the config file |

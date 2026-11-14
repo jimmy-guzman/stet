@@ -36,31 +36,30 @@ export interface BuildTreeOptions {
   changesOnly: boolean;
 }
 
-export function buildFileTree(
+export const buildFileTree = (
   repoFiles: RepoFile[],
   changedByPath: Map<string, ChangedFile>,
-  options: BuildTreeOptions,
-): FileTreeNode[] {
-  return decorateTree(
+  options: BuildTreeOptions
+): FileTreeNode[] =>
+  decorateTree(
     buildTreeStructure(repoFiles, new Set(changedByPath.keys()), options),
-    changedByPath,
+    changedByPath
   );
-}
 
 // The repo-size-proportional half: the directory hierarchy and file nodes, sorted
 // And single-child-flattened. It depends only on the file *set* (repoFiles plus
 // Any changed paths the index dropped) and `changesOnly`, never on per-file churn,
 // So the reactive layer memoizes it across content-only edits and skips this walk.
-export function buildTreeStructure(
+export const buildTreeStructure = (
   repoFiles: RepoFile[],
   changedPaths: Set<string>,
-  options: BuildTreeOptions,
-): FileTreeNode[] {
+  options: BuildTreeOptions
+): FileTreeNode[] => {
   const root = makeDirectory("", "");
   const directories = new Map<string, DirectoryNode>([["", root]]);
   const seen = new Set<string>();
 
-  function insert(path: string, tracked: boolean, symlink: boolean) {
+  const insert = (path: string, tracked: boolean, symlink: boolean) => {
     if (options.changesOnly && !changedPaths.has(path)) {
       return;
     }
@@ -70,7 +69,8 @@ export function buildTreeStructure(
     let currentPath = "";
 
     for (const directoryName of parts.slice(0, -1)) {
-      currentPath = currentPath === "" ? directoryName : `${currentPath}/${directoryName}`;
+      currentPath =
+        currentPath === "" ? directoryName : `${currentPath}/${directoryName}`;
       let directory = directories.get(currentPath);
 
       if (directory === undefined) {
@@ -91,7 +91,7 @@ export function buildTreeStructure(
       tracked,
       type: "file",
     });
-  }
+  };
 
   for (const file of repoFiles) {
     seen.add(file.path);
@@ -108,19 +108,19 @@ export function buildTreeStructure(
   sortTree(root);
   computeFileCounts(root);
   return root.children.map(flattenSingleChildChains);
-}
+};
 
 // The cheap half: overlay the current changed set onto a prebuilt structure,
 // Setting each file's change and re-aggregating directories from it. Runs on every
 // Model update (where counts churn) while the structure above stays cached.
 // Returns stable references when the decorated content is identical so downstream
 // Solid memos (treeRows, focusedRowIndex) skip work proportional to the repo size.
-export function decorateTree(
+export const decorateTree = (
   nodes: FileTreeNode[],
-  changedByPath: Map<string, ChangedFile>,
-): FileTreeNode[] {
+  changedByPath: Map<string, ChangedFile>
+): FileTreeNode[] => {
   let result: FileTreeNode[] | undefined;
-  for (let i = 0; i < nodes.length; i++) {
+  for (let i = 0; i < nodes.length; i += 1) {
     const next = decorateNode(nodes[i], changedByPath);
     if (next !== nodes[i]) {
       result ??= nodes.slice(0, i);
@@ -130,9 +130,12 @@ export function decorateTree(
     }
   }
   return result ?? nodes;
-}
+};
 
-function decorateNode(node: FileTreeNode, changedByPath: Map<string, ChangedFile>): FileTreeNode {
+const decorateNode = (
+  node: FileTreeNode,
+  changedByPath: Map<string, ChangedFile>
+): FileTreeNode => {
   if (node.type === "file") {
     const changed = changedByPath.get(node.path);
     if (changed === node.changed) {
@@ -141,7 +144,7 @@ function decorateNode(node: FileTreeNode, changedByPath: Map<string, ChangedFile
     return { ...node, changed };
   }
   let children: FileTreeNode[] | undefined;
-  for (let i = 0; i < node.children.length; i++) {
+  for (let i = 0; i < node.children.length; i += 1) {
     const next = decorateNode(node.children[i], changedByPath);
     if (next !== node.children[i]) {
       children ??= node.children.slice(0, i);
@@ -154,18 +157,18 @@ function decorateNode(node: FileTreeNode, changedByPath: Map<string, ChangedFile
     return node;
   }
   return { ...node, ...aggregateChildren(children), children };
-}
+};
 
-export function defaultExpandedDirectories(changedPaths: string[]) {
+export const defaultExpandedDirectories = (changedPaths: string[]) => {
   let expanded = new Set<string>();
   for (const path of changedPaths) {
     expanded = expandAncestorsForPath(expanded, path);
   }
 
   return expanded;
-}
+};
 
-export function expandAncestorsForPath(expanded: Set<string>, path: string) {
+export const expandAncestorsForPath = (expanded: Set<string>, path: string) => {
   const next = new Set(expanded);
   const parts = path.split("/");
 
@@ -174,12 +177,12 @@ export function expandAncestorsForPath(expanded: Set<string>, path: string) {
   }
 
   return next;
-}
+};
 
-export function flattenTree(nodes: FileTreeNode[], expanded: Set<string>) {
+export const flattenTree = (nodes: FileTreeNode[], expanded: Set<string>) => {
   const rows: FileTreeRow[] = [];
 
-  function visit(node: FileTreeNode, depth: number) {
+  const visit = (node: FileTreeNode, depth: number) => {
     rows.push({ depth, index: rows.length, node });
 
     if (node.type === "directory" && expanded.has(node.id)) {
@@ -187,16 +190,16 @@ export function flattenTree(nodes: FileTreeNode[], expanded: Set<string>) {
         visit(child, depth + 1);
       }
     }
-  }
+  };
 
   for (const node of nodes) {
     visit(node, 0);
   }
 
   return rows;
-}
+};
 
-export function firstFileInNode(node: FileTreeNode): FileNode | undefined {
+export const firstFileInNode = (node: FileTreeNode): FileNode | undefined => {
   if (node.type === "file") {
     return node;
   }
@@ -209,39 +212,37 @@ export function firstFileInNode(node: FileTreeNode): FileNode | undefined {
   }
 
   return undefined;
-}
+};
 
 // Sets fileCount on every directory after the structure is built so that decorateNode can
 // Return stable directory references without losing the count on the first decoration.
-function computeFileCounts(directory: DirectoryNode): number {
+const computeFileCounts = (directory: DirectoryNode): number => {
   let count = 0;
   for (const child of directory.children) {
     count += child.type === "file" ? 1 : computeFileCounts(child);
   }
   directory.fileCount = count;
   return count;
-}
+};
 
-function makeDirectory(name: string, path: string): DirectoryNode {
-  return {
-    additions: 0,
-    changedCount: 0,
-    children: [],
-    deletions: 0,
-    fileCount: 0,
-    id: `dir:${path}`,
-    name,
-    path,
-    stage: undefined,
-    type: "directory",
-    warnings: [],
-  };
-}
+const makeDirectory = (name: string, path: string): DirectoryNode => ({
+  additions: 0,
+  changedCount: 0,
+  children: [],
+  deletions: 0,
+  fileCount: 0,
+  id: `dir:${path}`,
+  name,
+  path,
+  stage: undefined,
+  type: "directory",
+  warnings: [],
+});
 
 // Sum a directory's churn, file/changed counts, merged stage, and warnings from
 // Its already-decorated children. Pure (returns the fields rather than mutating),
 // So `decorateNode` can rebuild directories immutably over the cached structure.
-function aggregateChildren(children: FileTreeNode[]) {
+const aggregateChildren = (children: FileTreeNode[]) => {
   const warnings = new Set<string>();
   const stages = new Set<StageState>();
   let additions = 0;
@@ -281,12 +282,12 @@ function aggregateChildren(children: FileTreeNode[]) {
     changedCount,
     deletions,
     fileCount,
-    stage: stages.size === 0 ? undefined : stages.size === 1 ? [...stages][0] : "mixed",
+    stage: stages.size > 1 ? "mixed" : [...stages][0],
     warnings: [...warnings],
   };
-}
+};
 
-function sortTree(directory: DirectoryNode) {
+const sortTree = (directory: DirectoryNode) => {
   directory.children.sort((a, b) => {
     if (a.type !== b.type) {
       return a.type === "directory" ? -1 : 1;
@@ -300,18 +301,22 @@ function sortTree(directory: DirectoryNode) {
       sortTree(child);
     }
   }
-}
+};
 
-function flattenSingleChildChains(node: FileTreeNode): FileTreeNode {
+const flattenSingleChildChains = (node: FileTreeNode): FileTreeNode => {
   if (node.type === "file") {
     return node;
   }
 
   let current = node;
-  while (current.children.length === 1 && current.children[0]?.type === "directory") {
-    const child = current.children[0];
+  let [child] = current.children;
+  while (current.children.length === 1 && child?.type === "directory") {
     current = { ...child, name: `${current.name}/${child.name}` };
+    [child] = current.children;
   }
 
-  return { ...current, children: current.children.map(flattenSingleChildChains) };
-}
+  return {
+    ...current,
+    children: current.children.map(flattenSingleChildChains),
+  };
+};

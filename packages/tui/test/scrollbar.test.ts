@@ -49,13 +49,13 @@ describe("scrollbarThumb", () => {
   test("never moves the thumb up as scrollTop grows", () => {
     const tops = Array.from(
       { length: 91 },
-      (_, scrollTop) => scrollbarThumb(100, 10, scrollTop)?.top,
+      (_, scrollTop) => scrollbarThumb(100, 10, scrollTop)?.top
     );
     expect(tops.every((top) => top !== undefined)).toBe(true);
-    tops.forEach((top, index) => {
+    for (const [index, top] of tops.entries()) {
       if (index > 0) {
         expect(top ?? 0).toBeGreaterThanOrEqual(tops[index - 1] ?? 0);
       }
-    });
+    }
   });
 });

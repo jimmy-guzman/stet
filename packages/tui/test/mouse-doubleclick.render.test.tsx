@@ -1,30 +1,35 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
+
+// The left (sidebar) and right (viewer/search) panes share a `││` seam, and the same file
+// Name appears in both, so scope the frame scan to one pane before locating a row.
+const paneRowOf = (frame: string, side: "left" | "right", text: string) =>
+  frame
+    .split("\n")
+    .map((line) => {
+      const parts = line.split("││");
+      return side === "left" ? (parts[0] ?? "") : parts.slice(1).join("││");
+    })
+    .findIndex((cell) => cell.includes(text));
 
 // The double-click guard reads only the clicks its pane forwards to it, so a click on a
 // Row the pane otherwise ignores (a directory in the tree, a file header in search) must
 // Still reach the guard, or a slow-but-in-window sequence of three separate single clicks
 // (target -> other row -> same target) reads as a double and fires the navigating action.
 describe("double-click tracker resets on an intervening row click", () => {
-  // The left (sidebar) and right (viewer/search) panes share a `││` seam, and the same file
-  // Name appears in both, so scope the frame scan to one pane before locating a row.
-  const paneRowOf = (frame: string, side: "left" | "right", text: string) =>
-    frame
-      .split("\n")
-      .map((line) => {
-        const parts = line.split("││");
-        return side === "left" ? (parts[0] ?? "") : parts.slice(1).join("││");
-      })
-      .findIndex((cell) => cell.includes(text));
-
   test("a directory click between two clicks on the same file does not pin it as a tab", async () => {
     const repoRoot = createFixtureRepo("stet-tree-dblclick-", {
       "a.txt": "alpha\n",
@@ -34,16 +39,17 @@ describe("double-click tracker resets on an intervening row click", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, mockMouse, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, mockMouse, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, {
+        height: 24,
+        width: 100,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       await settleUntil(
         "tree rendered",
-        (frame) => frame.includes("a.txt") && frame.includes("pkg"),
+        (frame) => frame.includes("a.txt") && frame.includes("pkg")
       );
 
       // Directories sort above files, so `pkg` is above `a.txt`; expanding it pushes
@@ -78,17 +84,15 @@ describe("double-click tracker resets on an intervening row click", () => {
       "src/a.ts": "const seed = 0\n",
       "src/b.ts": "const seed = 0\n",
     });
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const needleA = 1\n");
-    writeFileSync(join(repoRoot, "src", "b.ts"), "const needleB = 2\n");
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const needleA = 1\n");
+    writeFileSync(path.join(repoRoot, "src", "b.ts"), "const needleB = 2\n");
 
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } = await testRender(
-      () => <App />,
-      { height: 30, width: 120 },
-    );
+    const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, { height: 30, width: 120 });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -97,7 +101,9 @@ describe("double-click tracker resets on an intervening row click", () => {
       await settleUntil("search pane", (frame) => frame.includes("search…"));
       await mockInput.typeText("needle");
       // Two files match, so the results carry two headers with a match under each.
-      await settleUntil("results", (frame) => frame.includes("2 matches in 2 files"));
+      await settleUntil("results", (frame) =>
+        frame.includes("2 matches in 2 files")
+      );
 
       // `src/b.ts`'s group is below `src/a.ts`'s, so collapsing it never shifts the
       // Match-a row above it. Both names also appear in the sidebar, hence the scope.

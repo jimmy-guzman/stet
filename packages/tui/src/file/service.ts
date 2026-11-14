@@ -11,7 +11,7 @@ export class File extends Context.Service<
     readonly content: (
       repoRoot: string,
       path: string,
-      options: LoadFileContentOptions,
+      options: LoadFileContentOptions
     ) => Effect.Effect<FileContent>;
   }
 >()("stet/File") {}
@@ -28,11 +28,17 @@ export const FileLive = Layer.effect(
       // Caught before decoding.
       content: (repoRoot, path, options) =>
         options.gitSpec === undefined
-          ? Effect.promise(() => loadFileContentAsync(repoRoot, path, options))
+          ? Effect.promise(
+              async () => await loadFileContentAsync(repoRoot, path, options)
+            )
           : subprocess.run(["git", "show", options.gitSpec], repoRoot).pipe(
-              Effect.map((result) => classifyFileBytes(result.stdoutBytes, options)),
-              Effect.catch(() => Effect.succeed<FileContent>({ kind: "missing" })),
+              Effect.map((result) =>
+                classifyFileBytes(result.stdoutBytes, options)
+              ),
+              Effect.catch(() =>
+                Effect.succeed<FileContent>({ kind: "missing" })
+              )
             ),
     };
-  }),
+  })
 );

@@ -10,16 +10,19 @@ const match = (path: string, line: number, text: string, column = 1) => ({
   text,
 });
 
-const lines = (count: number) => Array.from({ length: count }, (_, i) => `line ${i + 1}`);
+const lines = (count: number) =>
+  Array.from({ length: count }, (_, i) => `line ${i + 1}`);
 
 const shape = (items: SearchItem[]) =>
-  items.map((item) =>
-    item.kind === "header"
-      ? `header ${item.path} (${item.count})`
-      : item.kind === "gap"
-        ? "gap"
-        : `${item.match === undefined ? "context" : "match"} ${item.line}`,
-  );
+  items.map((item) => {
+    if (item.kind === "header") {
+      return `header ${item.path} (${item.count})`;
+    }
+    if (item.kind === "gap") {
+      return "gap";
+    }
+    return `${item.match === undefined ? "context" : "match"} ${item.line}`;
+  });
 
 describe("buildSearchItems", () => {
   test("groups matches by file with a header and context around each match", () => {
@@ -85,7 +88,12 @@ describe("buildSearchItems", () => {
       linesByPath: new Map([["a.ts", lines(3)]]),
       matches: [match("a.ts", 1, "line 1"), match("a.ts", 3, "line 3")],
     });
-    expect(shape(items)).toEqual(["header a.ts (2)", "match 1", "context 2", "match 3"]);
+    expect(shape(items)).toEqual([
+      "header a.ts (2)",
+      "match 1",
+      "context 2",
+      "match 3",
+    ]);
   });
 
   test("a path without file lines degrades to match-only rows from the grep text", () => {
@@ -93,11 +101,22 @@ describe("buildSearchItems", () => {
       collapsed: new Set(),
       context: 2,
       linesByPath: new Map(),
-      matches: [match("bin.dat", 4, "grep text"), match("bin.dat", 9, "more grep text")],
+      matches: [
+        match("bin.dat", 4, "grep text"),
+        match("bin.dat", 9, "more grep text"),
+      ],
     });
-    expect(shape(items)).toEqual(["header bin.dat (2)", "match 4", "gap", "match 9"]);
+    expect(shape(items)).toEqual([
+      "header bin.dat (2)",
+      "match 4",
+      "gap",
+      "match 9",
+    ]);
     const rows = items.filter((item) => item.kind === "line");
-    expect(rows.map((row) => row.text)).toEqual(["grep text", "more grep text"]);
+    expect(rows.map((row) => row.text)).toEqual([
+      "grep text",
+      "more grep text",
+    ]);
   });
 
   test("a collapsed path contributes only its header, count intact", () => {
@@ -123,7 +142,7 @@ describe("buildSearchItems", () => {
       "context 4",
       "context 5",
     ]);
-    const header = items[0];
+    const [header] = items;
     expect(header.kind === "header" && header.collapsed).toBe(true);
   });
 

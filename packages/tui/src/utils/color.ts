@@ -1,5 +1,5 @@
 /** Linear-interpolate two `#rrggbb` hex colors; `t` is clamped to [0, 1]. */
-export function lerpHex(from: string, to: string, t: number) {
+export const lerpHex = (from: string, to: string, t: number) => {
   const clamped = Math.max(0, Math.min(1, t));
   const channel = (offset: number) => {
     const a = Number.parseInt(from.slice(offset, offset + 2), 16);
@@ -9,4 +9,4 @@ export function lerpHex(from: string, to: string, t: number) {
       .padStart(2, "0");
   };
   return `#${channel(1)}${channel(3)}${channel(5)}`;
-}
+};

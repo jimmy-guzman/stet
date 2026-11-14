@@ -4,7 +4,7 @@ const DOUBLE_CLICK_MS = 400;
 // Successive `onMouseDown`s. Each guard tracks the last click's identity and
 // Time; a second click on the same id within the window reads as a double. The
 // Id resets on a double so a third rapid click is not counted as another double.
-export function createDoubleClickGuard() {
+export const createDoubleClickGuard = () => {
   let last = { at: 0, id: "" };
   return (id: string) => {
     const at = Date.now();
@@ -12,4 +12,4 @@ export function createDoubleClickGuard() {
     last = { at, id: isDouble ? "" : id };
     return isDouble;
   };
-}
+};

@@ -1,14 +1,15 @@
 import {
   areLanguagesAttached,
   areThemesAttached,
+  attachResolvedThemes,
   getSharedHighlighter,
   parsePatchFiles,
-  registerCustomTheme,
   renderDiffWithHighlighter,
   setLanguageOverride,
 } from "@pierre/diffs";
 import type { DiffsHighlighter, RenderDiffOptions } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
+import { normalizeTheme } from "shiki/core";
 
 import { fileSupportForPath } from "@/file-support/registry";
 import { activeThemeName, appearance } from "@/theme/active";
@@ -39,38 +40,47 @@ export interface RenderInput {
 // Themes attaches another theme rather than mutating the attached one, which is
 // What lets the highlight cache key on it and re-theme cleanly. Diff/cursor/find
 // Backgrounds are still layered from stet tokens at render time.
-function diffThemeName() {
+const diffThemeName = () => {
   const name = activeThemeName();
   return syntaxThemeForName(name) ?? `${STET_SHIKI_THEME_NAME}:${name}`;
-}
+};
 
-const registered = new Set<string>();
-
-// Register (token themes) and attach the active render theme to the shared
-// Highlighter, returning its name. Bundled syntaxThemes are known to Shiki and
-// Only need attaching; an attach failure leaves the render to fall back to plain
-// Text. Called before every render so a theme switch attaches on demand.
-async function ensureDiffTheme() {
+// Attach the active render theme to the shared highlighter, returning its name.
+// A token theme is built and normalized here, then attached synchronously (the
+// same normalization a registered loader would run, minus the promise); bundled
+// SyntaxThemes are known to Shiki and load through the highlighter. An attach
+// Failure leaves the render to fall back to plain text. Called before every
+// Render so a theme switch attaches on demand.
+const ensureDiffTheme = async () => {
   const name = activeThemeName();
   const themeName = diffThemeName();
-  if (syntaxThemeForName(name) === undefined && !registered.has(themeName)) {
-    registerCustomTheme(themeName, () =>
-      Promise.resolve({ ...shikiTheme(themeForName(name), appearance()), name: themeName }),
-    );
-    registered.add(themeName);
+  const instance = await highlighter();
+  if (areThemesAttached(themeName)) {
+    return themeName;
   }
-  await highlighter(themeName);
-  if (!areThemesAttached(themeName)) {
-    await getSharedHighlighter({
-      langs: [],
-      preferredHighlighter: "shiki-wasm",
-      themes: [themeName],
-    }).catch(() => {
+  if (syntaxThemeForName(name) === undefined) {
+    try {
+      attachResolvedThemes(
+        normalizeTheme({
+          ...shikiTheme(themeForName(name), appearance()),
+          name: themeName,
+        }),
+        instance
+      );
+    } catch {
       // Attach failed; the render falls back to plain text.
-    });
+    }
+    return themeName;
   }
+  await getSharedHighlighter({
+    langs: [],
+    preferredHighlighter: "shiki-wasm",
+    themes: [themeName],
+  }).catch(() => {
+    // Attach failed; the render falls back to plain text.
+  });
   return themeName;
-}
+};
 
 // Languages warmed into the shared highlighter at startup so the common cases
 // Render without paying the one-time grammar compile. Anything outside this set
@@ -110,7 +120,7 @@ const inflight = new Map<string, Promise<DiffRender>>();
 
 // Approximate retained size: the per-line text dominates (UTF-16, 2 bytes/code unit);
 // `fg` labels and object overhead are ignored and offset by a conservative cap.
-function sizeOf(render: DiffRender) {
+const sizeOf = (render: DiffRender) => {
   let units = 0;
   for (const row of render.rows) {
     if (row.kind === "line") {
@@ -125,22 +135,21 @@ function sizeOf(render: DiffRender) {
     units += line.content.length;
   }
   return units * 2;
-}
+};
 
 let highlighterPromise: Promise<DiffsHighlighter> | undefined;
-function highlighter(themeName: string) {
+const highlighter = async () => {
   // The WASM (oniguruma) engine is ~10x faster than the default JS regex engine
   // For TypeScript-family grammars (cold ~125ms vs ~1300ms, warm ~5ms vs ~30ms).
   // The highlight call is synchronous and would otherwise jank the event loop.
-  // Created once with the initial active theme; later themes attach via
-  // EnsureDiffTheme.
+  // Created once with no theme; ensureDiffTheme attaches each render theme.
   highlighterPromise ??= getSharedHighlighter({
     langs: LANGS,
     preferredHighlighter: "shiki-wasm",
-    themes: [themeName],
+    themes: [],
   });
-  return highlighterPromise;
-}
+  return await highlighterPromise;
+};
 
 // A tiny TS patch used to trigger the one-time cold grammar compile at startup
 // Rather than on the first real diff (the compile is synchronous and ~125ms).
@@ -151,29 +160,28 @@ const WARM_PATCH =
  * Warm the shared Shiki highlighter (and the TS grammar) so the first diff renders without paying
  * the one-time load/compile. Called at startup (and in test setup); never rejects.
  */
-export async function preloadDiffHighlighter() {
+export const preloadDiffHighlighter = async () => {
   try {
     await ensureDiffTheme();
     await renderDiff({ full: false, maxLines: 10, patch: WARM_PATCH });
   } catch {
     // Best-effort warm-up.
   }
-}
+};
 
 // Content fingerprint: a hash of the full patch (not sampled slices, which could
 // Collide for a same-length edit outside the sampled windows and return a stale
 // Render) plus the render options that change output. The active render theme is
 // Part of the key so a theme switch never serves a stale-colored render.
-function fingerprint(input: RenderInput) {
-  return `${diffThemeName()}:${input.full ? 1 : 0}:${input.maxLines}:${Bun.hash(input.patch)}`;
-}
+const fingerprint = (input: RenderInput) =>
+  `${diffThemeName()}:${input.full ? 1 : 0}:${input.maxLines}:${Bun.hash(input.patch)}`;
 
 /**
  * Synchronous structure-only pass: parse + plain rows, no highlighting. Lets the viewer paint
  * instantly (one span per line = one renderable per line); the async highlight pass upgrades the
  * spans afterward, off the critical path.
  */
-export function structureDiff(input: RenderInput): DiffRender {
+export const structureDiff = (input: RenderInput): DiffRender => {
   if (input.patch === "") {
     return EMPTY;
   }
@@ -186,7 +194,7 @@ export function structureDiff(input: RenderInput): DiffRender {
     maxLines: input.maxLines,
   });
   return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
-}
+};
 
 // Grammars not in LANGS are attached on demand: the file's language is inferred
 // From its name (and its pre-rename name) and loaded into the shared highlighter
@@ -200,69 +208,76 @@ export function structureDiff(input: RenderInput): DiffRender {
 // Every render without growing one entry per language for the process lifetime.
 const attaching = new Map<string, Promise<unknown>>();
 
-function attach(lang: string) {
+const attach = async (lang: string) => {
   const existing = attaching.get(lang);
   if (existing !== undefined) {
-    return existing;
+    return await existing;
   }
   const promise = getSharedHighlighter({
     langs: [lang],
     preferredHighlighter: "shiki-wasm",
     themes: [diffThemeName()],
   })
-    .then(() => {
-      attaching.delete(lang);
-    })
+    .then(() => attaching.delete(lang))
     .catch(() => {
       // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
       // Keep the settled entry so the failed extension is not re-resolved every render.
     });
   attaching.set(lang, promise);
-  return promise;
-}
+  return await promise;
+};
 
 /**
  * The Shiki language a file highlights as, shared by the diff and any surface that renders code
  * from that file (search results), so their colors agree.
  */
-export function languageForPath(path: string) {
-  return fileSupportForPath(path).syntax;
-}
+export const languageForPath = (path: string) =>
+  fileSupportForPath(path).syntax;
 
-async function ensureLanguages(meta: { name: string; prevName?: string }) {
-  const names = meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
-  const pending = new Set(names.map(languageForPath)).difference(new Set(["text"]));
+const ensureLanguages = async (meta: { name: string; prevName?: string }) => {
+  const names =
+    meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
+  const pending = new Set(names.map(languageForPath)).difference(
+    new Set(["text"])
+  );
 
-  await Promise.all([...pending].filter((lang) => !areLanguagesAttached(lang)).map(attach));
-}
+  await Promise.all(
+    [...pending].filter((lang) => !areLanguagesAttached(lang)).map(attach)
+  );
+};
 
 /**
  * Highlight a standalone code snippet (a search excerpt) into per-line spans, reusing the diff's
  * shared highlighter and active theme so the colors match. Never rejects: an unknown language or
  * highlighter failure falls back to one plain span per line, so the snippet still shows uncolored.
  */
-export async function highlightSnippet(code: string, lang: string): Promise<RenderSpan[][]> {
+export const highlightSnippet = async (
+  code: string,
+  lang: string
+): Promise<RenderSpan[][]> => {
   try {
     const themeName = await ensureDiffTheme();
-    const hl = await highlighter(themeName);
+    const hl = await highlighter();
     if (!areLanguagesAttached(lang)) {
       await attach(lang);
     }
     const { tokens } = hl.codeToTokens(code, { lang, theme: themeName });
-    return tokens.map((line) => line.map((token) => ({ fg: token.color, text: token.content })));
+    return tokens.map((line) =>
+      line.map((token) => ({ fg: token.color, text: token.content }))
+    );
   } catch {
     return code.split("\n").map((line) => [{ text: line }]);
   }
-}
+};
 
-async function compute(input: RenderInput): Promise<DiffRender> {
+const compute = async (input: RenderInput): Promise<DiffRender> => {
   const meta = parsePatchFiles(input.patch)[0]?.files[0];
   if (meta === undefined) {
     return EMPTY;
   }
 
   const themeName = await ensureDiffTheme();
-  const hl = await highlighter(themeName);
+  const hl = await highlighter();
   await ensureLanguages(meta);
 
   let addSpans: RenderSpan[][] = [];
@@ -273,7 +288,10 @@ async function compute(input: RenderInput): Promise<DiffRender> {
     // Match, the fix for extensionless names in a subdirectory.
     const lang = languageForPath(meta.name);
     const target = lang === "text" ? meta : setLanguageOverride(meta, lang);
-    const themed = renderDiffWithHighlighter(target, hl, { ...RENDER_OPTIONS, theme: themeName });
+    const themed = renderDiffWithHighlighter(target, hl, {
+      ...RENDER_OPTIONS,
+      theme: themeName,
+    });
     addSpans = themed.code.additionLines.map(flattenLineSpans);
     delSpans = themed.code.deletionLines.map(flattenLineSpans);
   } catch {
@@ -286,12 +304,15 @@ async function compute(input: RenderInput): Promise<DiffRender> {
   });
 
   return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
-}
+};
 
-function evict() {
+const evict = () => {
   // Keep the just-inserted (possibly oversized) render even when it alone exceeds the
   // Byte cap: it is the one being viewed.
-  while (cache.size > MAX_CACHE || (cacheBytes > MAX_CACHE_BYTES && cache.size > 1)) {
+  while (
+    cache.size > MAX_CACHE ||
+    (cacheBytes > MAX_CACHE_BYTES && cache.size > 1)
+  ) {
     const key = cache.keys().next().value;
     if (key === undefined) {
       return;
@@ -302,27 +323,27 @@ function evict() {
       cacheBytes -= entry.bytes;
     }
   }
-}
+};
 
 /**
  * Parse + highlight + build the windowed-ready row model for one file's patch, cached by content
  * fingerprint with in-flight de-duplication. Never rejects; an empty patch or a failure resolves to
  * an empty render.
  */
-export function renderDiff(input: RenderInput): Promise<DiffRender> {
+export const renderDiff = async (input: RenderInput): Promise<DiffRender> => {
   if (input.patch === "") {
-    return Promise.resolve(EMPTY);
+    return EMPTY;
   }
 
   const key = fingerprint(input);
   const hit = cache.get(key);
   if (hit !== undefined) {
-    return Promise.resolve(hit.render);
+    return hit.render;
   }
 
   const existing = inflight.get(key);
   if (existing !== undefined) {
-    return existing;
+    return await existing;
   }
 
   const promise = compute(input)
@@ -340,8 +361,8 @@ export function renderDiff(input: RenderInput): Promise<DiffRender> {
     });
 
   inflight.set(key, promise);
-  return promise;
-}
+  return await promise;
+};
 
 export class DiffEngine extends Context.Service<
   DiffEngine,
@@ -353,5 +374,7 @@ export class DiffEngine extends Context.Service<
 export const DiffEngineLive = Layer.sync(DiffEngine, () => {
   // Warm the highlighter when the runtime builds so the first diff is fast.
   void preloadDiffHighlighter();
-  return { render: (input) => Effect.promise(() => renderDiff(input)) };
+  return {
+    render: (input) => Effect.promise(async () => await renderDiff(input)),
+  };
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { join } from "node:path";
+import path from "node:path";
 
 import { KeyEvent } from "@opentui/core";
 import { batch } from "solid-js";
@@ -7,7 +7,13 @@ import { batch } from "solid-js";
 import { createKeyHandler } from "@/keymap";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, loadWorktrees, runGit, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  loadWorktrees,
+  runGit,
+  seedState,
+} from "./helpers";
 
 // `tab` switches between the tree and the viewer, landing on the tree only while it is open, so
 // Focus can never name a pane the user closed.
@@ -25,12 +31,12 @@ const key = (name: string) =>
     source: "raw",
   });
 
-function wide() {
+const wide = () => {
   batch(() => {
     state.setTerminalWidth(80);
     state.setTerminalHeight(40);
   });
-}
+};
 
 test("tab switches between the tree and the viewer", () => {
   wide();
@@ -66,7 +72,10 @@ test("tab in the search view cycles its fields and stays in the pane", () => {
   wide();
   state.openSearch();
   expect(state.searchFocus()).toBe("query");
-  const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
+  const handle = createKeyHandler({
+    openInEditor: async () => {},
+    quit: () => {},
+  });
 
   // The search view owns `tab` for its own three fields, so the pane walk never starts here.
   handle(key("tab"));
@@ -79,13 +88,17 @@ test("tab in the search view cycles its fields and stays in the pane", () => {
 });
 
 test("switching worktrees lands focus on the tree only while the tree is on screen", async () => {
-  const repoRoot = createFixtureRepo("stet-pane-focus-switch-", { "notes.txt": "one\n" });
-  const linkedRoot = join(repoRoot, ".wt");
+  const repoRoot = createFixtureRepo("stet-pane-focus-switch-", {
+    "notes.txt": "one\n",
+  });
+  const linkedRoot = path.join(repoRoot, ".wt");
   runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
   const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
   seedState(model, { kind: "all", ref: "HEAD" });
   const worktrees = await loadWorktrees(repoRoot);
-  const linked = worktrees.find((worktree) => worktree.branch === "side-branch");
+  const linked = worktrees.find(
+    (worktree) => worktree.branch === "side-branch"
+  );
   if (linked === undefined) {
     throw new Error("linked worktree missing");
   }

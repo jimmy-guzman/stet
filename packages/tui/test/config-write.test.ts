@@ -12,36 +12,35 @@ import type { SettingsSnapshot } from "@/config/write";
  * no edit. Sourcing them from the record would make every case below agree with itself and guard
  * nothing.
  */
-function snapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
-  return {
-    appearance: "dark",
-    changesOnly: false,
-    editor: undefined,
-    iconsEnabled: true,
-    ide: undefined,
-    searchCaseSensitive: false,
-    searchRegex: false,
-    searchScope: "changed",
-    sidebarHeight: undefined,
-    sidebarOpen: true,
-    sidebarPosition: "left",
-    sidebarWidth: undefined,
-    theme: undefined,
-    wrap: false,
-    ...overrides,
-  };
-}
+const snapshot = (
+  overrides: Partial<SettingsSnapshot> = {}
+): SettingsSnapshot => ({
+  appearance: "dark",
+  changesOnly: false,
+  editor: undefined,
+  iconsEnabled: true,
+  ide: undefined,
+  searchCaseSensitive: false,
+  searchRegex: false,
+  searchScope: "changed",
+  sidebarHeight: undefined,
+  sidebarOpen: true,
+  sidebarPosition: "left",
+  sidebarWidth: undefined,
+  theme: undefined,
+  wrap: false,
+  ...overrides,
+});
 
-function unwrap(result: ReturnType<typeof updateSettingsText>) {
-  return result.pipe(
+const unwrap = (result: ReturnType<typeof updateSettingsText>) =>
+  result.pipe(
     Result.match({
       onFailure: (message: string) => {
         throw new Error(message);
       },
       onSuccess: (value: { text: string; saved: string[] }) => value,
-    }),
+    })
   );
-}
 
 describe("updateSettingsText", () => {
   test("a snapshot matching the file writes nothing", () => {
@@ -54,7 +53,9 @@ describe("updateSettingsText", () => {
   test("a theme pick lands beside the user's comments, untouched", () => {
     const source = `{\n  // my settings\n  "editor": "vim +{line} {file}",\n}\n`;
 
-    const { saved, text } = unwrap(updateSettingsText(source, snapshot({ theme: "mono-dark" })));
+    const { saved, text } = unwrap(
+      updateSettingsText(source, snapshot({ theme: "mono-dark" }))
+    );
 
     expect(saved).toEqual(["theme"]);
     expect(text).toContain("// my settings");
@@ -66,7 +67,10 @@ describe("updateSettingsText", () => {
     const source = `{\n  "theme": { "dark": "a", "light": "b" },\n}\n`;
 
     const { text } = unwrap(
-      updateSettingsText(source, snapshot({ appearance: "dark", theme: "mono-dark" })),
+      updateSettingsText(
+        source,
+        snapshot({ appearance: "dark", theme: "mono-dark" })
+      )
     );
 
     expect(text).toContain(`"dark": "mono-dark"`);
@@ -74,13 +78,17 @@ describe("updateSettingsText", () => {
   });
 
   test("the auto selection removes the theme key", () => {
-    const { text } = unwrap(updateSettingsText(`{ "theme": "light" }`, snapshot()));
+    const { text } = unwrap(
+      updateSettingsText(`{ "theme": "light" }`, snapshot())
+    );
 
     expect(text).not.toContain("theme");
   });
 
   test("removing the only key survives its JSONC trailing comma", () => {
-    const { text } = unwrap(updateSettingsText(`{\n  "theme": "light",\n}\n`, snapshot()));
+    const { text } = unwrap(
+      updateSettingsText(`{\n  "theme": "light",\n}\n`, snapshot())
+    );
 
     expect(text).not.toContain("theme");
     expect(() => Bun.JSONC.parse(text)).not.toThrow();
@@ -101,7 +109,10 @@ describe("updateSettingsText", () => {
 
   test("divergent toggles create their sections; shared labels dedupe", () => {
     const { saved, text } = unwrap(
-      updateSettingsText("{}", snapshot({ sidebarOpen: false, sidebarWidth: 44, wrap: true })),
+      updateSettingsText(
+        "{}",
+        snapshot({ sidebarOpen: false, sidebarWidth: 44, wrap: true })
+      )
     );
 
     expect(saved).toEqual(["wrap", "sidebar"]);
@@ -113,7 +124,7 @@ describe("updateSettingsText", () => {
 
   test("moving a pane writes its position", () => {
     const { saved, text } = unwrap(
-      updateSettingsText("{}", snapshot({ sidebarPosition: "right" })),
+      updateSettingsText("{}", snapshot({ sidebarPosition: "right" }))
     );
 
     expect(saved).toEqual(["sidebar"]);
@@ -124,7 +135,7 @@ describe("updateSettingsText", () => {
     const source = `{\n  "viewer": { "wrap": true }, // keep wrapping\n}\n`;
 
     const { saved, text } = unwrap(
-      updateSettingsText(source, snapshot({ theme: "dark", wrap: true })),
+      updateSettingsText(source, snapshot({ theme: "dark", wrap: true }))
     );
 
     // Only the theme diverged; jsonc-parser may re-lay-out lines adjacent to the
@@ -137,7 +148,9 @@ describe("updateSettingsText", () => {
   test("turning a file's explicit true back off writes an explicit false", () => {
     const source = `{ "viewer": { "wrap": true } }`;
 
-    const { text } = unwrap(updateSettingsText(source, snapshot({ wrap: false })));
+    const { text } = unwrap(
+      updateSettingsText(source, snapshot({ wrap: false }))
+    );
 
     expect(text).toContain(`"wrap": false`);
   });
@@ -146,7 +159,7 @@ describe("updateSettingsText", () => {
     const source = `{ "sidebar": { "open": true, "width": 40 } }`;
 
     const { saved, text } = unwrap(
-      updateSettingsText(source, snapshot({ sidebarWidth: undefined })),
+      updateSettingsText(source, snapshot({ sidebarWidth: undefined }))
     );
 
     expect(saved).toEqual(["sidebar"]);
@@ -160,8 +173,11 @@ describe("updateSettingsText", () => {
     const { saved, text } = unwrap(
       updateSettingsText(
         source,
-        snapshot({ editor: "nvim +{line} {file}", ide: "zed {repo} {file}:{line}" }),
-      ),
+        snapshot({
+          editor: "nvim +{line} {file}",
+          ide: "zed {repo} {file}:{line}",
+        })
+      )
     );
 
     expect(saved).toEqual(["editor", "ide"]);
@@ -172,7 +188,9 @@ describe("updateSettingsText", () => {
   test("no flag leaves the file's editor and ide keys untouched", () => {
     const source = `{ "editor": "hx {file}", "ide": "code {repo}" }`;
 
-    const { saved, text } = unwrap(updateSettingsText(source, snapshot({ theme: "dark" })));
+    const { saved, text } = unwrap(
+      updateSettingsText(source, snapshot({ theme: "dark" }))
+    );
 
     expect(saved).toEqual(["theme"]);
     expect(text).toContain(`"editor": "hx {file}"`);
@@ -182,20 +200,24 @@ describe("updateSettingsText", () => {
   test("a flag matching the file writes nothing", () => {
     const source = `{ "ide": "code {repo}" }`;
 
-    const { saved } = unwrap(updateSettingsText(source, snapshot({ ide: "code {repo}" })));
+    const { saved } = unwrap(
+      updateSettingsText(source, snapshot({ ide: "code {repo}" }))
+    );
 
     expect(saved).toEqual([]);
   });
 
   test("empty text seeds a fresh object", () => {
-    const { text } = unwrap(updateSettingsText("", snapshot({ theme: "dark" })));
+    const { text } = unwrap(
+      updateSettingsText("", snapshot({ theme: "dark" }))
+    );
 
     expect(Bun.JSONC.parse(text)).toEqual({ theme: "dark" });
   });
 
   test("a comment-only document seeds a fresh object", () => {
     const { text } = unwrap(
-      updateSettingsText(`// "theme": "light"\n`, snapshot({ theme: "dark" })),
+      updateSettingsText(`// "theme": "light"\n`, snapshot({ theme: "dark" }))
     );
 
     expect(Bun.JSONC.parse(text)).toEqual({ theme: "dark" });
@@ -203,16 +225,26 @@ describe("updateSettingsText", () => {
   });
 
   test("an unterminated comment fails without producing output", () => {
-    expect(Result.isFailure(updateSettingsText("/* open", snapshot({ theme: "dark" })))).toBe(true);
+    expect(
+      Result.isFailure(
+        updateSettingsText("/* open", snapshot({ theme: "dark" }))
+      )
+    ).toBe(true);
   });
 
   test("malformed text fails without producing output", () => {
-    expect(Result.isFailure(updateSettingsText(`{ "theme": `, snapshot({ theme: "dark" })))).toBe(
-      true,
-    );
+    expect(
+      Result.isFailure(
+        updateSettingsText(`{ "theme": `, snapshot({ theme: "dark" }))
+      )
+    ).toBe(true);
   });
 
   test("a non-object document fails without producing output", () => {
-    expect(Result.isFailure(updateSettingsText(`[1, 2]`, snapshot({ theme: "dark" })))).toBe(true);
+    expect(
+      Result.isFailure(
+        updateSettingsText(`[1, 2]`, snapshot({ theme: "dark" }))
+      )
+    ).toBe(true);
   });
 });

@@ -9,7 +9,7 @@ const YEAR = 365 * DAY;
  * A timestamp as a compact age relative to `now` (both unix seconds): `now`, `5m`, `3h`, `2d`,
  * `3w`, `4mo`, `2y`. `now` is a parameter so callers stay testable.
  */
-export function relativeTime(unixSeconds: number, now: number) {
+export const relativeTime = (unixSeconds: number, now: number) => {
   const elapsed = Math.max(0, now - unixSeconds);
   if (elapsed < MINUTE) {
     return "now";
@@ -30,4 +30,4 @@ export function relativeTime(unixSeconds: number, now: number) {
     return `${Math.floor(elapsed / MONTH)}mo`;
   }
   return `${Math.floor(elapsed / YEAR)}y`;
-}
+};

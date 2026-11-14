@@ -6,9 +6,12 @@ describe("mergeDeep", () => {
   test("recurses into nested objects and replaces leaves", () => {
     expect(
       mergeDeep(
-        { accent: { primary: "#000000" }, surface: { base: "#111111", panel: "#222222" } },
-        { surface: { base: "#abcdef" } },
-      ),
+        {
+          accent: { primary: "#000000" },
+          surface: { base: "#111111", panel: "#222222" },
+        },
+        { surface: { base: "#abcdef" } }
+      )
     ).toEqual({
       accent: { primary: "#000000" },
       surface: { base: "#abcdef", panel: "#222222" },

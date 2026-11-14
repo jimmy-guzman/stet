@@ -8,10 +8,10 @@ import type { ChangeKind, StageState } from "@/git/model";
 // Happens in resolve.ts.
 const Hex = Schema.String.pipe(
   Schema.check(
-    Schema.isPattern(/^#[0-9a-f]{6}$/, {
+    Schema.isPattern(/^#[0-9a-f]{6}$/u, {
       message: "expected a 6-digit lowercase hex color, e.g. #1a2b3c",
-    }),
-  ),
+    })
+  )
 );
 
 // Typed as a full record over the git-status unions, so adding a `ChangeKind` or
@@ -86,17 +86,21 @@ export const ThemeSchema = Schema.Struct({
 
 export type Theme = Schema.Schema.Type<typeof ThemeSchema>;
 
+const greyHex = (value: string) =>
+  value.slice(1, 3) === value.slice(3, 5) &&
+  value.slice(3, 5) === value.slice(5, 7);
+
 /**
  * A theme is monochrome when every token is a pure grey (r = g = b), leaving no hue to carry
  * meaning. Derived from the tokens rather than declared, so any all-grey theme (a user's included)
  * gets the hue-free renders, like the viewer's `+`/`-` change bar, without a flag to remember.
  */
-export function isMonochromeTheme(theme: Theme) {
-  const greyHex = (value: string) =>
-    value.slice(1, 3) === value.slice(3, 5) && value.slice(3, 5) === value.slice(5, 7);
+export const isMonochromeTheme = (theme: Theme) => {
   const grey = (node: unknown): boolean =>
     typeof node === "string"
       ? greyHex(node)
-      : typeof node === "object" && node !== null && Object.values(node).every(grey);
+      : typeof node === "object" &&
+        node !== null &&
+        Object.values(node).every(grey);
   return grey(theme);
-}
+};

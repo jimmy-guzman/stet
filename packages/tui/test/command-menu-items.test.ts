@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 import { buildCommandMenuItems } from "@/components/command-menu/items";
 import type { CommandMenuInput } from "@/components/command-menu/items";
 
-const viewer = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => ({
+const viewer = (
+  overrides: Partial<CommandMenuInput> = {}
+): CommandMenuInput => ({
   caretColumn: 5,
   caretLine: 12,
   context: "viewer",
@@ -23,7 +25,8 @@ const tree = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => ({
   ...overrides,
 });
 
-const labels = (input: CommandMenuInput) => buildCommandMenuItems(input).map((item) => item.label);
+const labels = (input: CommandMenuInput) =>
+  buildCommandMenuItems(input).map((item) => item.label);
 
 describe("buildCommandMenuItems", () => {
   test("viewer lists the copy and open actions", () => {
@@ -37,12 +40,18 @@ describe("buildCommandMenuItems", () => {
   });
 
   test("viewer shows full content only when the file is truncated", () => {
-    expect(labels(viewer({ truncated: false }))).not.toContain("Show full content");
-    expect(labels(viewer({ truncated: true })).at(-1)).toBe("Show full content");
+    expect(labels(viewer({ truncated: false }))).not.toContain(
+      "Show full content"
+    );
+    expect(labels(viewer({ truncated: true })).at(-1)).toBe(
+      "Show full content"
+    );
   });
 
   test("viewer copy reference carries the caret line and column", () => {
-    const item = buildCommandMenuItems(viewer()).find((entry) => entry.label === "Copy reference");
+    const item = buildCommandMenuItems(viewer()).find(
+      (entry) => entry.label === "Copy reference"
+    );
 
     expect(item?.action).toEqual({
       column: 5,
@@ -53,9 +62,9 @@ describe("buildCommandMenuItems", () => {
   });
 
   test("viewer copy reference drops the column at line level", () => {
-    const item = buildCommandMenuItems(viewer({ caretColumn: undefined, caretLine: 12 })).find(
-      (entry) => entry.label === "Copy reference",
-    );
+    const item = buildCommandMenuItems(
+      viewer({ caretColumn: undefined, caretLine: 12 })
+    ).find((entry) => entry.label === "Copy reference");
 
     expect(item?.action).toEqual({
       column: undefined,
@@ -68,7 +77,9 @@ describe("buildCommandMenuItems", () => {
   test("viewer editor actions target the file at the caret line", () => {
     const items = buildCommandMenuItems(viewer());
 
-    expect(items.find((item) => item.label === "Open in editor")?.action).toEqual({
+    expect(
+      items.find((item) => item.label === "Open in editor")?.action
+    ).toEqual({
       kind: "openEditor",
       line: 12,
       mode: "terminal",
@@ -83,7 +94,9 @@ describe("buildCommandMenuItems", () => {
   });
 
   test("viewer without a selected path has no items", () => {
-    expect(buildCommandMenuItems(viewer({ selectedPath: undefined }))).toEqual([]);
+    expect(buildCommandMenuItems(viewer({ selectedPath: undefined }))).toEqual(
+      []
+    );
   });
 
   test("tree file node lists pin, copy path, and editor opens (opening is the row click's job)", () => {
@@ -98,10 +111,14 @@ describe("buildCommandMenuItems", () => {
 
   test("open externally carries the path", () => {
     expect(
-      buildCommandMenuItems(viewer()).find((item) => item.label === "Open externally")?.action,
+      buildCommandMenuItems(viewer()).find(
+        (item) => item.label === "Open externally"
+      )?.action
     ).toEqual({ kind: "openExternal", path: "src/foo.ts" });
     expect(
-      buildCommandMenuItems(tree()).find((item) => item.label === "Open externally")?.action,
+      buildCommandMenuItems(tree()).find(
+        (item) => item.label === "Open externally"
+      )?.action
     ).toEqual({ kind: "openExternal", path: "src/foo.ts" });
   });
 
@@ -114,7 +131,9 @@ describe("buildCommandMenuItems", () => {
       line: undefined,
       path: "src/foo.ts",
     });
-    expect(items.find((item) => item.label === "Open in editor")?.action).toEqual({
+    expect(
+      items.find((item) => item.label === "Open in editor")?.action
+    ).toEqual({
       kind: "openEditor",
       line: undefined,
       mode: "terminal",

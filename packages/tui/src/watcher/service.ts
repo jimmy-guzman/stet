@@ -1,6 +1,7 @@
 import { watch } from "node:fs";
 
 import { Context, Effect, Layer, Queue, Stream } from "effect";
+import { constVoid } from "effect/Function";
 
 import { Git } from "@/git/service";
 
@@ -28,8 +29,10 @@ export class Watcher extends Context.Service<
  * @param roots - Watch roots used to monitor worktree files
  * @returns One tick per debounced burst of changes
  */
-function watchStream(roots: ReturnType<typeof watchRoots>) {
-  return Stream.callback<void>(
+const watchStream = (
+  roots: ReturnType<typeof watchRoots>
+): Stream.Stream<void> =>
+  Stream.callback(
     (queue) =>
       Effect.gen(function* watch_() {
         // Debounce inside the callback so a burst collapses to one emit. The queue is bufferSize-1
@@ -42,18 +45,22 @@ function watchStream(roots: ReturnType<typeof watchRoots>) {
         };
         const watchers = roots.flatMap((root) => {
           try {
-            const watcher = watch(root.path, { recursive: true }, (_event, filename) => {
-              if (classify(root.gitInternalPrefix, filename) === "ignored") {
-                return;
+            const watcher = watch(
+              root.path,
+              { recursive: true },
+              (_event, filename) => {
+                if (classify(root.gitInternalPrefix, filename) === "ignored") {
+                  return;
+                }
+                if (timer !== undefined) {
+                  clearTimeout(timer);
+                }
+                timer = setTimeout(flush, DEBOUNCE_MS);
               }
-              if (timer !== undefined) {
-                clearTimeout(timer);
-              }
-              timer = setTimeout(flush, DEBOUNCE_MS);
-            });
+            );
             // An async watcher error (e.g. the root is removed) must not crash the
             // Stream; drop it and let the slow poll cover that root.
-            watcher.on("error", () => {});
+            watcher.on("error", constVoid);
             return [watcher];
           } catch {
             return [];
@@ -67,13 +74,12 @@ function watchStream(roots: ReturnType<typeof watchRoots>) {
             for (const watcher of watchers) {
               watcher.close();
             }
-          }),
+          })
         );
         return yield* Effect.never;
       }),
-    { bufferSize: 1, strategy: "dropping" },
+    { bufferSize: 1, strategy: "dropping" }
   );
-}
 
 export const WatcherLive = Layer.effect(
   Watcher,
@@ -85,9 +91,11 @@ export const WatcherLive = Layer.effect(
         Stream.unwrap(
           git.gitDir(repoRoot).pipe(
             Effect.map((gitDir) => watchStream(watchRoots(repoRoot, gitDir))),
-            Effect.orElseSucceed(() => watchStream(watchRoots(repoRoot, undefined))),
-          ),
+            Effect.orElseSucceed(() =>
+              watchStream(watchRoots(repoRoot, undefined))
+            )
+          )
         ),
     };
-  }),
+  })
 );

@@ -1,22 +1,28 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
     "bun": {
       "source": "bun.sh",
       "sourceType": "well-known",
-      "computedHash": "a35be3bbad9ba66bc962d0f29098cd2b7a582023976cdb3649a3b6dc171a26de"
+      "computedHash": "d449ee151079d1ece7b62d476b774d574c17161b109bbbcfb67767ae6e91f0de"
     },
     "effect-best-practices": {
       "source": "makisuo/skills",
       "sourceType": "github",
       "skillPath": "effect-best-practices/SKILL.md",
-      "computedHash": "241513d240f805e1651f86311089b521592cdf298eafaa3ba5ccc089ea0c97c6"
+      "computedHash": "30f3b0947d57c46ab4a0aaefd8103b6a4540fe50f88e76f8be8dffcd1bd02800"
     },
     "opentui": {
       "source": "anomalyco/opentui",
       "sourceType": "github",
       "skillPath": "packages/web/src/content/SKILL.md",
-      "computedHash": "b76b53e5524b2c2d6536001f82d0dde9964c31e8c27ef61e5a4342ba3d855e30"
+      "computedHash": "6137383a405a85f241469923605452a894f25b66fc8ba0373401b4ba5cead606"
+    },
+    "ultracite": {
+      "source": "haydenbleasel/ultracite",
+      "sourceType": "github",
+      "skillPath": "skills/ultracite/SKILL.md",
+      "computedHash": "8dbe692397240875c2c53f9f6450984b011198a631a23f5c7579066e6553f313"
     }
   }
 }

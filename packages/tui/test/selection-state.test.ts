@@ -5,19 +5,17 @@ import { batch } from "solid-js";
 import type { GitModel } from "@/git/model";
 import { state } from "@/state";
 
-function modelWith(paths: string[]): GitModel {
-  return {
-    branch: undefined,
-    changed: [],
-    changedByPath: new Map(),
-    repoFiles: paths.map((path) => ({ path, symlink: false, tracked: true })),
-    repoFilesKey: "k",
-    repoRoot: "/x",
-    scopeKey: "all:HEAD",
-  };
-}
+const modelWith = (paths: string[]): GitModel => ({
+  branch: undefined,
+  changed: [],
+  changedByPath: new Map(),
+  repoFiles: paths.map((path) => ({ path, symlink: false, tracked: true })),
+  repoFilesKey: "k",
+  repoRoot: "/x",
+  scopeKey: "all:HEAD",
+});
 
-function seed(paths: string[]) {
+const seed = (paths: string[]) => {
   batch(() => {
     state.setChangesOnly(false);
     state.setExpandedDirectories(new Set<string>());
@@ -25,7 +23,7 @@ function seed(paths: string[]) {
     state.setFocusedNodeId(`file:${paths[0]}`);
     state.seedNav(undefined);
   });
-}
+};
 
 // State is a global singleton shared across test files; reset what seed() mutates
 afterEach(() => {

@@ -15,7 +15,7 @@ export interface Word {
 }
 
 /** Every word in the line, in order. */
-export function words(line: string): Word[] {
+export const words = (line: string): Word[] => {
   const out: Word[] = [];
   let start = -1;
   // Iterate by code point (`\p{L}`/`\p{N}` are per code point) while tracking the
@@ -37,39 +37,31 @@ export function words(line: string): Word[] {
     out.push({ end: index, start });
   }
   return out;
-}
+};
 
 /** Start offsets of each word; the caret always rests on one of these (or 0). */
-export function wordStarts(line: string): number[] {
-  return words(line).map((word) => word.start);
-}
+export const wordStarts = (line: string): number[] =>
+  words(line).map((word) => word.start);
 
 /** The word containing `index`, or undefined when `index` falls in a gap. */
-export function wordAt(line: string, index: number): Word | undefined {
-  return words(line).find((word) => index >= word.start && index < word.end);
-}
+export const wordAt = (line: string, index: number): Word | undefined =>
+  words(line).find((word) => index >= word.start && index < word.end);
 
 /** The next word start strictly after `index`; stays put (returns `index`) when there is none. */
-export function nextWord(line: string, index: number): number {
-  return wordStarts(line).find((start) => start > index) ?? index;
-}
+export const nextWord = (line: string, index: number): number =>
+  wordStarts(line).find((start) => start > index) ?? index;
 
 /** The previous word start strictly before `index`; stays put (returns `index`) when there is none. */
-export function prevWord(line: string, index: number): number {
-  return (
-    wordStarts(line)
-      .toReversed()
-      .find((start) => start < index) ?? index
-  );
-}
+export const prevWord = (line: string, index: number): number =>
+  wordStarts(line)
+    .toReversed()
+    .find((start) => start < index) ?? index;
 
 /** The line's first word start, or 0 for a line with no words (caret home). */
-export function firstWord(line: string): number {
-  return wordStarts(line)[0] ?? 0;
-}
+export const firstWord = (line: string): number => wordStarts(line)[0] ?? 0;
 
 /** The line's last word start, or 0 for a line with no words. */
-export function lastWord(line: string): number {
+export const lastWord = (line: string): number => {
   const starts = wordStarts(line);
-  return starts[starts.length - 1] ?? 0;
-}
+  return starts.at(-1) ?? 0;
+};

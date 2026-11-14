@@ -1,8 +1,14 @@
-import util from "node:util";
+import { parseArgs } from "node:util";
 
 import { keyHelpGroups } from "@/help/keys";
 
-export type ScopeKind = "unstaged" | "staged" | "all" | "session" | "last-commit" | "commit";
+export type ScopeKind =
+  | "unstaged"
+  | "staged"
+  | "all"
+  | "session"
+  | "last-commit"
+  | "commit";
 
 // Picker order, also the single source of truth for the scope list. Grouped for the
 // Menu: the "changes" scopes (all/staged/unstaged) then the "history" scopes
@@ -35,41 +41,55 @@ export interface CliOptions {
   version: boolean;
 }
 
-export type Command = { kind: "run"; options: CliOptions } | { kind: "upgrade" };
+export type Command =
+  | { kind: "run"; options: CliOptions }
+  | { kind: "upgrade" };
 
 /**
- * Splits the reserved `upgrade` subcommand from the default TUI invocation before `parseArgs` runs,
+ * Splits the reserved `upgrade` subcommand from the default TUI invocation before `parseCliArgs` runs,
  * so the "single positional = git ref" grammar never has to disambiguate it. `upgrade` takes no
  * further arguments.
  */
-export function parseCommand(args: string[]): Command {
+export const parseCommand = (args: string[]): Command => {
   if (args[0] !== "upgrade") {
-    return { kind: "run", options: parseArgs(args) };
+    return { kind: "run", options: parseCliArgs(args) };
   }
 
-  const extra = args[1];
+  const [, extra] = args;
   if (extra !== undefined) {
     throw new Error(
-      extra.startsWith("-") ? `Unknown option: ${extra}` : `Unexpected argument: ${extra}`,
+      extra.startsWith("-")
+        ? `Unknown option: ${extra}`
+        : `Unexpected argument: ${extra}`
     );
   }
 
   return { kind: "upgrade" };
-}
+};
 
-export function parseArgs(args: string[]): CliOptions {
-  const { values, positionals } = util.parseArgs({
+const scopeKind = (staged: boolean, unstaged: boolean): ScopeKind => {
+  if (staged) {
+    return "staged";
+  }
+  if (unstaged) {
+    return "unstaged";
+  }
+  return "all";
+};
+
+export const parseCliArgs = (args: string[]): CliOptions => {
+  const { values, positionals } = parseArgs({
     allowPositionals: true,
     args,
     options: {
-      "editor": { type: "string" },
-      "help": { short: "h", type: "boolean" },
-      "ide": { type: "string" },
+      editor: { type: "string" },
+      help: { short: "h", type: "boolean" },
+      ide: { type: "string" },
       "no-icons": { type: "boolean" },
-      "staged": { type: "boolean" },
-      "unstaged": { type: "boolean" },
-      "version": { short: "v", type: "boolean" },
-      "wrap": { type: "boolean" },
+      staged: { type: "boolean" },
+      unstaged: { type: "boolean" },
+      version: { short: "v", type: "boolean" },
+      wrap: { type: "boolean" },
     },
     strict: true,
   });
@@ -78,32 +98,37 @@ export function parseArgs(args: string[]): CliOptions {
     throw new Error(`Unexpected argument: ${positionals[1]}`);
   }
 
-  if (values.staged && values.unstaged) {
+  const staged = values.staged === true;
+  const unstaged = values.unstaged === true;
+  if (staged && unstaged) {
     throw new Error("--staged and --unstaged are mutually exclusive");
   }
 
-  const kind: ScopeKind = values.staged ? "staged" : values.unstaged ? "unstaged" : "all";
+  const kind = scopeKind(staged, unstaged);
 
   return {
     editor: requireNonEmptyValue("--editor", values.editor),
     help: values.help ?? false,
-    icons: !values["no-icons"],
+    icons: values["no-icons"] !== true,
     ide: requireNonEmptyValue("--ide", values.ide),
-    overflow: values.wrap ? "wrap" : "scroll",
-    scope: { kind, ref: requireNonEmptyValue("<ref>", positionals[0]) ?? "HEAD" },
+    overflow: values.wrap === true ? "wrap" : "scroll",
+    scope: {
+      kind,
+      ref: requireNonEmptyValue("<ref>", positionals[0]) ?? "HEAD",
+    },
     version: values.version ?? false,
   };
-}
+};
 
 // A blank command template (`--editor=`) or a blank positional (`stet ""`) parses to an empty
 // String. Stet rejects that as a usage error even though parseArgs accepts it: a blank ref would
 // Otherwise reach git as one and be reported back as an unknown ref that names nothing.
-function requireNonEmptyValue(name: string, value: string | undefined) {
+const requireNonEmptyValue = (name: string, value: string | undefined) => {
   if (value !== undefined && value.trim() === "") {
     throw new Error(`${name} requires a non-empty value`);
   }
   return value;
-}
+};
 
 // A repository with no commits diffs against the empty tree, which is stet's own substitution and
 // Never a ref anyone typed, so it reads as the absence of a commit rather than as a sha (40
@@ -115,9 +140,8 @@ function requireNonEmptyValue(name: string, value: string | undefined) {
 // The menu during the startup load carries whatever `baseRef` held at the moment it was picked, and
 // The startup batch deliberately leaves a user-touched scope alone. Labelling off the signal there
 // Names a base git was never given.
-function refLabel(ref: string, emptyTree: string) {
-  return ref === emptyTree ? "no commits yet" : ref;
-}
+const refLabel = (ref: string, emptyTree: string) =>
+  ref === emptyTree ? "no commits yet" : ref;
 
 /**
  * The active scope, named for the header.
@@ -126,7 +150,7 @@ function refLabel(ref: string, emptyTree: string) {
  *   absence of a commit. Required rather than optional, because omitting it prints a bare 40- or
  *   64-character sha into the densest row in the app.
  */
-export function scopeLabel(scope: DiffScope, emptyTree: string) {
+export const scopeLabel = (scope: DiffScope, emptyTree: string) => {
   if (scope.kind === "staged") {
     return `staged vs ${refLabel(scope.ref, emptyTree)}`;
   }
@@ -150,11 +174,11 @@ export function scopeLabel(scope: DiffScope, emptyTree: string) {
   }
 
   return `uncommitted vs ${refLabel(scope.ref, emptyTree)}`;
-}
+};
 
 // Ref-agnostic row labels for the scope picker (the active scope's full,
 // Ref-bearing label still shows in the header via scopeLabel).
-export function scopeMenuLabel(kind: ScopeKind) {
+export const scopeMenuLabel = (kind: ScopeKind) => {
   if (kind === "staged") {
     return "staged";
   }
@@ -172,16 +196,18 @@ export function scopeMenuLabel(kind: ScopeKind) {
   }
 
   return "unstaged";
-}
+};
 
 // Renders the `?` overlay registry (`keyHelpGroups`) as the `--help` Keys section,
 // So the two never drift, current rebinds included. Combos align to the widest one
 // By display width (wide glyphs like the arrows count correctly), grouped under
 // Each section heading.
-function keyBindingsHelp() {
+const keyBindingsHelp = () => {
   const groups = keyHelpGroups();
   const width = Math.max(
-    ...groups.flatMap((group) => group.entries.map((entry) => Bun.stringWidth(entry.combo))),
+    ...groups.flatMap((group) =>
+      group.entries.map((entry) => Bun.stringWidth(entry.combo))
+    )
   );
   return groups
     .map(
@@ -189,15 +215,15 @@ function keyBindingsHelp() {
         `  ${group.heading}:\n${group.entries
           .map(
             (entry) =>
-              `    ${entry.combo}${" ".repeat(width - Bun.stringWidth(entry.combo) + 2)}${entry.description}`,
+              `    ${entry.combo}${" ".repeat(width - Bun.stringWidth(entry.combo) + 2)}${entry.description}`
           )
-          .join("\n")}`,
+          .join("\n")}`
     )
     .join("\n\n");
-}
+};
 
-export function helpText() {
-  return `stet - read-only companion TUI for inspecting an agent's changes
+export const helpText = () =>
+  `stet - read-only companion TUI for inspecting an agent's changes
 
 Usage:
   stet
@@ -251,4 +277,3 @@ The whole repo renders as a tree with changes overlaid; open any file
 read-only. The view is live: files, diffs, and recency markers refresh as an
 agent edits, and checks re-run after the repo goes quiet.
 `;
-}

@@ -14,6 +14,7 @@ export const source = loader({
  */
 export const llmSource = loader({
   baseUrl: "/docs",
-  url: (slugs) => `${siteUrl}/docs${slugs.length > 0 ? `/${slugs.join("/")}` : ""}.md`,
+  url: (slugs) =>
+    `${siteUrl}/docs${slugs.length > 0 ? `/${slugs.join("/")}` : ""}.md`,
   source: docs.toFumadocsSource(),
 });

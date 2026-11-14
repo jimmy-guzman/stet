@@ -25,6 +25,23 @@ describe("themeForName", () => {
   });
 });
 
+const channel = (hex: string, offset: number) => {
+  const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+};
+
+const luminance = (hex: string) =>
+  0.2126 * channel(hex, 1) +
+  0.7152 * channel(hex, 3) +
+  0.0722 * channel(hex, 5);
+
+const contrast = (foreground: string, background: string) => {
+  const values = [luminance(foreground), luminance(background)].toSorted(
+    (a, b) => b - a
+  );
+  return (values[0] + 0.05) / (values[1] + 0.05);
+};
+
 describe("built-in icon colors", () => {
   test("uses the curated file icon palette", () => {
     const coloredIcons = [
@@ -89,42 +106,42 @@ describe("built-in icon colors", () => {
     ];
 
     expect(
-      [...builtinIcons.keys()].filter((icon) => darkTheme.icon[icon] === undefined).toSorted(),
+      [...builtinIcons.keys()]
+        .filter((icon) => darkTheme.icon[icon] === undefined)
+        .toSorted()
     ).toEqual(mutedIcons);
     expect(
-      [...builtinIcons.keys()].filter((icon) => lightTheme.icon[icon] === undefined).toSorted(),
+      [...builtinIcons.keys()]
+        .filter((icon) => lightTheme.icon[icon] === undefined)
+        .toSorted()
     ).toEqual(mutedIcons);
-    expect(Object.keys(darkTheme.icon).filter((icon) => !builtinIcons.has(icon))).toEqual([]);
-    expect(Object.keys(lightTheme.icon).filter((icon) => !builtinIcons.has(icon))).toEqual([]);
+    expect(
+      Object.keys(darkTheme.icon).filter((icon) => !builtinIcons.has(icon))
+    ).toEqual([]);
+    expect(
+      Object.keys(lightTheme.icon).filter((icon) => !builtinIcons.has(icon))
+    ).toEqual([]);
   });
 
   test("keeps every icon color visible across its theme surfaces", () => {
-    const channel = (hex: string, offset: number) => {
-      const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
-      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-    };
-    const luminance = (hex: string) =>
-      0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
-    const contrast = (foreground: string, background: string) => {
-      const values = [luminance(foreground), luminance(background)].toSorted((a, b) => b - a);
-      return (values[0] + 0.05) / (values[1] + 0.05);
-    };
-    const failures = Object.entries({ dark: darkTheme, light: lightTheme }).flatMap(
-      ([appearance, theme]) =>
-        Object.entries(theme.icon).flatMap(([icon, color]) =>
-          Object.entries({
-            base: theme.surface.base,
-            cursor: theme.surface.cursor,
-            panel: theme.surface.panel,
-          })
-            .map(([surface, background]) => ({
-              appearance,
-              contrast: contrast(color, background),
-              icon,
-              surface,
-            }))
-            .filter((result) => result.contrast < 3),
-        ),
+    const failures = Object.entries({
+      dark: darkTheme,
+      light: lightTheme,
+    }).flatMap(([appearance, theme]) =>
+      Object.entries(theme.icon).flatMap(([icon, color]) =>
+        Object.entries({
+          base: theme.surface.base,
+          cursor: theme.surface.cursor,
+          panel: theme.surface.panel,
+        })
+          .map(([surface, background]) => ({
+            appearance,
+            contrast: contrast(color, background),
+            icon,
+            surface,
+          }))
+          .filter((result) => result.contrast < 3)
+      )
     );
 
     expect(failures).toEqual([]);
@@ -147,12 +164,14 @@ describe("monochrome themes", () => {
   });
 
   test("a user-defined all-grey theme classifies as monochrome; one nested hue breaks it", () => {
-    expect(isMonochromeTheme({ ...monoDarkTheme, icon: { lua: "#808080" } })).toBe(true);
+    expect(
+      isMonochromeTheme({ ...monoDarkTheme, icon: { lua: "#808080" } })
+    ).toBe(true);
     expect(
       isMonochromeTheme({
         ...monoDarkTheme,
         syntax: { ...monoDarkTheme.syntax, keyword: "#ff8800" },
-      }),
+      })
     ).toBe(false);
   });
 
@@ -186,11 +205,15 @@ describe("themeNames", () => {
   test("lists registered themes after the built-ins", () => {
     const snapshot = snapshotRegistry();
     try {
-      registerThemes(resolveThemes({ "registry-probe": { base: "dark" } }).themes);
+      registerThemes(
+        resolveThemes({ "registry-probe": { base: "dark" } }).themes
+      );
       const names = themeNames();
 
       expect(names).toContain("registry-probe");
-      expect(names.indexOf("dark")).toBeLessThan(names.indexOf("registry-probe"));
+      expect(names.indexOf("dark")).toBeLessThan(
+        names.indexOf("registry-probe")
+      );
     } finally {
       restoreRegistry(snapshot);
     }
@@ -212,7 +235,9 @@ describe("resolveThemes", () => {
 
     expect(issues).toEqual([]);
     expect(themes.get("soft")?.tokens.accent.primary).toBe("#abcdef");
-    expect(themes.get("soft")?.tokens.surface.base).toBe(darkTheme.surface.base);
+    expect(themes.get("soft")?.tokens.surface.base).toBe(
+      darkTheme.surface.base
+    );
   });
 
   test("merges dynamic icon colors over a base", () => {
@@ -228,7 +253,10 @@ describe("resolveThemes", () => {
 
   test("resolves a base that is another custom theme", () => {
     const { issues, themes } = resolveThemes({
-      child: { base: "parent", surface: { base: "#0a0a0a", cursor: "#0b0b0b", panel: "#0c0c0c" } },
+      child: {
+        base: "parent",
+        surface: { base: "#0a0a0a", cursor: "#0b0b0b", panel: "#0c0c0c" },
+      },
       parent: { accent: { primary: "#abcdef" }, base: "dark" },
     });
 
@@ -256,11 +284,15 @@ describe("resolveThemes", () => {
     expect(issues).toEqual([]);
     expect(themes.get("mine")?.syntaxTheme).toBeUndefined();
     expect(themes.get("mine")?.tokens.syntax.keyword).toBe("#abcdef");
-    expect(themes.get("mine")?.tokens.syntax.string).toBe(darkTheme.syntax.string);
+    expect(themes.get("mine")?.tokens.syntax.string).toBe(
+      darkTheme.syntax.string
+    );
   });
 
   test("reports an unknown bundled syntax theme but still resolves the tokens", () => {
-    const { issues, themes } = resolveThemes({ mine: { base: "dark", syntax: "nope" } });
+    const { issues, themes } = resolveThemes({
+      mine: { base: "dark", syntax: "nope" },
+    });
 
     expect(themes.get("mine")?.syntaxTheme).toBeUndefined();
     expect(themes.get("mine")?.tokens).toBeDefined();
@@ -283,11 +315,16 @@ describe("resolveThemes", () => {
     });
 
     expect(themes.size).toBe(0);
-    expect(issues.filter((issue) => issue.startsWith('theme "bad":'))).toHaveLength(1);
+    expect(
+      issues.filter((issue) => issue.startsWith('theme "bad":'))
+    ).toHaveLength(1);
   });
 
   test("reports a circular base", () => {
-    const { issues, themes } = resolveThemes({ a: { base: "b" }, b: { base: "a" } });
+    const { issues, themes } = resolveThemes({
+      a: { base: "b" },
+      b: { base: "a" },
+    });
 
     expect(themes.size).toBe(0);
     expect(issues.some((issue) => issue.includes("circular"))).toBe(true);
@@ -304,7 +341,9 @@ describe("resolveThemes", () => {
   });
 
   test("reports an invalid full theme", () => {
-    const { issues, themes } = resolveThemes({ mine: { accent: { primary: "#abcdef" } } });
+    const { issues, themes } = resolveThemes({
+      mine: { accent: { primary: "#abcdef" } },
+    });
 
     expect(themes.has("mine")).toBe(false);
     expect(issues).toHaveLength(1);

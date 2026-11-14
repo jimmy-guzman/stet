@@ -35,8 +35,10 @@ const run = (target) => {
   child.on("exit", (code, signal) => {
     if (signal) {
       process.kill(process.pid, signal);
+
       return;
     }
+
     process.exit(code ?? 1);
   });
 };
@@ -50,14 +52,18 @@ const packageName = `stet-${os.platform()}-${os.arch()}`;
  */
 const findBinary = (dir) => {
   const candidate = path.join(dir, "node_modules", packageName, "bin", "stet");
+
   if (fs.existsSync(candidate)) {
     return candidate;
   }
+
   const parent = path.dirname(dir);
+
   return parent === dir ? undefined : findBinary(parent);
 };
 
 const fromEnv = process.env.STET_BIN_PATH;
+
 const resolved =
   fromEnv !== undefined && fromEnv !== "" ? fromEnv : findBinary(__dirname);
 

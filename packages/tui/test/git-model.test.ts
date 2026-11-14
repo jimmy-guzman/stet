@@ -223,6 +223,7 @@ describe("parsePorcelainStatus", () => {
     const stages = parsePorcelainStatus(
       "M  staged.ts\0 M unstaged.ts\0MM mixed.ts\0?? new.ts\0"
     );
+
     expect(stages.get("staged.ts")).toBe("staged");
     expect(stages.get("unstaged.ts")).toBe("unstaged");
     expect(stages.get("mixed.ts")).toBe("mixed");
@@ -240,6 +241,7 @@ describe("parsePorcelainStatus", () => {
     const stages = parsePorcelainStatus(
       "## main...origin/main\0 M edited.ts\0"
     );
+
     expect(stages.get("edited.ts")).toBe("unstaged");
     expect(stages.has("main...origin/main")).toBe(false);
   });
@@ -275,6 +277,7 @@ describe("loadModel in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-git-symlink-", {
       "a.ts": "const a = 1\n",
     });
+
     try {
       symlinkSync("/nonexistent-target", path.join(repoRoot, "broken-link"));
       const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
@@ -299,6 +302,7 @@ describe("loadModel in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-git-tracked-symlink-", {
       "target.ts": "const a = 1\n",
     });
+
     try {
       symlinkSync("target.ts", path.join(repoRoot, "link.ts"));
       runGit(repoRoot, ["add", "link.ts"]);
@@ -326,6 +330,7 @@ describe("loadModel in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-git-symlink-flip-", {
       "a.ts": "const a = 1\n",
     });
+
     try {
       // Same path and identical git output both times, so only the on-disk type
       // Changes: the repo-file cache must not mask the flip behind a stale flag.
@@ -354,6 +359,7 @@ describe("loadModel in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-git-unicode-", {
       "src/café.ts": "const a = 1\n",
     });
+
     try {
       writeFileSync(path.join(repoRoot, "src", "café.ts"), "const a = 2\n");
       const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
@@ -364,6 +370,7 @@ describe("loadModel in a fixture repo", () => {
         kind: "modified",
       });
       expect(loaded.changed).toHaveLength(1);
+
       if (changed === undefined) {
         throw new Error("unicode file missing from model");
       }
@@ -373,6 +380,7 @@ describe("loadModel in a fixture repo", () => {
         { kind: "all", ref: "HEAD" },
         changed
       );
+
       expect(diff).toContain("+const a = 2");
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
@@ -383,6 +391,7 @@ describe("loadModel in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-git-prefix-", {
       "src/a.ts": "const a = 1\n",
     });
+
     try {
       runGit(repoRoot, ["config", "diff.noprefix", "true"]);
       runGit(repoRoot, ["config", "diff.mnemonicPrefix", "true"]);
@@ -391,6 +400,7 @@ describe("loadModel in a fixture repo", () => {
       const scope = { kind: "all", ref: "HEAD" } as const;
       const loaded = await loadModel(repoRoot, scope);
       const changed = loaded.changedByPath.get("src/a.ts");
+
       if (changed === undefined) {
         throw new Error("changed file missing from model");
       }
@@ -408,9 +418,11 @@ describe("loadModel in a fixture repo", () => {
       { length: 12 },
       (_, index) => `const line${index} = ${index}`
     ).join("\n");
+
     const repoRoot = createFixtureRepo("stet-git-rename-", {
       "src/old.ts": `${content}\n`,
     });
+
     try {
       renameSync(
         path.join(repoRoot, "src", "old.ts"),
@@ -426,14 +438,17 @@ describe("loadModel in a fixture repo", () => {
       const loaded = await loadModel(repoRoot, scope);
       const renamed = loaded.changedByPath.get("src/new.ts");
       expect(renamed).toMatchObject({ kind: "renamed", oldPath: "src/old.ts" });
+
       if (renamed === undefined) {
         throw new Error("renamed file missing from model");
       }
 
       const diff = await loadFileDiff(loaded.repoRoot, scope, renamed);
+
       const addedLines = diff
         .split("\n")
         .filter((line) => line.startsWith("+") && !line.startsWith("+++"));
+
       expect(diff).toContain("rename from src/old.ts");
       expect(addedLines).toEqual(["+const added = true"]);
     } finally {
@@ -445,6 +460,7 @@ describe("loadModel in a fixture repo", () => {
     const repoRoot = createFixtureRepo("stet-git-commit-scope-", {
       "a.txt": "one\n",
     });
+
     try {
       writeFileSync(path.join(repoRoot, "b.txt"), "two\n");
       runGit(repoRoot, ["add", "."]);
@@ -455,6 +471,7 @@ describe("loadModel in a fixture repo", () => {
 
       const commits = await loadRecentCommits(repoRoot, 30);
       const middle = commits.find((commit) => commit.subject === "add b");
+
       if (middle?.parent === undefined) {
         throw new Error(
           "middle commit missing, or missing the parent it was committed onto"
@@ -466,14 +483,17 @@ describe("loadModel in a fixture repo", () => {
         kind: "commit",
         ref: middle.parent,
       } as const;
+
       const loaded = await loadModel(repoRoot, scope);
 
       expect(loaded.changed.map((entry) => entry.path)).toEqual(["b.txt"]);
 
       const added = loaded.changedByPath.get("b.txt");
+
       if (added === undefined) {
         throw new Error("b.txt missing from the commit model");
       }
+
       const diff = await loadFileDiff(loaded.repoRoot, scope, added);
       expect(diff).toContain("+two");
     } finally {
@@ -529,10 +549,12 @@ describe("mergeChanged", () => {
 describe("changedPathsDiffer", () => {
   test("is false when only counts/stage/mtime churn", () => {
     const previous = [file("a.ts"), file("b.ts")];
+
     const next = [
       file("a.ts", { additions: 9, deletions: 4, mtimeMs: 99 }),
       file("b.ts"),
     ];
+
     expect(changedPathsDiffer(previous, next)).toBe(false);
   });
 

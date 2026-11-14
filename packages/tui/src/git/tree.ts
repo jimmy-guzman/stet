@@ -107,6 +107,7 @@ export const buildTreeStructure = (
 
   sortTree(root);
   computeFileCounts(root);
+
   return root.children.map(flattenSingleChildChains);
 };
 
@@ -120,8 +121,10 @@ export const decorateTree = (
   changedByPath: Map<string, ChangedFile>
 ): FileTreeNode[] => {
   let result: FileTreeNode[] | undefined;
+
   for (let i = 0; i < nodes.length; i += 1) {
     const next = decorateNode(nodes[i], changedByPath);
+
     if (next !== nodes[i]) {
       result ??= nodes.slice(0, i);
       result.push(next);
@@ -129,6 +132,7 @@ export const decorateTree = (
       result.push(next);
     }
   }
+
   return result ?? nodes;
 };
 
@@ -138,14 +142,19 @@ const decorateNode = (
 ): FileTreeNode => {
   if (node.type === "file") {
     const changed = changedByPath.get(node.path);
+
     if (changed === node.changed) {
       return node;
     }
+
     return { ...node, changed };
   }
+
   let children: FileTreeNode[] | undefined;
+
   for (let i = 0; i < node.children.length; i += 1) {
     const next = decorateNode(node.children[i], changedByPath);
+
     if (next !== node.children[i]) {
       children ??= node.children.slice(0, i);
       children.push(next);
@@ -153,14 +162,17 @@ const decorateNode = (
       children.push(next);
     }
   }
+
   if (children === undefined) {
     return node;
   }
+
   return { ...node, ...aggregateChildren(children), children };
 };
 
 export const defaultExpandedDirectories = (changedPaths: string[]) => {
   let expanded = new Set<string>();
+
   for (const path of changedPaths) {
     expanded = expandAncestorsForPath(expanded, path);
   }
@@ -206,6 +218,7 @@ export const firstFileInNode = (node: FileTreeNode): FileNode | undefined => {
 
   for (const child of node.children) {
     const file = firstFileInNode(child);
+
     if (file !== undefined) {
       return file;
     }
@@ -218,10 +231,13 @@ export const firstFileInNode = (node: FileTreeNode): FileNode | undefined => {
 // Return stable directory references without losing the count on the first decoration.
 const computeFileCounts = (directory: DirectoryNode): number => {
   let count = 0;
+
   for (const child of directory.children) {
     count += child.type === "file" ? 1 : computeFileCounts(child);
   }
+
   directory.fileCount = count;
+
   return count;
 };
 
@@ -256,21 +272,26 @@ const aggregateChildren = (children: FileTreeNode[]) => {
       deletions += child.deletions;
       fileCount += child.fileCount;
       changedCount += child.changedCount;
+
       if (child.stage !== undefined) {
         stages.add(child.stage);
       }
+
       for (const warning of child.warnings) {
         warnings.add(warning);
       }
+
       continue;
     }
 
     fileCount += 1;
+
     if (child.changed !== undefined) {
       changedCount += 1;
       additions += child.changed.additions;
       deletions += child.changed.deletions;
       stages.add(child.changed.stage);
+
       for (const warning of child.changed.warnings) {
         warnings.add(warning);
       }
@@ -310,6 +331,7 @@ const flattenSingleChildChains = (node: FileTreeNode): FileTreeNode => {
 
   let current = node;
   let [child] = current.children;
+
   while (current.children.length === 1 && child?.type === "directory") {
     current = { ...child, name: `${current.name}/${child.name}` };
     [child] = current.children;

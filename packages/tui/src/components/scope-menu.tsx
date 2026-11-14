@@ -8,13 +8,17 @@ import { theme } from "@/theme/context";
 import { relativeTime } from "@/utils/relative-time";
 
 const commitsView = () => state.scopeMenuView() === "commits";
+
 // Wall-clock captured at drill-in (state.now() is the recency clock, which freezes
 // While the repo is idle and would render every commit age as "now").
 const nowSeconds = () => state.commitsNow();
+
 const marker = (active: boolean, current: boolean) =>
   `${active ? "▸" : " "}${current ? "●" : " "} `;
+
 const rowBackground = (active: boolean) =>
   active ? theme.colors.surface.cursor : theme.colors.surface.panel;
+
 const rowFg = (active: boolean) =>
   active ? theme.colors.text.selected : theme.colors.text.strong;
 
@@ -45,6 +49,7 @@ export const ScopeMenu = () => {
       foregroundColor: theme.colors.scrollbar.thumb,
     },
   };
+
   const horizontalScrollbarOptions = { visible: false };
 
   return (
@@ -88,6 +93,7 @@ export const ScopeMenu = () => {
             {(kind, index) => {
               const active = () => index === state.scopeMenuIndex();
               const current = () => kind() === state.scope().kind;
+
               return (
                 <>
                   <Show when={index === 0}>{groupHeader("changes")}</Show>
@@ -183,6 +189,7 @@ export const ScopeMenu = () => {
                 // Marked by the pinned sha, not a list position, so a reload can't
                 // Drift the ● onto the wrong row.
                 const current = () => commit().sha === state.scope().headRef;
+
                 return (
                   <box
                     id={`scope-menu-${index}`}

@@ -24,12 +24,14 @@ export const InstallCommand = ({ command }: { command: string }) => {
 
   const copy = async () => {
     clearTimeout(resetTimer.current);
+
     try {
       await navigator.clipboard.writeText(command);
       setStatus("copied");
     } catch {
       setStatus("error");
     }
+
     resetTimer.current = setTimeout(() => {
       setStatus("idle");
     }, 1500);

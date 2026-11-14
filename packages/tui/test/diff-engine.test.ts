@@ -42,9 +42,11 @@ describe("renderDiff", () => {
     const added = render.rows
       .filter(isLineRow)
       .find((row) => row.type === "add");
+
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
+
     // The reconstructed text is exact, and Shiki colored it (the plain-text fallback is one
     // Uncolored span, so a foreground color is what says the grammar attached).
     expect(added.spans.map((span) => span.text).join("")).toBe(
@@ -82,6 +84,7 @@ index 1111111..2222222 100644
 -let total: u32 = 0;
 +let total: u32 = sum(items);
 `;
+
     const render = await renderDiff({
       full: false,
       maxLines: 1600,
@@ -91,9 +94,11 @@ index 1111111..2222222 100644
     const added = render.rows
       .filter(isLineRow)
       .find((row) => row.type === "add");
+
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
+
     expect(added.spans.map((span) => span.text).join("")).toBe(
       "let total: u32 = sum(items);"
     );
@@ -118,9 +123,11 @@ index 1111111..2222222 100644
       const added = render.rows
         .filter(isLineRow)
         .find((row) => row.type === "add");
+
       if (added === undefined) {
         throw new Error("expected an addition row");
       }
+
       expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
     }
   });
@@ -136,6 +143,7 @@ index 1111111..2222222 100644
 -FROM node:18
 +FROM oven/bun:1
 `;
+
     const render = await renderDiff({
       full: false,
       maxLines: 1600,
@@ -145,9 +153,11 @@ index 1111111..2222222 100644
     const added = render.rows
       .filter(isLineRow)
       .find((row) => row.type === "add");
+
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
+
     expect(added.spans.map((span) => span.text).join("")).toBe(
       "FROM oven/bun:1"
     );
@@ -163,6 +173,7 @@ index 1111111..2222222 100644
 -save-exact=false
 +save-exact=true
 `;
+
     const render = await renderDiff({
       full: false,
       maxLines: 1600,
@@ -172,9 +183,11 @@ index 1111111..2222222 100644
     const added = render.rows
       .filter(isLineRow)
       .find((row) => row.type === "add");
+
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
+
     expect(added.spans.map((span) => span.text).join("")).toBe(
       "save-exact=true"
     );
@@ -190,6 +203,7 @@ index 1111111..2222222 100644
 -old line
 +new line here
 `;
+
     const render = await renderDiff({
       full: false,
       maxLines: 1600,
@@ -199,9 +213,11 @@ index 1111111..2222222 100644
     const added = render.rows
       .filter(isLineRow)
       .find((row) => row.type === "add");
+
     if (added === undefined) {
       throw new Error("expected an addition row");
     }
+
     expect(added.spans.map((span) => span.text).join("")).toBe("new line here");
   });
 });

@@ -23,9 +23,11 @@ const focusedName = () => state.treeRows()[state.focusedRowIndex()].node.name;
 describe("sidebar windowing", () => {
   test("frames the cursor deep in a large directory, frees the wheel, and clamps on collapse", async () => {
     const files: Record<string, string> = {};
+
     for (let i = 0; i < 300; i += 1) {
       files[`big/f${String(i).padStart(3, "0")}.txt`] = `content ${i}\n`;
     }
+
     const repoRoot = createFixtureRepo("stet-window-", files);
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
@@ -33,6 +35,7 @@ describe("sidebar windowing", () => {
 
     const { renderer, mockMouse, mockInput, renderOnce, captureCharFrame } =
       await testRender(() => <App />, { height: 16, width: 90 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) =>
       current.includes("f000.txt")
@@ -51,6 +54,7 @@ describe("sidebar windowing", () => {
       // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
       await renderOnce();
     }
+
     await renderOnce();
     expect(sidebarFrame()).toContain(focusedName());
     expect(sidebarFrame()).not.toContain("f000.txt");
@@ -63,6 +67,7 @@ describe("sidebar windowing", () => {
       // oxlint-disable-next-line no-await-in-loop -- sequential wheel steps
       await renderOnce();
     }
+
     await renderOnce();
     expect(sidebarFrame()).not.toContain(focusedName());
 
@@ -81,6 +86,7 @@ describe("sidebar windowing", () => {
       // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
       await renderOnce();
     }
+
     mockInput.pressKey("h");
     await renderOnce();
     await renderOnce();

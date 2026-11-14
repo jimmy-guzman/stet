@@ -36,6 +36,7 @@ describe("textContent", () => {
       { length: MAX_FILE_LINES + 10 },
       (_, index) => `line ${index}`
     ).join("\n");
+
     const truncated = textContent(long, false);
     expect(truncated).toMatchObject({
       kind: "text",
@@ -64,6 +65,7 @@ describe("classifyFileBytes", () => {
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
       0x44, 0x52, 0, 0, 0, 16, 0, 0, 0, 8,
     ]);
+
     expect(classifyFileBytes(png, { full: false })).toEqual({
       bytes: 24,
       image: { format: "PNG", height: 8, width: 16 },

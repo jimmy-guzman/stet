@@ -32,6 +32,7 @@ test("the move key docks the tree to the right, and it renders there", async () 
   const repoRoot = createFixtureRepo("stet-pane-dock-", {
     "src/a.ts": "export const a = 1;\n",
   });
+
   const scope = { kind: "all", ref: "HEAD" } as const;
   seedState(await loadModel(repoRoot, scope), scope);
 
@@ -40,6 +41,7 @@ test("the move key docks the tree to the right, and it renders there", async () 
       height: 24,
       width: 100,
     });
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) => current.includes("a.ts"));
@@ -49,6 +51,7 @@ test("the move key docks the tree to the right, and it renders there", async () 
     mockInput.pressKey("d");
     // Top -> right
     mockInput.pressKey("d");
+
     const frame = await settleUntil(
       "docked right",
       () => state.sidebarPosition() === "right"
@@ -74,6 +77,7 @@ test("m zooms the focused pane to fill the band, and again restores it", async (
   const repoRoot = createFixtureRepo("stet-pane-zoom-", {
     "src/a.ts": "export const a = 1;\n",
   });
+
   const scope = { kind: "all", ref: "HEAD" } as const;
   seedState(await loadModel(repoRoot, scope), scope);
 
@@ -82,6 +86,7 @@ test("m zooms the focused pane to fill the band, and again restores it", async (
       height: 24,
       width: 100,
     });
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) => current.includes("a.ts"));
@@ -119,6 +124,7 @@ test("a bare d never fires the move while the search pane owns the keys", async 
   const repoRoot = createFixtureRepo("stet-pane-dock-search-", {
     "src/a.ts": "export const a = 1;\n",
   });
+
   const scope = { kind: "all", ref: "HEAD" } as const;
   seedState(await loadModel(repoRoot, scope), scope);
 
@@ -127,6 +133,7 @@ test("a bare d never fires the move while the search pane owns the keys", async 
       height: 24,
       width: 100,
     });
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("first render", (current) => current.includes("a.ts"));

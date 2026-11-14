@@ -53,6 +53,7 @@ export const buildSearchItems = (
   input: BuildSearchItemsInput
 ): SearchItem[] => {
   const indexed = input.matches.map((match, index) => ({ index, match }));
+
   return [
     ...Map.groupBy(indexed, (entry) => entry.match.path).entries(),
   ].flatMap(([path, entries]) => {
@@ -63,11 +64,14 @@ export const buildSearchItems = (
       kind: "header",
       path,
     };
+
     if (input.collapsed.has(path)) {
       return [header];
     }
+
     const rows = fileLineItems(path, entries, input);
     rows.unshift(header);
+
     return rows;
   });
 };
@@ -84,11 +88,13 @@ const fileLineItems = (
 ): SearchItem[] => {
   const lines = input.linesByPath.get(path);
   const byLine = new Map(entries.map((entry) => [entry.match.line, entry]));
+
   const excerpts = mergeExcerpts(
     entries.map((entry) => {
       // An unreadable file (binary, oversized), or a match past a truncated
       // Read, still shows its hit: the grep text alone, with no context.
       const within = lines !== undefined && entry.match.line <= lines.length;
+
       return within
         ? {
             end: Math.min(lines.length, entry.match.line + input.context),
@@ -97,13 +103,16 @@ const fileLineItems = (
         : { end: entry.match.line, start: entry.match.line };
     })
   );
+
   const lineWidth = Math.max(
     1,
     ...excerpts.map((excerpt) => String(excerpt.end).length)
   );
+
   return excerpts.flatMap((excerpt, excerptIndex) => {
     const rows = rangeOf(excerpt).map((lineNumber): SearchItem => {
       const entry = byLine.get(lineNumber);
+
       const shared = {
         id: `search-line-${path}-${lineNumber}`,
         kind: "line" as const,
@@ -112,12 +121,14 @@ const fileLineItems = (
         path,
         text: lines?.[lineNumber - 1] ?? entry?.match.text ?? "",
       };
+
       return entry === undefined
         ? shared
         : Object.assign(shared, {
             match: { column: entry.match.column, index: entry.index },
           });
     });
+
     if (excerptIndex > 0) {
       rows.unshift({
         id: `search-gap-${path}-${excerptIndex}`,
@@ -125,6 +136,7 @@ const fileLineItems = (
         path,
       });
     }
+
     return rows;
   });
 };
@@ -138,14 +150,18 @@ interface Excerpt {
 // Excerpts are never adjacent without a real unshown line between them.
 const mergeExcerpts = (ranges: Excerpt[]): Excerpt[] => {
   const merged: Excerpt[] = [];
+
   for (const range of ranges) {
     const last = merged.at(-1);
+
     if (last !== undefined && range.start <= last.end + 1) {
       last.end = Math.max(last.end, range.end);
       continue;
     }
+
     merged.push({ end: range.end, start: range.start });
   }
+
   return merged;
 };
 

@@ -25,6 +25,7 @@ const renderMessage = (text: string): ReactNode[] => {
 
   for (const match of text.matchAll(inlineToken)) {
     const { index } = match;
+
     if (index > last) {
       nodes.push(text.slice(last, index));
     }

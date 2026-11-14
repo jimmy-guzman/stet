@@ -19,20 +19,24 @@ test("a repo name wider than the header truncates and keeps the changed count", 
   const repoRoot = createFixtureRepo(`stet-${"long-repo-name-".repeat(4)}x-`, {
     "src/a.ts": "const a = 1\n",
   });
+
   writeFileSync(path.join(repoRoot, "src/a.ts"), "const a = 2\n");
 
   const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
   seedState(model, { kind: "all", ref: "HEAD" });
+
   const { renderer, renderOnce, captureCharFrame } = await testRender(
     () => <App />,
     { height: 24, width: 80 }
   );
+
   const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
   try {
     const frame = await settleUntil("app chrome", (text) =>
       text.includes("q quit")
     );
+
     const [header = ""] = frame.split("\n");
     expect(header).toContain("1 changed");
     expect(header).toContain("stet-long-repo-name-");

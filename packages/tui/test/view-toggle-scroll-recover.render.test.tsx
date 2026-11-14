@@ -25,15 +25,19 @@ const visibleLineNumbers = (frame: string) =>
 
 const diffScrollBox = (node: Renderable) => {
   const candidates: ScrollBoxRenderable[] = [];
+
   const walk = (current: Renderable) => {
     if (current instanceof ScrollBoxRenderable) {
       candidates.push(current);
     }
+
     for (const child of current.getChildren()) {
       walk(child);
     }
   };
+
   walk(node);
+
   return candidates.toSorted((a, b) => b.scrollHeight - a.scrollHeight)[0];
 };
 
@@ -48,10 +52,12 @@ test("recovers when a layout pass strands the physical scroll", async () => {
     { length: 120 },
     (_, index) => `const line_${index + 1} = ${index + 1}`
   );
+
   const repoRoot = createFixtureRepo("stet-toggle-strand-", {
     "long.ts": `${lines.join("\n")}\n`,
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
   });
+
   writeFileSync(
     path.join(repoRoot, "long.ts"),
     `${lines.with(109, "const line_110 = 9999").join("\n")}\n`
@@ -59,11 +65,13 @@ test("recovers when a layout pass strands the physical scroll", async () => {
 
   const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
   seedState(model, { kind: "all", ref: "HEAD" });
+
   const { renderer, renderOnce, captureCharFrame, mockInput } =
     await testRender(() => <App />, {
       height: 34,
       width: 120,
     });
+
   const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
   try {
@@ -92,6 +100,7 @@ test("recovers when a layout pass strands the physical scroll", async () => {
       (current) =>
         visibleLineNumbers(current).includes(110) && box.scrollTop > 50
     );
+
     expect(visibleLineNumbers(recovered)).toContain(110);
     expect(box.scrollHeight).toBeGreaterThanOrEqual(115);
   } finally {

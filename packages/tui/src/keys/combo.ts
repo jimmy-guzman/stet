@@ -54,18 +54,22 @@ export const parseCombo = (text: string): Combo | undefined => {
     shift: boolean
   ): Combo | undefined => {
     const modifier = /^(?<name>ctrl|shift)[+-](?<rest>.+)$/iu.exec(rest);
+
     if (
       modifier?.groups?.name !== undefined &&
       modifier.groups.rest !== undefined
     ) {
       const lower = modifier.groups.name.toLowerCase();
+
       return read(
         modifier.groups.rest,
         ctrl || lower === "ctrl",
         shift || lower === "shift"
       );
     }
+
     const name = aliases.get(rest.toLowerCase()) ?? rest;
+
     if (name.length === 1) {
       if (isLetter(name)) {
         // "G" and "shift+g" are the same combo.
@@ -75,14 +79,17 @@ export const parseCombo = (text: string): Combo | undefined => {
           shift: shift || name !== name.toLowerCase(),
         };
       }
+
       // A symbol carries its own shift (typing "?" needs it on most layouts),
       // So a shift modifier on one is meaningless and rejected as a typo.
       return shift ? undefined : { ctrl, name, shift: false };
     }
+
     return namedKeys.has(name.toLowerCase())
       ? { ctrl, name: name.toLowerCase(), shift }
       : undefined;
   };
+
   return text === "" ? undefined : read(text.trim(), false, false);
 };
 
@@ -100,12 +107,16 @@ export const matchesKey = (
   if (key.ctrl !== combo.ctrl) {
     return false;
   }
+
   if (key.name.length === 1) {
     if (isLetter(key.name)) {
       const shift = key.shift || key.name !== key.name.toLowerCase();
+
       return key.name.toLowerCase() === combo.name && shift === combo.shift;
     }
+
     return key.name === combo.name;
   }
+
   return key.name.toLowerCase() === combo.name && key.shift === combo.shift;
 };

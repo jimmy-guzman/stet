@@ -26,6 +26,7 @@ export const ListScrollbar = (props: {
       props.viewport(),
       props.scrollTop()
     );
+
     return Array.from({ length: props.viewport() }, (_, index) =>
       thumb !== undefined &&
       index >= thumb.top &&
@@ -34,6 +35,7 @@ export const ListScrollbar = (props: {
         : " "
     ).join("\n");
   });
+
   return (
     <box
       ref={(el) => {

@@ -131,6 +131,7 @@ describe("matchIndices", () => {
   test("resolves a directory-only match to that directory", () => {
     const path =
       ".agents/skills/effect-best-practices/references/error-patterns.md";
+
     const indices = matchIndices("references", path);
     const start = path.indexOf("references");
     expect(indices).toEqual(
@@ -224,8 +225,10 @@ describe("rankFiles", () => {
   test("empty query over more paths than the limit equals the full-sort head", () => {
     const manyPaths = Array.from({ length: 500 }, (_, index) => {
       const dir = ["src", "test", "docs"][index % 3];
+
       return `${dir}/f${String(index).padStart(3, "0")}.ts`;
     });
+
     const options = {
       changed: new Set(manyPaths.filter((_, index) => index % 7 === 0)),
       lastChangedAt: new Map(
@@ -241,14 +244,18 @@ describe("rankFiles", () => {
         const recencyDelta =
           (options.lastChangedAt.get(b) ?? 0) -
           (options.lastChangedAt.get(a) ?? 0);
+
         if (recencyDelta !== 0) {
           return recencyDelta;
         }
+
         const changedDelta =
           (options.changed.has(b) ? 1 : 0) - (options.changed.has(a) ? 1 : 0);
+
         if (changedDelta !== 0) {
           return changedDelta;
         }
+
         return a.localeCompare(b);
       })
       .slice(0, options.limit);

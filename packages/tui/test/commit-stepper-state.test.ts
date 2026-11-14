@@ -70,6 +70,7 @@ test("switching worktrees while viewing a commit resets the scope to all", async
   const repoRoot = createFixtureRepo("stet-commit-rebaseline-", {
     "notes.txt": "one\n",
   });
+
   const linkedRoot = path.join(repoRoot, ".wt");
   runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
 
@@ -81,9 +82,11 @@ test("switching worktrees while viewing a commit resets the scope to all", async
   state.setScope({ headRef: "deadbeef", kind: "commit", ref: "cafebabe" });
 
   const worktrees = await loadWorktrees(repoRoot);
+
   const linked = worktrees.find(
     (worktree) => worktree.branch === "side-branch"
   );
+
   if (linked === undefined) {
     throw new Error("linked worktree missing");
   }

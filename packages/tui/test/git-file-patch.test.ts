@@ -187,6 +187,7 @@ describe("buildFilePatch", () => {
   test("a modified file produces a git-shaped patch with three context lines", () => {
     const oldText = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\n";
     const newText = "one\ntwo\nthree\nfour\nCHANGED\nsix\nseven\neight\nnine\n";
+
     const built = buildFilePatch(
       file("src/a.ts"),
       text(oldText),
@@ -196,6 +197,7 @@ describe("buildFilePatch", () => {
     if (built.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(built.patch).toStartWith("diff --git a/src/a.ts b/src/a.ts\n");
     expect(built.patch).toContain("--- a/src/a.ts\n");
     expect(built.patch).toContain("+++ b/src/a.ts\n");
@@ -222,6 +224,7 @@ describe("buildFilePatch", () => {
     if (built.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(built.patch).toStartWith("diff --git a/src/a.ts b/src/a.ts\n");
     expect(built.patch).toContain("new file mode 100644\n");
     expect(built.patch).toContain("--- /dev/null\n");
@@ -242,6 +245,7 @@ describe("buildFilePatch", () => {
     if (built.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(built.patch).toContain("deleted file mode 100644\n");
     expect(built.patch).toContain("--- a/src/a.ts\n");
     expect(built.patch).toContain("+++ /dev/null\n");
@@ -261,6 +265,7 @@ describe("buildFilePatch", () => {
     if (built.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(built.patch).toStartWith("diff --git a/src/old.ts b/src/new.ts\n");
     expect(built.patch).toContain("rename from src/old.ts\n");
     expect(built.patch).toContain("rename to src/new.ts\n");
@@ -286,6 +291,7 @@ describe("buildFilePatch", () => {
     if (built.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(built.patch).toContain("rename from src/old.ts\n");
     expect(built.patch).not.toContain("@@");
     expect(rows(built.patch)).toEqual([]);
@@ -293,15 +299,19 @@ describe("buildFilePatch", () => {
 
   test("a missing trailing newline emits the no-newline marker on the right side", () => {
     const removed = buildFilePatch(file("a.txt"), text("end\n"), text("end"));
+
     if (removed.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(removed.patch).toContain("+end\n\\ No newline at end of file\n");
 
     const added = buildFilePatch(file("a.txt"), text("end"), text("end\n"));
+
     if (added.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(added.patch).toContain("-end\n\\ No newline at end of file\n");
   });
 
@@ -345,6 +355,7 @@ describe("buildFilePatch", () => {
       text("a\r\nb\r\n"),
       text("a\r\nc\r\n")
     );
+
     expect(both.kind).toBe("patch");
   });
 
@@ -368,6 +379,7 @@ describe("buildFilePatch", () => {
     if (built.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(rows(built.patch)).toEqual([]);
   });
 
@@ -381,6 +393,7 @@ describe("buildFilePatch", () => {
     if (built.kind !== "patch") {
       throw new Error("expected a patch");
     }
+
     expect(built.patch).toContain("new file mode 100644\n");
     expect(rows(built.patch)).toEqual([]);
   });

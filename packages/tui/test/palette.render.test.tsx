@@ -20,13 +20,16 @@ describe("go-to-file palette", () => {
       "src/tree.ts": "export const tree = true\n",
       "test/tree.test.ts": "export const testTree = true\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -35,38 +38,48 @@ describe("go-to-file palette", () => {
         (frame) => frame.includes("q quit"),
         5
       );
+
       expect(initial).toContain("q quit");
 
       mockInput.pressKey("p", { ctrl: true });
+
       const palette = await settleUntil("go-to-file palette", (frame) =>
         frame.includes("go to file")
       );
+
       expect(palette).toContain("go to file");
 
       // Q must feed the input and show "no matches", not quit the app
       await mockInput.typeText("qqqq");
+
       const afterTyping = await settleUntil(
         "empty palette results",
         (frame) => frame.includes("q quit") && frame.includes("no matches")
       );
+
       expect(afterTyping).toContain("q quit");
       expect(afterTyping).toContain("no matches");
 
       for (let index = 0; index < 4; index += 1) {
         mockInput.pressBackspace();
       }
+
       await mockInput.typeText("treets");
+
       const afterSearch = await settleUntil("tree search result", (frame) =>
         frame.includes("src/tree.ts")
       );
+
       expect(afterSearch).toContain("src/tree.ts");
 
       mockInput.pressEnter();
+
       const after = await settleUntil(
         "selected tree file",
         (frame) =>
           frame.includes("src/tree.ts") && !frame.includes("go to file")
       );
+
       expect(after).toContain("src/tree.ts");
       expect(after).not.toContain("go to file");
     } finally {
@@ -85,13 +98,16 @@ describe("go-to-file palette", () => {
         "b\n",
       "README.md": "# Fixture\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 100,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -102,9 +118,11 @@ describe("go-to-file palette", () => {
       );
 
       await mockInput.typeText("references");
+
       const results = await settleUntil("mid-dir match visible", (frame) =>
         frame.includes("references")
       );
+
       // The matched directory is on screen (the leading dirs were truncated, not it).
       expect(results).toContain("references");
       expect(results).toContain("…");

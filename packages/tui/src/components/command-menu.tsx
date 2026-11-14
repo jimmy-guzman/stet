@@ -28,12 +28,15 @@ export const CommandMenu = (props: {
 
   const placeMenu = (anchor: CaretCell) => {
     const items = state.commandMenuItems();
+
     const inner = Math.max(
       HINT.length,
       ...items.map((item) => 2 + Bun.stringWidth(item.label))
     );
+
     // +2 border, +2 padding; capped so a menu never runs off a narrow pane.
     const width = Math.min(inner + 4, props.viewportWidth());
+
     const placement = placeCard({
       anchor,
       cardHeight: items.length + 3,
@@ -41,20 +44,25 @@ export const CommandMenu = (props: {
       viewportHeight: props.viewportHeight(),
       viewportWidth: props.viewportWidth(),
     });
+
     return { items, placement, width };
   };
+
   const layout = createMemo(() => {
     const anchor = props.anchor();
+
     return anchor === undefined ? undefined : placeMenu(anchor);
   });
 
   const run = (item: CommandMenuItem) => {
     const { action } = item;
+
     if (action.kind === "openEditor") {
       void openInEditor(renderer, action.path, action.line, action.mode);
     } else {
       state.dispatchCommandAction(action);
     }
+
     state.closeCommandMenu();
   };
 
@@ -75,6 +83,7 @@ export const CommandMenu = (props: {
           <Index each={value().items}>
             {(item, index) => {
               const highlighted = () => index === state.commandMenuIndex();
+
               return (
                 <box
                   ref={(el) => {

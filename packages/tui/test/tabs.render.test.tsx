@@ -24,11 +24,13 @@ describe("tabs strip", () => {
       { length: 20 },
       (_, index) => `const line${index + 1} = ${index + 1}`
     );
+
     const repoRoot = createFixtureRepo("stet-tabs-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${body.join("\n")}\n`,
       "src/b.ts": `${body.join("\n")}\n`,
     });
+
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
       `${["const line1 = 1", "const aChanged = true", ...body.slice(2)].join("\n")}\n`
@@ -40,11 +42,13 @@ describe("tabs strip", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -63,9 +67,11 @@ describe("tabs strip", () => {
       // Strip appears with the pinned a.ts (basename) and the active preview b.ts.
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
+
       const twoTabs = await settleUntil("b.ts active", (frame) =>
         frame.includes("bChanged")
       );
+
       expect(state.tabItems().length).toBe(2);
       // Active tab shows its path
       expect(twoTabs).toContain("src/b.ts");
@@ -79,18 +85,22 @@ describe("tabs strip", () => {
 
       // Cycle to the pinned tab: the viewer swaps to a.ts.
       state.cycleTab(-1);
+
       const back = await settleUntil("a.ts active again", (frame) =>
         frame.includes("aChanged")
       );
+
       expect(back).toContain("src/a.ts");
       expect(back).not.toContain("src/b.ts");
 
       // Closing the pinned tab leaves only the preview, so the strip disappears.
       mockInput.pressKey("w", { ctrl: true });
+
       const collapsed = await settleUntil(
         "back to one tab",
         (frame) => frame.includes("src/b.ts") && frame.includes("bChanged")
       );
+
       expect(state.tabItems().length).toBe(1);
       expect(collapsed).toMatch(/\+\d+ -\d+ · ln \d+/u);
     } finally {
@@ -104,11 +114,13 @@ describe("tabs strip", () => {
       { length: 20 },
       (_, index) => `const line${index + 1} = ${index + 1}`
     );
+
     const repoRoot = createFixtureRepo("stet-tabcursor-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${body.join("\n")}\n`,
       "src/b.ts": `${body.join("\n")}\n`,
     });
+
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
       `const aChanged = true\n${body.slice(1).join("\n")}\n`
@@ -120,11 +132,13 @@ describe("tabs strip", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
@@ -134,6 +148,7 @@ describe("tabs strip", () => {
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
+
       const frame = await settleUntil("two tabs", (f) =>
         f.includes("src/b.ts")
       );
@@ -176,11 +191,13 @@ describe("tabs strip", () => {
       { length: 20 },
       (_, index) => `const line${index + 1} = ${index + 1}`
     );
+
     const repoRoot = createFixtureRepo("stet-tabpin-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${body.join("\n")}\n`,
       "src/b.ts": `${body.join("\n")}\n`,
     });
+
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
       `const aChanged = true\n${body.slice(1).join("\n")}\n`
@@ -192,8 +209,10 @@ describe("tabs strip", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
       await testRender(() => <App />, { height: 30, width: 120 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -202,6 +221,7 @@ describe("tabs strip", () => {
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
+
       const frame = await settleUntil("two tabs", (f) =>
         f.includes("src/b.ts")
       );
@@ -228,15 +248,18 @@ describe("tabs strip", () => {
       "src/a.ts": "const a = 1\n",
       "src/b.ts": "const b = 1\n",
     });
+
     writeFileSync(path.join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockMouse } =
       await testRender(() => <App />, {
         height: 24,
         width: 100,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -251,6 +274,7 @@ describe("tabs strip", () => {
       await mockMouse.doubleClick(column + 1, rowIndex);
       await settleUntil("b.ts pinned", () => {
         const tab = state.tabItems().find((item) => item.path === "src/b.ts");
+
         return tab !== undefined && !tab.preview;
       });
 
@@ -268,16 +292,19 @@ describe("tabs strip", () => {
       "src/a.ts": "const a = 1\n",
       "src/b.ts": "const b = 1\n",
     });
+
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const aChanged = 1\n");
     writeFileSync(path.join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 24,
         width: 100,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -286,14 +313,17 @@ describe("tabs strip", () => {
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
+
       const frame = await settleUntil("two tabs", (f) =>
         f.includes("src/b.ts")
       );
+
       await renderOnce();
 
       // Read the actual rendered cell attributes (what the terminal paints).
       const italic = createTextAttributes({ italic: true });
       const buffer = renderer.currentRenderBuffer;
+
       // `italic` is a single bit, so the cell carries it when that bit of its mask is set.
       const isItalicAt = (x: number, y: number) =>
         Math.floor(

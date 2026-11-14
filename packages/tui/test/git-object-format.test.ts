@@ -62,6 +62,7 @@ test("a commitless SHA-256 repository loads against its empty tree", async () =>
     { "loose.txt": "two\n", "staged.txt": "one\n" },
     { ...sha256, commit: false }
   );
+
   runGit(repo, ["add", "staged.txt"]);
 
   const { emptyTree } = await repoContext(repo);
@@ -100,21 +101,26 @@ test("a SHA-256 root commit reports no parent and diffs against the empty tree",
   const parent = await runGitService(
     Git.pipe(Effect.flatMap((git) => git.parentRef(repo)))
   );
+
   expect(parent).toBeUndefined();
 
   // What `selectScope` and `selectCommit` build once the parent comes back absent.
   const { emptyTree } = await repoContext(repo);
+
   const scope = {
     headRef: "HEAD",
     kind: "last-commit",
     ref: parent ?? emptyTree,
   } as const;
+
   const model = await loadModel(repo, scope);
 
   const added = model.changedByPath.get("a.txt");
+
   if (added === undefined) {
     throw new Error("a.txt missing from the root commit's model");
   }
+
   expect(added.kind).toBe("added");
   expect(await loadFileDiff(repo, scope, added)).toContain("+one");
 });
@@ -127,6 +133,7 @@ test("a linked worktree of a SHA-256 repository reports the same empty tree", as
     { "a.txt": "one\n" },
     sha256
   );
+
   const linked = path.join(repo, "linked");
   runGit(repo, ["worktree", "add", "-b", "feature", linked]);
 

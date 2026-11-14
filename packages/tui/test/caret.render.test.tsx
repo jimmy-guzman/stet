@@ -23,6 +23,7 @@ describe("word caret", () => {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": "const a = 1\nconst b = 1\n",
     });
+
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
       "const a = 2\nconst b = 2\n"
@@ -30,11 +31,13 @@ describe("word caret", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -62,9 +65,11 @@ describe("word caret", () => {
 
       // H past the first word wraps back to the previous line's last word.
       mockInput.pressKey("h");
+
       const back = await settleUntil("caret wraps back", (frame) =>
         /ln 1:11\b/u.test(frame)
       );
+
       expect(back).toMatch(/ln 1:11\b/u);
     } finally {
       renderer.destroy();
@@ -77,15 +82,18 @@ describe("word caret", () => {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": "const a = 1\n",
     });
+
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const alpha = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
@@ -103,6 +111,7 @@ describe("word caret", () => {
       const frame = await settleUntil("caret on a symbol", (current) =>
         /ln \d+:\d+/u.test(current)
       );
+
       const rows = frame.split("\n");
       const rowIndex = rows.findIndex((row) => row.includes("alpha"));
       expect(rowIndex).toBeGreaterThan(-1);
@@ -110,10 +119,12 @@ describe("word caret", () => {
       // Click the gutter (just past the sidebar, before the content): line-level,
       // So the stats line drops the column and `y` copies path:line.
       await mouse.click(state.layout().viewer.x + 2, rowIndex);
+
       const onLine = await settleUntil(
         "line-level selection",
         (current) => /ln \d+(?!:)/u.test(current) && !/ln \d+:\d/u.test(current)
       );
+
       expect(onLine).not.toMatch(/ln \d+:\d/u);
       mockInput.pressKey("y");
       expect(copied.at(-1)).toBe("src/a.ts:1");
@@ -138,23 +149,29 @@ describe("word caret", () => {
       { length: 18 },
       (_, index) => `before${index}`
     ).join(" ");
+
     const words = Array.from({ length: 18 }, (_, index) =>
       index === 12 ? "targetword" : `word${index}`
     );
+
     const content = words.join(" ");
+
     const repoRoot = createFixtureRepo("stet-caret-wrap-click-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${before}\n`,
     });
+
     writeFileSync(path.join(repoRoot, "src", "a.ts"), `${content}\n`);
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 80,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
@@ -170,15 +187,19 @@ describe("word caret", () => {
           state.cursorLineContent() === content
       );
       mockInput.pressKey("x");
+
       const wrapped = await settleUntil(
         "target word wrapped onto a continuation row",
         (frame) => state.overflow() === "wrap" && frame.includes("targetword")
       );
+
       const wrappedRows = wrapped.split("\n");
       const firstRow = wrappedRows.findIndex((row) => row.includes("word0"));
+
       const targetRow = wrappedRows.findIndex((row) =>
         row.includes("targetword")
       );
+
       const targetColumn = wrappedRows[targetRow]?.indexOf("targetword") ?? -1;
       expect(firstRow).toBeGreaterThan(-1);
       expect(targetRow).toBeGreaterThan(-1);
@@ -203,6 +224,7 @@ describe("word caret", () => {
       "src/a.ts": "const a = 1\n",
       "src/b.ts": "const b = 1\n",
     });
+
     // Distinctive content per file (`alpha` vs `beta`) so the rendered diff proves
     // Which file is active, not just the line:col shape.
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const alpha = 2\n");
@@ -210,11 +232,13 @@ describe("word caret", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -237,10 +261,12 @@ describe("word caret", () => {
       // Back must switch the view to a *and* restore its captured caret column, not
       // Stay on b or re-home to a's first word.
       mockInput.pressKey("<");
+
       const restored = await settleUntil(
         "a active and caret restored",
         (current) => current.includes("alpha") && /ln \d+:7\b/u.test(current)
       );
+
       expect(restored).toContain("alpha");
       expect(restored).not.toContain("beta");
       expect(restored).toMatch(/ln \d+:7\b/u);

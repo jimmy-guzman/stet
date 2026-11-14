@@ -26,8 +26,10 @@ const EMPTY: VisibleWindow = {
 /** Cumulative terminal-row end offset for each source row. */
 export const cumulativeRowEnds = (heights: readonly number[]) => {
   let total = 0;
+
   return heights.map((height) => {
     total += Math.max(0, height);
+
     return total;
   });
 };
@@ -36,20 +38,24 @@ export const cumulativeRowEnds = (heights: readonly number[]) => {
 const firstRowEndingAfter = (ends: readonly number[], cell: number) => {
   let low = 0;
   let high = ends.length - 1;
+
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
+
     if ((ends[middle] ?? 0) > cell) {
       high = middle;
     } else {
       low = middle + 1;
     }
   }
+
   return low;
 };
 
 /** Row containing a zero-based terminal-cell offset, or undefined outside the content. */
 export const rowIndexAtOffset = (ends: readonly number[], offset: number) => {
   const total = ends.at(-1) ?? 0;
+
   return Number.isFinite(offset) && offset >= 0 && offset < total
     ? firstRowEndingAfter(ends, Math.floor(offset))
     : undefined;
@@ -87,12 +93,14 @@ export const visibleWindowVariable = (
   overscan = 0
 ): VisibleWindow => {
   const count = heights.length;
+
   if (count <= 0) {
     return EMPTY;
   }
 
   const tops: number[] = [];
   let total = 0;
+
   for (const height of heights) {
     tops.push(total);
     total += Math.max(0, height);
@@ -102,20 +110,26 @@ export const visibleWindowVariable = (
     0,
     Math.min(Math.floor(scrollTop), Math.max(0, total - 1))
   );
+
   const bottom = top + Math.max(0, viewportHeight);
 
   let first = -1;
   let last = -1;
+
   for (let index = 0; index < count; index += 1) {
     const height = Math.max(0, heights[index] ?? 0);
+
     if (height === 0) {
       continue;
     }
+
     const rowTop = tops[index] ?? 0;
+
     if (rowTop + height > top && rowTop < bottom) {
       if (first === -1) {
         first = index;
       }
+
       last = index;
     }
   }

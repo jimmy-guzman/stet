@@ -35,11 +35,13 @@ const onInput = (value: string) => {
 const onWheel = (event: MouseEvent) => {
   const direction = event.scroll?.direction;
   const delta = event.scroll?.delta ?? 1;
+
   if (direction === "up") {
     move(-delta);
   } else if (direction === "down") {
     move(delta);
   }
+
   if (event.scroll !== undefined) {
     event.scroll.delta = 0;
   }
@@ -109,8 +111,10 @@ export const ThemeCombobox = () => {
           <Index each={state.themeComboboxResults()}>
             {(item, index) => {
               const selected = () => index === state.themeComboboxIndex();
+
               const current = () =>
                 item().selection === state.themeComboboxOrigin();
+
               return (
                 <box
                   id={`theme-combobox-${index}`}

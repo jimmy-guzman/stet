@@ -36,6 +36,7 @@ const hasBackground = (
   hex: string
 ) => {
   const want = RGBA.fromHex(hex);
+
   return frame.lines.some((line) =>
     line.spans.some(
       (span) =>
@@ -49,6 +50,7 @@ const hasBackground = (
 const locate = (frame: string, needle: string) => {
   const lines = frame.split("\n");
   const y = lines.findIndex((line) => line.includes(needle));
+
   return { x: y === -1 ? 0 : lines[y].indexOf(needle), y };
 };
 
@@ -92,8 +94,10 @@ describe("theme switcher", () => {
     const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, captureSpans, mockInput } =
       await testRender(() => <App />, { height: 32, width: 120 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -155,6 +159,7 @@ describe("theme switcher", () => {
     const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const {
       renderer,
       renderOnce,
@@ -163,6 +168,7 @@ describe("theme switcher", () => {
       mockInput,
       mockMouse,
     } = await testRender(() => <App />, { height: 32, width: 120 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -173,11 +179,13 @@ describe("theme switcher", () => {
         frame.includes("hover preview")
       );
       await mockInput.typeText("zztwo");
+
       // Both themes match; the first (zztwoa) is highlighted and previewed.
       const filtered = await settleUntil(
         "both rows visible",
         (frame) => frame.includes("zztwoa") && frame.includes("zztwob")
       );
+
       // Preview is a Solid effect that flushes on a microtask, so settle (re-render)
       // Until the background reflects it rather than asserting on a fixed frame.
       await settleUntil("zztwoa previewed", () =>

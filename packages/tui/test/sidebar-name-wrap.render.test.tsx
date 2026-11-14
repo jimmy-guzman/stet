@@ -22,10 +22,12 @@ const sidebarLines = (frame: string) =>
 describe("sidebar filename does not scroll on wheel", () => {
   test("keeps the tree row showing the name start after a wheel over it", async () => {
     const longName = "a-really-quite-long-repository-file-name.txt";
+
     const repoRoot = createFixtureRepo("stet-name-wrap-", {
       [longName]: "one\n",
       "short.txt": "two\n",
     });
+
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
@@ -56,6 +58,7 @@ describe("sidebar filename does not scroll on wheel", () => {
           sidebarLines(frame).some((line) => line.includes(namePrefix))
         )
       );
+
       const rowY = before.findIndex((line) => line.includes(namePrefix));
       expect(rowY).toBeGreaterThanOrEqual(0);
       expect(before[rowY]).toContain(namePrefix);
@@ -64,6 +67,7 @@ describe("sidebar filename does not scroll on wheel", () => {
         await mockMouse.scroll(10, rowY, "down");
         await renderOnce();
       };
+
       await wheelDownOverName();
       await wheelDownOverName();
       await wheelDownOverName();

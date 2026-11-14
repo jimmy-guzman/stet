@@ -25,12 +25,14 @@ describe("monochrome change bar", () => {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0" } })}\n`,
       "src/a.ts": "const before = 1\n",
     });
+
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const AFTERWARD = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setSidebarOpen(false);
     setSelection("mono-dark");
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -38,6 +40,7 @@ describe("monochrome change bar", () => {
         width: 80,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -47,21 +50,26 @@ describe("monochrome change bar", () => {
       );
 
       expect(frame).not.toContain("▎");
+
       const removeRow = frame
         .split("\n")
         .find((line) => line.includes("before"));
+
       const addRow = frame
         .split("\n")
         .find((line) => line.includes("AFTERWARD"));
+
       expect(removeRow).toContain("-");
       expect(addRow).toContain("+");
 
       // Switching to a known colored built-in restores the block bar live (an
       // Explicit name, so the assertion never rides on the ambient appearance).
       setSelection("dark");
+
       const colored = await settleUntil("block bar restored", (current) =>
         current.includes("▎")
       );
+
       expect(colored).toContain("▎");
     } finally {
       setSelection(undefined);

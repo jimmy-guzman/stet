@@ -21,11 +21,13 @@ describe("recordActivity", () => {
       [{ kind: "changed", path: "a.ts" }],
       1000
     );
+
     expect(log.events).toEqual([{ at: 1000, kind: "changed", path: "a.ts" }]);
   });
 
   test("caps the log at the most recent events", () => {
     let log = emptyActivityLog;
+
     for (let index = 0; index < 1200; index += 1) {
       log = recordActivity(
         log,
@@ -46,6 +48,7 @@ describe("derived views", () => {
       [{ kind: "appeared", path: "a.ts" }],
       1000
     );
+
     log = recordActivity(
       log,
       [
@@ -65,6 +68,7 @@ describe("derived views", () => {
       [{ kind: "changed", path: "a.ts" }],
       1000
     );
+
     log = recordActivity(log, [{ kind: "removed", path: "b.ts" }], 2000);
 
     expect(latestActivity(log)).toEqual({

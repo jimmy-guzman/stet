@@ -12,6 +12,7 @@ const DENY_FIRST_SEGMENT = new Set([
   "rebase-merge",
   "rebase-apply",
 ]);
+
 const DENY_EXACT = new Set(["COMMIT_EDITMSG", "FETCH_HEAD"]);
 
 /**
@@ -46,6 +47,7 @@ export const classify = (
   }
 
   const internalPath = filename.slice(gitInternalPrefix.length);
+
   if (
     internalPath.endsWith(".lock") ||
     DENY_EXACT.has(internalPath) ||
@@ -53,5 +55,6 @@ export const classify = (
   ) {
     return "ignored";
   }
+
   return "internal";
 };

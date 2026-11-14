@@ -90,6 +90,7 @@ test("the minimum follows the axis: a top-docked tree closes at the row floor", 
   for (let step = 0; step < 5; step += 1) {
     state.shrinkPane();
   }
+
   expect(state.sidebarOpen()).toBe(true);
   expect(state.layout().sidebar.height).toBe(5);
 

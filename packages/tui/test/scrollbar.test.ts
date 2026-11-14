@@ -51,7 +51,9 @@ describe("scrollbarThumb", () => {
       { length: 91 },
       (_, scrollTop) => scrollbarThumb(100, 10, scrollTop)?.top
     );
+
     expect(tops.every((top) => top !== undefined)).toBe(true);
+
     for (const [index, top] of tops.entries()) {
       if (index > 0) {
         expect(top ?? 0).toBeGreaterThanOrEqual(tops[index - 1] ?? 0);

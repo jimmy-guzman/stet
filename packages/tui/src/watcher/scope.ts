@@ -11,6 +11,7 @@ import path from "node:path";
  */
 export const watchRoots = (repoRoot: string, gitDir: string | undefined) => {
   const worktree = { gitInternalPrefix: `.git${path.sep}`, path: repoRoot };
+
   if (
     gitDir === undefined ||
     gitDir === repoRoot ||
@@ -18,5 +19,6 @@ export const watchRoots = (repoRoot: string, gitDir: string | undefined) => {
   ) {
     return [worktree];
   }
+
   return [worktree, { gitInternalPrefix: "", path: gitDir }];
 };

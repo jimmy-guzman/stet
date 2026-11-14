@@ -12,6 +12,7 @@ const CHANGE_KIND_MEANINGS: Record<ChangeKind, string> = {
   renamed: "renamed",
   untracked: "untracked",
 };
+
 const CHANGE_KIND_ORDER = [
   "modified",
   "added",
@@ -26,6 +27,7 @@ const STAGE_MEANINGS: Record<StageState, string> = {
   unstaged: "unstaged",
   untracked: "untracked",
 };
+
 const STAGE_ORDER = [
   "staged",
   "unstaged",

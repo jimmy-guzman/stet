@@ -85,6 +85,7 @@ export const EditorLive = Layer.succeed(Editor)({
               },
               { once: true }
             );
+
             return await proc.exited;
           },
         })

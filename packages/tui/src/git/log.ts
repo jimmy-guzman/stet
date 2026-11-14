@@ -33,13 +33,16 @@ export const parseLog = (stdout: string): Commit[] =>
     .flatMap((record) => {
       const [sha, shortSha, parents, author, authorTime, ...subject] =
         record.split(FIELD);
+
       const time =
         authorTime === undefined || authorTime === ""
           ? Number.NaN
           : Number(authorTime);
+
       if (sha === undefined || Number.isNaN(time)) {
         return [];
       }
+
       return [
         {
           author: author ?? "",

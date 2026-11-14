@@ -17,9 +17,11 @@ const BAG_SIZE = 37;
 
 const buildCharBag = (chars: string[]) => {
   const bag = new Uint8Array(BAG_SIZE);
+
   for (const raw of chars) {
     const char = raw.toLowerCase();
     const code = char.codePointAt(0) ?? 0;
+
     if (char >= "a" && char <= "z") {
       bag[code - 97] = Math.min(bag[code - 97] + 1, 2);
     } else if (char >= "0" && char <= "9") {
@@ -28,6 +30,7 @@ const buildCharBag = (chars: string[]) => {
       bag[BAG_HYPHEN] = 1;
     }
   }
+
   return bag;
 };
 
@@ -37,6 +40,7 @@ const bagIsSuperset = (candidate: Uint8Array, query: Uint8Array) => {
       return false;
     }
   }
+
   return true;
 };
 
@@ -61,12 +65,14 @@ const matchPreparedTerms = (
   }
 
   let total = 0;
+
   for (const term of prepared) {
     if (!bagIsSuperset(candidate.bag, term.bag)) {
       return undefined;
     }
 
     const score = scorePath(term, candidate);
+
     if (score <= 0) {
       return undefined;
     }
@@ -87,6 +93,7 @@ interface QueryPrep {
 const prepareQuery = (query: string): QueryPrep => {
   const original = toCodePoints(query);
   const lower = original.map((char) => char.toLowerCase());
+
   return {
     bag: buildCharBag(lower),
     lower,
@@ -111,6 +118,7 @@ const candidateCache = new Map<string, Candidate>();
 
 const candidateFor = (path: string): Candidate => {
   const cached = candidateCache.get(path);
+
   if (cached !== undefined) {
     return cached;
   }
@@ -121,11 +129,14 @@ const candidateFor = (path: string): Candidate => {
 
   if (candidateCache.size >= CANDIDATE_CACHE_LIMIT) {
     const oldestPath = candidateCache.keys().next().value;
+
     if (oldestPath !== undefined) {
       candidateCache.delete(oldestPath);
     }
   }
+
   candidateCache.set(path, candidate);
+
   return candidate;
 };
 
@@ -142,15 +153,18 @@ const findLastPositions = (
   for (let i = queryLower.length - 1; i >= 0; i -= 1) {
     const char = queryLower[i];
     let found = -1;
+
     for (let j = end - 1; j >= 0; j -= 1) {
       if (pathLower[j] === char) {
         found = j;
         break;
       }
     }
+
     if (found === -1) {
       return undefined;
     }
+
     positions[i] = found;
     end = found;
   }
@@ -167,6 +181,7 @@ const lastSubsequenceRun = (haystack: string[], needle: string[]): number => {
       return start;
     }
   }
+
   return -1;
 };
 
@@ -180,25 +195,32 @@ const lastSubsequenceRun = (haystack: string[], needle: string[]): number => {
 // Not contiguous. Returns [] for an empty or non-matching query.
 export const matchIndices = (query: string, text: string): number[] => {
   const terms = queryTerms(query);
+
   if (terms.length === 0) {
     return [];
   }
 
   const textLower = toCodePoints(text).map((char) => char.toLowerCase());
   const matched = new Set<number>();
+
   for (const term of terms) {
     const termLower = toCodePoints(term).map((char) => char.toLowerCase());
     const run = lastSubsequenceRun(textLower, termLower);
+
     if (run >= 0) {
       for (let offset = 0; offset < termLower.length; offset += 1) {
         matched.add(run + offset);
       }
+
       continue;
     }
+
     const positions = findLastPositions(termLower, textLower);
+
     if (positions === undefined) {
       return [];
     }
+
     for (const position of positions) {
       matched.add(position);
     }
@@ -233,10 +255,13 @@ const positionScore = (
   if (j <= pathIndex) {
     return 1;
   }
+
   const last = chars[j - 1];
+
   if (last === "/") {
     return 0.9;
   }
+
   if (
     last === "-" ||
     last === "_" ||
@@ -246,12 +271,15 @@ const positionScore = (
   ) {
     return 0.8;
   }
+
   if (last === ".") {
     return 0.7;
   }
+
   if (queryIndex === 0) {
     return BASE_DISTANCE_PENALTY;
   }
+
   return Math.max(
     MIN_DISTANCE_PENALTY,
     BASE_DISTANCE_PENALTY - (j - pathIndex - 1) * ADDITIONAL_DISTANCE_PENALTY
@@ -270,14 +298,17 @@ const positionScore = (
 // Letters scattered through parent directories.
 const scorePath = (query: QueryPrep, candidate: Candidate): number => {
   const found = findLastPositions(query.lower, candidate.lower);
+
   if (found === undefined) {
     return 0;
   }
+
   // Rebound with an explicit non-nullable type: `found` narrows here, but TS
   // Does not carry that narrowing into the nested `recurse` closure below.
   const lastPositions: number[] = found;
 
   const pathLength = candidate.chars.length;
+
   const memo = Array.from<number | undefined>({
     length: query.lower.length * pathLength,
   });
@@ -288,12 +319,14 @@ const scorePath = (query: QueryPrep, candidate: Candidate): number => {
     }
 
     const safeLimit = Math.min(lastPositions[queryIndex], pathLength - 1);
+
     if (pathIndex > safeLimit) {
       return 0;
     }
 
     const memoKey = queryIndex * pathLength + pathIndex;
     const memoized = memo[memoKey];
+
     if (memoized !== undefined) {
       return memoized;
     }
@@ -305,6 +338,7 @@ const scorePath = (query: QueryPrep, candidate: Candidate): number => {
     for (let j = pathIndex; j <= safeLimit; j += 1) {
       const pathChar = candidate.lower[j];
       const isSeparator = pathChar === "/";
+
       if (queryIndex === 0 && isSeparator) {
         lastSlash = j;
       }
@@ -325,9 +359,12 @@ const scorePath = (query: QueryPrep, candidate: Candidate): number => {
 
       const multiplier =
         queryIndex === 0 ? charScore / (pathLength - lastSlash) : charScore;
+
       const branchScore = recurse(queryIndex + 1, j + 1) * multiplier;
+
       if (branchScore > score) {
         score = branchScore;
+
         if (branchScore === 1) {
           break;
         }
@@ -335,6 +372,7 @@ const scorePath = (query: QueryPrep, candidate: Candidate): number => {
     }
 
     memo[memoKey] = score;
+
     return score;
   };
 
@@ -343,6 +381,7 @@ const scorePath = (query: QueryPrep, candidate: Candidate): number => {
 
 export const fuzzyMatch = (query: string, path: string): number | undefined => {
   const terms = queryTerms(query);
+
   if (terms.length === 0) {
     return 0;
   }
@@ -356,17 +395,20 @@ export const rankFiles = (
   options: RankOptions
 ): string[] => {
   const terms = queryTerms(query);
+
   if (terms.length === 0) {
     return topK(paths, options.limit, (a, b) => {
       const recencyDelta =
         (options.lastChangedAt.get(b) ?? 0) -
         (options.lastChangedAt.get(a) ?? 0);
+
       if (recencyDelta !== 0) {
         return recencyDelta;
       }
 
       const changedDelta =
         (options.changed.has(b) ? 1 : 0) - (options.changed.has(a) ? 1 : 0);
+
       if (changedDelta !== 0) {
         return changedDelta;
       }
@@ -380,6 +422,7 @@ export const rankFiles = (
   return paths
     .flatMap((path) => {
       const score = matchPreparedTerms(prepared, candidateFor(path));
+
       return score === undefined ? [] : [{ path, score }];
     })
     .toSorted((a, b) => b.score - a.score || a.path.localeCompare(b.path))
@@ -399,27 +442,35 @@ const topK = <T>(
   compare: (a: T, b: T) => number
 ): T[] => {
   const top: T[] = [];
+
   for (const item of items) {
     if (top.length === limit) {
       const last = top[limit - 1];
+
       if (last === undefined || compare(item, last) >= 0) {
         continue;
       }
     }
+
     let low = 0;
     let high = top.length;
+
     while (low < high) {
       const mid = Math.floor((low + high) / 2);
+
       if (compare(item, top[mid]) < 0) {
         high = mid;
       } else {
         low = mid + 1;
       }
     }
+
     top.splice(low, 0, item);
+
     if (top.length > limit) {
       top.pop();
     }
   }
+
   return top;
 };

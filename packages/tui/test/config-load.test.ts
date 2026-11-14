@@ -202,6 +202,7 @@ describe("loadConfigText", () => {
     const { config, issues } = loadConfigText(
       `{ "sidebar": { "position": "middle" }, "viewer": { "wrap": true } }`
     );
+
     expect(issues).toHaveLength(1);
     expect(config.sidebar).toBeUndefined();
     expect(config.viewer).toEqual({ wrap: true });

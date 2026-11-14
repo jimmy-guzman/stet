@@ -36,24 +36,31 @@ interface Excerpt {
 
 const asHeader = (item: SearchItem) =>
   item.kind === "header" ? item : undefined;
+
 const asLine = (item: SearchItem) => (item.kind === "line" ? item : undefined);
 
 const innerWidth = () => Math.max(1, state.layout().viewer.content.width);
+
 // The results band reserves a width-1 scrollbar column; the full-width chrome
 // Rows (inputs, status, footer) keep `innerWidth`.
 const resultsWidth = () => Math.max(1, innerWidth() - 1);
+
 // The cell names the *effective* universe: widened -> repo; otherwise the
 // Active diff scope, so a staged/session lens is never misread as uncommitted.
 const scopeLabel = () => {
   if (state.searchScope() === "repo") {
     return "repo";
   }
+
   const { kind } = state.scope();
+
   if (kind === "all") {
     return "changes";
   }
+
   return kind === "last-commit" ? "last commit" : kind;
 };
+
 const focusIn = (target: "query" | "glob") =>
   state.focusedPane() === "search" && state.searchFocus() === target;
 
@@ -64,21 +71,25 @@ const statusColor = () =>
 
 const rowBackground = (item: SearchItem, index: number) => {
   const selected = index === state.searchIndex();
+
   if (item.kind === "line" && item.match !== undefined) {
     return selected ? theme.rgba.findMatchBgActive : theme.colors.find.matchBg;
   }
+
   return selected ? theme.colors.surface.cursor : undefined;
 };
 
 const submit = () => {
   const items = state.searchItems();
   const selected = items[state.searchIndex()];
+
   const target =
     selected?.kind === "line" && selected.match !== undefined
       ? state.searchIndex()
       : items.findIndex(
           (item) => item.kind === "line" && item.match !== undefined
         );
+
   if (target !== -1) {
     state.jumpToSearchItem(target);
   }
@@ -104,6 +115,7 @@ const onGlobInput = (value: string) => {
 // Reads under NO_COLOR; the whole cell is the click target.
 const toggleCell = (on: boolean, glyph: string) =>
   on ? `[${glyph}]` : ` ${glyph} `;
+
 const toggleColor = (on: boolean) =>
   on ? theme.colors.accent.primary : theme.colors.text.muted;
 
@@ -111,6 +123,7 @@ const emptyText = () => {
   if (state.searchStatus() === "searching") {
     return "searching…";
   }
+
   return state.searchStatus() === "ready" ? "no matches" : "type to search";
 };
 
@@ -124,24 +137,31 @@ export const SearchPane = () => {
   const fileCount = createMemo(
     () => new Set(state.searchResults().map((m) => m.path)).size
   );
+
   const summary = () => {
     const count = state.searchResults().length;
     const more = state.searchTruncated() ? "+" : "";
+
     return `${count}${more} match${count === 1 ? "" : "es"} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
   };
+
   const statusText = () => {
     const status = state.searchStatus();
+
     if (status === "idle") {
       return "type to search";
     }
+
     if (status === "searching") {
       return state.searchResults().length === 0
         ? "searching…"
         : `${summary()} · searching…`;
     }
+
     if (status === "error") {
       return `${levelGlyph("error")} search failed · check the pattern`;
     }
+
     return state.searchResults().length === 0 ? "no matches" : summary();
   };
 
@@ -152,11 +172,13 @@ export const SearchPane = () => {
     const byItem = new Map<number, { key: string; offset: number }>();
     let current: Excerpt | undefined;
     let currentLine = 0;
+
     for (const [index, item] of state.searchItems().entries()) {
       if (item.kind !== "line") {
         current = undefined;
         continue;
       }
+
       if (
         current !== undefined &&
         item.path === current.path &&
@@ -172,9 +194,11 @@ export const SearchPane = () => {
         };
         excerpts.push(current);
       }
+
       currentLine = item.line;
       byItem.set(index, { key: current.key, offset: current.texts.length - 1 });
     }
+
     return { byItem, excerpts };
   });
 
@@ -184,6 +208,7 @@ export const SearchPane = () => {
   const [spanCache, setSpanCache] = createSignal(
     new Map<string, RenderSpan[][]>()
   );
+
   createEffect(() => {
     state.searchResults();
     activeThemeName();
@@ -196,28 +221,34 @@ export const SearchPane = () => {
     const from = state.searchScrollTop();
     const to = from + state.searchListHeight();
     const cache = spanCache();
+
     const pending = excerptData().excerpts.filter(
       (excerpt) =>
         excerpt.itemStart < to &&
         excerpt.itemStart + excerpt.texts.length > from &&
         !cache.has(excerpt.key)
     );
+
     if (pending.length === 0) {
       return;
     }
+
     const cancelled = { current: false };
     onCleanup(() => {
       cancelled.current = true;
     });
+
     const highlightExcerpt = async (excerpt: Excerpt) => {
       const lines = await highlightSnippet(
         excerpt.texts.join("\n"),
         languageForPath(excerpt.path)
       );
+
       if (!cancelled.current) {
         setSpanCache((previous) => new Map(previous).set(excerpt.key, lines));
       }
     };
+
     for (const excerpt of pending) {
       void highlightExcerpt(excerpt);
     }
@@ -226,11 +257,13 @@ export const SearchPane = () => {
   const rowSpans = (item: { text: string }, index: number): RenderSpan[] => {
     const ref = excerptData().byItem.get(index);
     const lines = ref === undefined ? undefined : spanCache().get(ref.key);
+
     return lines?.[ref?.offset ?? 0] ?? [{ text: item.text }];
   };
 
   const visibleItems = createMemo(() => {
     const start = state.searchScrollTop();
+
     return state
       .searchItems()
       .slice(start, start + state.searchListHeight())
@@ -250,6 +283,7 @@ export const SearchPane = () => {
   // View away, mirroring the diff where a click only moves the cursor); a
   // Double click opens. Headers keep single-click collapse (non-destructive).
   const isDoubleClick = createDoubleClickGuard();
+
   const clickRow = (item: SearchItem, index: number) => {
     batch(() => {
       state.setFocusedPane("search");
@@ -259,23 +293,31 @@ export const SearchPane = () => {
       // Clicks on the same match breaks the sequence, rather than being invisible to
       // The tracker and letting the second match click read as a double.
       const isDouble = isDoubleClick(item.id);
+
       if (item.kind === "header") {
         state.toggleSearchGroup(item.path);
+
         return;
       }
+
       if (item.kind !== "line") {
         return;
       }
+
       if (isDouble) {
         state.jumpToSearchItem(index);
+
         return;
       }
+
       // Select the clicked row, or the nearest navigable one above a context row.
       const items = state.searchItems();
+
       const selected = items.findLastIndex(
         (candidate, candidateIndex) =>
           candidateIndex <= index && isNavigableSearchItem(candidate)
       );
+
       if (selected !== -1) {
         state.setSearchSelection(selected);
       }

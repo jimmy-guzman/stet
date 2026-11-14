@@ -42,6 +42,7 @@ export interface RenderInput {
 // Backgrounds are still layered from stet tokens at render time.
 const diffThemeName = () => {
   const name = activeThemeName();
+
   return syntaxThemeForName(name) ?? `${STET_SHIKI_THEME_NAME}:${name}`;
 };
 
@@ -55,9 +56,11 @@ const ensureDiffTheme = async () => {
   const name = activeThemeName();
   const themeName = diffThemeName();
   const instance = await highlighter();
+
   if (areThemesAttached(themeName)) {
     return themeName;
   }
+
   if (syntaxThemeForName(name) === undefined) {
     try {
       attachResolvedThemes(
@@ -70,8 +73,10 @@ const ensureDiffTheme = async () => {
     } catch {
       // Attach failed; the render falls back to plain text.
     }
+
     return themeName;
   }
+
   await getSharedHighlighter({
     langs: [],
     preferredHighlighter: "shiki-wasm",
@@ -79,6 +84,7 @@ const ensureDiffTheme = async () => {
   }).catch(() => {
     // Attach failed; the render falls back to plain text.
   });
+
   return themeName;
 };
 
@@ -108,6 +114,7 @@ const RENDER_OPTIONS: Omit<RenderDiffOptions, "theme"> = {
 };
 
 const MAX_CACHE = 40;
+
 // A count cap alone lets 40 large full-file renders hold hundreds of MB, since each
 // Render retains every line's text. Cap on approximate bytes too, with the count as a
 // Backstop for many tiny renders.
@@ -122,6 +129,7 @@ const inflight = new Map<string, Promise<DiffRender>>();
 // `fg` labels and object overhead are ignored and offset by a conservative cap.
 const sizeOf = (render: DiffRender) => {
   let units = 0;
+
   for (const row of render.rows) {
     if (row.kind === "line") {
       for (const span of row.spans) {
@@ -131,13 +139,16 @@ const sizeOf = (render: DiffRender) => {
       units += row.text.length;
     }
   }
+
   for (const line of render.navigable) {
     units += line.content.length;
   }
+
   return units * 2;
 };
 
 let highlighterPromise: Promise<DiffsHighlighter> | undefined;
+
 const highlighter = async () => {
   // The WASM (oniguruma) engine is ~10x faster than the default JS regex engine
   // For TypeScript-family grammars (cold ~125ms vs ~1300ms, warm ~5ms vs ~30ms).
@@ -148,6 +159,7 @@ const highlighter = async () => {
     preferredHighlighter: "shiki-wasm",
     themes: [],
   });
+
   return await highlighterPromise;
 };
 
@@ -185,14 +197,18 @@ export const structureDiff = (input: RenderInput): DiffRender => {
   if (input.patch === "") {
     return EMPTY;
   }
+
   const meta = parsePatchFiles(input.patch)[0]?.files[0];
+
   if (meta === undefined) {
     return EMPTY;
   }
+
   const { hiddenLines, rows } = buildDiffRows(meta, [], [], {
     full: input.full,
     maxLines: input.maxLines,
   });
+
   return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
 };
 
@@ -210,9 +226,11 @@ const attaching = new Map<string, Promise<unknown>>();
 
 const attach = async (lang: string) => {
   const existing = attaching.get(lang);
+
   if (existing !== undefined) {
     return await existing;
   }
+
   const promise = getSharedHighlighter({
     langs: [lang],
     preferredHighlighter: "shiki-wasm",
@@ -223,7 +241,9 @@ const attach = async (lang: string) => {
       // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
       // Keep the settled entry so the failed extension is not re-resolved every render.
     });
+
   attaching.set(lang, promise);
+
   return await promise;
 };
 
@@ -237,6 +257,7 @@ export const languageForPath = (path: string) =>
 const ensureLanguages = async (meta: { name: string; prevName?: string }) => {
   const names =
     meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
+
   const pending = new Set(names.map(languageForPath)).difference(
     new Set(["text"])
   );
@@ -258,10 +279,13 @@ export const highlightSnippet = async (
   try {
     const themeName = await ensureDiffTheme();
     const hl = await highlighter();
+
     if (!areLanguagesAttached(lang)) {
       await attach(lang);
     }
+
     const { tokens } = hl.codeToTokens(code, { lang, theme: themeName });
+
     return tokens.map((line) =>
       line.map((token) => ({ fg: token.color, text: token.content }))
     );
@@ -272,6 +296,7 @@ export const highlightSnippet = async (
 
 const compute = async (input: RenderInput): Promise<DiffRender> => {
   const meta = parsePatchFiles(input.patch)[0]?.files[0];
+
   if (meta === undefined) {
     return EMPTY;
   }
@@ -282,16 +307,19 @@ const compute = async (input: RenderInput): Promise<DiffRender> => {
 
   let addSpans: RenderSpan[][] = [];
   let delSpans: RenderSpan[][] = [];
+
   try {
     // The library re-derives the language from `meta.name` (the full path) internally,
     // So force the basename-resolved grammar; a no-op for extension files that already
     // Match, the fix for extensionless names in a subdirectory.
     const lang = languageForPath(meta.name);
     const target = lang === "text" ? meta : setLanguageOverride(meta, lang);
+
     const themed = renderDiffWithHighlighter(target, hl, {
       ...RENDER_OPTIONS,
       theme: themeName,
     });
+
     addSpans = themed.code.additionLines.map(flattenLineSpans);
     delSpans = themed.code.deletionLines.map(flattenLineSpans);
   } catch {
@@ -314,11 +342,14 @@ const evict = () => {
     (cacheBytes > MAX_CACHE_BYTES && cache.size > 1)
   ) {
     const key = cache.keys().next().value;
+
     if (key === undefined) {
       return;
     }
+
     const entry = cache.get(key);
     cache.delete(key);
+
     if (entry !== undefined) {
       cacheBytes -= entry.bytes;
     }
@@ -337,11 +368,13 @@ export const renderDiff = async (input: RenderInput): Promise<DiffRender> => {
 
   const key = fingerprint(input);
   const hit = cache.get(key);
+
   if (hit !== undefined) {
     return hit.render;
   }
 
   const existing = inflight.get(key);
+
   if (existing !== undefined) {
     return await existing;
   }
@@ -353,14 +386,17 @@ export const renderDiff = async (input: RenderInput): Promise<DiffRender> => {
       cache.set(key, { bytes, render: result });
       cacheBytes += bytes;
       evict();
+
       return result;
     })
     .catch(() => {
       inflight.delete(key);
+
       return EMPTY;
     });
 
   inflight.set(key, promise);
+
   return await promise;
 };
 
@@ -374,6 +410,7 @@ export class DiffEngine extends Context.Service<
 export const DiffEngineLive = Layer.sync(DiffEngine, () => {
   // Warm the highlighter when the runtime builds so the first diff is fast.
   void preloadDiffHighlighter();
+
   return {
     render: (input) => Effect.promise(async () => await renderDiff(input)),
   };

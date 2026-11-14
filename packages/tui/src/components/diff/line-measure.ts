@@ -21,10 +21,12 @@ export const createLineMeasurer = (widthMethod: WidthMethod) => {
     },
     measure(text: string, width: number) {
       buffer.setText(text);
+
       const result = view.measureForDimensions(
         Math.max(1, width),
         LARGE_HEIGHT
       );
+
       return Math.max(1, result?.lineCount ?? 1);
     },
     offsetForVisualRow(text: string, width: number, visualRow: number) {
@@ -32,6 +34,7 @@ export const createLineMeasurer = (widthMethod: WidthMethod) => {
       buffer.setText(text);
       view.setWrapWidth(wrapWidth);
       view.measureForDimensions(wrapWidth, LARGE_HEIGHT);
+
       return (
         view.lineInfo.lineStartCols[Math.max(0, Math.floor(visualRow))] ?? 0
       );

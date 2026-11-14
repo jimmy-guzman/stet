@@ -15,16 +15,20 @@ export const viewerStats = (
       ? `${fileContent.lineCount} lines${fileContent.truncated ? " (truncated)" : ""}`
       : "";
   }
+
   if (selectedFile === undefined) {
     return "";
   }
+
   const warnings =
     selectedFile.warnings.length === 0
       ? ""
       : ` !${selectedFile.warnings.join(",")}`;
+
   if (selectedFile.binary) {
     return `binary${warnings}`;
   }
+
   return `+${selectedFile.additions} -${selectedFile.deletions}${warnings}`;
 };
 
@@ -63,13 +67,16 @@ export const nearestNavigableIndex = (
 ) => {
   let best = -1;
   let bestDistance = Number.POSITIVE_INFINITY;
+
   for (const [index, line] of lines.entries()) {
     const reference = line.newLine ?? line.oldLine;
+
     if (reference === undefined) {
       continue;
     }
 
     const distance = Math.abs(reference - target);
+
     if (distance < bestDistance) {
       bestDistance = distance;
       best = index;

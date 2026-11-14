@@ -32,6 +32,7 @@ export const followScrollTop = ({
   if (height >= viewport) {
     return Math.max(0, Math.min(top, maxScroll));
   }
+
   // Cap the margin to the space the row actually leaves on each side, not just to
   // The viewport: with `height + 2*margin > viewport` the requested margin can't
   // Hold on both edges, and a margin clamped only to the viewport would alternate
@@ -41,15 +42,18 @@ export const followScrollTop = ({
     Math.max(0, margin),
     Math.floor((viewport - height) / 2)
   );
+
   if (top - safeMargin < current) {
     return Math.max(0, Math.min(top - safeMargin, maxScroll));
   }
+
   if (top + height + safeMargin > current + viewport) {
     return Math.max(
       0,
       Math.min(top + height + safeMargin - viewport, maxScroll)
     );
   }
+
   return Math.max(0, Math.min(current, maxScroll));
 };
 
@@ -80,18 +84,23 @@ export const followScrollX = ({
   margin,
 }: FollowRange) => {
   const width = to - from;
+
   if (width >= viewport) {
     return Math.max(0, Math.min(from, maxScroll));
   }
+
   const safeMargin = Math.min(
     Math.max(0, margin),
     Math.floor((viewport - width) / 2)
   );
+
   if (from - safeMargin < current) {
     return Math.max(0, Math.min(from - safeMargin, maxScroll));
   }
+
   if (to + safeMargin > current + viewport) {
     return Math.max(0, Math.min(to + safeMargin - viewport, maxScroll));
   }
+
   return Math.max(0, Math.min(current, maxScroll));
 };

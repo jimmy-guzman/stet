@@ -18,9 +18,11 @@ export const windowWheelHandler =
   }) =>
   (event: MouseEvent) => {
     const direction = event.scroll?.direction;
+
     if (direction !== "up" && direction !== "down") {
       return;
     }
+
     const delta = event.scroll?.delta ?? 1;
     const maxScroll = Math.max(0, view.rowCount() - view.viewport());
     view.setScrollTop(
@@ -33,6 +35,7 @@ export const windowWheelHandler =
         )
       )
     );
+
     if (event.scroll !== undefined) {
       event.scroll.delta = 0;
     }

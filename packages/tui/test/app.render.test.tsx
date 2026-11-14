@@ -16,8 +16,10 @@ describe("App rendering", () => {
     const repoRoot = createFixtureRepo("app-render-", {
       "src/index.ts": "export const main = true;\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -25,6 +27,7 @@ describe("App rendering", () => {
         width: 110,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     const frame = await settleUntil("app chrome", (current) =>

@@ -21,8 +21,10 @@ const allScope = { kind: "all", ref: "HEAD" } as const;
 // Racing the watcher's arming (the unit test proves the watcher fires).
 test("the tree reflects an on-disk edit", async () => {
   const repo = createFixtureRepo("watcher-render-", { "watched.txt": "one\n" });
+
   try {
     seedState(await loadModel(repo, allScope), allScope);
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -30,11 +32,13 @@ test("the tree reflects an on-disk edit", async () => {
         width: 100,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     const before = await settleUntil("clean tree", (frame) =>
       frame.includes("watched.txt")
     );
+
     expect(before).not.toContain("+1 -0");
 
     // Let the fs.watch subscription arm so the watcher catches the edit on the
@@ -48,6 +52,7 @@ test("the tree reflects an on-disk edit", async () => {
       1,
       400
     );
+
     expect(after).toContain("watched.txt");
 
     renderer.destroy();

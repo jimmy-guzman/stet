@@ -44,6 +44,7 @@ const seedSidebar = (config: UserConfig) => {
   state.setChangesOnly(
     config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly
   );
+
   if (!(config.sidebar?.open ?? configDefaults.sidebar.open)) {
     // The one close path rather than a copy of it, so focus leaving the hidden tree is
     // Decided in the same place here as it is for `ctrl-b` and a shrink past the minimum.
@@ -98,10 +99,13 @@ try {
       // Only `HEAD` is substituted: a ref the user named still resolves on an orphan branch, where
       // Diffing against the empty tree instead would silently show the wrong base.
       const unborn = options.scope.ref === "HEAD" && head === undefined;
+
       const scope = unborn
         ? { ...options.scope, ref: emptyTree }
         : options.scope;
+
       const changed = yield* git.changedFiles(repoRoot, scope);
+
       return { changed, scope, sessionBase: head ?? emptyTree, unborn };
     });
 
@@ -112,11 +116,14 @@ try {
   const startupFailure = (repoRoot: string, error: unknown) =>
     Effect.gen(function* explainStartup() {
       const fallback = error instanceof Error ? error.message : String(error);
+
       if (!(error instanceof GitError) || options.scope.kind === "unstaged") {
         return fallback;
       }
+
       const git = yield* Git;
       const diffable = yield* git.refIsDiffable(repoRoot, options.scope.ref);
+
       return diffable ? fallback : unknownRefMessage(options.scope.ref);
     });
 
@@ -124,9 +131,11 @@ try {
   // The diff highlighter: the active theme must be set before that warm-up reads
   // It. ConfigLive has no dependencies, so this builds nothing heavy.
   const configRuntime = ManagedRuntime.make(ConfigLive);
+
   const { config, issues: configIssues } = await configRuntime.runPromise(
     Config.pipe(Effect.flatMap((service) => service.load()))
   );
+
   await configRuntime.dispose();
 
   // Register the configured themes and seed the theme selection *before* the
@@ -135,6 +144,7 @@ try {
   // Renderer nor the detected appearance; appearance is applied just below.
   const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
   registerThemes(themes);
+
   // The prefersMonochrome check (see theme/mono.ts) replaces the configured
   // Selection with the built-in monochrome pair. A later explicit pick in the
   // Theme switcher still applies: no-color.org asks that color stop being the
@@ -142,6 +152,7 @@ try {
   const themeSelection = prefersMonochrome(process.env)
     ? { dark: "mono-dark", light: "mono-light" }
     : config.theme;
+
   setSelection(themeSelection);
 
   // Registers before the runtime builds, so the diff and icons share one startup snapshot for the
@@ -151,10 +162,13 @@ try {
       files: config.files,
       icons: config.icons?.glyphs,
     });
+
   registerFileSupport(fileSupport);
+
   const { issues: keybindingIssues, set: keybindings } = resolveKeybindings(
     config.keybindings ?? {}
   );
+
   registerKeybindings(keybindings);
 
   // Resolve the repository before the renderer enters the alt-screen, so "not a git repository"
@@ -164,10 +178,12 @@ try {
   const preflightRuntime = ManagedRuntime.make(
     GitLive.pipe(Layer.provide(ProcessLive))
   );
+
   const { emptyTree, mainWorktreePath, repoRoot } =
     await preflightRuntime.runPromise(
       Git.pipe(Effect.flatMap((git) => git.repoContext(process.cwd())))
     );
+
   await preflightRuntime.dispose();
 
   // Create the renderer up front and detect the terminal's dark/light appearance
@@ -183,6 +199,7 @@ try {
     autoFocus: false,
     exitOnCtrlC: false,
   });
+
   const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
 
   // Restore the terminal on every exit path, not just a clean quit. In raw mode a
@@ -194,17 +211,20 @@ try {
     renderer.setTerminalTitle("");
     renderer.destroy();
   };
+
   const crash = (error: unknown) => {
     restoreTerminal();
     logError(error instanceof Error ? error.message : String(error));
     process.exit(1);
   };
+
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(signal, () => {
       restoreTerminal();
       process.exit(0);
     });
   }
+
   process.on("uncaughtException", crash);
   process.on("unhandledRejection", crash);
 
@@ -215,6 +235,7 @@ try {
   // The highlighter; the renderer's theme_mode event updates appearance live.
   setAppearance(appearance);
   const activeName = selectThemeName(themeSelection, appearance);
+
   if (!hasTheme(activeName)) {
     themeIssues.push(
       `theme "${activeName}" not found; using the ${appearance} default`
@@ -283,17 +304,21 @@ try {
       const { changed, scope, sessionBase, unborn } = await runtime.runPromise(
         startup(repoRoot, emptyTree)
       );
+
       const model: GitModel = {
         repoRoot,
         ...changed,
         repoFiles: [],
         repoFilesKey: "",
       };
+
       const initialSelectedPath =
         model.changed[0]?.path ?? model.repoFiles[0]?.path;
+
       const baseExpanded = defaultExpandedDirectories(
         model.changed.map((file) => file.path)
       );
+
       const initialExpanded =
         initialSelectedPath === undefined
           ? baseExpanded
@@ -301,6 +326,7 @@ try {
 
       batch(() => {
         state.setHeadUnborn(unborn);
+
         // The shell painted before this resolved, so the user may already have picked a scope from
         // The menu; only the untouched CLI scope is re-pointed at the resolved base.
         if (
@@ -309,6 +335,7 @@ try {
         ) {
           state.setScope(scope);
         }
+
         state.setSessionBase(sessionBase);
         state.setGitModel(model);
         state.setRepoRoot(model.repoRoot);
@@ -329,6 +356,7 @@ try {
         ...fileSupportIssues,
         ...keybindingIssues,
       ];
+
       if (issues.length > 0) {
         state.notify(issues[0] ?? "config has issues");
       }
@@ -339,6 +367,7 @@ try {
       process.exit(1);
     }
   };
+
   void loadModel();
 } catch (error) {
   logError(error instanceof Error ? error.message : String(error));

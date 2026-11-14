@@ -40,6 +40,7 @@ test("the app opens a commitless SHA-256 repository against its own empty tree",
     { "a.txt": "one\ntwo\n" },
     sha256
   );
+
   const { emptyTree } = await repoContext(repo);
   const scope = { kind: "all", ref: emptyTree } as const;
 
@@ -54,8 +55,10 @@ test("the app opens a commitless SHA-256 repository against its own empty tree",
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
     const frame = await settleUntil("the tree lists the file", (current) =>
       current.includes("a.txt")
     );
@@ -78,6 +81,7 @@ test("the base returns to HEAD once a SHA-256 repository has its first commit", 
     { "a.txt": "one\n" },
     sha256
   );
+
   const { emptyTree } = await repoContext(repo);
   const scope = { kind: "all", ref: emptyTree } as const;
 
@@ -92,6 +96,7 @@ test("the base returns to HEAD once a SHA-256 repository has its first commit", 
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     await settleUntil("the empty repository renders", (frame) =>
@@ -108,6 +113,7 @@ test("the base returns to HEAD once a SHA-256 repository has its first commit", 
       1,
       600
     );
+
     expect(frame).not.toContain("no commits yet");
   } finally {
     renderer.destroy();

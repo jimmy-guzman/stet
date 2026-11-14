@@ -14,6 +14,7 @@ import pkg from "../package.json";
 // Repo root, not the package: the hoisted node_modules lives here and `dist/` stays
 // Here (release.yml uploads dist/*).
 const dir = path.resolve(import.meta.dirname, "../../..");
+
 process.chdir(dir);
 
 const single = process.argv.includes("--single");
@@ -96,12 +97,14 @@ for (const target of targets) {
   if (target.os === process.platform && target.arch === process.arch) {
     // oxlint-disable-next-line no-await-in-loop -- sequential cross-compilation: each target must complete before the next
     const version = await $`dist/${name}/bin/${pkg.name} --version`.text();
+
     if (version.trim() !== pkg.version) {
       console.error(
         `smoke test failed: expected ${pkg.version}, got ${version.trim()}`
       );
       process.exit(1);
     }
+
     console.log(`smoke test passed: ${version.trim()}`);
   }
 
@@ -165,6 +168,7 @@ if (!single) {
 
 if (archive) {
   const sums: string[] = [];
+
   for (const name of built) {
     // Every platform ships tar.gz so the format never needs to be re-derived
     // By install.sh, release.yml, or the homebrew formula
@@ -177,6 +181,7 @@ if (archive) {
     hasher.update(await Bun.file(`dist/${archiveName}`).arrayBuffer());
     sums.push(`${hasher.digest("hex")}  ${archiveName}`);
   }
+
   await Bun.file("dist/SHA256SUMS").write(`${sums.join("\n")}\n`);
 }
 

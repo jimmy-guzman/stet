@@ -23,11 +23,13 @@ const unbornScope = { kind: "all", ref: emptyTree } as const;
 const createUnbornRepo = (prefix: string) => {
   const repo = mkdtempSync(path.join(tmpdir(), prefix));
   runGit(repo, ["init"]);
+
   return repo;
 };
 
 test("a repository with no commits opens with its files read as added", async () => {
   const repo = createUnbornRepo("unborn-render-");
+
   try {
     writeFileSync(path.join(repo, "staged.txt"), "one\n");
     writeFileSync(path.join(repo, "loose.txt"), "two\n");
@@ -44,8 +46,10 @@ test("a repository with no commits opens with its files read as added", async ()
         width: 100,
       }
     );
+
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
       const frame = await settleUntil("tree", (current) =>
         current.includes("staged.txt")
       );
@@ -64,6 +68,7 @@ test("a repository with no commits opens with its files read as added", async ()
 // Return `all` to it: left pinned, the whole tree would keep reading as added forever.
 test("the first commit re-points the base off the empty tree", async () => {
   const repo = createUnbornRepo("unborn-commit-");
+
   try {
     writeFileSync(path.join(repo, "staged.txt"), "one\n");
     runGit(repo, ["add", "staged.txt"]);
@@ -79,6 +84,7 @@ test("the first commit re-points the base off the empty tree", async () => {
         width: 100,
       }
     );
+
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
       await settleUntil("added file", (current) =>
@@ -108,6 +114,7 @@ test("the first commit re-points the base off the empty tree", async () => {
 // Freezes at its pre-checkout state with no alert.
 test("a mid-session orphan checkout re-points the base onto the empty tree", async () => {
   const repo = createUnbornRepo("unborn-orphan-");
+
   try {
     writeFileSync(path.join(repo, "a.txt"), "one\n");
     runGit(repo, ["add", "a.txt"]);
@@ -124,6 +131,7 @@ test("a mid-session orphan checkout re-points the base onto the empty tree", asy
         width: 100,
       }
     );
+
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
       await settleUntil("edited file", (current) =>
@@ -153,6 +161,7 @@ test("a mid-session orphan checkout re-points the base onto the empty tree", asy
 // Orphan checkout already did.
 test("a mid-session orphan checkout drops the last-commit scope to all", async () => {
   const repo = createUnbornRepo("unborn-orphan-last-");
+
   try {
     writeFileSync(path.join(repo, "a.txt"), "one\n");
     runGit(repo, ["add", "a.txt"]);
@@ -165,11 +174,13 @@ test("a mid-session orphan checkout drops the last-commit scope to all", async (
       encoding: "utf-8",
       env: stripGitEnv(process.env),
     }).trim();
+
     const lastCommitScope = {
       headRef: "HEAD",
       kind: "last-commit",
       ref: parent,
     } as const;
+
     seedState(await loadModel(repo, lastCommitScope), lastCommitScope);
     // A range scope's ref is a parent SHA, not the CLI ref `seedState` mirrors off it.
     state.setCliBaseRef("HEAD");
@@ -181,6 +192,7 @@ test("a mid-session orphan checkout drops the last-commit scope to all", async (
         width: 100,
       }
     );
+
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
       await settleUntil("last commit", (current) =>

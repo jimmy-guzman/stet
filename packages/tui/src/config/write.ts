@@ -58,6 +58,7 @@ const themeEquals = (
   ) {
     return a === b;
   }
+
   return a.dark === b.dark && a.light === b.light;
 };
 
@@ -78,6 +79,7 @@ const themeEdit = (
       value: snapshot.theme,
     };
   }
+
   return {
     label: "theme",
     path: ["theme"],
@@ -106,6 +108,7 @@ const parseIssue = (text: string) => {
 const parses = (text: string) => {
   try {
     Bun.JSONC.parse(text);
+
     return true;
   } catch {
     return false;
@@ -122,9 +125,11 @@ const stripDanglingCommas = (text: string) => {
     SyntaxKind.LineCommentTrivia,
     SyntaxKind.BlockCommentTrivia,
   ]);
+
   const scanner = createScanner(text, false);
   const dangling: { length: number; offset: number }[] = [];
   let previous: SyntaxKind | undefined;
+
   for (
     let kind = scanner.scan();
     kind !== SyntaxKind.EOF;
@@ -133,6 +138,7 @@ const stripDanglingCommas = (text: string) => {
     if (trivia.has(kind)) {
       continue;
     }
+
     if (
       kind === SyntaxKind.CommaToken &&
       (previous === SyntaxKind.OpenBraceToken ||
@@ -143,8 +149,10 @@ const stripDanglingCommas = (text: string) => {
         offset: scanner.getTokenOffset(),
       });
     }
+
     previous = kind;
   }
+
   return dangling.reduceRight(
     (current, comma) =>
       current.slice(0, comma.offset) +
@@ -253,9 +261,11 @@ export const updateSettingsText = (
   snapshot: SettingsSnapshot
 ): Result.Result<{ text: string; saved: string[] }, string> => {
   const issue = isEmptyJsonc(text) ? undefined : parseIssue(text);
+
   if (issue !== undefined) {
     return Result.fail(issue);
   }
+
   const { config } = loadConfigText(text);
 
   const edits = [
@@ -270,20 +280,24 @@ export const updateSettingsText = (
   }
 
   let updated = text;
+
   for (const edit of edits) {
     updated = applyEdits(
       updated,
       modify(updated, edit.path, edit.value, { formattingOptions })
     );
   }
+
   // Removing the only property leaves jsonc-parser's edit dangling the property's
   // JSONC trailing comma (`{ , }`, measured against jsonc-parser 3.3.1), so a
   // Result that no longer parses gets that one comma stripped and is checked
   // Again; anything still broken fails without writing.
   const repaired = parses(updated) ? updated : stripDanglingCommas(updated);
+
   if (!parses(repaired)) {
     return Result.fail("could not edit config; nothing saved");
   }
+
   return Result.succeed({
     saved: [...new Set(edits.map((edit) => edit.label))],
     text: repaired,

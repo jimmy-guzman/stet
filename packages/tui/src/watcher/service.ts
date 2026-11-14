@@ -39,10 +39,12 @@ const watchStream = (
         // Dropping, so a tick offered while one is still pending is redundant and dropped; the
         // Safety poll is the floor for anything lost.
         let timer: ReturnType<typeof setTimeout> | undefined;
+
         const flush = () => {
           timer = undefined;
           Queue.offerUnsafe(queue, undefined);
         };
+
         const watchers = roots.flatMap((root) => {
           try {
             const watcher = watch(
@@ -52,30 +54,37 @@ const watchStream = (
                 if (classify(root.gitInternalPrefix, filename) === "ignored") {
                   return;
                 }
+
                 if (timer !== undefined) {
                   clearTimeout(timer);
                 }
+
                 timer = setTimeout(flush, DEBOUNCE_MS);
               }
             );
+
             // An async watcher error (e.g. the root is removed) must not crash the
             // Stream; drop it and let the slow poll cover that root.
             watcher.on("error", constVoid);
+
             return [watcher];
           } catch {
             return [];
           }
         });
+
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
             if (timer !== undefined) {
               clearTimeout(timer);
             }
+
             for (const watcher of watchers) {
               watcher.close();
             }
           })
         );
+
         return yield* Effect.never;
       }),
     { bufferSize: 1, strategy: "dropping" }

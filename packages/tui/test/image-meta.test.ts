@@ -3,29 +3,37 @@ import { describe, expect, test } from "bun:test";
 import { imageMeta } from "@/file/image-meta";
 
 const concat = (...parts: number[][]) => Uint8Array.from(parts.flat());
+
 const ascii = (text: string) =>
   Array.from(text, (char) => char.codePointAt(0) ?? 0);
+
 const bytesOf = (size: number, write: (view: DataView) => void) => {
   const bytes = new Uint8Array(size);
   write(new DataView(bytes.buffer));
+
   return [...bytes];
 };
+
 const u16be = (n: number) =>
   bytesOf(2, (view) => {
     view.setUint16(0, n);
   });
+
 const u16le = (n: number) =>
   bytesOf(2, (view) => {
     view.setUint16(0, n, true);
   });
+
 const u32be = (n: number) =>
   bytesOf(4, (view) => {
     view.setUint32(0, n);
   });
+
 const u32le = (n: number) =>
   bytesOf(4, (view) => {
     view.setUint32(0, n, true);
   });
+
 const u24le = (n: number) => u32le(n).slice(0, 3);
 const zeros = (n: number) => Array.from({ length: n }, () => 0);
 
@@ -38,6 +46,7 @@ describe("imageMeta", () => {
       u32be(128),
       u32be(64)
     );
+
     expect(imageMeta(png)).toEqual({ format: "PNG", height: 64, width: 128 });
   });
 
@@ -66,12 +75,14 @@ describe("imageMeta", () => {
       u16be(96),
       zeros(10)
     );
+
     expect(imageMeta(jpeg)).toEqual({ format: "JPEG", height: 48, width: 96 });
   });
 
   test("reads lossless WebP (VP8L) dimensions", () => {
     // VP8L packs width - 1 into bits 0-13 and height - 1 into bits 14-27.
     const bits = 100 - 1 + (50 - 1) * 2 ** 14;
+
     const webp = concat(
       ascii("RIFF"),
       u32le(0),
@@ -82,6 +93,7 @@ describe("imageMeta", () => {
       u32le(bits),
       zeros(5)
     );
+
     expect(imageMeta(webp)).toEqual({ format: "WebP", height: 50, width: 100 });
   });
 
@@ -99,6 +111,7 @@ describe("imageMeta", () => {
       u16le(120),
       u16le(90)
     );
+
     expect(imageMeta(webp)).toEqual({ format: "WebP", height: 90, width: 120 });
   });
 
@@ -116,6 +129,7 @@ describe("imageMeta", () => {
       u24le(1920 - 1),
       u24le(1080 - 1)
     );
+
     expect(imageMeta(webp)).toEqual({
       format: "WebP",
       height: 1080,
@@ -131,6 +145,7 @@ describe("imageMeta", () => {
       ascii("ANIM"),
       zeros(14)
     );
+
     expect(imageMeta(webp)).toBeUndefined();
   });
 

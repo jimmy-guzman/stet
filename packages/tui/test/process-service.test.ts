@@ -80,6 +80,7 @@ test("Process.run fails with a clear message when the cwd no longer exists", asy
 
 test("Process.run kills the child when the fiber is interrupted", async () => {
   const start = Date.now();
+
   const fiber = Effect.runFork(
     Process.pipe(
       Effect.flatMap((process) => process.run(["sleep", "5"], import.meta.dir)),

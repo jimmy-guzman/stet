@@ -25,26 +25,33 @@ export const openInEditor = async (
 ) => {
   const template =
     mode === "ide" ? state.ideTemplate() : state.editorTemplate();
+
   if (template === undefined) {
     state.notify(
       mode === "ide"
         ? "no IDE configured; set 'ide' or --ide"
         : "no editor configured; set 'editor' or --editor"
     );
+
     return;
   }
+
   const cwd = state.gitModel().repoRoot;
+
   const argv = buildEditorCommand(
     template,
     path.join(cwd, filePath),
     line,
     cwd
   );
+
   if (argv.length === 0) {
     return;
   }
+
   if (mode === "terminal") {
     renderer.suspend();
+
     try {
       await runtime.runPromise(
         Editor.use((editor) => editor.openTerminal(argv, cwd))
@@ -57,8 +64,10 @@ export const openInEditor = async (
     } finally {
       renderer.resume();
     }
+
     return;
   }
+
   runtime.runFork(
     Editor.use((editor) => editor.openIde(argv, cwd)).pipe(
       Effect.tap((code) =>

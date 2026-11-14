@@ -24,6 +24,7 @@ const revParse = (repo: string, ref: string) =>
 
 test("Git.loadModel reports a modified file with churn counts", async () => {
   const repo = createFixtureRepo("git-service-modified-", { "a.txt": "one\n" });
+
   try {
     writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
 
@@ -46,6 +47,7 @@ test("Git.changedFiles includes an untracked file", async () => {
   const repo = createFixtureRepo("git-service-untracked-", {
     "tracked.txt": "x\n",
   });
+
   try {
     writeFileSync(path.join(repo, "new.txt"), "fresh\n");
 
@@ -70,6 +72,7 @@ test("Git.parentRef reports no parent on a root commit", async () => {
   const repo = createFixtureRepo("git-service-rootcommit-", {
     "a.txt": "one\n",
   });
+
   try {
     const parent = await Effect.runPromise(
       Git.pipe(
@@ -86,6 +89,7 @@ test("Git.parentRef reports no parent on a root commit", async () => {
 
 test("Git.parentRef returns the prior commit's SHA when one exists", async () => {
   const repo = createFixtureRepo("git-service-parent-", { "a.txt": "one\n" });
+
   try {
     const first = revParse(repo, "HEAD");
     writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
@@ -106,6 +110,7 @@ test("Git.parentRef returns the prior commit's SHA when one exists", async () =>
 
 test("Git.headRef returns the current HEAD SHA", async () => {
   const repo = createFixtureRepo("git-service-headref-", { "a.txt": "one\n" });
+
   try {
     const head = revParse(repo, "HEAD");
 
@@ -127,6 +132,7 @@ test("Git.headRef returns the current HEAD SHA", async () => {
 test("Git.headRef reports no HEAD when HEAD is unborn", async () => {
   const repo = mkdtempSync(path.join(tmpdir(), "git-service-unborn-"));
   runGit(repo, ["init"]);
+
   try {
     const resolved = await Effect.runPromise(
       Git.pipe(
@@ -146,6 +152,7 @@ test("Git.headRef reports no HEAD when HEAD is unborn", async () => {
 test("Git.changedFiles against the empty tree lists a commitless repo's files", async () => {
   const repo = mkdtempSync(path.join(tmpdir(), "git-service-unborn-changed-"));
   runGit(repo, ["init"]);
+
   try {
     writeFileSync(path.join(repo, "staged.txt"), "one\n");
     writeFileSync(path.join(repo, "loose.txt"), "two\n");
@@ -178,6 +185,7 @@ test("Git.changedFiles against the empty tree lists a commitless repo's files", 
 test("Git.loadModel against the empty tree lists a commitless repo's tracked files", async () => {
   const repo = mkdtempSync(path.join(tmpdir(), "git-service-unborn-model-"));
   runGit(repo, ["init"]);
+
   try {
     writeFileSync(path.join(repo, "staged.txt"), "one\n");
     runGit(repo, ["add", "staged.txt"]);
@@ -202,6 +210,7 @@ test("Git.loadModel against the empty tree lists a commitless repo's tracked fil
 
 test("Git.repoContext resolves the repo root, main worktree, and empty tree", async () => {
   const repo = createFixtureRepo("git-service-context-", { "a.txt": "one\n" });
+
   try {
     const context = await Effect.runPromise(
       Git.pipe(
@@ -222,6 +231,7 @@ test("Git.repoContext resolves the repo root, main worktree, and empty tree", as
 
 test("Git.repoContext names the directory when it is not a repository", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "git-service-norepo-"));
+
   try {
     const failure = await Effect.runPromise(
       Git.pipe(
@@ -240,6 +250,7 @@ test("Git.repoContext names the directory when it is not a repository", async ()
 test("Git.repoContext reports a bare repository as having no working tree", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "git-service-bare-"));
   runGit(dir, ["init", "--bare"]);
+
   try {
     const failure = await Effect.runPromise(
       Git.pipe(
@@ -261,12 +272,14 @@ test("Git.repoContext reports a bare repository as having no working tree", asyn
 // Or raised, since this question only ever explains a diff that already failed.
 test("Git.refIsDiffable separates the sides git diff can take", async () => {
   const repo = createFixtureRepo("git-service-diffable-", { "a.txt": "one\n" });
+
   try {
     const blob = execFileSync("git", ["rev-parse", "HEAD:a.txt"], {
       cwd: repo,
       encoding: "utf-8",
       env: stripGitEnv(process.env),
     }).trim();
+
     runGit(repo, ["branch", "other"]);
 
     const answers = await Effect.runPromise(
@@ -310,6 +323,7 @@ test("an inherited GIT_DIR silently redirects an unsanitized git invocation", ()
   const other = mkdtempSync(path.join(tmpdir(), "git-env-hostile-"));
   const before = revParse(decoy, "HEAD");
   const hostileEnv = { ...process.env, GIT_DIR: path.join(decoy, ".git") };
+
   const gitConfig = [
     "-c",
     "user.name=Stet Test",
@@ -349,12 +363,14 @@ test("stripGitEnv neutralizes that same inherited GIT_DIR", () => {
   const other = mkdtempSync(path.join(tmpdir(), "git-env-sanitized-"));
   const before = revParse(decoy, "HEAD");
   const hostileEnv = { ...process.env, GIT_DIR: path.join(decoy, ".git") };
+
   const gitConfig = [
     "-c",
     "user.name=Stet Test",
     "-c",
     "user.email=stet-test@example.com",
   ];
+
   // The exact pattern runGit uses: an explicit, freshly-computed env replaces whatever the
   // Process inherited, rather than relying on execFileSync's default env passthrough.
   const opts = {

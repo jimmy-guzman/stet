@@ -11,14 +11,18 @@ import { lerpHex } from "@/utils/color";
 import { RecencyDot } from "./recency-dot";
 
 const model = () => state.statusBarModel();
+
 // Narrowed per branch so each `Match` gets the member it renders; the model is a closed union,
 // So a new content kind is a type error here rather than a silently blank row.
 const asMessage = (current: StatusBarModel) =>
   current.kind === "message" ? current : undefined;
+
 const asAmbient = (current: StatusBarModel) =>
   current.kind === "ambient" ? current : undefined;
+
 const asGuidance = (current: StatusBarModel) =>
   current.kind === "guidance" ? current : undefined;
+
 // The changed file carries the tree's cue: its git change kind tints the path, fading toward
 // Faint across the 30s recency window, so freshness reads as brightness and the row recedes as
 // It ages rather than announcing an age in words.
@@ -27,7 +31,9 @@ const pathFg = (activity: StatusBarActivity) => {
     activity.changeKind === undefined
       ? theme.colors.text.muted
       : theme.colors.kind[activity.changeKind];
+
   const fraction = recencyFraction(activity.at, state.now());
+
   return fraction === undefined
     ? base
     : lerpHex(base, theme.colors.text.faint, fraction);

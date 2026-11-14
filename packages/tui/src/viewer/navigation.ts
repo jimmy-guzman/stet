@@ -82,9 +82,11 @@ export const unpinTab = (nav: NavState, id: string): NavState => {
   if (!nav.tabs.some((tab) => tab.id === id)) {
     return nav;
   }
+
   const flipped = nav.tabs.map((tab) =>
     tab.id === id ? { ...tab, preview: true } : tab
   );
+
   return {
     ...nav,
     tabs: flipped.filter((tab) => tab.id === id || !tab.preview),
@@ -96,6 +98,7 @@ const activeTab = (nav: NavState) =>
 
 export const currentLocation = (nav: NavState): Location | undefined => {
   const tab = activeTab(nav);
+
   return tab.index < 0 ? undefined : tab.entries[tab.index];
 };
 
@@ -103,6 +106,7 @@ export const canBack = (nav: NavState) => activeTab(nav).index > 0;
 
 export const canForward = (nav: NavState) => {
   const tab = activeTab(nav);
+
   return tab.index < tab.entries.length - 1;
 };
 
@@ -142,12 +146,14 @@ const sameVisibleLocation = (a: Location, b: Location) =>
 export const navigate = (nav: NavState, location: Location): NavState =>
   mapActive(nav, (tab) => {
     const head = tab.entries[tab.index];
+
     const replaceHead =
       head !== undefined &&
       (sameVisibleLocation(head, location) ||
         (location.kind === "browse" &&
           head.kind === "browse" &&
           tab.index === tab.entries.length - 1));
+
     if (replaceHead) {
       return {
         ...tab,
@@ -156,7 +162,9 @@ export const navigate = (nav: NavState, location: Location): NavState =>
         ),
       };
     }
+
     const entries = [...tab.entries.slice(0, tab.index + 1), location];
+
     return { ...tab, entries, index: entries.length - 1 };
   });
 
@@ -182,6 +190,7 @@ export const openTab = (
   preview: boolean
 ): NavState => {
   const tabs = preview ? nav.tabs.filter((tab) => !tab.preview) : nav.tabs;
+
   return {
     ...nav,
     activeTabId: id,
@@ -196,15 +205,20 @@ export const closeTab = (nav: NavState, id: string): NavState => {
   if (nav.tabs.length <= 1) {
     return unpinTab(nav, id);
   }
+
   const index = nav.tabs.findIndex((tab) => tab.id === id);
+
   if (index === -1) {
     return nav;
   }
+
   const tabs = nav.tabs.filter((tab) => tab.id !== id);
+
   const activeTabId =
     nav.activeTabId === id
       ? (tabs[index] ?? tabs[index - 1] ?? tabs[0]).id
       : nav.activeTabId;
+
   return { ...nav, activeTabId, tabs };
 };
 
@@ -213,11 +227,13 @@ export const selectTab = (nav: NavState, id: string): NavState =>
 
 export const nextTab = (nav: NavState): NavState => {
   const index = nav.tabs.findIndex((tab) => tab.id === nav.activeTabId);
+
   return { ...nav, activeTabId: nav.tabs[(index + 1) % nav.tabs.length].id };
 };
 
 export const prevTab = (nav: NavState): NavState => {
   const index = nav.tabs.findIndex((tab) => tab.id === nav.activeTabId);
+
   return {
     ...nav,
     activeTabId: nav.tabs[(index - 1 + nav.tabs.length) % nav.tabs.length].id,

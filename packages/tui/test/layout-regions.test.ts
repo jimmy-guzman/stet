@@ -61,6 +61,7 @@ test("the regions tile the terminal exactly, for every dock", () => {
           terminalWidth: width,
         })
       );
+
       const where = `${sidebarPosition} at ${width}x${height}`;
       expect(`${where}: ${painted.length}`).toBe(`${where}: ${width * height}`);
       expect(`${where}: ${new Set(painted).size}`).toBe(
@@ -164,6 +165,7 @@ test("a pane honors only the override on the axis it is docked to", () => {
     sidebar: { ...both, position: "top" },
     terminalHeight: 40,
   }).sidebar;
+
   expect(top.height).toBe(20);
   expect(top.width).toBe(80);
 });
@@ -173,12 +175,14 @@ test("the default extent belongs to the axis", () => {
     sidebar: pane({ position: "top" }),
     terminalHeight: 40,
   });
+
   expect(onTop.sidebar.height).toBe(PANE_DEFAULT_HEIGHT);
 
   const onBottom = layout({
     sidebar: pane({ position: "bottom" }),
     terminalHeight: 40,
   });
+
   expect(onBottom.sidebar.height).toBe(PANE_DEFAULT_HEIGHT);
   expect(onBottom.sidebar.y).toBeGreaterThan(onBottom.viewer.y);
 });

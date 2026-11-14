@@ -1,5 +1,6 @@
 const latestReleaseUrl =
   "https://api.github.com/repos/jimmy-guzman/stet/releases/latest";
+
 const releasesPageUrl = "https://github.com/jimmy-guzman/stet/releases/latest";
 
 // Bun.semver.order throws on a non-semver string, so validate at the boundary: callers only ever
@@ -7,6 +8,7 @@ const releasesPageUrl = "https://github.com/jimmy-guzman/stet/releases/latest";
 const isValidVersion = (version: string) => {
   try {
     Bun.semver.order(version, version);
+
     return true;
   } catch {
     return false;
@@ -22,9 +24,11 @@ export const tagToVersion = (tag: string) => {
   const withoutComponent = tag.startsWith("stet-")
     ? tag.slice("stet-".length)
     : tag;
+
   const version = withoutComponent.startsWith("v")
     ? withoutComponent.slice(1)
     : withoutComponent;
+
   return isValidVersion(version) ? version : undefined;
 };
 
@@ -41,6 +45,7 @@ export const formatUpdateNotice = (update: {
     `run "stet upgrade" to update`,
     releasesPageUrl,
   ];
+
   // Stack the segments so a narrow terminal never hard-wraps mid-segment; the "\n  "
   // Indent aligns continuation lines under the "ℹ " marker log() prepends.
   return segments.join("\n  ");
@@ -60,11 +65,14 @@ export const fetchLatestVersion = async (): Promise<string | undefined> => {
       headers: { Accept: "application/vnd.github+json", "User-Agent": "stet" },
       signal: AbortSignal.timeout(3000),
     });
+
     const body: unknown = response.ok ? await response.json() : undefined;
+
     const tag =
       typeof body === "object" && body !== null && "tag_name" in body
         ? body.tag_name
         : undefined;
+
     return typeof tag === "string" ? tagToVersion(tag) : undefined;
   } catch {
     return undefined;

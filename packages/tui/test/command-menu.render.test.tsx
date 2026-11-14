@@ -29,6 +29,7 @@ describe("context command menu", () => {
       "a.txt": "alpha\n",
       "b.txt": "beta\n",
     });
+
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
@@ -38,6 +39,7 @@ describe("context command menu", () => {
         height: 24,
         width: 100,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -47,6 +49,7 @@ describe("context command menu", () => {
 
       // The first file row sits below the header and the sidebar's top border.
       await mockMouse.click(5, 2, MouseButton.RIGHT);
+
       const frame = await settleUntil(
         "menu opens with its actions",
         (current) => current.includes("Pin as tab")
@@ -54,6 +57,7 @@ describe("context command menu", () => {
 
       expect(state.commandMenuOpen()).toBe(true);
       expect(state.commandMenuContext()).toBe("tree");
+
       // Every file action, the selection caret, and the shared footer hint render.
       for (const label of [
         "Pin as tab",
@@ -63,6 +67,7 @@ describe("context command menu", () => {
       ]) {
         expect(frame).toContain(label);
       }
+
       expect(frame).toContain("▸");
       expect(frame).toContain("↑↓ navigate");
     } finally {
@@ -76,6 +81,7 @@ describe("context command menu", () => {
       "package.json": `${JSON.stringify({ name: "cmd-fixture" })}\n`,
       "src/a.ts": "const alpha = 1\n",
     });
+
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
       "const alpha = 1\nconst added = 2\n"
@@ -90,6 +96,7 @@ describe("context command menu", () => {
         height: 28,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -120,12 +127,14 @@ describe("context command menu", () => {
       "a.txt": "alpha\n",
       "b.txt": "beta\n",
     });
+
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
     const { renderer, renderOnce, captureCharFrame, mockMouse, mockInput } =
       await testRender(() => <App />, { height: 24, width: 100 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -142,10 +151,12 @@ describe("context command menu", () => {
       // Click a different tree row: the focused node drifts, so the menu must close
       // Rather than linger invisibly and keep swallowing keys.
       await mockMouse.click(5, 2);
+
       const dismissed = await settleUntil(
         "menu closed",
         (frame) => !frame.includes("Pin as tab")
       );
+
       expect(state.commandMenuOpen()).toBe(false);
       expect(dismissed).not.toContain("↑↓ navigate");
 
@@ -166,9 +177,11 @@ describe("context command menu", () => {
 
   test("the tree menu closes when the sidebar scrolls its anchor row away", async () => {
     const files: Record<string, string> = {};
+
     for (let i = 0; i < 30; i += 1) {
       files[`f${String(i).padStart(2, "0")}.txt`] = `content ${i}\n`;
     }
+
     const repoRoot = createFixtureRepo("stet-cmd-scroll-", files);
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
@@ -179,6 +192,7 @@ describe("context command menu", () => {
         height: 24,
         width: 100,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -208,6 +222,7 @@ describe("context command menu", () => {
       "package.json": `${JSON.stringify({ name: "cmd-drift" })}\n`,
       "src/a.ts": "const alpha = 1\n",
     });
+
     writeFileSync(
       path.join(repoRoot, "src", "a.ts"),
       "const alpha = 1\nconst added = 2\n"
@@ -222,6 +237,7 @@ describe("context command menu", () => {
         height: 28,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -254,12 +270,14 @@ describe("context command menu", () => {
       "a.txt": "alpha\n",
       "b.txt": "beta\n",
     });
+
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
     const { renderer, renderOnce, captureCharFrame, mockMouse, mockInput } =
       await testRender(() => <App />, { height: 24, width: 100 });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -292,9 +310,11 @@ describe("context command menu", () => {
       { length: 120 },
       (_, i) => `const line_${i + 1} = ${i + 1}`
     );
+
     const repoRoot = createFixtureRepo("stet-cmd-offscreen-", {
       "long.ts": `${lines.join("\n")}\n`,
     });
+
     const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
@@ -305,6 +325,7 @@ describe("context command menu", () => {
         useMouse: true,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -317,12 +338,14 @@ describe("context command menu", () => {
       // Wheel-scroll deep so the top-line caret leaves the viewport (the wheel moves
       // The window, not the caret, and the follow never snaps it back).
       await mockMouse.moveTo(90, 20);
+
       for (let tick = 0; tick < 20; tick += 1) {
         // oxlint-disable-next-line no-await-in-loop -- one wheel tick per render pass
         await mockMouse.scroll(90, 20, "down");
         // oxlint-disable-next-line no-await-in-loop -- one wheel tick per render pass
         await renderOnce();
       }
+
       expect(state.viewerScrollTop()).toBeGreaterThan(0);
 
       // The caret is now off-screen, so the viewer menu cannot anchor: opening it must

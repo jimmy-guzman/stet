@@ -5,9 +5,11 @@ export const formatBytes = (bytes: number) => {
   if (bytes < 1024) {
     return `${bytes} B`;
   }
+
   const units = ["KB", "MB", "GB", "TB"];
   const exponent = Math.min(Math.floor(Math.log2(bytes) / 10), units.length);
   const value = bytes / 1024 ** exponent;
   const rounded = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+
   return `${rounded} ${units[exponent - 1]}`;
 };

@@ -21,6 +21,7 @@ import { RecencyDot } from "./recency-dot";
 // Survives a row remount mid-gesture and never leaks process-wide.
 const asDirectoryNode = (row: FileTreeRow) =>
   row.node.type === "directory" ? row.node : undefined;
+
 const asFileNode = (row: FileTreeRow) =>
   row.node.type === "file" ? row.node : undefined;
 
@@ -58,9 +59,11 @@ const DirectoryRow = (props: {
   isDoubleClick: (id: string) => boolean;
 }) => {
   const indent = () => " ".repeat(Math.max(0, props.row.depth) * 2);
+
   const focused = () =>
     state.focusedPane() === "tree" &&
     props.row.index === state.focusedRowIndex();
+
   const background = () =>
     focused() ? theme.colors.surface.cursor : theme.colors.surface.base;
 
@@ -70,14 +73,17 @@ const DirectoryRow = (props: {
   // Right-click instead focuses the row and opens the context menu at the cell.
   const onMouseDown = (event: MouseEvent) => {
     event.stopPropagation();
+
     if (isRightClick(event)) {
       batch(() => {
         state.setFocusedPane("tree");
         state.setFocusedNodeId(props.node.id);
       });
       state.openCommandMenu("tree", { x: event.x, y: event.y });
+
       return;
     }
+
     batch(() => {
       state.setFocusedPane("tree");
       state.setFocusedNodeId(props.node.id);
@@ -87,40 +93,50 @@ const DirectoryRow = (props: {
       // Invisible to the tracker and letting the second file click read as a double-pin.
       props.isDoubleClick(props.node.id);
       const next = new Set(state.expandedDirectories());
+
       if (next.has(props.node.id)) {
         next.delete(props.node.id);
       } else {
         next.add(props.node.id);
       }
+
       state.setExpandedDirectories(next);
     });
   };
 
   const isExpanded = () => state.expandedDirectories().has(props.node.id);
   const icon = () => namedIcon(isExpanded() ? "folder-open" : "folder");
+
   // The directory dot tracks its most recently changed descendant; the dot itself
   // Decides freshness from the timestamp, so an aged-out value simply yields no dot.
   const recencyAt = () =>
     isExpanded()
       ? undefined
       : state.directoryRecencyByPath().get(props.node.path);
+
   const nameFg = () => {
     if (focused()) {
       return theme.colors.text.selected;
     }
+
     return props.node.changedCount > 0
       ? theme.colors.text.primary
       : theme.colors.text.strong;
   };
+
   const glyph = () => {
     if (state.iconsEnabled()) {
       return icon().glyph;
     }
+
     return isExpanded() ? "▾" : "▸";
   };
+
   const hasBadges = () => !isExpanded() && props.node.changedCount > 0;
+
   const maxNameLen = () =>
     contentWidth() - indent().length - 2 - (hasBadges() ? 14 : 0);
+
   return (
     <box
       width="100%"
@@ -182,9 +198,11 @@ const FileRow = (props: {
   isDoubleClick: (id: string) => boolean;
 }) => {
   const indent = () => " ".repeat(Math.max(0, props.row.depth) * 2);
+
   const focused = () =>
     state.focusedPane() === "tree" &&
     props.row.index === state.focusedRowIndex();
+
   const background = () =>
     focused() ? theme.colors.surface.cursor : theme.colors.surface.base;
 
@@ -194,17 +212,21 @@ const FileRow = (props: {
   // The row (without opening it) and opens the context menu at the cell.
   const onMouseDown = (event: MouseEvent) => {
     event.stopPropagation();
+
     if (isRightClick(event)) {
       batch(() => {
         state.setFocusedPane("tree");
         state.setFocusedNodeId(props.node.id);
       });
       state.openCommandMenu("tree", { x: event.x, y: event.y });
+
       return;
     }
+
     batch(() => {
       state.setFocusedPane("tree");
       state.selectFile(props.node.path);
+
       if (props.isDoubleClick(props.node.path)) {
         state.pinActiveTab();
       }
@@ -213,16 +235,21 @@ const FileRow = (props: {
 
   const changed = () => props.node.changed;
   const selected = () => state.selectedPath() === props.node.path;
+
   const nameFg = () => {
     if (focused() || selected()) {
       return theme.colors.text.selected;
     }
+
     const file = changed();
+
     return file === undefined
       ? theme.colors.text.secondary
       : theme.colors.kind[file.kind];
   };
+
   const hasBadges = () => changed() !== undefined;
+
   const maxNameLen = () =>
     contentWidth() -
     indent().length -

@@ -24,17 +24,20 @@ describe("scope switching", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
 
       mockInput.pressKey("s");
+
       // This menu's scrollbox is sized to exactly its rows (`scopeKinds.length + 3`), so it has no
       // Slack to absorb a viewport that comes up a row short: `commits`, the last row and the only
       // Way into a commit scope, is what drops. Settling on a row above it and reading the last one
@@ -45,6 +48,7 @@ describe("scope switching", () => {
       const menu = await settleUntil("scope kinds", (frame) =>
         frame.includes("since session start")
       );
+
       expect(menu).toContain("last commit");
       expect(menu).toContain("commits");
     } finally {
@@ -58,16 +62,19 @@ describe("scope switching", () => {
       "package.json": `${JSON.stringify({ name: "scope-fixture" })}\n`,
       "src/a.ts": "const a = 1\n",
     });
+
     // An unstaged edit: the default `all` scope sees it, the `staged` scope does not.
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -91,12 +98,14 @@ describe("scope switching", () => {
       // Let the cursor move commit before enter, as a real key cadence would.
       await settleUntil("picker cursor moved", () => true, 2);
       mockInput.pressEnter();
+
       const after = await settleUntil(
         "staged scope drops the unstaged change",
         (frame) => frame.includes("staged vs HEAD") && !frame.includes("+1 -1"),
         1,
         400
       );
+
       expect(after).toContain("staged vs HEAD");
       expect(after).not.toContain("+1 -1");
     } finally {
@@ -112,15 +121,18 @@ describe("scope switching", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       mockInput.pressKey("s");
+
       const open = await settleUntil(
         "picker lists all scopes under their group headers",
         (frame) =>
@@ -134,14 +146,17 @@ describe("scope switching", () => {
           frame.includes("changes") &&
           frame.includes("history")
       );
+
       // The active scope (uncommitted) carries the ● marker.
       expect(open).toContain("● uncommitted");
 
       mockInput.pressEscape();
+
       const closed = await settleUntil(
         "escape closes the picker",
         (frame) => !frame.includes("● uncommitted")
       );
+
       expect(closed).not.toContain("since session start");
     } finally {
       renderer.destroy();
@@ -154,15 +169,18 @@ describe("scope switching", () => {
       "package.json": `${JSON.stringify({ name: "scope-session-fixture" })}\n`,
       "src/a.ts": "const a = 1\n",
     });
+
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -181,12 +199,14 @@ describe("scope switching", () => {
       // Let the cursor move commit before enter, as a real key cadence would.
       await settleUntil("picker cursor moved", () => true, 2);
       mockInput.pressEnter();
+
       const after = await settleUntil(
         "header shows the session scope",
         (frame) =>
           frame.includes("since session start") &&
           !frame.includes("uncommitted vs HEAD")
       );
+
       // Session base defaults to HEAD here, so the unstaged change is still in view.
       expect(after).toContain("since session start");
       expect(after).toContain("+1 -1");
@@ -201,6 +221,7 @@ describe("scope switching", () => {
       "package.json": `${JSON.stringify({ name: "scope-lastcommit-fixture" })}\n`,
       "src/a.ts": "const a = 1\n",
     });
+
     // A second commit: last-commit must diff it against its parent (the root commit),
     // Not fold in any working-tree state. The tree is otherwise clean.
     writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
@@ -208,11 +229,13 @@ describe("scope switching", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 34,
         width: 120,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -232,10 +255,12 @@ describe("scope switching", () => {
       mockInput.pressKey("j");
       await settleUntil("picker cursor moved", () => true, 2);
       mockInput.pressEnter();
+
       const after = await settleUntil(
         "last-commit reveals the second commit's change",
         (frame) => frame.includes("last commit") && frame.includes("+1 -1")
       );
+
       expect(after).toContain("last commit");
       expect(after).toContain("+1 -1");
     } finally {
@@ -261,14 +286,17 @@ test("a root commit holds its last-commit scope across refresh drains", async ()
   const repoRoot = createFixtureRepo("stet-root-commit-scope-", {
     "a.txt": "one\ntwo\nthree\n",
   });
+
   // The fixture is a plain `git init`, so this is the base the drain resolves to as well.
   const scope = {
     headRef: "HEAD",
     kind: "last-commit",
     ref: emptyTreeForFormat("sha1"),
   } as const;
+
   try {
     seedState(await loadModel(repoRoot, scope), scope);
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -276,6 +304,7 @@ test("a root commit holds its last-commit scope across refresh drains", async ()
         width: 100,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {

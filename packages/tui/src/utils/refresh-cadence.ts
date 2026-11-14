@@ -10,6 +10,7 @@ const ACTIVE_MS = 10_000;
 
 const FAST = "750 millis";
 const QUIET = "2 seconds";
+
 // Trust is per-session and one-way (a watcher that proved itself then dies silently
 // Is not distrusted while the repo is quiet — we cannot tell a dead watcher from a
 // Healthy idle one without polling). So TRUSTED also bounds the worst-case latency
@@ -36,6 +37,7 @@ export const refreshDelay = (input: {
   // Catches up. One window for both, so a change the watcher DID catch (tick at
   // ~the same time as the change) never trips the fast path.
   const watcherStale = input.now - input.lastWatcherTickAt > ACTIVE_MS;
+
   if (active && watcherStale) {
     return FAST;
   }

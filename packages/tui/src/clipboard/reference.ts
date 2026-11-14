@@ -8,6 +8,7 @@ export const formatCopyReference = (payload: CopyReferencePayload) => {
   if (payload.line === undefined) {
     return payload.path;
   }
+
   if (payload.column === undefined) {
     return `${payload.path}:${payload.line}`;
   }

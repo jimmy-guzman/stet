@@ -113,13 +113,16 @@ export const seedState = (
   emptyTree = emptyTreeForFormat("sha1")
 ) => {
   const selected = model.changed[0]?.path ?? model.repoFiles[0]?.path;
+
   const baseExpanded = defaultExpandedDirectories(
     model.changed.map((file) => file.path)
   );
+
   const expanded =
     selected === undefined
       ? baseExpanded
       : expandAncestorsForPath(baseExpanded, selected);
+
   batch(() => {
     state.setScope(scope);
     state.setCliBaseRef(scope.ref);
@@ -162,15 +165,19 @@ export const seedState = (
     state.setSearchIndex(0);
     state.setSearchScrollTop(0);
     state.setSidebarScrollTop(0);
+
     if (state.searchRegex()) {
       state.toggleSearchRegex();
     }
+
     if (state.searchCaseSensitive()) {
       state.toggleSearchCase();
     }
+
     if (state.searchScope() !== "changed") {
       state.toggleSearchScope();
     }
+
     state.setThemeComboboxQuery("");
     state.setThemeComboboxIndex(0);
   });
@@ -203,6 +210,7 @@ afterEach(() => {
   for (const repoRoot of fixtureRepoRoots) {
     rmSync(repoRoot, { force: true, recursive: true });
   }
+
   fixtureRepoRoots.clear();
 });
 
@@ -233,6 +241,7 @@ export const createFixtureRepo = (
   }
 
   runGit(repoRoot, ["init", `--object-format=${objectFormat}`]);
+
   if (commit) {
     runGit(repoRoot, ["add", "."]);
     runGit(repoRoot, ["commit", "-m", "fixture"]);
@@ -260,12 +269,14 @@ export const makeSettleUntil =
     maxAttempts = 400
   ) => {
     let frame = "";
+
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       // oxlint-disable-next-line no-await-in-loop -- polling retry: each tick must complete before the next check
       await Bun.sleep(10);
       // oxlint-disable-next-line no-await-in-loop -- polling retry: each tick must complete before the next check
       await renderOnce();
       frame = captureCharFrame();
+
       if (attempt + 1 >= minAttempts && predicate(frame)) {
         return frame;
       }

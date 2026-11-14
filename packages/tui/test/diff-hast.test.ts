@@ -14,6 +14,7 @@ describe("flattenLineSpans", () => {
       children: [span("#F97583", "const"), span("#79B8FF", " b")],
       type: "element",
     };
+
     expect(flattenLineSpans(line)).toEqual([
       { fg: "#F97583", text: "const" },
       { fg: "#79B8FF", text: " b" },
@@ -31,6 +32,7 @@ describe("flattenLineSpans", () => {
       ],
       type: "element",
     };
+
     expect(flattenLineSpans(line)).toEqual([{ fg: "#abcdef", text: "nested" }]);
   });
 
@@ -39,6 +41,7 @@ describe("flattenLineSpans", () => {
       children: [{ type: "text", value: "plain" }],
       type: "element",
     };
+
     expect(flattenLineSpans(line)).toEqual([{ text: "plain" }]);
   });
 

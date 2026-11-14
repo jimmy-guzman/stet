@@ -12,6 +12,7 @@ export const prefersMonochrome = (env: Record<string, string | undefined>) => {
   if (env.FORCE_COLOR !== undefined) {
     return env.FORCE_COLOR === "0" || env.FORCE_COLOR === "false";
   }
+
   return env.NO_COLOR !== undefined && env.NO_COLOR !== "";
 };
 

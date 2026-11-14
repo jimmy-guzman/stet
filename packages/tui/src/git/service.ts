@@ -177,17 +177,20 @@ export const GitLive = Layer.effect(
           .run(["git", "show", side.spec], repoRoot)
           .pipe(Effect.map((result) => classifySideBytes(result.stdoutBytes)));
       }
+
       if (side.kind === "worktree") {
         return Effect.promise(
           async () => await readWorktreeSide(repoRoot, worktreePath)
         );
       }
+
       return Effect.succeed({ kind: "text", text: "" });
     };
 
     return {
       binaryMeta: (repoRoot, scope, file) => {
         const { newSide, oldSide } = fileDiffSides(scope, file);
+
         return Effect.all(
           [
             fetchSide(repoRoot, oldSide, file.path),
@@ -297,6 +300,7 @@ export const GitLive = Layer.effect(
       },
       fileSource: (repoRoot, scope, file) => {
         const { newSide, oldSide } = fileDiffSides(scope, file);
+
         return fetchSide(
           repoRoot,
           file.kind === "deleted" ? oldSide : newSide,
@@ -428,6 +432,7 @@ export const GitLive = Layer.effect(
           // `--path-format` echoes the option instead of rejecting it.
           Effect.flatMap((result) => {
             const context = parseRepoContext(result.stdout);
+
             return context === undefined
               ? Effect.fail(
                   new GitError({
@@ -478,6 +483,7 @@ export const GitLive = Layer.effect(
         const heads = worktrees
           .map((worktree) => worktree.head)
           .filter((head) => head !== "");
+
         const commitTimes =
           heads.length === 0
             ? Effect.succeed(new Map<string, number>())

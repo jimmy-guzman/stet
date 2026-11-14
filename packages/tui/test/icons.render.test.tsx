@@ -25,8 +25,10 @@ describe("file-type icons", () => {
     const repoRoot = createFixtureRepo("icons-default-", {
       "src/index.ts": "export const a = 1;\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -34,6 +36,7 @@ describe("file-type icons", () => {
         width: 110,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     const frame = await settleUntil("tree", (current) =>
@@ -50,9 +53,11 @@ describe("file-type icons", () => {
     const repoRoot = createFixtureRepo("icons-no-icons-", {
       "src/index.ts": "export const a = 1;\n",
     });
+
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setIconsEnabled(false);
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -60,6 +65,7 @@ describe("file-type icons", () => {
         width: 110,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     const frame = await settleUntil("tree", (current) =>
@@ -76,11 +82,13 @@ describe("file-type icons", () => {
     const repo = createFixtureRepo("icon-symlink-", {
       "target.ts": "export const a = 1;\n",
     });
+
     symlinkSync("target.ts", path.join(repo, "shortcut.ts"));
     runGit(repo, ["add", "shortcut.ts"]);
     runGit(repo, ["commit", "-m", "add link"]);
     const model = await loadModel(repo, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -88,12 +96,14 @@ describe("file-type icons", () => {
         width: 60,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       const frame = await settleUntil("tree", (current) =>
         current.includes("shortcut.ts")
       );
+
       const linkLine =
         frame.split("\n").find((line) => line.includes("shortcut.ts")) ?? "";
 
@@ -114,8 +124,10 @@ describe("file-type icons", () => {
       "aaa.ts": "export const a = 1;\n",
       "this-is-a-very-long-filename-that-truncates.ts": "export const z = 1;\n",
     });
+
     const model = await loadModel(repo, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame } = await testRender(
       () => <App />,
       {
@@ -123,11 +135,13 @@ describe("file-type icons", () => {
         width: 44,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     const frame = await settleUntil("tree", (current) =>
       current.includes("aaa.ts")
     );
+
     const lines = frame.split("\n");
     const shortIndex = lines.findIndex((line) => line.includes("aaa.ts"));
     const longIndex = lines.findIndex((line) => line.includes("this-is"));

@@ -33,6 +33,7 @@ test("a content-only refresh tick never re-ranks the open picker", () => {
     { path: "src/a.ts", symlink: false, tracked: true },
     { path: "src/b.ts", symlink: false, tracked: true },
   ];
+
   state.setGitModel(modelWith(repoFiles, "k1"));
   state.openFileCombobox();
   const before = state.fileComboboxResults();

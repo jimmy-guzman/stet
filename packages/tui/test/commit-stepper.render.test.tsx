@@ -21,6 +21,7 @@ const commitFixture = (prefix: string) => {
     "package.json": `${JSON.stringify({ name: "commits-fixture" })}\n`,
     "src/a.ts": "const a = 1\n",
   });
+
   writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
   runGit(repoRoot, [
     "commit",
@@ -39,6 +40,7 @@ const commitFixture = (prefix: string) => {
     "-am",
     "XENON 🔄 the newest commit with a long trailing subject",
   ]);
+
   return repoRoot;
 };
 
@@ -47,11 +49,13 @@ describe("commit drill-down", () => {
     const repoRoot = commitFixture("stet-commits-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 90,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -91,10 +95,12 @@ describe("commit drill-down", () => {
       mockInput.pressKey("j");
       await settleUntil("cursor moved to the second commit", () => true, 2);
       mockInput.pressEnter();
+
       const after = await settleUntil(
         "header names the commit by subject",
         (frame) => !frame.includes("switch scope") && frame.includes("YACHT")
       );
+
       expect(after).toContain("YACHT");
     } finally {
       renderer.destroy();

@@ -14,6 +14,7 @@ const withFileSupport = async (
 ) => {
   const resolved = resolveFileSupportConfig(raw);
   registerFileSupport(resolved.registry);
+
   try {
     await run(resolved.issues);
   } finally {

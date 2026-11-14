@@ -57,6 +57,7 @@ export const ProcessLive = Layer.succeed(Process)({
           if (!existsSync(cwd)) {
             throw new Error(`working directory no longer exists: ${cwd}`);
           }
+
           return Bun.spawn({
             cmd: [...command],
             cwd,
@@ -92,6 +93,7 @@ export const ProcessLive = Layer.succeed(Process)({
               },
               { once: true }
             );
+
             // ArrayBuffer() + an explicit Uint8Array view, never `.bytes()`: Bun
             // 1.3.14's runtime returns an ArrayBuffer from `bytes()` on a stream
             // (despite the Uint8Array typing, and unlike `bun test`, whose
@@ -110,11 +112,13 @@ export const ProcessLive = Layer.succeed(Process)({
           Effect.flatMap(([stdoutBuffer, stderr, exitCode]) => {
             const stdoutBytes = new Uint8Array(stdoutBuffer);
             const stdout = new TextDecoder().decode(stdoutBytes);
+
             if ((options?.allowedExitCodes ?? [0]).includes(exitCode)) {
               return Effect.succeed({ exitCode, stderr, stdout, stdoutBytes });
             }
 
             const detail = stderr.trim() || stdout.trim();
+
             return Effect.fail(
               new CommandError({
                 command,

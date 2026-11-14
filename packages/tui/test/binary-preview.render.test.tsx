@@ -18,6 +18,7 @@ import {
 const u32be = (n: number) => {
   const bytes = new Uint8Array(4);
   new DataView(bytes.buffer).setUint32(0, n);
+
   return [...bytes];
 };
 
@@ -49,6 +50,7 @@ describe("binary preview", () => {
     const repoRoot = createFixtureRepo("binary-preview-", {
       "keep.ts": "keep\n",
     });
+
     writeFileSync(path.join(repoRoot, "logo.png"), png(128, 64));
     runGit(repoRoot, ["add", "logo.png"]);
     runGit(repoRoot, ["commit", "-m", "add logo"]);
@@ -65,6 +67,7 @@ describe("binary preview", () => {
         width: 110,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -85,6 +88,7 @@ describe("binary preview", () => {
     const repoRoot = createFixtureRepo("binary-browse-", {
       "keep.ts": "keep\n",
     });
+
     writeFileSync(path.join(repoRoot, "logo.png"), png(64, 32));
     runGit(repoRoot, ["add", "logo.png"]);
     runGit(repoRoot, ["commit", "-m", "add logo"]);
@@ -101,6 +105,7 @@ describe("binary preview", () => {
         width: 110,
       }
     );
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {

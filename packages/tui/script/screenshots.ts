@@ -25,20 +25,25 @@ import path from "node:path";
  * into it, so it is the single committed home. Always this repo, so a PR here picks them up.
  */
 const OUT = path.resolve(import.meta.dir, "../../../docs/public/screenshots");
+
 /**
  * Which checkout stet runs against (the repo root; the tapes cd into its packages/tui); override
  * with a post-restructure checkout to capture a clean tree elsewhere.
  */
 const REPO_OVERRIDE = process.env.STET_SCREENSHOT_REPO ?? "";
+
 const REPO =
   REPO_OVERRIDE === ""
     ? path.resolve(import.meta.dir, "../../..")
     : path.resolve(REPO_OVERRIDE);
+
 const BUN = process.execPath;
 const VHS = "vhs";
+
 /** Optional lossless PNG optimizer; when absent the raw (larger) VHS output ships unchanged. */
 const OXIPNG = Bun.which("oxipng");
 const TAPES = path.resolve(tmpdir(), "stet-screenshots");
+
 /**
  * Pinned to the monorepo restructure commit: everything after it is clean feature work, so the diff
  * shows real code changes rather than the ~200 files the `src`→`packages/tui/src` move renamed. A
@@ -47,12 +52,14 @@ const TAPES = path.resolve(tmpdir(), "stet-screenshots");
  * tapes below that name a file: they each need one that is actually changed in the window.
  */
 const BASE_REF = "f1e0d21";
+
 /**
  * A throwaway image for the binary-preview shot: an untracked PNG so the viewer renders its
  * metadata card (type, dimensions, size) instead of a diff. Generated with ffmpeg (already required
  * by VHS) at a legible size, and planted only for that shot so it never shows up in another tree.
  */
 const IMAGE_FIXTURE = `${REPO}/packages/tui/_demo-image.png`;
+
 /**
  * A throwaway linked worktree for the `worktree: true` screens: stet derives its git identity from
  * the cwd, so launching there renders the header's worktree form (`folder · branch`, file-tree
@@ -64,6 +71,7 @@ const IMAGE_FIXTURE = `${REPO}/packages/tui/_demo-image.png`;
  */
 const WORKTREE_DIR = `${REPO}/.claude/worktrees/tidy-layout`;
 const WORKTREE_BRANCH = "feat/tidy-layout";
+
 /**
  * A throwaway config dir for the `config: true` shots: stet reads `XDG_CONFIG_HOME`, so pointing
  * those tapes here gives them named themes and a reachable context-menu binding without touching
@@ -71,14 +79,17 @@ const WORKTREE_BRANCH = "feat/tidy-layout";
  * `ctrl-s` makes one of them a writer.
  */
 const SCREENSHOT_CONFIG_DIR = path.resolve(tmpdir(), "stet-screenshots-config");
+
 const SCREENSHOT_CONFIG_FILE = path.resolve(
   SCREENSHOT_CONFIG_DIR,
   "stet",
   "config.jsonc"
 );
+
 /** Where git and stet alike look for their per-user config when `XDG_CONFIG_HOME` is unset. */
 const REAL_CONFIG_HOME =
   process.env.XDG_CONFIG_HOME ?? path.join(homedir(), ".config");
+
 const SCREENSHOT_CONFIG = JSON.stringify(
   {
     /**
@@ -119,6 +130,7 @@ const SCREENSHOT_CONFIG = JSON.stringify(
   null,
   2
 );
+
 /**
  * The recency shot's edits, applied in order while stet is already running. Recency cannot be
  * staged before launch: the activity log is built by diffing successive git models and the first
@@ -143,6 +155,7 @@ const RECENT_EDITS = [
 
 // Canvas height, shared by every capture.
 const CANVAS_HEIGHT = 1520;
+
 const header = () =>
   [
     "Set Shell zsh",
@@ -426,7 +439,9 @@ const run = async (cmd: string, cmdArgs: string[], cwd = TAPES) => {
     cwd,
     stdio: ["inherit", "inherit", "inherit"],
   });
+
   const code = await proc.exited;
+
   if (code !== 0) {
     throw new Error(`${cmd} exited ${code}`);
   }
@@ -436,11 +451,13 @@ const shoot = async (screen: (typeof screens)[number]) => {
   if (screen.config === true) {
     await writeScreenshotConfig();
   }
+
   await Bun.write(`${TAPES}/${screen.name}.tape`, tapeFor(screen));
   console.log(`▶ ${screen.name}`);
   await run(VHS, [`${TAPES}/${screen.name}.tape`]);
   const png = `${OUT}/${screen.name}.png`;
   await Bun.write(png, Bun.file(`${TAPES}/${screen.name}.png`));
+
   if (OXIPNG !== null) {
     await run(OXIPNG, ["-o", "max", "--strip", "safe", png]);
   }
@@ -448,12 +465,14 @@ const shoot = async (screen: (typeof screens)[number]) => {
 
 // Refuse to clobber a path this script did not create, and tear down only what it created.
 let plantedImageFixture = false;
+
 const writeImageFixture = async () => {
   if (existsSync(IMAGE_FIXTURE)) {
     throw new Error(
       `refusing to overwrite existing ${IMAGE_FIXTURE} (not created by this script)`
     );
   }
+
   // A real PNG (ffmpeg's test pattern) so the card reports honest dimensions and a plausible size,
   // Rather than a hand-built header. ffmpeg already ships with VHS, so it adds no new dependency.
   try {
@@ -476,6 +495,7 @@ const writeImageFixture = async () => {
     rmSync(IMAGE_FIXTURE, { force: true });
     throw error;
   }
+
   plantedImageFixture = true;
 };
 
@@ -483,18 +503,21 @@ const removeImageFixture = () => {
   if (!plantedImageFixture) {
     return;
   }
+
   rmSync(IMAGE_FIXTURE, { force: true });
   plantedImageFixture = false;
 };
 
 // Same ownership rule as the image fixture: refuse a path we did not create, tear down our own.
 let plantedWorktree = false;
+
 const addWorktree = async () => {
   if (existsSync(WORKTREE_DIR)) {
     throw new Error(
       `refusing to reuse existing ${WORKTREE_DIR} (not created by this script)`
     );
   }
+
   plantedWorktree = true;
   await run(
     "git",
@@ -509,6 +532,7 @@ const removeWorktree = () => {
   if (!plantedWorktree) {
     return;
   }
+
   Bun.spawnSync(["git", "worktree", "remove", "--force", WORKTREE_DIR], {
     cwd: REPO,
   });
@@ -526,6 +550,7 @@ const writeScreenshotConfig = async () => {
   // Every other one. Link the real git config back in so only stet's config moves.
   const realGitConfig = path.join(REAL_CONFIG_HOME, "git");
   const linked = path.join(SCREENSHOT_CONFIG_DIR, "git");
+
   if (existsSync(realGitConfig) && !existsSync(linked)) {
     symlinkSync(realGitConfig, linked, "dir");
   }
@@ -542,6 +567,7 @@ const removeScreenshotConfig = () => {
  * process; the caller awaits it before restoring, so no write can land after the restore.
  */
 const plantedRecentEdits: { original: string; path: string }[] = [];
+
 const applyRecentEdits = async () => {
   for (const edit of RECENT_EDITS) {
     // oxlint-disable-next-line no-await-in-loop -- the delays are cumulative by design
@@ -566,9 +592,11 @@ const restoreRecentEdits = () => {
 };
 
 const only = new Set(Bun.argv.slice(2));
+
 const unknown = [...only].filter(
   (name) => !screens.some((screen) => screen.name === name)
 );
+
 if (unknown.length > 0) {
   console.warn(
     `ignoring unknown screen name(s): ${unknown.join(", ")} — known: ${screens.map((screen) => screen.name).join(", ")}`
@@ -584,12 +612,14 @@ if (OXIPNG === null) {
 const wanted = screens.filter(
   (screen) => only.size === 0 || only.has(screen.name)
 );
+
 const standalone = wanted.filter(
   (screen) =>
     screen.worktree !== true &&
     screen.imageFixture !== true &&
     screen.recentEdits !== true
 );
+
 const worktreed = wanted.filter((screen) => screen.worktree === true);
 const imageFixtured = wanted.filter((screen) => screen.imageFixture === true);
 const recentEdited = wanted.filter((screen) => screen.recentEdits === true);
@@ -597,11 +627,13 @@ const recentEdited = wanted.filter((screen) => screen.recentEdits === true);
 // One cleanup list drives both the finally and the signal handlers, so a Ctrl-C mid-shoot leaves
 // Behind neither the temp config, the demo image, nor a source file the recency shot edited.
 const cleanups: (() => void)[] = [];
+
 const cleanup = () => {
   for (const remove of cleanups.splice(0)) {
     remove();
   }
 };
+
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     cleanup();
@@ -626,6 +658,7 @@ try {
     // Main-checkout shots, and tear it down through the shared cleanup.
     await addWorktree();
     cleanups.push(removeWorktree);
+
     for (const screen of worktreed) {
       // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
       await shoot(screen);
@@ -637,6 +670,7 @@ try {
     // Tear it down through the shared cleanup.
     await writeImageFixture();
     cleanups.push(removeImageFixture);
+
     for (const screen of imageFixtured) {
       // oxlint-disable-next-line no-await-in-loop -- vhs spawns a headless terminal; runs must be sequential
       await shoot(screen);

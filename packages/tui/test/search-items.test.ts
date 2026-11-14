@@ -18,9 +18,11 @@ const shape = (items: SearchItem[]) =>
     if (item.kind === "header") {
       return `header ${item.path} (${item.count})`;
     }
+
     if (item.kind === "gap") {
       return "gap";
     }
+
     return `${item.match === undefined ? "context" : "match"} ${item.line}`;
   });
 
@@ -32,6 +34,7 @@ describe("buildSearchItems", () => {
       linesByPath: new Map([["a.ts", lines(20)]]),
       matches: [match("a.ts", 10, "line 10")],
     });
+
     expect(shape(items)).toEqual([
       "header a.ts (1)",
       "context 8",
@@ -49,6 +52,7 @@ describe("buildSearchItems", () => {
       linesByPath: new Map([["a.ts", lines(20)]]),
       matches: [match("a.ts", 5, "line 5"), match("a.ts", 8, "line 8")],
     });
+
     expect(shape(items)).toEqual([
       "header a.ts (2)",
       "context 3",
@@ -69,6 +73,7 @@ describe("buildSearchItems", () => {
       linesByPath: new Map([["a.ts", lines(20)]]),
       matches: [match("a.ts", 2, "line 2"), match("a.ts", 10, "line 10")],
     });
+
     expect(shape(items)).toEqual([
       "header a.ts (2)",
       "context 1",
@@ -88,6 +93,7 @@ describe("buildSearchItems", () => {
       linesByPath: new Map([["a.ts", lines(3)]]),
       matches: [match("a.ts", 1, "line 1"), match("a.ts", 3, "line 3")],
     });
+
     expect(shape(items)).toEqual([
       "header a.ts (2)",
       "match 1",
@@ -106,6 +112,7 @@ describe("buildSearchItems", () => {
         match("bin.dat", 9, "more grep text"),
       ],
     });
+
     expect(shape(items)).toEqual([
       "header bin.dat (2)",
       "match 4",
@@ -133,6 +140,7 @@ describe("buildSearchItems", () => {
         match("b.ts", 3, "line 3"),
       ],
     });
+
     expect(shape(items)).toEqual([
       "header a.ts (2)",
       "header b.ts (1)",
@@ -156,6 +164,7 @@ describe("buildSearchItems", () => {
       ]),
       matches: [match("a.ts", 1, "line 1", 7), match("b.ts", 2, "line 2", 3)],
     });
+
     const rows = items.filter((item) => item.kind === "line");
     expect(rows.map((row) => row.match)).toEqual([
       { column: 7, index: 0 },
@@ -170,6 +179,7 @@ describe("buildSearchItems", () => {
       linesByPath: new Map([["a.ts", lines(150)]]),
       matches: [match("a.ts", 2, "line 2"), match("a.ts", 99, "line 99")],
     });
+
     const rows = items.filter((item) => item.kind === "line");
     expect(new Set(rows.map((row) => row.lineWidth))).toEqual(new Set([3]));
   });
@@ -181,6 +191,7 @@ describe("buildSearchItems", () => {
       linesByPath: new Map([["a.ts", ["alpha", "bravo", "charlie"]]]),
       matches: [match("a.ts", 2, "bravo")],
     });
+
     const rows = items.filter((item) => item.kind === "line");
     expect(rows.map((row) => row.text)).toEqual(["alpha", "bravo", "charlie"]);
   });
@@ -194,6 +205,7 @@ describe("isNavigableSearchItem", () => {
       linesByPath: new Map([["a.ts", lines(20)]]),
       matches: [match("a.ts", 2, "line 2"), match("a.ts", 10, "line 10")],
     });
+
     expect(items.filter(isNavigableSearchItem).map((item) => item.id)).toEqual([
       "search-header-a.ts",
       "search-line-a.ts-2",

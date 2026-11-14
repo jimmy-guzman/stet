@@ -12,8 +12,10 @@ export const scrollbarThumb = (
   const size = Math.max(1, Math.round((viewport * viewport) / rowCount));
   const maxTop = viewport - size;
   const maxScroll = rowCount - viewport;
+
   const top =
     maxScroll === 0 ? 0 : Math.round((maxTop * scrollTop) / maxScroll);
+
   return viewport <= 0 || rowCount <= viewport
     ? undefined
     : { size, top: Math.max(0, Math.min(top, maxTop)) };

@@ -29,6 +29,7 @@ test("renders the shell before any model is seeded", async () => {
   // Is destroyed. Seeding the next test must clear it before App reacts.
   state.setCurrentWorktreeDeleted(true);
   seedState(emptyModel, allScope);
+
   const { renderer, renderOnce, captureCharFrame } = await testRender(
     () => <App />,
     {
@@ -36,6 +37,7 @@ test("renders the shell before any model is seeded", async () => {
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
@@ -44,6 +46,7 @@ test("renders the shell before any model is seeded", async () => {
     const frame = await settleUntil("shell", (current) =>
       current.includes("q quit")
     );
+
     expect(frame).toContain("q quit");
   } finally {
     renderer.destroy();

@@ -53,6 +53,7 @@ export const restoreRegistry = (
   snapshot: ReturnType<typeof snapshotRegistry>
 ) => {
   registry.clear();
+
   for (const [name, theme] of snapshot) {
     registry.set(name, theme);
   }
@@ -65,6 +66,7 @@ export const selectThemeName = (
   if (selection === undefined) {
     return appearance;
   }
+
   return typeof selection === "string" ? selection : selection[appearance];
 };
 
@@ -98,11 +100,13 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
 
   const bundledOr = (name: string, value: string) => {
     const known = bundledThemeIds.has(value);
+
     if (!known) {
       issues.push(
         `theme "${name}": unknown syntax theme ${JSON.stringify(value)}`
       );
     }
+
     return known ? value : undefined;
   };
 
@@ -111,26 +115,34 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
     stack: string[]
   ): RegisteredTheme | undefined => {
     const cached = resolved.get(name);
+
     if (cached !== undefined) {
       return cached;
     }
+
     if (failed.has(name)) {
       return undefined;
     }
+
     const entry = raw[name];
+
     if (entry === undefined) {
       // Not a user theme: a built-in is the only other source (used by `base`).
       return builtins[name];
     }
+
     if (stack.includes(name)) {
       issues.push(`theme "${name}" has a circular base`);
       failed.add(name);
+
       return undefined;
     }
+
     if (!isPlainObject(entry)) {
       // Decode reports why a non-object entry isn't a theme
       tokensOf(name, entry);
       failed.add(name);
+
       return undefined;
     }
 
@@ -140,14 +152,17 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
       typeof baseName === "string"
         ? resolve(baseName, [...stack, name])
         : undefined;
+
     if (typeof baseName === "string" && base === undefined) {
       issues.push(`theme "${name}": base "${baseName}" not found`);
       failed.add(name);
+
       return undefined;
     }
 
     let syntaxTheme: string | undefined;
     let overrides: Record<string, unknown> = {};
+
     if (typeof syntaxValue === "string") {
       syntaxTheme = bundledOr(name, syntaxValue);
     } else if (isPlainObject(syntaxValue)) {
@@ -162,21 +177,27 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
 
     const mergedUi =
       base === undefined ? uiTokens : mergeDeep(base.tokens, uiTokens);
+
     const syntax = mergeDeep(
       base?.tokens.syntax ?? darkTheme.syntax,
       overrides
     );
+
     const candidate = isPlainObject(mergedUi)
       ? { ...mergedUi, syntax }
       : mergedUi;
 
     const tokens = tokensOf(name, candidate);
+
     if (tokens === undefined) {
       failed.add(name);
+
       return undefined;
     }
+
     const record: RegisteredTheme = { syntaxTheme, tokens };
     resolved.set(name, record);
+
     return record;
   };
 

@@ -22,6 +22,7 @@ export const words = (line: string): Word[] => {
   // UTF-16 offset, so an astral identifier glyph counts as one character and the
   // Returned offsets stay UTF-16 indices.
   let index = 0;
+
   for (const char of line) {
     if (IDENTIFIER.test(char)) {
       if (start === -1) {
@@ -31,11 +32,14 @@ export const words = (line: string): Word[] => {
       out.push({ end: index, start });
       start = -1;
     }
+
     index += char.length;
   }
+
   if (start !== -1) {
     out.push({ end: index, start });
   }
+
   return out;
 };
 
@@ -63,5 +67,6 @@ export const firstWord = (line: string): number => wordStarts(line)[0] ?? 0;
 /** The line's last word start, or 0 for a line with no words. */
 export const lastWord = (line: string): number => {
   const starts = wordStarts(line);
+
   return starts.at(-1) ?? 0;
 };

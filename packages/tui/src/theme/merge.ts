@@ -12,8 +12,10 @@ export const mergeDeep = (base: unknown, overrides: unknown): unknown => {
   }
 
   const out: Record<string, unknown> = { ...base };
+
   for (const [key, value] of Object.entries(overrides)) {
     out[key] = key in base ? mergeDeep(base[key], value) : value;
   }
+
   return out;
 };

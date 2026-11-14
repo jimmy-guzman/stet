@@ -44,24 +44,30 @@ export const computeFoldRegions = (
 
   for (let index = 0; index < navigable.length; index += 1) {
     const header = navigable[index];
+
     if (header === undefined || isBlank(header.content)) {
       continue;
     }
 
     const headerIndent = indentWidth(header.content);
     let end = index;
+
     for (let scan = index + 1; scan < navigable.length; scan += 1) {
       const scanned = navigable[scan];
+
       if (scanned === undefined) {
         break;
       }
+
       if (isBlank(scanned.content)) {
         continue;
       }
+
       if (indentWidth(scanned.content) > headerIndent) {
         end = scan;
         continue;
       }
+
       break;
     }
 
@@ -97,8 +103,10 @@ export const computeMarkdownFoldRegions = (
 ): FoldRegion[] => {
   const inFence: boolean[] = [];
   let fenced = false;
+
   for (let index = 0; index < navigable.length; index += 1) {
     inFence[index] = fenced;
+
     if (CODE_FENCE.test(navigable[index]?.content ?? "")) {
       fenced = !fenced;
     }
@@ -106,30 +114,40 @@ export const computeMarkdownFoldRegions = (
 
   const levelAt = (index: number) => {
     const line = navigable[index];
+
     return line === undefined || inFence[index]
       ? 0
       : headingLevel(line.content);
   };
 
   const regions: FoldRegion[] = [];
+
   for (let index = 0; index < navigable.length; index += 1) {
     const level = levelAt(index);
+
     if (level === 0) {
       continue;
     }
+
     let end = index;
+
     for (let scan = index + 1; scan < navigable.length; scan += 1) {
       const scanLevel = levelAt(scan);
+
       if (scanLevel > 0 && scanLevel <= level) {
         break;
       }
+
       end = scan;
     }
+
     // Trailing blank lines belong to the gap before the next heading, not the section.
     while (end > index && isBlank(navigable[end]?.content ?? "")) {
       end -= 1;
     }
+
     const header = navigable[index];
+
     if (end > index && header !== undefined) {
       regions.push({
         count: end - index,
@@ -153,10 +171,13 @@ export const foldRegionsFor = (navigable: NavigableLine[], mode: FoldMode) =>
 
 const nextLineRow = (rows: DiffRow[], from: number) => {
   let index = from;
+
   while (index < rows.length && rows[index]?.kind !== "line") {
     index += 1;
   }
+
   const row = rows[index];
+
   return row?.kind === "line" ? row : undefined;
 };
 
@@ -183,6 +204,7 @@ export const applyCollapsedRegions = (
     navigableLinesFromRows(rows),
     options.mode ?? "indent"
   ).filter((region) => options.folded.has(region.key));
+
   const regionByHeader = new Map(
     foldedRegions.map((region) => [region.headerNavIndex, region])
   );
@@ -204,6 +226,7 @@ export const applyCollapsedRegions = (
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
+
     if (row === undefined) {
       continue;
     }
@@ -212,12 +235,14 @@ export const applyCollapsedRegions = (
       const key = `gap:${gapOrdinal}`;
       gapOrdinal += 1;
       const following = nextLineRow(rows, index + 1);
+
       // A gap can sit inside a fold region that spans an elided middle (edits at both
       // Ends of a block); hide it with the folded body. Its ordinal stays reserved
       // Above so the remaining gap keys don't shift when the region unfolds.
       if (following !== undefined && following.navIndex <= skipUntil) {
         continue;
       }
+
       const revealSource = options.expandedGaps.has(key)
         ? options.gapSource
         : undefined;
@@ -236,12 +261,14 @@ export const applyCollapsedRegions = (
         });
         const firstNew = following.newLine - row.count;
         const firstOld = following.oldLine - row.count;
+
         for (let offset = 0; offset < row.count; offset += 1) {
           const source = revealSource.lines[firstNew - 1 + offset] ?? "";
           pushLine("context", firstOld + offset, firstNew + offset, [
             { text: source },
           ]);
         }
+
         continue;
       }
 
@@ -267,6 +294,7 @@ export const applyCollapsedRegions = (
     pushLine(row.type, row.oldLine, row.newLine, row.spans);
 
     const region = regionByHeader.get(row.navIndex);
+
     if (region !== undefined) {
       out.push({
         collapsed: true,
@@ -293,6 +321,7 @@ export const remapCursorAfterToggle = (
   next: NavigableLine[]
 ) => {
   const anchor = previous[cursorIndex];
+
   if (anchor === undefined) {
     return Math.max(0, Math.min(cursorIndex, next.length - 1));
   }
@@ -303,22 +332,28 @@ export const remapCursorAfterToggle = (
       : line.newLine === anchor.newLine;
 
   const exact = next.findIndex(sameLine);
+
   if (exact !== -1) {
     return exact;
   }
 
   const anchorKey = anchor.newLine ?? anchor.oldLine ?? 0;
   let fallback = 0;
+
   for (let index = 0; index < next.length; index += 1) {
     const line = next[index];
+
     if (line === undefined) {
       continue;
     }
+
     if ((line.newLine ?? line.oldLine ?? 0) <= anchorKey) {
       fallback = index;
       continue;
     }
+
     break;
   }
+
   return fallback;
 };

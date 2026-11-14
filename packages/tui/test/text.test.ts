@@ -12,6 +12,7 @@ const rangeFrom = (start: number, length: number) =>
 
 const visibleMatch = (result: { text: string; matched: number[] }) => {
   const chars = toCodePoints(result.text);
+
   return result.matched.map((index) => chars[index]).join("");
 };
 
@@ -100,6 +101,7 @@ describe("truncateAroundMatch", () => {
   test("keeps a basename match by anchoring to the tail", () => {
     const text = "src/very/deep/nested/path/to/error-patterns.md";
     const start = text.indexOf("patterns");
+
     const result = truncateAroundMatch(
       text,
       rangeFrom(start, "patterns".length),

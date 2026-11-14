@@ -31,10 +31,12 @@ describe("markdown folding", () => {
       "run the command",
       "",
     ].join("\n");
+
     const repoRoot = createFixtureRepo("stet-fold-md-", {
       "docs.md": source,
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
     });
+
     // Edit a line inside the Install section so the file changes and the caret homes there.
     writeFileSync(
       path.join(repoRoot, "docs.md"),
@@ -43,11 +45,13 @@ describe("markdown folding", () => {
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
+
     const { renderer, renderOnce, captureCharFrame, mockInput } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
       });
+
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -57,17 +61,21 @@ describe("markdown folding", () => {
       // Fold the Install section: its body collapses, but sibling headings stay. An
       // Indent-based fold would find nothing here (every line is at column 0).
       mockInput.pressKey("z");
+
       const folded = await settleUntil("section folded", (frame) =>
         /\d+ lines folded/u.test(frame)
       );
+
       expect(folded).not.toContain("step three");
       expect(folded).toContain("## Install");
       expect(folded).toContain("## Usage");
 
       mockInput.pressKey("z");
+
       const unfolded = await settleUntil("section unfolded", (frame) =>
         frame.includes("step three")
       );
+
       expect(unfolded).not.toContain("lines folded");
     } finally {
       renderer.destroy();

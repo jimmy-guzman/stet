@@ -92,6 +92,7 @@ describe("parseCliArgs", () => {
       "--ide",
       "code --goto {file}:{line}",
     ]);
+
     expect(result.editor).toBe("nvim +{line} {file}");
     expect(result.ide).toBe("code --goto {file}:{line}");
     expect(result.scope.kind).toBe("all");
@@ -190,6 +191,7 @@ describe("scopeKinds", () => {
 
 describe("scopeLabel", () => {
   const SHA1_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
   const SHA256_EMPTY_TREE =
     "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 
@@ -259,13 +261,16 @@ describe("scopeMenuLabel", () => {
 describe("helpText", () => {
   test("documents every keybinding from the registry", () => {
     const help = helpText();
+
     for (const group of keyHelpGroups()) {
       expect(help).toContain(`${group.heading}:`);
+
       for (const entry of group.entries) {
         expect(help).toContain(entry.combo);
         expect(help).toContain(entry.description);
       }
     }
+
     expect(help).toContain("The view is live");
   });
 

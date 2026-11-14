@@ -82,6 +82,7 @@ describe("history stack", () => {
 describe("jump dedup", () => {
   test("a jump to the current location refreshes in place, not a duplicate", () => {
     const start = initialNav(loc("a", "jump", { cursorLine: 5 }));
+
     const again = navigate(
       start,
       loc("a", "jump", {
@@ -89,6 +90,7 @@ describe("jump dedup", () => {
         viewport: { scrollTop: 8, scrollX: 0 },
       })
     );
+
     expect(again.tabs[0].entries).toHaveLength(1);
     expect(canBack(again)).toBe(false);
     // The current entry is refreshed with the new viewport rather than duplicated.
@@ -98,12 +100,14 @@ describe("jump dedup", () => {
   test("re-navigating to the current entry keeps forward history", () => {
     // Entries a, b, c at index 2
     const nav = open(open(initialNav(loc("a")), "b"), "c");
+
     // Go back to "b", then navigate to the same visible "b": a no-op move must not
     // Truncate the forward "c".
     const restay = navigate(
       back(nav),
       loc("b", "jump", { cursorLine: undefined })
     );
+
     expect(canForward(restay)).toBe(true);
     expect(currentLocation(forward(restay))?.path).toBe("c");
   });
@@ -113,6 +117,7 @@ describe("jump dedup", () => {
       navigate(initialNav(loc("x")), loc("a", "jump", { cursorLine: 50 })),
       loc("a", "jump", { cursorLine: 80 })
     );
+
     expect(currentLocation(nav)?.cursorLine).toBe(80);
     expect(currentLocation(back(nav))?.cursorLine).toBe(50);
     expect(currentLocation(back(back(nav)))?.path).toBe("x");
@@ -126,6 +131,7 @@ describe("browse coalescing", () => {
       "d",
       "browse"
     );
+
     expect(currentLocation(nav)?.path).toBe("d");
     // One step back from the coalesced browse head lands on the original "a".
     expect(currentLocation(back(nav))?.path).toBe("a");
@@ -149,6 +155,7 @@ describe("browse coalescing", () => {
 describe("recordCurrent", () => {
   test("overwrites the current entry, so back restores the recorded spot", () => {
     const nav = open(initialNav(loc("a")), "b");
+
     const recorded = recordCurrent(
       nav,
       loc("b", "jump", {
@@ -156,6 +163,7 @@ describe("recordCurrent", () => {
         viewport: { scrollTop: 9, scrollX: 3 },
       })
     );
+
     const backOne = back(recorded);
     // The "b" entry we left now carries the recorded cursor/scroll.
     expect(currentLocation(forward(backOne))?.cursorLine).toBe(42);
@@ -178,6 +186,7 @@ describe("MRU viewports", () => {
       cursorLine: 7,
       viewport: { scrollTop: 5, scrollX: 1 },
     });
+
     expect(recall(nav, "a")).toEqual({
       cursorLine: 7,
       viewport: { scrollTop: 5, scrollX: 1 },
@@ -192,10 +201,12 @@ describe("MRU viewports", () => {
       initialNav(loc("a")),
       loc("a", "jump", { viewport: { scrollTop: 9, scrollX: 0 } })
     );
+
     const nav = remember(open(left, "b"), "a", {
       cursorLine: undefined,
       viewport: { scrollTop: 20, scrollX: 0 },
     });
+
     expect(currentLocation(back(nav))?.viewport.scrollTop).toBe(9);
     expect(recall(nav, "a")?.viewport.scrollTop).toBe(20);
   });
@@ -271,6 +282,7 @@ describe("tabs", () => {
       "2",
       false
     );
+
     nav = closeTab(nav, "2");
     expect(nav.tabs).toHaveLength(2);
     expect(nav.activeTabId).toBe("1");
@@ -284,6 +296,7 @@ describe("tabs", () => {
       "2",
       false
     );
+
     nav = selectTab(nav, "1");
     nav = closeTab(nav, "1");
     expect(nav.activeTabId).toBe("2");

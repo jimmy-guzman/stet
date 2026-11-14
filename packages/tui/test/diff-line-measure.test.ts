@@ -5,6 +5,7 @@ import { createLineMeasurer } from "@/components/diff/line-measure";
 // Drives the real OpenTUI text engine (the same call the renderable's layout
 // Uses), so these assert rendered wrap behavior, not a reimplemented formula.
 const measurer = createLineMeasurer("unicode");
+
 afterAll(() => {
   measurer.destroy();
 });

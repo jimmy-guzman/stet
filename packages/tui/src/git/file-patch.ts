@@ -77,9 +77,11 @@ export const fileDiffSides = (
     if (scope.kind === "staged") {
       return { kind: "git", spec: `:${file.path}` };
     }
+
     if (scope.kind === "last-commit" || scope.kind === "commit") {
       return { kind: "git", spec: `${scope.headRef ?? "HEAD"}:${file.path}` };
     }
+
     return { kind: "worktree" };
   };
 
@@ -121,17 +123,22 @@ export const readWorktreeSide = async (
   path: string
 ): Promise<SideContent> => {
   const absolutePath = `${repoRoot}/${path}`;
+
   try {
     const stat = await lstat(absolutePath);
+
     if (stat.isSymbolicLink()) {
       return { kind: "text", text: await readlink(absolutePath) };
     }
+
     if (!stat.isFile()) {
       return { kind: "missing" };
     }
+
     if (stat.size > MAX_SIDE_BYTES) {
       return { kind: "too-large" };
     }
+
     return classifySideBytes(await readFile(absolutePath));
   } catch {
     return { kind: "missing" };
@@ -161,6 +168,7 @@ export const buildFilePatch = (
   }
 
   const created = file.kind === "added" || file.kind === "untracked";
+
   if (
     !created &&
     file.kind !== "deleted" &&

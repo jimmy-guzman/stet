@@ -26,20 +26,24 @@ describe("configured keybindings", () => {
       "src/a.ts": "export const a = 1\n",
       "zz.md": "sentinel\n",
     });
+
     // Teardown wraps everything after each resource appears (the keys registry
     // Is process-global and outside resetState, so a throw during setup must
     // Not leak the rebind into later tests).
     try {
       const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
       seedState(model, { kind: "all", ref: "HEAD" });
+
       const { issues, set } = resolveKeybindings({
         "toggle-sidebar": "ctrl+e",
       });
+
       expect(issues).toEqual([]);
       registerKeybindings(set);
 
       const { renderer, renderOnce, captureCharFrame, mockInput } =
         await testRender(() => <App />, { height: 30, width: 90 });
+
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
       try {
@@ -47,11 +51,13 @@ describe("configured keybindings", () => {
 
         // The default combo no longer toggles.
         mockInput.pressKey("b", { ctrl: true });
+
         const afterDefault = await settleUntil(
           "sidebar intact",
           (frame) => frame.includes("zz.md"),
           3
         );
+
         expect(afterDefault).toContain("zz.md");
 
         // The configured combo does.

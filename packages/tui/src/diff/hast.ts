@@ -35,6 +35,7 @@ const walk = (
           : { fg: inheritedFg, text: node.value }
       );
     }
+
     return;
   }
 
@@ -44,6 +45,7 @@ const walk = (
 
   const properties = isRecord(node.properties) ? node.properties : undefined;
   const fg = colorFromStyle(properties?.style) ?? inheritedFg;
+
   for (const child of node.children) {
     walk(child, fg, out);
   }
@@ -55,6 +57,7 @@ const walk = (
  */
 export const flattenLineSpans = (line: unknown): RenderSpan[] => {
   const out: RenderSpan[] = [];
+
   if (isRecord(line) && Array.isArray(line.children)) {
     for (const child of line.children) {
       walk(child, undefined, out);
@@ -62,6 +65,7 @@ export const flattenLineSpans = (line: unknown): RenderSpan[] => {
   }
 
   const last = out.at(-1);
+
   if (last !== undefined && last.text.endsWith("\n")) {
     last.text = last.text.slice(0, -1);
   }

@@ -102,5 +102,6 @@ export const isMonochromeTheme = (theme: Theme) => {
       : typeof node === "object" &&
         node !== null &&
         Object.values(node).every(grey);
+
   return grey(theme);
 };

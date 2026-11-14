@@ -38,6 +38,7 @@ describe("computeFoldRegions", () => {
       nav(4, "}"),
       nav(5, "const top = 1;"),
     ]);
+
     expect(regions).toEqual([
       { count: 2, endNavIndex: 2, headerNavIndex: 0, key: "fold:n1" },
     ]);
@@ -51,6 +52,7 @@ describe("computeFoldRegions", () => {
       nav(4, "  }"),
       nav(5, "}"),
     ]);
+
     expect(regions).toEqual([
       { count: 3, endNavIndex: 3, headerNavIndex: 0, key: "fold:n1" },
       { count: 1, endNavIndex: 2, headerNavIndex: 1, key: "fold:n2" },
@@ -66,6 +68,7 @@ describe("computeFoldRegions", () => {
       nav(5, ""),
       nav(6, "g = 1"),
     ]);
+
     expect(regions).toEqual([
       { count: 3, endNavIndex: 3, headerNavIndex: 0, key: "fold:n1" },
     ]);
@@ -96,6 +99,7 @@ describe("applyCollapsedRegions folds", () => {
       expandedGaps: new Set(),
       folded: new Set(["fold:n1"]),
     });
+
     expect(result.rows).toEqual([
       line(0, 1, "function foo() {"),
       {
@@ -123,10 +127,12 @@ describe("applyCollapsedRegions folds", () => {
       line(2, 6, "  const b = 2"),
       line(3, 7, "}"),
     ];
+
     const result = applyCollapsedRegions(spanning, {
       expandedGaps: new Set(),
       folded: new Set(["fold:n1"]),
     });
+
     expect(result.rows).toEqual([
       line(0, 1, "function foo() {"),
       {
@@ -153,10 +159,12 @@ describe("applyCollapsedRegions folds", () => {
       line(3, 4, "  }"),
       line(4, 5, "}"),
     ];
+
     const result = applyCollapsedRegions(nested, {
       expandedGaps: new Set(),
       folded: new Set(["fold:n1", "fold:n2"]),
     });
+
     expect(result.rows).toEqual([
       line(0, 1, "class C {"),
       {
@@ -195,6 +203,7 @@ describe("applyCollapsedRegions gaps", () => {
       folded: new Set(),
       gapSource: { lines: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] },
     });
+
     expect(result.rows[0]).toEqual({
       collapsed: false,
       count: 3,
@@ -215,6 +224,7 @@ describe("applyCollapsedRegions gaps", () => {
       expandedGaps: new Set(["gap:0"]),
       folded: new Set(),
     });
+
     expect(result.rows[0]).toMatchObject({
       collapsed: true,
       regionKind: "gap",
@@ -237,6 +247,7 @@ describe("remapCursorAfterToggle", () => {
         empty
       ).rows
     );
+
     expect(remapCursorAfterToggle(before, 3, after)).toBe(1);
   });
 
@@ -256,6 +267,7 @@ describe("computeMarkdownFoldRegions", () => {
       nav(5, "## Usage"),
       nav(6, "do this"),
     ]);
+
     expect(regions).toEqual([
       { count: 5, endNavIndex: 5, headerNavIndex: 0, key: "fold:n1" },
       { count: 1, endNavIndex: 3, headerNavIndex: 2, key: "fold:n3" },
@@ -271,6 +283,7 @@ describe("computeMarkdownFoldRegions", () => {
       nav(4, "```"),
       nav(5, "real text"),
     ]);
+
     expect(regions).toEqual([
       { count: 4, endNavIndex: 4, headerNavIndex: 0, key: "fold:n1" },
     ]);
@@ -283,6 +296,7 @@ describe("computeMarkdownFoldRegions", () => {
       nav(3, ""),
       nav(4, "# Next"),
     ]);
+
     expect(regions).toEqual([
       { count: 1, endNavIndex: 1, headerNavIndex: 0, key: "fold:n1" },
     ]);

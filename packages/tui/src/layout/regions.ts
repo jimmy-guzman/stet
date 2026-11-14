@@ -57,12 +57,16 @@ const STATUS_ROWS = 1;
 
 /** Narrowest a docked pane may become; shrinking past it closes the pane instead of clamping. */
 export const PANE_MIN_WIDTH = 24;
+
 /** Shortest a docked pane may become; shrinking past it closes the pane instead of clamping. */
 export const PANE_MIN_HEIGHT = 5;
+
 /** Columns the viewer is guaranteed, capping how wide a side dock can grow. */
 const VIEWER_MIN_WIDTH = 28;
+
 /** Rows the viewer is guaranteed: its border, its title row, and one line of content. */
 const VIEWER_MIN_HEIGHT = 4;
+
 /**
  * Rows a top- or bottom-docked pane takes without a manual size; the vertical peer of
  * `responsiveWidth`.
@@ -123,6 +127,7 @@ const carve = (
   if (!pane.open) {
     return { band, rect: EMPTY_PANE };
   }
+
   if (horizontalDock(pane.position)) {
     const extent = clampExtent(
       pane.widthOverride ?? responsiveWidth(band.width),
@@ -130,7 +135,9 @@ const carve = (
       PANE_MIN_WIDTH,
       VIEWER_MIN_WIDTH
     );
+
     const leading = pane.position === "left";
+
     return {
       band: {
         ...band,
@@ -145,13 +152,16 @@ const carve = (
       }),
     };
   }
+
   const extent = clampExtent(
     pane.heightOverride ?? PANE_DEFAULT_HEIGHT,
     band.height,
     PANE_MIN_HEIGHT,
     VIEWER_MIN_HEIGHT
   );
+
   const leading = pane.position === "top";
+
   return {
     band: {
       ...band,
@@ -179,12 +189,14 @@ export const computeLayout = (input: LayoutInput): Layout => {
     x: 0,
     y: 0,
   };
+
   const status = {
     height: STATUS_ROWS,
     width: input.terminalWidth,
     x: 0,
     y: Math.max(HEADER_ROWS, input.terminalHeight - STATUS_ROWS),
   };
+
   const band: Rect = {
     height: Math.max(0, input.terminalHeight - HEADER_ROWS - STATUS_ROWS),
     width: input.terminalWidth,
@@ -204,6 +216,7 @@ export const computeLayout = (input: LayoutInput): Layout => {
   }
 
   const sidebar = carve(band, input.sidebar);
+
   return {
     header,
     sidebar: sidebar.rect,

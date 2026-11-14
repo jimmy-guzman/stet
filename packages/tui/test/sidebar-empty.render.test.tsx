@@ -40,11 +40,14 @@ test("shows the changes-only empty state when nothing changed", async () => {
       width: 100,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
     const frame = await settleUntil("empty sidebar", (current) =>
       sidebarOf(current).includes("no changes")
     );
+
     const sidebar = sidebarOf(frame);
     expect(sidebar).toContain("no changes");
     expect(sidebar).toContain("press c to show all");
@@ -81,11 +84,14 @@ test("shows the empty-repo state when there are no files", async () => {
       width: 120,
     }
   );
+
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
     const frame = await settleUntil("empty repo sidebar", (current) =>
       sidebarOf(current).includes("no files")
     );
+
     const sidebar = sidebarOf(frame);
     expect(sidebar).toContain("no files");
     expect(sidebar).toContain("this repository has no files yet");

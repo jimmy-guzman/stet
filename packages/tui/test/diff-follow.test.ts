@@ -40,6 +40,7 @@ describe("followScrollTop", () => {
       height: 6,
       top: 20,
     });
+
     expect(
       followScrollTop({ ...base, current: settled, height: 6, top: 20 })
     ).toBe(settled);

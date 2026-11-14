@@ -23,6 +23,7 @@ const openPath = (path: string) => {
 
 const onSubmit = () => {
   const path = state.fileComboboxResults()[state.fileComboboxIndex()];
+
   if (path === undefined) {
     state.setFileComboboxOpen(false);
   } else {
@@ -104,15 +105,19 @@ export const FileCombobox = () => {
           <Index each={state.fileComboboxResults()}>
             {(path, index) => {
               const changed = () => state.gitModel().changedByPath.get(path());
+
               const nameFg = () => {
                 if (index === state.fileComboboxIndex()) {
                   return theme.colors.text.selected;
                 }
+
                 const entry = changed();
+
                 return entry === undefined
                   ? theme.colors.text.secondary
                   : theme.colors.kind[entry.kind];
               };
+
               return (
                 <box
                   id={`file-combobox-${index}`}
@@ -189,28 +194,34 @@ const HighlightedPath = (props: {
     if (ref === undefined) {
       return;
     }
+
     const display = truncateAroundMatch(
       props.path(),
       matchIndices(props.query(), props.path()),
       props.max()
     );
+
     const highlighted = new Set(display.matched);
     const spans: { fg: string; text: string }[] = [];
+
     for (const [index, char] of toCodePoints(display.text).entries()) {
       const color = highlighted.has(index) ? props.matchFg() : props.fg();
       const last = spans.at(-1);
+
       if (last !== undefined && last.fg === color) {
         last.text += char;
       } else {
         spans.push({ fg: color, text: char });
       }
     }
+
     ref.content = new StyledText(
       (spans.length === 0 ? [{ fg: props.fg(), text: "" }] : spans).map(
         (span) => fg(span.fg)(span.text)
       )
     );
   });
+
   return (
     <text
       ref={(el) => {

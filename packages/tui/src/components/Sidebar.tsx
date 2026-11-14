@@ -1,7 +1,7 @@
 import { createMemo, Index, Show } from "solid-js";
 
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 
 import { ListScrollbar } from "./ListScrollbar";
@@ -10,7 +10,6 @@ import { TreeRow } from "./TreeRow";
 import { windowWheelHandler } from "./wheel";
 
 export function Sidebar() {
-  const theme = useTheme();
   // One guard for the whole tree: double-clicking a file row pins it, mirroring
   // The tab strip. Owned here (not per row) so it outlives a row remount.
   const isDoubleFileClick = createDoubleClickGuard();

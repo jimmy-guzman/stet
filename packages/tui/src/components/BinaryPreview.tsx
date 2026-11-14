@@ -2,7 +2,7 @@ import { Show } from "solid-js";
 
 import type { ImageMeta } from "@/file/image-meta";
 import type { BinaryDiff, SideMeta } from "@/git/file-patch";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { formatBytes } from "@/utils/format-bytes";
 
 import { FileIcon } from "./FileIcon";
@@ -30,8 +30,6 @@ export function BinaryPreview(props: {
   single?: SideMeta;
   diff?: BinaryDiff;
 }) {
-  const theme = useTheme();
-
   const labelSide = () => props.single ?? props.diff?.newSide ?? props.diff?.oldSide;
 
   const detail = () => {

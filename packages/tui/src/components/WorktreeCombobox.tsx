@@ -4,7 +4,7 @@ import { batch, createEffect, Index, Show } from "solid-js";
 import { recencyFraction } from "@/git/activity";
 import { WORKTREE_ACTIVE_MS } from "@/git/worktree";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { worktreeLabel } from "@/ui-helpers";
 import { lerpHex } from "@/utils/color";
 import { relativeTime } from "@/utils/relative-time";
@@ -23,7 +23,6 @@ const LABEL_MIN = 8;
 const CHROME_CELLS = 4;
 
 export function WorktreeCombobox() {
-  const theme = useTheme();
   let worktreeComboboxRef: ScrollBoxRenderable | undefined;
 
   createEffect(() => {

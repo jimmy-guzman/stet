@@ -13,7 +13,6 @@ import {
   openTab,
   pinTab,
   prevTab,
-  previewTab,
   unpinTab,
   recall,
   recordCurrent,
@@ -184,12 +183,12 @@ describe("MRU viewports", () => {
 describe("preview / pin", () => {
   test("the seeded tab is a preview tab", () => {
     const nav = initialNav(loc("a"));
-    expect(previewTab(nav)?.id).toBe("0");
+    expect(nav.tabs.find((tab) => tab.preview)?.id).toBe("0");
   });
 
   test("pinTab clears the preview flag and is idempotent", () => {
     const pinned = pinTab(initialNav(loc("a")), "0");
-    expect(previewTab(pinned)).toBeUndefined();
+    expect(pinned.tabs.find((tab) => tab.preview)).toBeUndefined();
     expect(pinTab(pinned, "0")).toEqual(pinned);
   });
 
@@ -197,21 +196,21 @@ describe("preview / pin", () => {
     // Tab 0 pinned (active), tab 1 a leftover preview.
     const nav = openTab(pinTab(initialNav(loc("a")), "0"), loc("b"), "1", true);
     const unpinned = unpinTab(nav, "0");
-    expect(previewTab(unpinned)?.id).toBe("0");
+    expect(unpinned.tabs.find((tab) => tab.preview)?.id).toBe("0");
     expect(unpinned.tabs.filter((tab) => tab.preview)).toHaveLength(1);
     expect(unpinned.tabs.some((tab) => tab.id === "1")).toBe(false);
   });
 
   test("a freshly opened preview tab is the only preview", () => {
     const nav = openTab(pinTab(initialNav(loc("a")), "0"), loc("b"), "1", true);
-    expect(previewTab(nav)?.id).toBe("1");
+    expect(nav.tabs.find((tab) => tab.preview)?.id).toBe("1");
     expect(nav.tabs.filter((tab) => tab.preview)).toHaveLength(1);
   });
 
   test("opening a new preview replaces the existing preview", () => {
     const nav = openTab(initialNav(loc("a")), loc("b"), "1", true);
     expect(nav.tabs).toHaveLength(1);
-    expect(previewTab(nav)?.id).toBe("1");
+    expect(nav.tabs.find((tab) => tab.preview)?.id).toBe("1");
   });
 
   test("closeTab and unpinTab are no-ops for an unknown id", () => {
@@ -261,7 +260,7 @@ describe("tabs", () => {
     const pinned = pinTab(initialNav(loc("a")), "0");
     const closed = closeTab(pinned, "0");
     expect(closed.tabs).toHaveLength(1);
-    expect(previewTab(closed)?.id).toBe("0");
+    expect(closed.tabs.find((tab) => tab.preview)?.id).toBe("0");
   });
 
   test("nextTab and prevTab cycle with wrap-around", () => {

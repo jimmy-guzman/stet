@@ -259,30 +259,6 @@ export function parseBranch(output: string): string | undefined {
   return (upstream === -1 ? named : named.slice(0, upstream)).trim() || undefined;
 }
 
-export function mergeModel(prev: GitModel, next: GitModel): GitModel {
-  if (
-    prev.repoRoot === next.repoRoot &&
-    prev.scopeKey === next.scopeKey &&
-    prev.repoFilesKey === next.repoFilesKey &&
-    prev.branch === next.branch &&
-    sameChangedSet(prev.changed, next.changed)
-  ) {
-    return prev;
-  }
-
-  // Keep identity for untouched files so per-file memos (e.g. the selected diff) hold
-  const changed = next.changed.map((file) => {
-    const before = prev.changedByPath.get(file.path);
-    return before !== undefined && sameChangedFile(before, file) ? before : file;
-  });
-
-  if (changed.every((file, index) => file === next.changed[index])) {
-    return next;
-  }
-
-  return { ...next, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) };
-}
-
 function sameChangedSet(a: ChangedFile[], b: ChangedFile[]) {
   return a.length === b.length && a.every((file, i) => sameChangedFile(file, b[i]));
 }

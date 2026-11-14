@@ -5,13 +5,12 @@ import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { STATUS_BAR_PADDING } from "@/status/model";
 import type { StatusBarActivity, StatusBarModel } from "@/status/model";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
 import { RecencyDot } from "./RecencyDot";
 
 export function StatusBar() {
-  const theme = useTheme();
   const model = () => state.statusBarModel();
   // Narrowed per branch so each `Match` gets the member it renders; the model is a closed union,
   // So a new content kind is a type error here rather than a silently blank row.

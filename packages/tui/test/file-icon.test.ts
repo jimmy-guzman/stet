@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { fileIcon, fileIconModel, folderIcon, symlinkIcon } from "@/utils/file-icon";
+import { fileIconForPath, namedIcon } from "@/file-support/registry";
+
+const fileIcon = (path: string) => fileIconForPath(path).glyph;
 
 describe("fileIcon", () => {
   test("matches by extension", () => {
@@ -113,7 +115,7 @@ describe("fileIcon", () => {
   test("prefers an exact filename over its extension", () => {
     // Package.json is a json file, but the stem entry beats the .json extension glyph.
     expect(fileIcon("package.json")).toBe("\u{e718}");
-    expect(fileIconModel("package.json").name).toBe("node");
+    expect(fileIconForPath("package.json").name).toBe("node");
     expect(fileIcon("package.json")).not.toBe(fileIcon("generic.json"));
     // Bunfig.toml gets the bun glyph, not the generic toml glyph.
     expect(fileIcon("bunfig.toml")).toBe("\u{e76f}");
@@ -210,17 +212,15 @@ describe("fileIcon", () => {
   });
 });
 
-describe("folderIcon", () => {
-  test("reflects expanded state", () => {
-    expect(folderIcon(true)).toBe("\u{f0dcf}");
-    expect(folderIcon(false)).toBe("\u{f0256}");
-    expect(folderIcon(true)).not.toBe(folderIcon(false));
+describe("namedIcon", () => {
+  test("folder and folder-open are distinct glyphs", () => {
+    expect(namedIcon("folder-open").glyph).toBe("\u{f0dcf}");
+    expect(namedIcon("folder").glyph).toBe("\u{f0256}");
+    expect(namedIcon("folder-open").glyph).not.toBe(namedIcon("folder").glyph);
   });
-});
 
-describe("symlinkIcon", () => {
-  test("is the symlink glyph, independent of the target name", () => {
-    expect(symlinkIcon()).toBe("\u{f481}");
-    expect(symlinkIcon()).not.toBe(fileIcon("link.ts"));
+  test("symlink is its own glyph, independent of the target name", () => {
+    expect(namedIcon("symlink").glyph).toBe("\u{f481}");
+    expect(namedIcon("symlink").glyph).not.toBe(fileIcon("link.ts"));
   });
 });

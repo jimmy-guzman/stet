@@ -6,7 +6,7 @@ import { resolveTheme } from "./resolve";
 import type { ResolvedTheme } from "./resolve";
 import { isMonochromeTheme } from "./tokens";
 
-// The reactive theme state, the single seam the UI (useTheme) and the diff engine
+// The reactive theme state, the single seam the UI (`theme`) and the diff engine
 // Read. `appearance` follows the terminal: detected once at startup, then updated
 // Live by the renderer's theme_mode event. `selection` is the config choice. The
 // Active theme derives from both, so a dark/light flip re-resolves everything that

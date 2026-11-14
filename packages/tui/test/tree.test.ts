@@ -7,7 +7,6 @@ import {
   decorateTree,
   defaultExpandedDirectories,
   expandAncestorsForPath,
-  findRowIndexForPath,
   firstFileInNode,
   flattenTree,
 } from "@/git/tree";
@@ -218,12 +217,6 @@ describe("expansion", () => {
 });
 
 describe("navigation helpers", () => {
-  test("finds the row index for a path", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, { changesOnly: false });
-    const rows = flattenTree(tree, new Set(["dir:src"]));
-    expect(findRowIndexForPath(rows, "src/git.ts")).toBeGreaterThan(0);
-  });
-
   test("finds the first file in a directory", () => {
     const tree = buildFileTree(repoFiles, changedByPath, { changesOnly: false });
     const src = tree.find((node) => node.type === "directory" && node.path === "src");

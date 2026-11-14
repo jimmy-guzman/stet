@@ -3,7 +3,7 @@ import { fg, StyledText } from "@opentui/core";
 import { batch, createEffect, Index, Show } from "solid-js";
 
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { kindLetter } from "@/ui-helpers";
 import { matchIndices } from "@/utils/fuzzy";
 import { toCodePoints, truncateAroundMatch } from "@/utils/text";
@@ -12,7 +12,6 @@ import { FileIcon } from "./FileIcon";
 import { RecencyDot } from "./RecencyDot";
 
 export function FileCombobox() {
-  const theme = useTheme();
   let fileComboboxRef: ScrollBoxRenderable | undefined;
 
   createEffect(() => {

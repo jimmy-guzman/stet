@@ -10,9 +10,6 @@ export interface ActivityLog {
   events: ActivityEvent[];
 }
 
-export type RecencyLevel = "fresh" | "recent" | "none";
-
-export const FRESH_MS = 5000;
 export const RECENT_MS = 30_000;
 
 const MAX_EVENTS = 1000;
@@ -61,14 +58,6 @@ export function directoryRecency(recencyByPath: Map<string, number>) {
 
 export function latestActivity(log: ActivityLog): ActivityEvent | undefined {
   return log.events.at(-1);
-}
-
-export function recencyLevel(at: number | undefined, now: number): RecencyLevel {
-  if (at === undefined || now - at >= RECENT_MS) {
-    return "none";
-  }
-
-  return now - at < FRESH_MS ? "fresh" : "recent";
 }
 
 /**

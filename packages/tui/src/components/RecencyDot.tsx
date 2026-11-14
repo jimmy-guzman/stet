@@ -2,7 +2,7 @@ import { Show } from "solid-js";
 
 import { recencyFraction } from "@/git/activity";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
 // The dot fades from recency.fresh toward recency.aged across an activity's
@@ -16,7 +16,6 @@ export function RecencyDot(props: {
   marginLeft?: number;
   marginRight?: number;
 }) {
-  const theme = useTheme();
   // `recencyFraction` is 0 at its freshest, so the dot must key on the resolved
   // Color (string | undefined), never on the fraction's truthiness.
   const color = () => {

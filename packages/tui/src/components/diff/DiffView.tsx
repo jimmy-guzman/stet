@@ -23,7 +23,7 @@ import {
 import { wordAt } from "@/diff/words";
 import { state } from "@/state";
 import { activeThemeMonochrome } from "@/theme/active";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { caretCell } from "@/viewer/anchor";
 
 import { CommandMenu } from "../CommandMenu";
@@ -48,7 +48,6 @@ function StyledLine(props: {
   scrollX: number;
   caret: CaretRange | undefined;
 }) {
-  const theme = useTheme();
   let ref: TextRenderable | undefined;
   createEffect(() => {
     if (ref === undefined) {
@@ -98,7 +97,6 @@ function StyledLine(props: {
 // Oscillates. That stable width is the property that keeps OpenTUI's layout from
 // Thrashing into the scheduler wedge the built-in `<diff>` triggered.
 export function DiffView() {
-  const theme = useTheme();
   const renderer = useRenderer();
   const measurer = createLineMeasurer(renderer.widthMethod);
   onCleanup(() => measurer.destroy());

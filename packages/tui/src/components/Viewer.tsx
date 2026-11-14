@@ -3,7 +3,7 @@ import { batch, createEffect, Match, on, Show, Switch } from "solid-js";
 
 import { firstWord, wordAt } from "@/diff/words";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { nearestNavigableIndex, placeholderText, viewerStats } from "@/ui-helpers";
 
 import { BinaryPreview } from "./BinaryPreview";
@@ -20,7 +20,6 @@ function caretForColumn(content: string, column: number) {
 }
 
 export function Viewer() {
-  const theme = useTheme();
   let findInputRef: InputRenderable | undefined;
 
   // Apply a navigation's pending restore once the target diff has loaded under the

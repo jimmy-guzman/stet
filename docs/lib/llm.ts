@@ -10,31 +10,24 @@
  * pages.
  */
 
-import { Data, Effect } from "effect";
 import type { InferPageType } from "fumadocs-core/source";
 
 import { siteUrl } from "@/lib/site";
 import type { source } from "@/lib/source";
 
-class LlmTextError extends Data.TaggedError("LlmTextError")<{ message: string }> {}
-
-export function getLLMText(page: InferPageType<typeof source>) {
-  return Effect.gen(function* () {
-    const processed = yield* Effect.tryPromise({
-      try: () => page.data.getText("processed"),
-      catch: (cause) =>
-        new LlmTextError({
-          message: `${page.url}: ${cause instanceof Error ? cause.message : String(cause)}`,
-        }),
+export async function getLLMText(page: InferPageType<typeof source>) {
+  const processed = await page.data.getText("processed").catch((cause: unknown) => {
+    throw new Error(`${page.url}: ${cause instanceof Error ? cause.message : String(cause)}`, {
+      cause,
     });
-
-    return [
-      `# ${page.data.title}`,
-      `URL: ${new URL(page.url, siteUrl).toString()}`,
-      "",
-      page.data.description ?? "",
-      "",
-      processed.trim(),
-    ].join("\n");
   });
+
+  return [
+    `# ${page.data.title}`,
+    `URL: ${new URL(page.url, siteUrl).toString()}`,
+    "",
+    page.data.description ?? "",
+    "",
+    processed.trim(),
+  ].join("\n");
 }

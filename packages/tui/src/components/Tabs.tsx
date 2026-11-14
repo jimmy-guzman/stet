@@ -2,7 +2,7 @@ import { createTextAttributes } from "@opentui/core";
 import { batch, createMemo, Index, Show } from "solid-js";
 
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 import { truncateLeft, truncateName } from "@/utils/text";
 
@@ -23,7 +23,6 @@ function baseName(path: string) {
 // Window centered on the active one, with ‹ › when more are clipped, so the
 // Active tab is always shown however narrow the viewer.
 export function Tabs() {
-  const theme = useTheme();
   const isDoubleClick = createDoubleClickGuard();
 
   const layout = createMemo(() => {

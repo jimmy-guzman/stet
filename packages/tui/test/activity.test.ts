@@ -3,11 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
   directoryRecency,
   emptyActivityLog,
-  FRESH_MS,
   lastChangedAt,
   latestActivity,
   recencyFraction,
-  recencyLevel,
   recordActivity,
   RECENT_MS,
 } from "@/git/activity";
@@ -78,17 +76,6 @@ describe("directoryRecency", () => {
   test("an unrelated directory has no key", () => {
     const byDirectory = directoryRecency(new Map([["src/a.ts", 1000]]));
     expect(byDirectory.has("test")).toBe(false);
-  });
-});
-
-describe("recencyLevel", () => {
-  test("decays from fresh to recent to none", () => {
-    expect(recencyLevel(1000, 1000)).toBe("fresh");
-    expect(recencyLevel(1000, 1000 + FRESH_MS - 1)).toBe("fresh");
-    expect(recencyLevel(1000, 1000 + FRESH_MS)).toBe("recent");
-    expect(recencyLevel(1000, 1000 + RECENT_MS - 1)).toBe("recent");
-    expect(recencyLevel(1000, 1000 + RECENT_MS)).toBe("none");
-    expect(recencyLevel(undefined, 1000)).toBe("none");
   });
 });
 

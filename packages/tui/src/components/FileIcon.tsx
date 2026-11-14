@@ -1,16 +1,15 @@
 import { Show } from "solid-js";
 
+import { fileIconForPath, namedIcon } from "@/file-support/registry";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
-import { fileIconModel, symlinkIconModel } from "@/utils/file-icon";
+import { theme } from "@/theme/context";
 
 /**
  * Keeps the shared file icon in a fixed two-cell box so Nerd Font width cannot shift list columns.
  * The repo-relative path lets full-path associations resolve consistently across every surface.
  */
 export function FileIcon(props: { path: string; symlink?: boolean }) {
-  const theme = useTheme();
-  const model = () => (props.symlink ? symlinkIconModel() : fileIconModel(props.path));
+  const model = () => (props.symlink ? namedIcon("symlink") : fileIconForPath(props.path));
   return (
     <Show when={state.iconsEnabled()}>
       <box width={2} overflow="hidden">

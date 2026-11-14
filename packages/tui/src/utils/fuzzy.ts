@@ -1,17 +1,9 @@
+import { toCodePoints } from "./text";
+
 export interface RankOptions {
   lastChangedAt: Map<string, number>;
   changed: Set<string>;
   limit: number;
-}
-
-// Splits by Unicode code point (not UTF-16 code unit), so a surrogate-pair
-// Emoji stays one char instead of splitting into two.
-function toChars(value: string): string[] {
-  const chars: string[] = [];
-  for (const char of value) {
-    chars.push(char);
-  }
-  return chars;
 }
 
 // A per-string bitset of which ascii letters/digits/hyphens it contains,
@@ -83,7 +75,7 @@ interface QueryPrep {
 }
 
 function prepareQuery(query: string): QueryPrep {
-  const original = toChars(query);
+  const original = toCodePoints(query);
   const lower = original.map((char) => char.toLowerCase());
   return {
     bag: buildCharBag(lower),
@@ -113,7 +105,7 @@ function candidateFor(path: string): Candidate {
     return cached;
   }
 
-  const chars = toChars(path);
+  const chars = toCodePoints(path);
   const lower = chars.map((char) => char.toLowerCase());
   const candidate = { bag: buildCharBag(lower), chars, lower };
 
@@ -179,10 +171,10 @@ export function matchIndices(query: string, text: string): number[] {
     return [];
   }
 
-  const textLower = toChars(text).map((char) => char.toLowerCase());
+  const textLower = toCodePoints(text).map((char) => char.toLowerCase());
   const matched = new Set<number>();
   for (const term of terms) {
-    const termLower = toChars(term).map((char) => char.toLowerCase());
+    const termLower = toCodePoints(term).map((char) => char.toLowerCase());
     const run = lastSubsequenceRun(textLower, termLower);
     if (run >= 0) {
       for (let offset = 0; offset < termLower.length; offset += 1) {

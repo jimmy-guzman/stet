@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   changedPathsDiffer,
   diffArgs,
-  mergeModel,
+  mergeChanged,
   nameStatusArgs,
   numstatArgs,
   parseBranch,
@@ -412,48 +412,42 @@ describe("loadModel in a fixture repo", () => {
   });
 });
 
-describe("mergeModel", () => {
+describe("mergeChanged", () => {
   test("returns the same reference when nothing changed", () => {
     const prev = model([file("a.ts"), file("b.ts")]);
     const next = model([file("a.ts"), file("b.ts")]);
-    expect(mergeModel(prev, next)).toBe(prev);
+    expect(mergeChanged(prev, next)).toBe(prev);
   });
 
-  test("returns the next model when churn changes", () => {
+  test("takes the next files when churn changes", () => {
     const prev = model([file("a.ts")]);
     const next = model([file("a.ts", { additions: 9 })]);
-    expect(mergeModel(prev, next)).toBe(next);
-  });
-
-  test("returns a fresh model when repo files change, reusing untouched file objects", () => {
-    const stable = file("a.ts");
-    const prev = model([stable], "before");
-    const next = model([file("a.ts")], "after");
-    const merged = mergeModel(prev, next);
+    const merged = mergeChanged(prev, next);
     expect(merged).not.toBe(prev);
-    expect(merged.repoFilesKey).toBe("after");
-    expect(merged.changedByPath.get("a.ts")).toBe(stable);
+    expect(merged.changedByPath).toBe(next.changedByPath);
   });
 
   test("returns a fresh model when the scope changes, even with identical content", () => {
-    const prev = model([file("a.ts")], "key", "all:HEAD");
+    const stable = file("a.ts");
+    const prev = model([stable], "key", "all:HEAD");
     const next = model([file("a.ts")], "key", "unstaged:HEAD");
-    const merged = mergeModel(prev, next);
+    const merged = mergeChanged(prev, next);
     expect(merged).not.toBe(prev);
     expect(merged.scopeKey).toBe("unstaged:HEAD");
+    expect(merged.changedByPath.get("a.ts")).toBe(stable);
   });
 
-  test("returns the next model when only a file's mtime changes", () => {
+  test("takes the next file when only its mtime changes", () => {
     const prev = model([file("a.ts", { mtimeMs: 1 })]);
     const next = model([file("a.ts", { mtimeMs: 2 })]);
-    expect(mergeModel(prev, next)).toBe(next);
+    expect(mergeChanged(prev, next).changedByPath.get("a.ts")?.mtimeMs).toBe(2);
   });
 
   test("keeps identity for untouched files when other files churn", () => {
     const stable = file("a.ts");
     const prev = model([stable, file("b.ts")]);
     const next = model([file("a.ts"), file("b.ts", { additions: 9 })]);
-    const merged = mergeModel(prev, next);
+    const merged = mergeChanged(prev, next);
     expect(merged).not.toBe(prev);
     expect(merged.changedByPath.get("a.ts")).toBe(stable);
     expect(merged.changedByPath.get("b.ts")).toBe(next.changedByPath.get("b.ts"));

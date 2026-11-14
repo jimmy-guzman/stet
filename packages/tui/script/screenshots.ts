@@ -105,9 +105,9 @@ const SCREENSHOT_CONFIG = JSON.stringify(
  *
  * Two things here are calibrated, and the first attempt got both wrong. They all sit directly under
  * `src/`, so the jump to the newest leaves the other two on screen; three files from three
- * directories left the earliest one scrolled out of the tree. And they are spaced well past the 5s
- * `FRESH_MS`, so the dots land on three visibly different points of the fade; 3s apart put every
- * one of them in the same bracket and the ramp the shot exists to show read as one flat state.
+ * directories left the earliest one scrolled out of the tree. And they are spaced 6s apart, so the
+ * dots land a fifth of the 30s `RECENT_MS` fade apart from each other; 3s apart put every one of
+ * them at nearly the same point and the ramp the shot exists to show read as one flat state.
  *
  * `afterMs` is the wait before each edit, cumulative, and coupled to the tape's own settle below:
  * every edit must land before it presses `.`, and the oldest must still be inside the 30s window.

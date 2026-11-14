@@ -67,10 +67,6 @@ export function initialNav(location: Location | undefined, tabId = "0"): NavStat
   };
 }
 
-export function previewTab(nav: NavState): Tab | undefined {
-  return nav.tabs.find((tab) => tab.preview);
-}
-
 // Promote a tab to a persistent (pinned) tab; idempotent on an already-pinned one.
 export function pinTab(nav: NavState, id: string): NavState {
   return {

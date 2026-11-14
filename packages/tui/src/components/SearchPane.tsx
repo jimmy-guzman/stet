@@ -6,7 +6,7 @@ import type { RenderSpan } from "@/diff/hast";
 import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
 import { activeThemeName } from "@/theme/active";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 import { truncate } from "@/utils/text";
 import { isNavigableSearchItem } from "@/viewer/search-items";
@@ -36,8 +36,6 @@ const asLine = (item: SearchItem) => (item.kind === "line" ? item : undefined);
  * flat `searchItems` list, one terminal row per item.
  */
 export function SearchPane() {
-  const theme = useTheme();
-
   const innerWidth = () => Math.max(1, state.layout().viewer.content.width);
   // The results band reserves a width-1 scrollbar column; the full-width chrome
   // Rows (inputs, status, footer) keep `innerWidth`.

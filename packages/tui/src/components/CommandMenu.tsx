@@ -4,7 +4,7 @@ import { createMemo, Index, Show } from "solid-js";
 
 import { openInEditor } from "@/editor/open";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import type { CaretCell } from "@/viewer/anchor";
 import { placeCard } from "@/viewer/anchor";
 
@@ -24,7 +24,6 @@ export function CommandMenu(props: {
   viewportWidth: () => number;
   viewportHeight: () => number;
 }) {
-  const theme = useTheme();
   const renderer = useRenderer();
 
   const layout = createMemo(() => {

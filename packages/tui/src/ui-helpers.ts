@@ -45,24 +45,16 @@ export function placeholderText(content: FileContent | undefined) {
   return "file not found";
 }
 
+const KIND_LETTER: Record<ChangedFile["kind"], string> = {
+  added: "A",
+  deleted: "D",
+  modified: "M",
+  renamed: "R",
+  untracked: "U",
+};
+
 export function kindLetter(kind: ChangedFile["kind"]) {
-  if (kind === "untracked") {
-    return "U";
-  }
-
-  if (kind === "added") {
-    return "A";
-  }
-
-  if (kind === "deleted") {
-    return "D";
-  }
-
-  if (kind === "renamed") {
-    return "R";
-  }
-
-  return "M";
+  return KIND_LETTER[kind];
 }
 
 export function nearestNavigableIndex(

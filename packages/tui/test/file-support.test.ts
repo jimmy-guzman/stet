@@ -4,19 +4,19 @@ import { resolveFileSupportConfig } from "@/file-support/config";
 import {
   fileIconForPath,
   fileSupportForPath,
+  defaultFileSupportRegistry,
   registerFileSupport,
-  restoreFileSupport,
-  snapshotFileSupport,
 } from "@/file-support/registry";
 
 function withFileSupport(
   raw: Parameters<typeof resolveFileSupportConfig>[0],
   run: (issues: string[]) => void | Promise<void>,
 ) {
-  const snapshot = snapshotFileSupport();
   const resolved = resolveFileSupportConfig(raw);
   registerFileSupport(resolved.registry);
-  return Promise.resolve(run(resolved.issues)).finally(() => restoreFileSupport(snapshot));
+  return Promise.resolve(run(resolved.issues)).finally(() =>
+    registerFileSupport(defaultFileSupportRegistry()),
+  );
 }
 
 test("file matching resolves exact name, glob, extension, and dotfile specificity", async () => {

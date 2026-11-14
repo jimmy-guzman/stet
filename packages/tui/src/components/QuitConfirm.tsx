@@ -1,10 +1,9 @@
 import type { MouseEvent } from "@opentui/core";
 
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 
 export function QuitConfirm() {
-  const theme = useTheme();
   return (
     // Full-screen barrier: an alert dialog blocks the app behind it. The scrim dims
     // The background, and capturing mouse-down keeps a background click inert (never

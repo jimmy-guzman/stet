@@ -99,14 +99,11 @@ if (process.argv.includes("--check")) {
   // ParseKeyTables lowercases headings (renderKeyTables capitalizes them for display), so
   // Normalize the same way here: the check compares data, not the display casing.
   const expected = groups.map((group) => ({
-    entries: group.entries.map(
-      (entry) =>
-        [entry.combo, entry.description, entry.ids.join(", ")] as [
-          string,
-          string,
-          string,
-        ]
-    ),
+    entries: group.entries.map((entry) => [
+      entry.combo,
+      entry.description,
+      entry.ids.join(", "),
+    ]),
     heading: group.heading.toLowerCase(),
   }));
 

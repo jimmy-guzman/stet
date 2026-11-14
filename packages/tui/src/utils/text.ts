@@ -111,8 +111,10 @@ export const truncateAroundMatch = (
 
     return {
       matched: matched
+        .values()
         .filter((index) => index >= start && index < end)
-        .map((index) => index - start + prefix.length),
+        .map((index) => index - start + prefix.length)
+        .toArray(),
       text: `${prefix}${chars.slice(start, end).join("")}${trail ? "…" : ""}`,
     };
   };

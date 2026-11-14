@@ -113,11 +113,11 @@ try {
   // Also the only honest place to name it: `rev-parse` accepts objects `git diff` rejects (a blob)
   // And rejects arguments it takes (`main...HEAD`, an unborn `HEAD`), so gating the launch on it
   // Both blocked working invocations and let broken ones through to a wall of git usage output.
-  const startupFailure = (repoRoot: string, error: unknown) =>
+  const startupFailure = (repoRoot: string, cause: unknown) =>
     Effect.gen(function* explainStartup() {
-      const fallback = error instanceof Error ? error.message : String(error);
+      const fallback = cause instanceof Error ? cause.message : String(cause);
 
-      if (!(error instanceof GitError) || options.scope.kind === "unstaged") {
+      if (!(cause instanceof GitError) || options.scope.kind === "unstaged") {
         return fallback;
       }
 
@@ -212,9 +212,9 @@ try {
     renderer.destroy();
   };
 
-  const crash = (error: unknown) => {
+  const crash = (cause: unknown) => {
     restoreTerminal();
-    logError(error instanceof Error ? error.message : String(error));
+    logError(cause instanceof Error ? cause.message : String(cause));
     process.exit(1);
   };
 
@@ -291,11 +291,11 @@ try {
   }
 
   // The startup diff already failed, so a failure to explain it falls back to the raw message.
-  const explainFailure = async (error: unknown) => {
+  const explainFailure = async (cause: unknown) => {
     try {
-      return await runtime.runPromise(startupFailure(repoRoot, error));
+      return await runtime.runPromise(startupFailure(repoRoot, cause));
     } catch {
-      return error instanceof Error ? error.message : String(error);
+      return cause instanceof Error ? cause.message : String(cause);
     }
   };
 

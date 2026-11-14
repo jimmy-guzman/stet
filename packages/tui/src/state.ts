@@ -32,7 +32,7 @@ import {
   remapCursorAfterToggle,
 } from "./diff/regions";
 import type { GapSource } from "./diff/regions";
-import type { DiffRow, NavigableLine } from "./diff/rows";
+import type { DiffRow } from "./diff/rows";
 import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { openExternalCommand } from "./editor/reference";
 import { Editor } from "./editor/service";
@@ -1445,20 +1445,14 @@ const createState = () => {
   // The fold/gap sets and the loaded source (not the caret), so cursor moves don't
   // Recompute it. `truncated`/`truncatedHidden` stay on the raw `render` deliberately:
   // The maxLines cap is about the whole file, not what the user folded away.
-  const collapsedRender = createMemo(() => {
-    const view = diffView();
-
-    if (view === undefined) {
-      return { navigable: [] as NavigableLine[], rows: [] as DiffRow[] };
-    }
-
-    return applyCollapsedRegions(view.render.rows, {
+  const collapsedRender = createMemo(() =>
+    applyCollapsedRegions(diffView()?.render.rows ?? [], {
       expandedGaps: expandedGaps(),
       folded: foldedRegions(),
       gapSource: loadedGapSource(),
       mode: foldMode(),
-    });
-  });
+    })
+  );
 
   const navigableLines = createMemo(() => collapsedRender().navigable);
   const viewerRows = () => collapsedRender().rows;
@@ -1468,20 +1462,13 @@ const createState = () => {
   const collapsedNavigableFor = (
     folded: ReadonlySet<string>,
     gaps: ReadonlySet<string>
-  ) => {
-    const view = diffView();
-
-    if (view === undefined) {
-      return [] as NavigableLine[];
-    }
-
-    return applyCollapsedRegions(view.render.rows, {
+  ) =>
+    applyCollapsedRegions(diffView()?.render.rows ?? [], {
       expandedGaps: gaps,
       folded,
       gapSource: loadedGapSource(),
       mode: foldMode(),
     }).navigable;
-  };
 
   // Folds shrink `navigableLines`, so the caret can end up past its end; the Viewer's
   // Existing cursor clamp (keyed on `navigableLines().length`) already re-homes it.

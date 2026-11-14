@@ -263,7 +263,11 @@ const ensureLanguages = async (meta: { name: string; prevName?: string }) => {
   );
 
   await Promise.all(
-    [...pending].filter((lang) => !areLanguagesAttached(lang)).map(attach)
+    pending
+      .values()
+      .filter((lang) => !areLanguagesAttached(lang))
+      .map(attach)
+      .toArray()
   );
 };
 

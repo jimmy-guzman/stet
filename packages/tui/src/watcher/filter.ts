@@ -36,7 +36,7 @@ export const classify = (
   filename: string | null | undefined
 ): WatchEventClass => {
   // `fs.watch` omits the name on some events (`null` on macOS, `undefined` on Linux inotify).
-  if (typeof filename !== "string") {
+  if (filename === null || filename === undefined) {
     return gitInternalPrefix === "" ? "internal" : "worktree";
   }
 

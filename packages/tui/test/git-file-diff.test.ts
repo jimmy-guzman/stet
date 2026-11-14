@@ -77,7 +77,7 @@ const pathspecDiff = (
       env: stripGitEnv(process.env),
     });
   } catch (error) {
-    if (error !== null && typeof error === "object" && "stdout" in error) {
+    if (error instanceof Error && "stdout" in error) {
       return String(error.stdout);
     }
 

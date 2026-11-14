@@ -26,14 +26,19 @@ test("the default registry comes back when a callback throws synchronously", asy
   const before = fileSupportForPath("a.probe").syntax;
   expect(before).not.toBe("json");
 
-  const failure = await withFileSupport(
-    { files: { probe: { extensions: ["probe"], syntax: "json" } } },
-    () => {
-      throw new Error("assertion failed inside the callback");
-    }
-  ).catch((error: unknown) => error);
+  const [outcome] = await Promise.allSettled([
+    withFileSupport(
+      { files: { probe: { extensions: ["probe"], syntax: "json" } } },
+      () => {
+        throw new Error("assertion failed inside the callback");
+      }
+    ),
+  ]);
 
-  expect(failure).toEqual(new Error("assertion failed inside the callback"));
+  expect(outcome).toEqual({
+    reason: new Error("assertion failed inside the callback"),
+    status: "rejected",
+  });
 
   expect(fileSupportForPath("a.probe").syntax).toBe(before);
 });

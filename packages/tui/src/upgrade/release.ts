@@ -1,3 +1,9 @@
+import { Option, Schema } from "effect";
+
+const decodeRelease = Schema.decodeUnknownOption(
+  Schema.Struct({ tag_name: Schema.String })
+);
+
 const latestReleaseUrl =
   "https://api.github.com/repos/jimmy-guzman/stet/releases/latest";
 
@@ -66,14 +72,15 @@ export const fetchLatestVersion = async (): Promise<string | undefined> => {
       signal: AbortSignal.timeout(3000),
     });
 
-    const body: unknown = response.ok ? await response.json() : undefined;
+    if (!response.ok) {
+      return undefined;
+    }
 
-    const tag =
-      typeof body === "object" && body !== null && "tag_name" in body
-        ? body.tag_name
-        : undefined;
+    const release = decodeRelease(await response.json());
 
-    return typeof tag === "string" ? tagToVersion(tag) : undefined;
+    return Option.isSome(release)
+      ? tagToVersion(release.value.tag_name)
+      : undefined;
   } catch {
     return undefined;
   }

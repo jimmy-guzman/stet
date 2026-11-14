@@ -68,10 +68,11 @@ export const ProcessLive = Layer.succeed(Process)({
             // Launching shell or git hook), so cwd always governs repo discovery.
             env: { ...stripGitEnv(Bun.env), GIT_OPTIONAL_LOCKS: "0" },
             stderr: "pipe",
+            stdin:
+              options?.stdin === undefined
+                ? undefined
+                : new Blob([options.stdin]),
             stdout: "pipe",
-            ...(options?.stdin === undefined
-              ? {}
-              : { stdin: new Blob([options.stdin]) }),
           });
         },
       }),

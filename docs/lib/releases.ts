@@ -33,17 +33,17 @@ interface GithubRelease {
   prerelease: boolean;
 }
 
-const sectionTitles: Record<string, string> = {
-  Features: "Features",
-  "Bug Fixes": "Bug fixes",
-  "Performance Improvements": "Performance improvements",
-  "⚠ BREAKING CHANGES": "Breaking changes",
-  Reverts: "Reverts",
-  Documentation: "Documentation",
-};
+const sectionTitles = new Map([
+  ["Features", "Features"],
+  ["Bug Fixes", "Bug fixes"],
+  ["Performance Improvements", "Performance improvements"],
+  ["⚠ BREAKING CHANGES", "Breaking changes"],
+  ["Reverts", "Reverts"],
+  ["Documentation", "Documentation"],
+]);
 
 const normalizeTitle = (raw: string) =>
-  sectionTitles[raw] ?? raw.replace(/^[^\p{L}]+/u, "").trim();
+  sectionTitles.get(raw) ?? raw.replace(/^[^\p{L}]+/u, "").trim();
 
 const parseNote = (line: string): ReleaseNote => {
   let message = line.replace(/^\*\s+/u, "").trim();
@@ -179,8 +179,10 @@ export const getReleases = async (): Promise<Release[]> => {
 
     return [first, ...rest]
       .flatMap((page) => page.releases)
+      .values()
       .filter((release) => !release.draft && !release.prerelease)
-      .map(toRelease);
+      .map(toRelease)
+      .toArray();
   } catch {
     return [];
   }

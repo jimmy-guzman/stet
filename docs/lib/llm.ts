@@ -15,17 +15,21 @@ import type { InferPageType } from "fumadocs-core/source";
 import { siteUrl } from "@/lib/site";
 import type { source } from "@/lib/source";
 
-export const getLLMText = async (page: InferPageType<typeof source>) => {
-  const processed = await page.data
-    .getText("processed")
-    .catch((error: unknown) => {
-      throw new Error(
-        `${page.url}: ${error instanceof Error ? error.message : String(error)}`,
-        {
-          cause: error,
-        }
-      );
-    });
+type Page = InferPageType<typeof source>;
+
+const processedText = async (page: Page) => {
+  try {
+    return await page.data.getText("processed");
+  } catch (error) {
+    throw new Error(
+      `${page.url}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
+};
+
+export const getLLMText = async (page: Page) => {
+  const processed = await processedText(page);
 
   return [
     `# ${page.data.title}`,

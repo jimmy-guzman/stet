@@ -201,9 +201,13 @@ export const buildDiffRows = (
 
 /** The navigable (cursorable) lines in order; `navIndex` equals array position. */
 export const navigableLinesFromRows = (rows: DiffRow[]): NavigableLine[] =>
-  rows.filter(isLineRow).map((row) => ({
-    content: row.spans.map((span) => span.text).join(""),
-    newLine: row.newLine,
-    oldLine: row.oldLine,
-    type: row.type,
-  }));
+  rows
+    .values()
+    .filter(isLineRow)
+    .map((row) => ({
+      content: row.spans.map((span) => span.text).join(""),
+      newLine: row.newLine,
+      oldLine: row.oldLine,
+      type: row.type,
+    }))
+    .toArray();

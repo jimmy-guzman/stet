@@ -13,7 +13,7 @@ const match = (path: string, line: number, text: string, column = 1) => ({
 const lines = (count: number) =>
   Array.from({ length: count }, (_, i) => `line ${i + 1}`);
 
-const shape = (items: SearchItem[]) =>
+const describeRows = (items: SearchItem[]) =>
   items.map((item) => {
     if (item.kind === "header") {
       return `header ${item.path} (${item.count})`;
@@ -35,7 +35,7 @@ describe("buildSearchItems", () => {
       matches: [match("a.ts", 10, "line 10")],
     });
 
-    expect(shape(items)).toEqual([
+    expect(describeRows(items)).toEqual([
       "header a.ts (1)",
       "context 8",
       "context 9",
@@ -53,7 +53,7 @@ describe("buildSearchItems", () => {
       matches: [match("a.ts", 5, "line 5"), match("a.ts", 8, "line 8")],
     });
 
-    expect(shape(items)).toEqual([
+    expect(describeRows(items)).toEqual([
       "header a.ts (2)",
       "context 3",
       "context 4",
@@ -74,7 +74,7 @@ describe("buildSearchItems", () => {
       matches: [match("a.ts", 2, "line 2"), match("a.ts", 10, "line 10")],
     });
 
-    expect(shape(items)).toEqual([
+    expect(describeRows(items)).toEqual([
       "header a.ts (2)",
       "context 1",
       "match 2",
@@ -94,7 +94,7 @@ describe("buildSearchItems", () => {
       matches: [match("a.ts", 1, "line 1"), match("a.ts", 3, "line 3")],
     });
 
-    expect(shape(items)).toEqual([
+    expect(describeRows(items)).toEqual([
       "header a.ts (2)",
       "match 1",
       "context 2",
@@ -113,7 +113,7 @@ describe("buildSearchItems", () => {
       ],
     });
 
-    expect(shape(items)).toEqual([
+    expect(describeRows(items)).toEqual([
       "header bin.dat (2)",
       "match 4",
       "gap",
@@ -141,7 +141,7 @@ describe("buildSearchItems", () => {
       ],
     });
 
-    expect(shape(items)).toEqual([
+    expect(describeRows(items)).toEqual([
       "header a.ts (2)",
       "header b.ts (1)",
       "context 1",

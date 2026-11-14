@@ -120,10 +120,7 @@ const clampExtent = (
  * @param band - The area between the header and status rows, in absolute terminal cells.
  * @param pane - The pane to place; a closed one claims nothing and yields a zero rect.
  */
-const carve = (
-  band: Rect,
-  pane: DockedPane
-): { band: Rect; rect: PaneRect } => {
+const carve = (band: Rect, pane: DockedPane) => {
   if (!pane.open) {
     return { band, rect: EMPTY_PANE };
   }

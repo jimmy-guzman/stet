@@ -6,22 +6,22 @@ import path from "node:path";
  * rather than a bare single-file window; terminal editors have no workspace and carry only
  * `{file}`/`{line}`.
  */
-const KNOWN_EDITOR_TEMPLATES: Record<string, string> = {
-  code: "code {repo} --goto {file}:{line}",
-  cursor: "cursor {repo} --goto {file}:{line}",
-  emacs: "emacs +{line} {file}",
-  helix: "helix {file}:{line}",
-  hx: "hx {file}:{line}",
-  idea: "idea {repo} --line {line} {file}",
-  kak: "kak +{line} {file}",
-  micro: "micro {file}:{line}",
-  nano: "nano +{line} {file}",
-  nvim: "nvim +{line} {file}",
-  subl: "subl {file}:{line}",
-  vi: "vi +{line} {file}",
-  vim: "vim +{line} {file}",
-  zed: "zed {repo} {file}:{line}",
-};
+const KNOWN_EDITOR_TEMPLATES = new Map([
+  ["code", "code {repo} --goto {file}:{line}"],
+  ["cursor", "cursor {repo} --goto {file}:{line}"],
+  ["emacs", "emacs +{line} {file}"],
+  ["helix", "helix {file}:{line}"],
+  ["hx", "hx {file}:{line}"],
+  ["idea", "idea {repo} --line {line} {file}"],
+  ["kak", "kak +{line} {file}"],
+  ["micro", "micro {file}:{line}"],
+  ["nano", "nano +{line} {file}"],
+  ["nvim", "nvim +{line} {file}"],
+  ["subl", "subl {file}:{line}"],
+  ["vi", "vi +{line} {file}"],
+  ["vim", "vim +{line} {file}"],
+  ["zed", "zed {repo} {file}:{line}"],
+]);
 
 /**
  * Expands a value into a full command template. If the value already contains `{file}` it is
@@ -36,7 +36,7 @@ const normalizeTemplate = (value: string, defaultSuffix: string): string => {
 
   const bin = path.basename(value.split(/\s+/u)[0] ?? value);
 
-  return KNOWN_EDITOR_TEMPLATES[bin] ?? `${value} ${defaultSuffix}`;
+  return KNOWN_EDITOR_TEMPLATES.get(bin) ?? `${value} ${defaultSuffix}`;
 };
 
 /**

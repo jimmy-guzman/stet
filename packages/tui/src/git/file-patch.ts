@@ -59,15 +59,14 @@ const MAX_SIDE_BYTES = 10_000_000;
 // Generated files) aborts to the git fallback instead of stalling the load.
 const DIFF_TIMEOUT_MS = 1000;
 
+const emptySide: PatchSide = { kind: "empty" };
+
 /**
  * Which two endpoints the scope's `git diff` invocation would compare for this file. `file.stage`
  * is deliberately not consulted: membership in the scope's changed set (built from the same `git
  * diff` arguments) already encodes it, exactly as the pathspec invocation relied on.
  */
-export const fileDiffSides = (
-  scope: DiffScope,
-  file: ChangedFile
-): { oldSide: PatchSide; newSide: PatchSide } => {
+export const fileDiffSides = (scope: DiffScope, file: ChangedFile) => {
   const base = (path: string): PatchSide =>
     scope.kind === "unstaged"
       ? { kind: "git", spec: `:${path}` }
@@ -86,10 +85,10 @@ export const fileDiffSides = (
   };
 
   return {
-    newSide: file.kind === "deleted" ? { kind: "empty" } : target(),
+    newSide: file.kind === "deleted" ? emptySide : target(),
     oldSide:
       file.kind === "added" || file.kind === "untracked"
-        ? { kind: "empty" }
+        ? emptySide
         : base(file.oldPath ?? file.path),
   };
 };

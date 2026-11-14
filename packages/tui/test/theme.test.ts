@@ -1,52 +1,42 @@
 import { describe, expect, test } from "bun:test";
 
 import { RGBA } from "@opentui/core";
+import { Predicate } from "effect";
 
 import { darkTheme } from "@/theme/dark";
 import { lightTheme } from "@/theme/light";
 import { resolveTheme } from "@/theme/resolve";
+import type { Theme } from "@/theme/tokens";
 
 const HEX = /^#[0-9a-f]{6}$/u;
 
-// Walks the theme and collects every string leaf; syntax style objects mix
-// Booleans (bold/italic/…) with color strings, and only the strings matter here
-const collectColors = (
-  value: unknown,
-  path: string,
-  out: [path: string, color: string][]
-) => {
-  if (typeof value === "string") {
-    out.push([path, value]);
-
-    return;
-  }
-
-  if (typeof value === "object" && value !== null) {
-    for (const [key, child] of Object.entries(value)) {
-      collectColors(child, `${path}.${key}`, out);
-    }
-  }
-};
+// Every theme leaf is a color, at most two levels deep (`success`, `text.primary`).
+const colorEntries = (theme: Theme) =>
+  Object.entries(theme).flatMap(([group, value]) =>
+    Predicate.isString(value)
+      ? [{ color: value, path: group }]
+      : Object.entries(value).map(([key, color]) => ({
+          color,
+          path: `${group}.${key}`,
+        }))
+  );
 
 describe.each([
   ["darkTheme", darkTheme],
   ["lightTheme", lightTheme],
 ])("%s", (_name, theme) => {
   test("every color token is a lowercase 6-digit hex", () => {
-    const colors: [path: string, color: string][] = [];
-    collectColors(theme, "theme", colors);
+    const colors = colorEntries(theme);
 
     expect(colors.length).toBeGreaterThan(0);
-    expect(colors.filter(([, color]) => !HEX.test(color))).toEqual([]);
+    expect(colors.filter(({ color }) => !HEX.test(color))).toEqual([]);
   });
 });
 
-const paths = (theme: unknown) => {
-  const out: [path: string, color: string][] = [];
-  collectColors(theme, "theme", out);
-
-  return out.map(([path]) => path).toSorted();
-};
+const paths = (theme: Theme) =>
+  colorEntries(theme)
+    .map(({ path }) => path)
+    .toSorted();
 
 describe("theme parity", () => {
   test("light and dark expose the exact same token paths", () => {

@@ -1,9 +1,9 @@
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 import { bundledThemesInfo } from "shiki/themes";
 
 import { darkTheme } from "./dark";
 import { lightTheme } from "./light";
-import { mergeDeep } from "./merge";
+import { isJsonObject, mergeDeep } from "./merge";
 import { monoDarkTheme, monoLightTheme } from "./mono";
 import { ThemeSchema } from "./tokens";
 import type { Theme } from "./tokens";
@@ -22,14 +22,14 @@ interface RegisteredTheme {
   syntaxTheme?: string;
 }
 
-const builtins: Record<string, RegisteredTheme> = {
-  dark: { tokens: darkTheme },
-  light: { tokens: lightTheme },
-  "mono-dark": { tokens: monoDarkTheme },
-  "mono-light": { tokens: monoLightTheme },
-};
+const builtins = new Map([
+  ["dark", { tokens: darkTheme }],
+  ["light", { tokens: lightTheme }],
+  ["mono-dark", { tokens: monoDarkTheme }],
+  ["mono-light", { tokens: monoLightTheme }],
+]);
 
-const registry = new Map<string, RegisteredTheme>(Object.entries(builtins));
+const registry = new Map<string, RegisteredTheme>(builtins);
 
 const bundledThemeIds = new Set(bundledThemesInfo.map((theme) => theme.id));
 
@@ -67,7 +67,7 @@ export const selectThemeName = (
     return appearance;
   }
 
-  return typeof selection === "string" ? selection : selection[appearance];
+  return Predicate.isString(selection) ? selection : selection[appearance];
 };
 
 export interface ResolvedThemes {
@@ -77,20 +77,17 @@ export interface ResolvedThemes {
 
 const decodeTheme = Schema.decodeUnknownResult(ThemeSchema);
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 /**
  * Resolve raw config theme entries into validated themes, applying `base` merges with cycle
  * detection. Anything wrong (invalid entry, unknown base or syntax theme, cycle) is reported in
  * `issues` rather than thrown, so one bad theme never sinks the rest.
  */
-export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
+export const resolveThemes = (raw: Schema.JsonObject): ResolvedThemes => {
   const resolved = new Map<string, RegisteredTheme>();
   const failed = new Set<string>();
   const issues: string[] = [];
 
-  const tokensOf = (name: string, candidate: unknown) =>
+  const tokensOf = (name: string, candidate: Schema.Json) =>
     Result.match(decodeTheme(candidate), {
       onFailure: (error) => {
         issues.push(`theme "${name}": ${String(error)}`);
@@ -110,6 +107,32 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
     return known ? value : undefined;
   };
 
+  // A `syntax` names a bundled theme, overrides the base's syntax tokens, or is
+  // Absent and inherits the base's bundled theme.
+  const syntaxOf = (
+    name: string,
+    value: Schema.Json | undefined,
+    inherited: string | undefined
+  ) => {
+    if (Predicate.isString(value)) {
+      return { overrides: {}, syntaxTheme: bundledOr(name, value) };
+    }
+
+    if (value === undefined) {
+      return { overrides: {}, syntaxTheme: inherited };
+    }
+
+    if (isJsonObject(value)) {
+      return { overrides: value, syntaxTheme: undefined };
+    }
+
+    issues.push(
+      `theme "${name}": syntax must be a bundled theme name or a token map`
+    );
+
+    return { overrides: {}, syntaxTheme: undefined };
+  };
+
   const resolve = (
     name: string,
     stack: string[]
@@ -124,12 +147,12 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
       return undefined;
     }
 
-    const entry = raw[name];
-
-    if (entry === undefined) {
+    if (!Object.hasOwn(raw, name)) {
       // Not a user theme: a built-in is the only other source (used by `base`).
-      return builtins[name];
+      return builtins.get(name);
     }
+
+    const entry = raw[name];
 
     if (stack.includes(name)) {
       issues.push(`theme "${name}" has a circular base`);
@@ -138,7 +161,7 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
       return undefined;
     }
 
-    if (!isPlainObject(entry)) {
+    if (!isJsonObject(entry)) {
       // Decode reports why a non-object entry isn't a theme
       tokensOf(name, entry);
       failed.add(name);
@@ -148,32 +171,22 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
 
     const { base: baseName, syntax: syntaxValue, ...uiTokens } = entry;
 
-    const base =
-      typeof baseName === "string"
-        ? resolve(baseName, [...stack, name])
-        : undefined;
+    const base = Predicate.isString(baseName)
+      ? resolve(baseName, [...stack, name])
+      : undefined;
 
-    if (typeof baseName === "string" && base === undefined) {
+    if (Predicate.isString(baseName) && base === undefined) {
       issues.push(`theme "${name}": base "${baseName}" not found`);
       failed.add(name);
 
       return undefined;
     }
 
-    let syntaxTheme: string | undefined;
-    let overrides: Record<string, unknown> = {};
-
-    if (typeof syntaxValue === "string") {
-      syntaxTheme = bundledOr(name, syntaxValue);
-    } else if (isPlainObject(syntaxValue)) {
-      overrides = syntaxValue;
-    } else if (syntaxValue === undefined) {
-      syntaxTheme = base?.syntaxTheme;
-    } else {
-      issues.push(
-        `theme "${name}": syntax must be a bundled theme name or a token map`
-      );
-    }
+    const { overrides, syntaxTheme } = syntaxOf(
+      name,
+      syntaxValue,
+      base?.syntaxTheme
+    );
 
     const mergedUi =
       base === undefined ? uiTokens : mergeDeep(base.tokens, uiTokens);
@@ -183,8 +196,8 @@ export const resolveThemes = (raw: Record<string, unknown>): ResolvedThemes => {
       overrides
     );
 
-    const candidate = isPlainObject(mergedUi)
-      ? { ...mergedUi, syntax }
+    const candidate = isJsonObject(mergedUi)
+      ? Object.fromEntries([...Object.entries(mergedUi), ["syntax", syntax]])
       : mergedUi;
 
     const tokens = tokensOf(name, candidate);

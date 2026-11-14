@@ -1,3 +1,5 @@
+import { Option, Schema } from "effect";
+
 import { keyActions } from "./actions";
 import type { KeyActionId, KeyContext } from "./actions";
 import { parseCombo } from "./combo";
@@ -51,6 +53,10 @@ const renamedIds = new Map([
   ["shrink-sidebar", "shrink-pane"],
 ]);
 
+const decodeComboTexts = Schema.decodeUnknownOption(
+  Schema.Union([Schema.String, Schema.Array(Schema.String)])
+);
+
 /**
  * Merge `config.keybindings` over the defaults, the registry-resolver way: an unknown action id or
  * an unparseable combo reports an issue and leaves the default in place, and `false` (or an empty
@@ -59,7 +65,7 @@ const renamedIds = new Map([
  * conflict but left as merged: the chain's order decides, and the issue says so.
  */
 export const resolveKeybindings = (
-  raw: Record<string, unknown>
+  raw: Schema.JsonObject
 ): ResolvedKeybindings => {
   const issues: string[] = [];
   const set = defaultKeybindings();
@@ -81,21 +87,16 @@ export const resolveKeybindings = (
       continue;
     }
 
-    const entries = typeof value === "string" ? [value] : value;
+    const decoded = decodeComboTexts(value);
 
-    if (
-      !Array.isArray(entries) ||
-      entries.some((text) => typeof text !== "string")
-    ) {
+    if (Option.isNone(decoded)) {
       issues.push(
         `keybinding "${id}": must be a combo, a list of combos, or false`
       );
       continue;
     }
 
-    const texts = entries.filter(
-      (text): text is string => typeof text === "string"
-    );
+    const texts = [decoded.value].flat();
 
     const parsed = texts.map((text) => ({ combo: parseCombo(text), text }));
     const bad = parsed.find((entry) => entry.combo === undefined);

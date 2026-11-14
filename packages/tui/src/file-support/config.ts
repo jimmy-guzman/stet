@@ -1,3 +1,4 @@
+import { Option, Predicate, Schema } from "effect";
 import { bundledLanguagesInfo } from "shiki";
 
 import type { FileAssociation, FileSupportRegistry } from "./model";
@@ -7,8 +8,19 @@ type MutableFileAssociation = {
   -readonly [Key in keyof FileAssociation]: FileAssociation[Key];
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isJsonObject = Schema.is(Schema.JsonObject);
+
+const decodeName = Schema.decodeUnknownOption(Schema.NonEmptyString);
+
+const decodeNameOrOff = Schema.decodeUnknownOption(
+  Schema.Union([Schema.Literal(false), Schema.NonEmptyString])
+);
+
+const decodeNames = Schema.decodeUnknownOption(
+  Schema.NonEmptyArray(Schema.NonEmptyString)
+);
+
+const decodeBoolean = Schema.decodeUnknownOption(Schema.Boolean);
 
 const syntaxIds = new Set(["text"]);
 
@@ -33,14 +45,12 @@ const fileFields = new Set([
 const stringList = (
   owner: string,
   field: "extensions" | "filenames" | "globs",
-  value: unknown,
+  value: Schema.Json,
   issues: string[]
-): string[] | undefined => {
-  if (
-    !Array.isArray(value) ||
-    value.length === 0 ||
-    value.some((item) => typeof item !== "string" || item === "")
-  ) {
+): readonly string[] | undefined => {
+  const decoded = decodeNames(value);
+
+  if (Option.isNone(decoded)) {
     issues.push(
       `file "${owner}": ${field} must be a non-empty array of non-empty strings`
     );
@@ -48,9 +58,7 @@ const stringList = (
     return undefined;
   }
 
-  const items = value.filter(
-    (item): item is string => typeof item === "string"
-  );
+  const items = decoded.value;
 
   if (
     field === "extensions" &&
@@ -104,7 +112,7 @@ const hasControlCharacter = (value: string) => {
 };
 
 const resolveIcons = (
-  raw: Record<string, unknown>,
+  raw: Schema.JsonObject,
   registry: FileSupportRegistry,
   issues: string[]
 ) => {
@@ -113,12 +121,13 @@ const resolveIcons = (
   for (const [name, value] of Object.entries(raw)) {
     if (value === false) {
       icons.delete(name);
-    } else if (
-      typeof value === "string" &&
-      value !== "" &&
-      !hasControlCharacter(value)
-    ) {
-      icons.set(name, value);
+      continue;
+    }
+
+    const glyph = decodeName(value);
+
+    if (Option.isSome(glyph) && !hasControlCharacter(glyph.value)) {
+      icons.set(name, glyph.value);
     } else {
       issues.push(`icon "${name}": must be a non-empty glyph string or false`);
     }
@@ -130,7 +139,7 @@ const resolveIcons = (
 /** Copies each present field onto `candidate`, reporting every invalid one; false when any was. */
 const assignEntryFields = (
   name: string,
-  entry: Record<string, unknown>,
+  entry: Schema.JsonObject,
   candidate: MutableFileAssociation,
   issues: string[]
 ) => {
@@ -150,8 +159,10 @@ const assignEntryFields = (
 
   for (const field of ["caseSensitive", "dotfiles"] as const) {
     if (entry[field] !== undefined) {
-      if (typeof entry[field] === "boolean") {
-        Object.assign(candidate, { [field]: entry[field] });
+      const flag = decodeBoolean(entry[field]);
+
+      if (Option.isSome(flag)) {
+        Object.assign(candidate, { [field]: flag.value });
       } else {
         issues.push(`file "${name}": ${field} must be boolean`);
         valid = false;
@@ -161,15 +172,15 @@ const assignEntryFields = (
 
   for (const field of ["icon", "syntax"] as const) {
     if (entry[field] !== undefined) {
-      const value = entry[field];
+      const reference = decodeNameOrOff(entry[field]);
 
-      if (value !== false && (typeof value !== "string" || value === "")) {
+      if (Option.isSome(reference)) {
+        Object.assign(candidate, { [field]: reference.value });
+      } else {
         issues.push(
           `file "${name}": ${field} must be a non-empty name or false`
         );
         valid = false;
-      } else {
-        Object.assign(candidate, { [field]: value });
       }
     }
   }
@@ -184,7 +195,7 @@ const dropUnknownFacets = (
   icons: ReadonlyMap<string, string>,
   issues: string[]
 ) => {
-  if (typeof candidate.icon === "string" && !icons.has(candidate.icon)) {
+  if (Predicate.isString(candidate.icon) && !icons.has(candidate.icon)) {
     issues.push(
       `file "${name}": unknown icon "${candidate.icon}"; dropping the icon facet`
     );
@@ -192,7 +203,7 @@ const dropUnknownFacets = (
   }
 
   if (
-    typeof candidate.syntax === "string" &&
+    Predicate.isString(candidate.syntax) &&
     !syntaxIds.has(candidate.syntax)
   ) {
     issues.push(
@@ -217,7 +228,7 @@ const hasSelectorAndFacet = (candidate: MutableFileAssociation) => {
 };
 
 const resolveFiles = (
-  raw: Record<string, unknown>,
+  raw: Schema.JsonObject,
   registry: FileSupportRegistry,
   icons: ReadonlyMap<string, string>,
   issues: string[]
@@ -230,7 +241,7 @@ const resolveFiles = (
       continue;
     }
 
-    if (!isRecord(entry)) {
+    if (!isJsonObject(entry)) {
       issues.push(`file "${name}": must be an object or false`);
       continue;
     }
@@ -275,8 +286,8 @@ export interface ResolvedFileSupportConfig {
 
 /** Merge user registries over built-ins in dependency order: icons, then files. */
 export const resolveFileSupportConfig = (raw: {
-  readonly files?: Record<string, unknown>;
-  readonly icons?: Record<string, unknown>;
+  readonly files?: Schema.JsonObject;
+  readonly icons?: Schema.JsonObject;
 }): ResolvedFileSupportConfig => {
   const issues: string[] = [];
   const builtins = defaultFileSupportRegistry();

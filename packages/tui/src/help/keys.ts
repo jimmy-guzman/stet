@@ -42,7 +42,6 @@ const KEY_HELP_GROUPS: {
       { actions: ["toggle-view"], description: "toggle diff ↔ full file view for a changed file" },
       { actions: ["fold"], description: "fold / unfold the region at the caret" },
       { actions: ["toggle-wrap"], description: "toggle long-line wrap in the viewer" },
-      { actions: ["provenance"], description: "toggle the line provenance rail" },
       { actions: ["load-full"], description: "load full content when truncated" },
       {
         actions: ["half-page-down", "half-page-up"],

@@ -72,9 +72,9 @@ describe("configured keybindings", () => {
   test("an unbound action drops out of the rendered help", () => {
     const baseline = snapshotKeybindings();
     try {
-      registerKeybindings(resolveKeybindings({ provenance: false }).set);
+      registerKeybindings(resolveKeybindings({ "toggle-wrap": false }).set);
 
-      expect(helpText()).not.toContain("provenance rail");
+      expect(helpText()).not.toContain("toggle long-line wrap");
     } finally {
       restoreKeybindings(baseline);
     }

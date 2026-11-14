@@ -11,16 +11,16 @@ import { createFixtureRepo, loadModel, runGit, seedState } from "./helpers";
 // The second asserts none of it survived. If the preload's reset ever goes away, the second fails,
 // Which is the whole point (that leak once turned one dead render test into fifteen CI failures).
 test("a dying test leaves the state dirty", () => {
-  state.toggleBlame();
+  state.setIconsEnabled(false);
   state.setFindOpen(true);
   state.setQuitConfirmOpen(true);
   state.setTerminalWidth(200);
 
-  expect(state.blameEnabled()).toBe(true);
+  expect(state.iconsEnabled()).toBe(false);
 });
 
 test("the next test still starts from the defaults", () => {
-  expect(state.blameEnabled()).toBe(false);
+  expect(state.iconsEnabled()).toBe(true);
   expect(state.findOpen()).toBe(false);
   expect(state.quitConfirmOpen()).toBe(false);
   expect(state.terminalWidth()).toBe(80);

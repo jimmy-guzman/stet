@@ -1,12 +1,10 @@
-import { provenanceGlyph } from "@/components/provenance";
 import type { ChangeKind, StageState } from "@/git/model";
-import type { Provenance } from "@/git/provenance";
 import type { Theme } from "@/theme/tokens";
 import { kindLetter } from "@/ui-helpers";
 
 // The `Record`s make a new enum member a compile error until it earns a meaning, so the legend
-// Cannot silently fall behind a mark the tree or the rail starts drawing. The `*_ORDER` arrays carry
-// Display order separately, since the provenance ramp is a timeline rather than alphabetical.
+// Cannot silently fall behind a mark the tree starts drawing. The `*_ORDER` arrays carry display
+// Order separately from the alphabetical keys.
 const CHANGE_KIND_MEANINGS: Record<ChangeKind, string> = {
   added: "added",
   deleted: "deleted",
@@ -35,26 +33,11 @@ const STAGE_ORDER = [
   "untracked",
 ] as const satisfies readonly StageState[];
 
-const PROVENANCE_MEANINGS: Record<Provenance, string> = {
-  branch: "committed on this branch",
-  changed: "changed since the file began",
-  initial: "original to the file",
-  session: "committed this session",
-  uncommitted: "uncommitted",
-};
-const PROVENANCE_ORDER = [
-  "uncommitted",
-  "session",
-  "branch",
-  "changed",
-  "initial",
-] as const satisfies readonly Provenance[];
-
 /**
  * The `?` overlay's marks view, the counterpart to `keyHelpGroups()`. Every glyph is read from the
- * same source the app renders with (`kindLetter`, `provenanceGlyph`), so a mark and its explanation
- * cannot drift apart. A `color` accessor is optional: the change letters read neutral, since their
- * color in the tree is the separate stage axis.
+ * same source the app renders with (`kindLetter`), so a mark and its explanation cannot drift
+ * apart. A `color` accessor is optional: the change letters read neutral, since their color in the
+ * tree is the separate stage axis.
  */
 export function legendGroups(): {
   entries: { color?: (colors: Theme) => string; glyph: string; meaning: string }[];
@@ -83,14 +66,6 @@ export function legendGroups(): {
         { color: (colors: Theme) => colors.recency.fresh, glyph: "●", meaning: "recently changed" },
       ],
       heading: "recency",
-    },
-    {
-      entries: PROVENANCE_ORDER.map((band) => ({
-        color: (colors: Theme) => colors.provenance[band],
-        glyph: provenanceGlyph(band),
-        meaning: PROVENANCE_MEANINGS[band],
-      })),
-      heading: "provenance rail (a)",
     },
   ];
 }

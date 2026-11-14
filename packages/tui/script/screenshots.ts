@@ -215,23 +215,15 @@ const screens = [
   {
     /**
      * The one shot that must land inside the 1.5s notice window, so it screenshots right after the
-     * keypress. Turn two settings on (`x` wrap, `a` provenance), then `ctrl-s`: the planted config
-     * declares neither, so both diverge from the file and the notice names both. It writes into the
-     * throwaway config dir rather than the user's own, which is why `config: true` rewrites that
-     * file before every shot that uses it.
+     * keypress. Turn wrap on (`x`), then `ctrl-s`: the planted config does not declare it, so it
+     * diverges from the file and the notice names it. It writes into the throwaway config dir
+     * rather than the user's own, which is why `config: true` rewrites that file before every shot
+     * that uses it.
      */
     config: true,
     launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
     name: "save-settings",
-    steps: [
-      openHeroDiff,
-      'Type "x"',
-      "Sleep 400ms",
-      'Type "a"',
-      "Sleep 800ms",
-      "Ctrl+S",
-      "Sleep 700ms",
-    ].join("\n"),
+    steps: [openHeroDiff, 'Type "x"', "Sleep 800ms", "Ctrl+S", "Sleep 700ms"].join("\n"),
   },
   {
     /**
@@ -327,36 +319,6 @@ const screens = [
       "Sleep 300ms",
       'Type "z"',
       "Sleep 1200ms",
-    ].join("\n"),
-  },
-  {
-    /**
-     * Toggle the provenance rail (`a`) on a real source file, switch to full-file view (`v`) so the
-     * whole history shows rather than just the diff's changed lines, then jump the caret onto a
-     * recently added method. The gutter rail places each line on its five-tier timeline (a Block
-     * Element weight ramp), and the status bar reads out the caret line's commit as a blame
-     * inspector. `git/service` is a long-lived file this branch also touched, so its rail spans the
-     * older tiers and the newer "this branch" one.
-     */
-    name: "provenance",
-    steps: [
-      "Ctrl+P",
-      'Type "git/service"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 1500ms",
-      'Type "v"',
-      "Sleep 600ms",
-      'Type "a"',
-      "Sleep 1200ms",
-      'Type "/"',
-      "Sleep 300ms",
-      'Type "blame: (repoRoot"',
-      "Sleep 500ms",
-      "Enter",
-      "Sleep 500ms",
-      "Escape",
-      "Sleep 1500ms",
     ].join("\n"),
   },
   {

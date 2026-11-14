@@ -41,10 +41,6 @@ beneath, and it stays.
 - Watches the filesystem and refreshes as the agent changes files, keeping the
   current file and selection stable.
 - Marks recent activity and lets you jump to the latest touched file.
-- Shows per-line provenance with `a`: a gutter rail that places each line on a
-  five-tier timeline, uncommitted, committed this session, committed on this
-  branch, changed since the file's start, or original to it, git blame reframed
-  around how much of what you are reviewing is yours and how recent it is.
 - Rearranges its own layout: the tree docks to any edge and resizes along it,
   with `d` cycling it clockwise, `m` toggling zoom on the focused pane, and
   `ctrl-s` persisting the arrangement.

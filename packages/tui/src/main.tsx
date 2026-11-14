@@ -204,7 +204,6 @@ try {
       // Decided in the same place here as it is for `ctrl-b` and a shrink past the minimum.
       state.collapseSidebar();
     }
-    state.setBlameEnabled(config.provenance?.enabled ?? configDefaults.provenance.enabled);
     state.setSearchRegex(config.search?.regex ?? configDefaults.search.regex);
     state.setSearchCaseSensitive(
       config.search?.caseSensitive ?? configDefaults.search.caseSensitive,

@@ -43,11 +43,11 @@ describe("resolveKeybindings", () => {
   });
 
   test("false unbinds an action", () => {
-    const { issues, set } = resolveKeybindings({ provenance: false });
+    const { issues, set } = resolveKeybindings({ "toggle-wrap": false });
 
     expect(issues).toEqual([]);
-    expect(set.combos.get("provenance")).toEqual([]);
-    expect(set.texts.get("provenance")).toEqual([]);
+    expect(set.combos.get("toggle-wrap")).toEqual([]);
+    expect(set.texts.get("toggle-wrap")).toEqual([]);
   });
 
   test("a renamed action id reports where it went", () => {

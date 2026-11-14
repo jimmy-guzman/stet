@@ -23,7 +23,6 @@ export interface SettingsSnapshot {
   editor: string | undefined;
   iconsEnabled: boolean;
   ide: string | undefined;
-  provenanceEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegex: boolean;
   searchScope: "changed" | "repo";
@@ -191,12 +190,6 @@ export function updateSettingsText(
       ["sidebar", "changesOnly"],
       snapshot.changesOnly,
       config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly,
-    ),
-    ...diff(
-      "provenance",
-      ["provenance", "enabled"],
-      snapshot.provenanceEnabled,
-      config.provenance?.enabled ?? configDefaults.provenance.enabled,
     ),
     ...diff(
       "search",

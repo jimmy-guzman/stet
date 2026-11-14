@@ -37,7 +37,6 @@ here is optional and shown with its default:
   "icons": { "enabled": true }, // Nerd Font file-type icons
   "viewer": { "wrap": false }, // wrap long lines instead of scrolling
   "sidebar": { "open": true, "changesOnly": false, "position": "left" }, // sizes default to the layout
-  "provenance": { "enabled": false }, // the per-line provenance rail
   "update": { "check": true }, // background release check at launch
   "search": { "regex": false, "caseSensitive": false, "scope": "changed" },
 }
@@ -52,7 +51,6 @@ here is optional and shown with its default:
 | `sidebar.width`        | responsive  | tree width in cells while docked left or right, clamped to the terminal (`[` / `]` adjust, `\` resets) |
 | `sidebar.height`       | `10`        | tree height in rows while docked top or bottom; each axis keeps its own size                           |
 | `sidebar.changesOnly`  | `false`     | the tree lists only changed files (`c` toggles)                                                        |
-| `provenance.enabled`   | `false`     | the line provenance rail starts on (`a` toggles)                                                       |
 | `update.check`         | `true`      | check GitHub for a newer release in the background at launch                                           |
 | `search.regex`         | `false`     | project search starts in regex mode (`ctrl-r` toggles)                                                 |
 | `search.caseSensitive` | `false`     | project search starts case-sensitive (`ctrl-x` toggles)                                                |
@@ -66,7 +64,7 @@ an action. The ids, the combo grammar, and the fixed exceptions live in the
 [keybindings reference](/docs/reference/keybindings#custom-keybindings).
 
 You never have to edit the file by hand for these: press `ctrl-s` anywhere to
-save your current session settings (theme, icons, wrap, sidebar, changes-only, provenance, search toggles, plus any `--editor`/`--ide` passed this run) back
+save your current session settings (theme, icons, wrap, sidebar, changes-only, search toggles, plus any `--editor`/`--ide` passed this run) back
 to the config. Only keys that differ from the file are written, as targeted
 edits that keep your comments, and the notice names what changed; an editor
 resolved from `$EDITOR`-style environment fallbacks is never written, only a

@@ -575,13 +575,6 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (pressed("provenance") && state.mainView() === "file") {
-        const on = state.blameEnabled();
-        state.toggleBlame();
-        state.notify(on ? "provenance off" : "provenance on");
-        return;
-      }
-
       if (pressed("latest-file")) {
         const latest = latestActivity(state.activityLog());
         if (latest !== undefined) {

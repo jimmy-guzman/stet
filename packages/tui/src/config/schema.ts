@@ -12,8 +12,6 @@ const ThemeSelection = Schema.Union([
 // Once merged over its base, and the same holds for files and glyphs).
 const RawRegistry = Schema.Record(Schema.String, Schema.Unknown);
 
-const Toggle = Schema.Struct({ enabled: Schema.optionalKey(Schema.Boolean) });
-
 // Built from the layout model's own tuple: `Schema.Literals` infers `L[number]`, so the schema
 // And the `Dock` union cannot drift apart in either direction.
 const DockPosition = Schema.Literals(DOCKS);
@@ -34,7 +32,6 @@ export const UserConfigSchema = Schema.Struct({
   // Values are a combo, a list of combos, or false; `resolveKeybindings`
   // Validates them against the action registry.
   keybindings: Schema.optionalKey(RawRegistry),
-  provenance: Schema.optionalKey(Toggle),
   search: Schema.optionalKey(
     Schema.Struct({
       caseSensitive: Schema.optionalKey(Schema.Boolean),
@@ -75,7 +72,6 @@ export type UserConfig = Schema.Schema.Type<typeof UserConfigSchema>;
  */
 export const configDefaults = {
   icons: { enabled: true },
-  provenance: { enabled: false },
   search: { caseSensitive: false, regex: false, scope: "changed" },
   sidebar: { changesOnly: false, open: true, position: "left" },
   update: { check: true },

@@ -32,7 +32,6 @@ export const keyActions = [
   { combos: ["ctrl-s"], context: "global", id: "save-settings" },
   { combos: ["c"], context: "global", id: "changes-only" },
   { combos: ["x"], context: "global", id: "toggle-wrap" },
-  { combos: ["a"], context: "global", id: "provenance" },
   { combos: ["."], context: "global", id: "latest-file" },
   { combos: ["<"], context: "global", id: "back" },
   { combos: [">"], context: "global", id: "forward" },

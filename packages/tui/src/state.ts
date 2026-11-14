@@ -45,14 +45,10 @@ import {
   recordActivity,
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
-import type { BlameLine } from "./git/blame";
-import { fileDiffSides } from "./git/file-patch";
 import type { BinaryDiff } from "./git/file-patch";
 import type { Commit } from "./git/log";
 import { changedPathsDiffer, mergeChanged } from "./git/model";
 import type { ChangedFile, GitModel } from "./git/model";
-import { classifyProvenance } from "./git/provenance";
-import type { Provenance } from "./git/provenance";
 import { filterPathspecs } from "./git/search";
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
@@ -85,7 +81,6 @@ import { fetchLatestVersion, isNewer } from "./upgrade/release";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
-import { relativeTime } from "./utils/relative-time";
 import {
   back,
   canBack,
@@ -185,7 +180,7 @@ const SEARCH_CONTEXT_LINES = 2;
 /**
  * Clockwise, so one press of the move key is a 90 degree turn to an adjacent edge and four presses
  * return the pane home. Keyed by every edge, so a new `Dock` is a compile error until it earns a
- * place in the rotation, the way `legend.ts` keys change kinds and provenance tiers.
+ * place in the rotation, the way `legend.ts` keys change kinds and stages.
  */
 const NEXT_DOCK: Record<Dock, Dock> = {
   bottom: "left",
@@ -325,9 +320,8 @@ function isSubsequence(query: string, target: string) {
 function createState() {
   // Every signal below is created through `tracked`, which records how to restore that signal's
   // Initial value. `resetState` replays the lot, so the reset can never drift from the signals it
-  // Resets. A hand-maintained reset list is what let one test leak `blameEnabled` into every file
-  // After it: the rail stayed on, the blame inspector took over the status bar, and unit tests that
-  // Never touch blame failed on a signal they had never heard of. Tests are the only caller (the app
+  // Resets. A hand-maintained reset list is what once let one test leak a toggle into every file
+  // After it, failing unit tests on a signal they had never heard of. Tests are the only caller (the app
   // Owns one state for its whole life), so this is the seam that makes the singleton safe to share.
   // A signal is not the only thing that outlives a test. The async guards further down (an in-flight
   // Controller, a pending timer, a staleness token, a "what we last loaded for" marker) each pass
@@ -404,44 +398,6 @@ function createState() {
   );
   const [commandMenuGuard, setCommandMenuGuard] = tracked<CommandMenuGuard | undefined>(undefined);
   const [iconsEnabled, setIconsEnabled] = tracked(true);
-  // The per-line provenance rail (blame reframed): off by default, toggled by `a`. The three
-  // Timeline anchors: `sessionCommits` = SHAs in `sessionBase..HEAD` (since launch),
-  // `branchCommits` = SHAs in `branchBase..HEAD` (this branch, a superset of the session set),
-  // And `fileFirstSha` = the open file's introducing commit. `blameByLine` maps a working-tree
-  // Line number to its blame; `openFileWhollyNew` marks an untracked/added file whose every
-  // Line is uncommitted (git can't blame it).
-  const [blameEnabled, setBlameEnabled] = tracked(false);
-  const [blameByLine, setBlameByLine] = tracked<ReadonlyMap<number, BlameLine>>(new Map());
-  const [sessionCommits, setSessionCommits] = tracked<ReadonlySet<string>>(new Set());
-  const [branchCommits, setBranchCommits] = tracked<ReadonlySet<string>>(new Set());
-  // The branch base is session-stable, so it is resolved on its own (per repo), separate from the
-  // Commit set that refreshes on the model drain.
-  const [branchBaseSha, setBranchBaseSha] = tracked<string | undefined>(undefined);
-  const [fileFirstSha, setFileFirstSha] = tracked<string | undefined>(undefined);
-  const [openFileWhollyNew, setOpenFileWhollyNew] = tracked(false);
-  const toggleBlame = () => setBlameEnabled((enabled) => !enabled);
-  // The provenance band + blame for a viewer row, O(1) off the precomputed map. A pure
-  // Removal (no working-tree line) has no blame; a wholly-new file's every line is
-  // Uncommitted. Read by the rail (band) and the status detail (band + blame).
-  const provenanceForRow = (row: { newLine?: number }) => {
-    if (!blameEnabled() || row.newLine === undefined) {
-      return undefined;
-    }
-    if (openFileWhollyNew()) {
-      return { band: "uncommitted" as Provenance, blame: undefined };
-    }
-    const blame = blameByLine().get(row.newLine);
-    return blame === undefined
-      ? undefined
-      : {
-          band: classifyProvenance(blame, {
-            branchShas: branchCommits(),
-            fileFirstSha: fileFirstSha(),
-            sessionShas: sessionCommits(),
-          }),
-          blame,
-        };
-  };
   const [overflow, setOverflow] = tracked<"scroll" | "wrap">("scroll");
   const [changesOnly, setChangesOnly] = tracked(false);
   const [selectedPath, setSelectedPath] = tracked<string | undefined>(undefined);
@@ -849,165 +805,6 @@ function createState() {
             );
           })
           .catch(() => {});
-      })
-      .catch(() => {});
-    onCleanup(() => controller.abort());
-  });
-
-  // The commits landed since launch (`sessionBase..HEAD`), the boundary of the "this session"
-  // Tier. Re-run on a model drain (a new commit moves HEAD); only fetched while the rail is on,
-  // And cheap (a bare rev-list). Failures leave the last set intact; disabling the rail clears it
-  // (like the blame effect), so a re-enable starts from an empty set until the refetch lands.
-  createEffect(() => {
-    if (!blameEnabled()) {
-      setSessionCommits(new Set<string>());
-      return;
-    }
-    const model = gitModel();
-    const base = sessionBase();
-    const controller = new AbortController();
-    runtime
-      .runPromise(
-        Git.use((git) => git.commitsSince(model.repoRoot, base)),
-        {
-          signal: controller.signal,
-        },
-      )
-      .then((shas) => {
-        if (!controller.signal.aborted) {
-          setSessionCommits(shas);
-        }
-      })
-      .catch(() => {});
-    onCleanup(() => controller.abort());
-  });
-
-  // The branch base (`merge-base HEAD <default-branch>`) is session-stable, so resolve it once per
-  // Repo (keyed on `repoRoot`, not the model drain), gated on the rail; its `symbolic-ref` plus
-  // Merge-base calls stay off the hot refresh path. A repo with no default branch leaves it
-  // Undefined, folding the branch tier away.
-  createEffect(() => {
-    if (!blameEnabled()) {
-      setBranchBaseSha(undefined);
-      return;
-    }
-    const root = repoRoot();
-    const controller = new AbortController();
-    runtime
-      .runPromise(
-        Git.use((git) => git.branchBase(root)),
-        { signal: controller.signal },
-      )
-      .then((base) => {
-        if (!controller.signal.aborted) {
-          setBranchBaseSha(base);
-        }
-      })
-      .catch(() => {});
-    onCleanup(() => controller.abort());
-  });
-
-  // The commits since the branch base (`branchBase..HEAD`), bounding the "this branch" tier (a
-  // Superset of the session set; the ordered classify separates them). Re-run on a model drain (a
-  // New commit moves HEAD) and when the base resolves, but only a bare rev-list, not the merge-base
-  // Resolution above. Disabling the rail clears it (like the blame effect).
-  createEffect(() => {
-    const base = branchBaseSha();
-    if (!blameEnabled() || base === undefined) {
-      setBranchCommits(new Set<string>());
-      return;
-    }
-    const model = gitModel();
-    const controller = new AbortController();
-    runtime
-      .runPromise(
-        Git.use((git) => git.commitsSince(model.repoRoot, base)),
-        {
-          signal: controller.signal,
-        },
-      )
-      .then((shas) => {
-        if (!controller.signal.aborted) {
-          setBranchCommits(shas);
-        }
-      })
-      .catch(() => {});
-    onCleanup(() => controller.abort());
-  });
-
-  // The open file's introducing commit (the `initial` boundary) is static per path, so resolve it
-  // On a file switch (keyed on `selectedPath`/`repoRoot`), not on every model drain like blame; an
-  // Untracked file has no history and resolves to undefined. Disabling the rail clears it.
-  createEffect(() => {
-    const path = selectedPath();
-    if (!blameEnabled() || path === undefined) {
-      setFileFirstSha(undefined);
-      return;
-    }
-    const root = repoRoot();
-    const controller = new AbortController();
-    runtime
-      .runPromise(
-        Git.use((git) => git.fileFirstCommit(root, path)),
-        { signal: controller.signal },
-      )
-      .then((sha) => {
-        if (!controller.signal.aborted && selectedPath() === path) {
-          setFileFirstSha(sha);
-        }
-      })
-      .catch(() => {});
-    onCleanup(() => controller.abort());
-  });
-
-  // Per-line blame for the open file, refreshed on the same trigger as the diff. A wholly-new file
-  // (untracked/added) is unblameable, so skip the git call and mark every line uncommitted from the
-  // Model; otherwise map each blame line by its line number for O(1) rail lookups. The previous
-  // File's map is cleared before the async reload so its lines never decorate this file, and the
-  // Reload aborts/re-runs on a file switch like the diff pipeline so a stale blame never lands.
-  createEffect(() => {
-    if (!blameEnabled()) {
-      batch(() => {
-        setBlameByLine(new Map());
-        setOpenFileWhollyNew(false);
-      });
-      return;
-    }
-    const src = diffSource();
-    if (src === undefined) {
-      setBlameByLine(new Map());
-      return;
-    }
-    const kind = src.model.changedByPath.get(src.path)?.kind;
-    if (kind === "untracked" || kind === "added") {
-      batch(() => {
-        setOpenFileWhollyNew(true);
-        setBlameByLine(new Map());
-      });
-      return;
-    }
-    // Clear the previous file's blame before the async reload so its lines never decorate this one.
-    batch(() => {
-      setOpenFileWhollyNew(false);
-      setBlameByLine(new Map());
-    });
-    // Blame the diff's right side, not always the working tree: a `staged`/`last-commit`/`commit`
-    // Scope shows the index or a revision, whose line numbers only match the rail when blamed there.
-    // `worktree`/`empty` sides (and unchanged files) blame the working tree.
-    const side = src.file === undefined ? undefined : fileDiffSides(src.scope, src.file).newSide;
-    const controller = new AbortController();
-    runtime
-      .runPromise(
-        Git.use((git) => git.blame(src.model.repoRoot, src.path, side)),
-        {
-          signal: controller.signal,
-        },
-      )
-      .then((lines) => {
-        if (controller.signal.aborted || selectedPath() !== src.path) {
-          return;
-        }
-        setBlameByLine(new Map(lines.map((line) => [line.line, line])));
       })
       .catch(() => {});
     onCleanup(() => controller.abort());
@@ -1664,29 +1461,6 @@ function createState() {
   const commandMenuItems = createMemo(() =>
     commandMenuOpen() ? buildCommandMenuItems(commandMenuInput(commandMenuContext())) : [],
   );
-  // The caret line's commit for the status bar: `author · age · subject` for a committed line
-  // (the band is the leading glyph the bar draws, not repeated in words), `uncommitted · working
-  // Tree` otherwise. Undefined when the rail is off or the caret sits on a row git can't attribute.
-  const caretProvenanceDetail = createMemo(() => {
-    const row = cursorLine();
-    const provenance = row === undefined ? undefined : provenanceForRow(row);
-    if (provenance === undefined) {
-      return undefined;
-    }
-    const text =
-      provenance.blame === undefined || provenance.band === "uncommitted"
-        ? "uncommitted · working tree"
-        : [
-            provenance.blame.author,
-            // The true wall clock in seconds, not the recency `now()` signal, which freezes ~30s
-            // After the last git activity and would under-report the age in an idle session.
-            relativeTime(provenance.blame.authorTime, Date.now() / 1000),
-            provenance.blame.summary,
-          ]
-            .filter((part) => part !== "")
-            .join(" · ");
-    return { band: provenance.band, text };
-  });
   // The bar's lowest tier: context-aware only for the temporary find modes, which have controls a
   // User cannot guess, and otherwise the one hint that reaches everything else. The panes get no
   // Standing tutorial line, since any live content outranks this and would bury it anyway.
@@ -1713,7 +1487,6 @@ function createState() {
       foregroundProgress: switchProgress(),
       guidance: guidance(),
       notification: notice(),
-      provenance: caretProvenanceDetail(),
       width: terminalWidth(),
     });
   });
@@ -2633,7 +2406,6 @@ function createState() {
       editor: editorFlag(),
       iconsEnabled: iconsEnabled(),
       ide: ideFlag(),
-      provenanceEnabled: blameEnabled(),
       searchCaseSensitive: searchCaseSensitive(),
       searchRegex: searchRegex(),
       searchScope: searchScope(),
@@ -3249,7 +3021,6 @@ function createState() {
     activateTab,
     activityLog,
     availableUpdate,
-    blameEnabled,
     canGoBack,
     canGoForward,
     caretColumn,
@@ -3339,7 +3110,6 @@ function createState() {
     pendingRestore,
     persistSettings,
     pinActiveTab,
-    provenanceForRow,
     quitConfirmOpen,
     recencyByPath,
     repoFilesLoading,
@@ -3375,7 +3145,6 @@ function createState() {
     selectionRange,
     selectionText,
     setActivityLog,
-    setBlameEnabled,
     setCaretLineLevel,
     setChangesOnly,
     setCliBaseRef,
@@ -3461,7 +3230,6 @@ function createState() {
     themeComboboxOpen,
     themeComboboxOrigin,
     themeComboboxResults,
-    toggleBlame,
     toggleFold,
     toggleGap,
     togglePinActiveTab,

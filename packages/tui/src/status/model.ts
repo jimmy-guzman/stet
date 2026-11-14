@@ -1,6 +1,4 @@
-import { provenanceGlyph } from "@/components/provenance";
 import type { ChangeKind } from "@/git/model";
-import type { Provenance } from "@/git/provenance";
 import { levelGlyph } from "@/log/levels";
 import type { LogLevel } from "@/log/levels";
 import { truncate, truncateLeft } from "@/utils/text";
@@ -63,13 +61,6 @@ interface StatusBarMessage {
   message: string;
 }
 
-interface StatusBarProvenance {
-  band: Provenance;
-  category: "contextual-inspection";
-  kind: "provenance";
-  text: string;
-}
-
 interface StatusBarAmbient {
   activity: StatusBarActivity;
   category: "ambient";
@@ -82,11 +73,7 @@ interface StatusBarGuidance {
   text: string;
 }
 
-export type StatusBarModel =
-  | StatusBarMessage
-  | StatusBarProvenance
-  | StatusBarAmbient
-  | StatusBarGuidance;
+export type StatusBarModel = StatusBarMessage | StatusBarAmbient | StatusBarGuidance;
 
 export interface StatusBarModelInput {
   activity: StatusBarActivity | undefined;
@@ -94,7 +81,6 @@ export interface StatusBarModelInput {
   foregroundProgress: string | undefined;
   guidance: string;
   notification: { level: LogLevel; text: string } | undefined;
-  provenance: { band: Provenance; text: string } | undefined;
   width: number;
 }
 
@@ -106,8 +92,7 @@ export interface StatusBarModelInput {
  * shrinks. Guidance sits at the bottom and always has content, which is what makes the return total
  * and every tier above it a pure displacement.
  *
- * The order encodes what the user is waiting on, most-acute first. A persistent alert outranks
- * provenance, so a real problem is never hidden behind the blame inspector.
+ * The order encodes what the user is waiting on, most-acute first.
  *
  * @param input The live signals, already resolved to plain values by `state.statusBarModel`
  * @returns The single item to render, fitted to `width` in terminal cells
@@ -124,18 +109,6 @@ export function buildStatusBarModel(input: StatusBarModelInput): StatusBarModel 
   if (input.alert !== undefined) {
     return fitMessage("persistent-alert", input.alert.level, input.alert.text, width);
   }
-  if (input.provenance !== undefined) {
-    return {
-      band: input.provenance.band,
-      category: "contextual-inspection",
-      kind: "provenance",
-      text: truncate(
-        input.provenance.text,
-        Math.max(0, width - Bun.stringWidth(`${provenanceGlyph(input.provenance.band)} `)),
-      ),
-    };
-  }
-
   const activity = fitActivity(input.activity, width);
   if (activity !== undefined) {
     return { activity, category: "ambient", kind: "ambient" };

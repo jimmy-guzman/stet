@@ -10,11 +10,13 @@ import { comboTextsFor, registerKeybindings } from "@/keys/registry";
 import { resolveKeybindings } from "@/keys/resolve";
 import { state } from "@/state";
 import {
+  activeTheme,
   activeThemeName,
   appearance,
   setAppearance,
   setSelection,
 } from "@/theme/active";
+import { darkTheme } from "@/theme/dark";
 import { registerThemes, resolveThemes, themeNames } from "@/theme/registry";
 
 import { createFixtureRepo, loadModel, runGit, seedState } from "./helpers";
@@ -60,6 +62,23 @@ test("the next test still starts from the default theme", () => {
   expect(themeNames()).not.toContain("isolation-probe");
   expect(activeThemeName()).toBe("dark");
   expect(appearance()).toBe("dark");
+});
+
+test("a dying test leaves the active built-in theme overridden", () => {
+  registerThemes(
+    resolveThemes({
+      dark: {
+        base: "light",
+        surface: { ...darkTheme.surface, base: "#123456" },
+      },
+    }).themes
+  );
+
+  expect(activeTheme().colors.surface.base).toBe("#123456");
+});
+
+test("the next test still resolves the built-in theme under that name", () => {
+  expect(activeTheme().colors.surface.base).toBe(darkTheme.surface.base);
 });
 
 test("a dying test leaves a rebind and a file association registered", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { builtinIcons } from "@/file-support/builtins";
+import { activeTheme } from "@/theme/active";
 import { darkTheme } from "@/theme/dark";
 import { lightTheme } from "@/theme/light";
 import { monoDarkTheme, monoLightTheme } from "@/theme/mono";
@@ -193,6 +194,23 @@ describe("selectThemeName", () => {
   test("a pair follows the appearance", () => {
     expect(selectThemeName({ dark: "a", light: "b" }, "dark")).toBe("a");
     expect(selectThemeName({ dark: "a", light: "b" }, "light")).toBe("b");
+  });
+});
+
+describe("activeTheme", () => {
+  test("re-resolves when a registered theme replaces the active name", () => {
+    expect(activeTheme().colors.surface.base).toBe(darkTheme.surface.base);
+
+    registerThemes(
+      resolveThemes({
+        dark: {
+          base: "light",
+          surface: { ...darkTheme.surface, base: "#123456" },
+        },
+      }).themes
+    );
+
+    expect(activeTheme().colors.surface.base).toBe("#123456");
   });
 });
 

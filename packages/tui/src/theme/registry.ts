@@ -1,5 +1,6 @@
 import { Predicate, Result, Schema } from "effect";
 import { bundledThemesInfo } from "shiki/themes";
+import { createSignal } from "solid-js";
 
 import { darkTheme } from "./dark";
 import { lightTheme } from "./light";
@@ -35,21 +36,36 @@ const builtins = new Map([
 
 const registry = new Map<string, RegisteredTheme>(builtins);
 
+/**
+ * Bumped on every registry write and read by every lookup, so a memo over a theme name (the active
+ * theme in `active.ts`) re-resolves when the entry behind an unchanged name is replaced: a config
+ * theme named `dark` registered after startup, or the test preload restoring the built-ins.
+ */
+const [registryVersion, setRegistryVersion] = createSignal(0);
+
+const readRegistry = () => {
+  registryVersion();
+
+  return registry;
+};
+
+const bumpRegistry = () => setRegistryVersion((version) => version + 1);
+
 const bundledThemeIds = new Set(bundledThemesInfo.map((theme) => theme.id));
 
 export const themeForName = (name: string): Theme =>
-  registry.get(name)?.tokens ?? darkTheme;
+  readRegistry().get(name)?.tokens ?? darkTheme;
 
 export const syntaxThemeForName = (name: string) =>
-  registry.get(name)?.syntaxTheme;
+  readRegistry().get(name)?.syntaxTheme;
 
-export const hasTheme = (name: string) => registry.has(name);
+export const hasTheme = (name: string) => readRegistry().has(name);
 
 /**
  * Built-ins first (`dark`, `light`), then user themes in registration order; `Map` preserves
  * insertion order, which is the order the switcher lists them in.
  */
-export const themeNames = () => [...registry.keys()];
+export const themeNames = () => [...readRegistry().keys()];
 
 /**
  * Test-only: the registry is a process-global map, so the test preload resets it to the built-ins
@@ -61,6 +77,8 @@ export const restoreRegistry = () => {
   for (const [name, theme] of builtins) {
     registry.set(name, theme);
   }
+
+  bumpRegistry();
 };
 
 export const selectThemeName = (
@@ -231,4 +249,6 @@ export const registerThemes = (themes: Map<string, RegisteredTheme>) => {
   for (const [name, theme] of themes) {
     registry.set(name, theme);
   }
+
+  bumpRegistry();
 };

@@ -4,7 +4,7 @@ import { Show } from "solid-js";
 
 import { scopeLabel } from "@/cli";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { truncate } from "@/utils/text";
 
 // Nerd Font (Material Design) glyphs for the header's git identity, code points verbatim from the
@@ -27,7 +27,6 @@ const MIN_SCOPE = 8;
 const MIN_BRANCH = 4;
 
 export function HeaderBar() {
-  const theme = useTheme();
   // A commit scope pins a historical commit, so the identity (and especially the branch, which is
   // Unrelated to a fixed commit) is dropped: the commit subject is the thing under inspection, and
   // The terminal title still carries repo/worktree. This also frees the line for the subject.

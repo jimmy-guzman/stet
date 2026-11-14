@@ -135,11 +135,3 @@ export function registerFileSupport(registry: FileSupportRegistry) {
 export function defaultFileSupportRegistry(): FileSupportRegistry {
   return freshRegistry();
 }
-
-export function snapshotFileSupport() {
-  return { files: new Map(files), icons: new Map(icons) };
-}
-
-export function restoreFileSupport(snapshot: ReturnType<typeof snapshotFileSupport>) {
-  registerFileSupport(snapshot);
-}

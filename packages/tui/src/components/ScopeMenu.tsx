@@ -4,7 +4,7 @@ import { createEffect, Index, Show } from "solid-js";
 import { scopeKinds, scopeMenuLabel } from "@/cli";
 import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { relativeTime } from "@/utils/relative-time";
 
 // Two levels in one overlay: the scope kinds, and a drill-down into recent commits
@@ -12,7 +12,6 @@ import { relativeTime } from "@/utils/relative-time";
 // Level is showing; a `▸` cursor caret plus a `●` current marker keep both legible
 // Under NO_COLOR, where the highlight background alone would vanish.
 export function ScopeMenu() {
-  const theme = useTheme();
   let scopeMenuRef: ScrollBoxRenderable | undefined;
 
   createEffect(() => {

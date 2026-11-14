@@ -1,11 +1,11 @@
 import type { MouseEvent } from "@opentui/core";
 import { batch, Show } from "solid-js";
 
+import { namedIcon } from "@/file-support/registry";
 import type { DirectoryNode, FileNode, FileTreeRow } from "@/git/tree";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 import { kindLetter } from "@/ui-helpers";
-import { folderIconModel } from "@/utils/file-icon";
 import { truncate, truncateName } from "@/utils/text";
 
 import { FileIcon } from "./FileIcon";
@@ -43,7 +43,6 @@ function DirectoryRow(props: {
   row: FileTreeRow;
   isDoubleClick: (id: string) => boolean;
 }) {
-  const theme = useTheme();
   const indent = () => " ".repeat(Math.max(0, props.row.depth) * 2);
   const focused = () =>
     state.focusedPane() === "tree" && props.row.index === state.focusedRowIndex();
@@ -83,7 +82,7 @@ function DirectoryRow(props: {
   };
 
   const isExpanded = () => state.expandedDirectories().has(props.node.id);
-  const icon = () => folderIconModel(isExpanded());
+  const icon = () => namedIcon(isExpanded() ? "folder-open" : "folder");
   // The directory dot tracks its most recently changed descendant; the dot itself
   // Decides freshness from the timestamp, so an aged-out value simply yields no dot.
   const recencyAt = () =>
@@ -156,7 +155,6 @@ function FileRow(props: {
   row: FileTreeRow;
   isDoubleClick: (id: string) => boolean;
 }) {
-  const theme = useTheme();
   const indent = () => " ".repeat(Math.max(0, props.row.depth) * 2);
   const focused = () =>
     state.focusedPane() === "tree" && props.row.index === state.focusedRowIndex();

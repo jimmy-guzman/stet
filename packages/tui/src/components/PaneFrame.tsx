@@ -2,7 +2,7 @@ import type { MouseEvent } from "@opentui/core";
 import type { JSX } from "@opentui/solid";
 import { Show } from "solid-js";
 
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 
 /**
  * The shared frame for the two persistent panes (tree, viewer). The box border stays neutral in
@@ -19,7 +19,6 @@ export function PaneFrame(props: {
   backgroundColor?: string;
   children: JSX.Element;
 }) {
-  const theme = useTheme();
   return (
     <box
       position="relative"

@@ -4,10 +4,6 @@
  * shape of stet's own `src/upgrade/release.ts`.
  */
 
-import { Data, Effect } from "effect";
-
-class VersionError extends Data.TaggedError("VersionError")<{ message: string }> {}
-
 function isVersionPayload(value: unknown): value is { version: string } {
   return (
     typeof value === "object" &&
@@ -17,39 +13,16 @@ function isVersionPayload(value: unknown): value is { version: string } {
   );
 }
 
-const loadVersion = Effect.gen(function* () {
-  const res = yield* Effect.tryPromise({
-    try: (signal) =>
-      fetch("https://registry.npmjs.org/@jimmy.codes/stet/latest", {
-        next: { revalidate: 3600 },
-        signal,
-      }),
-    catch: (cause) =>
-      new VersionError({ message: cause instanceof Error ? cause.message : String(cause) }),
-  });
-
-  if (!res.ok) {
-    return yield* Effect.fail(
-      new VersionError({ message: `version request failed: ${res.status}` }),
-    );
+export async function getStetVersion(): Promise<string | undefined> {
+  try {
+    const res = await fetch("https://registry.npmjs.org/@jimmy.codes/stet/latest", {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return undefined;
+    const data: unknown = await res.json();
+    return isVersionPayload(data) ? data.version : undefined;
+  } catch {
+    return undefined;
   }
-
-  const data = yield* Effect.tryPromise({
-    try: () => res.json() as Promise<unknown>,
-    catch: (cause) =>
-      new VersionError({ message: cause instanceof Error ? cause.message : String(cause) }),
-  });
-
-  if (isVersionPayload(data)) return data.version;
-
-  return yield* Effect.fail(new VersionError({ message: "unexpected npm payload" }));
-});
-
-export function getStetVersion(): Promise<string | undefined> {
-  return Effect.runPromise(
-    loadVersion.pipe(
-      Effect.timeout("3 seconds"),
-      Effect.orElseSucceed((): string | undefined => undefined),
-    ),
-  );
 }

@@ -1,6 +1,6 @@
 import { createMemo } from "solid-js";
 
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 
 import { scrollbarThumb } from "./scrollbar";
 
@@ -20,7 +20,6 @@ export function ListScrollbar(props: {
   viewport: () => number;
   scrollTop: () => number;
 }) {
-  const theme = useTheme();
   const content = createMemo(() => {
     const thumb = scrollbarThumb(props.rowCount(), props.viewport(), props.scrollTop());
     return Array.from({ length: props.viewport() }, (_, index) =>

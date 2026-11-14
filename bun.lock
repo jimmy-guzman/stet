@@ -16,7 +16,6 @@
     "docs": {
       "name": "@stet/docs",
       "dependencies": {
-        "effect": "4.0.1",
         "fumadocs-core": "16.16.2",
         "fumadocs-mdx": "15.4.6",
         "fumadocs-ui": "16.16.2",
@@ -38,7 +37,7 @@
     },
     "packages/tui": {
       "name": "stet",
-      "version": "0.10.1",
+      "version": "0.10.2",
       "bin": {
         "stet": "./src/main.tsx",
       },

@@ -5,8 +5,8 @@ import { testRender } from "@opentui/solid";
 
 import { App } from "@/App";
 import { helpText } from "@/cli";
-import { registerKeybindings, restoreKeybindings, snapshotKeybindings } from "@/keys/registry";
-import { resolveKeybindings } from "@/keys/resolve";
+import { registerKeybindings } from "@/keys/registry";
+import { defaultKeybindings, resolveKeybindings } from "@/keys/resolve";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
@@ -24,7 +24,6 @@ describe("configured keybindings", () => {
     // Teardown wraps everything after each resource appears (the keys registry
     // Is process-global and outside resetState, so a throw during setup must
     // Not leak the rebind into later tests).
-    const baseline = snapshotKeybindings();
     try {
       const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
       seedState(model, { kind: "all", ref: "HEAD" });
@@ -64,19 +63,18 @@ describe("configured keybindings", () => {
         renderer.destroy();
       }
     } finally {
-      restoreKeybindings(baseline);
+      registerKeybindings(defaultKeybindings());
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
   test("an unbound action drops out of the rendered help", () => {
-    const baseline = snapshotKeybindings();
     try {
       registerKeybindings(resolveKeybindings({ "toggle-wrap": false }).set);
 
       expect(helpText()).not.toContain("toggle long-line wrap");
     } finally {
-      restoreKeybindings(baseline);
+      registerKeybindings(defaultKeybindings());
     }
   });
 });

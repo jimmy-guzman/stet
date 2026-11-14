@@ -3,7 +3,7 @@ import { createMemo, For, Show } from "solid-js";
 import { keyHelpGroups } from "@/help/keys";
 import { legendGroups } from "@/help/legend";
 import { state } from "@/state";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 
 import packageJson from "../../package.json";
 
@@ -38,7 +38,6 @@ function wrappedLineCount(text: string, width: number) {
 }
 
 export function HelpDialog() {
-  const theme = useTheme();
   // Both views reduce to one row shape: a left cell (key combo or colored glyph) and a description.
   // The registry and the mark set are both fixed, so this recomputes only on a view toggle or a
   // Live theme flip.

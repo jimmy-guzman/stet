@@ -23,12 +23,11 @@ import type { LogLevel } from "./log/levels";
 import { log } from "./log/terminal";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
-import { useTheme } from "./theme/context";
+import { theme } from "./theme/context";
 import { worktreeLabel } from "./ui-helpers";
 import { formatUpdateNotice } from "./upgrade/release";
 
 export function App() {
-  const theme = useTheme();
   const renderer = useRenderer();
   const dimensions = useTerminalDimensions();
 

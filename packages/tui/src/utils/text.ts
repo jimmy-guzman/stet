@@ -1,6 +1,6 @@
 // Split into Unicode code points (not UTF-16 code units), so an astral char
 // Stays one entry. oxlint forbids both string spread and Array.from(string), so
-// The split is an explicit iteration (the same idiom the fuzzy matcher uses).
+// The split is an explicit iteration.
 export function toCodePoints(text: string): string[] {
   const chars: string[] = [];
   for (const char of text) {

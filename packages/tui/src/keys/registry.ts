@@ -19,12 +19,3 @@ export function combosFor(id: KeyActionId): Combo[] {
 export function comboTextsFor(id: KeyActionId): string[] {
   return active.texts.get(id) ?? [];
 }
-
-// Test-only: a test that registers bindings would leak them into later tests.
-export function snapshotKeybindings() {
-  return active;
-}
-
-export function restoreKeybindings(snapshot: KeybindingSet) {
-  active = snapshot;
-}

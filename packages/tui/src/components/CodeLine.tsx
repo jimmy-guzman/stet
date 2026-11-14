@@ -4,14 +4,13 @@ import { createEffect } from "solid-js";
 
 import type { RenderSpan } from "@/diff/hast";
 import { sliceSpansWindow } from "@/diff/spans";
-import { useTheme } from "@/theme/context";
+import { theme } from "@/theme/context";
 
 // One highlighted code line as a single StyledText buffer (the diff's StyledLine
 // Pattern): per-token colors without one <text> per token, set imperatively
 // Because StyledText is not a typed JSX child. Shared by every surface that shows
 // A source line (search results).
 export function CodeLine(props: { spans: () => RenderSpan[]; width: () => number }) {
-  const theme = useTheme();
   let ref: TextRenderable | undefined;
   createEffect(() => {
     if (ref === undefined) {

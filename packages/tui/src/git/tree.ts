@@ -196,10 +196,6 @@ export function flattenTree(nodes: FileTreeNode[], expanded: Set<string>) {
   return rows;
 }
 
-export function findRowIndexForPath(rows: FileTreeRow[], path: string) {
-  return rows.findIndex((row) => row.node.type === "file" && row.node.path === path);
-}
-
 export function firstFileInNode(node: FileTreeNode): FileNode | undefined {
   if (node.type === "file") {
     return node;

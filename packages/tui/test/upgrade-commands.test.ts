@@ -21,7 +21,11 @@ describe("upgradeInvocation", () => {
   });
 
   test("brew upgrades the tap formula", () => {
-    expect(upgradeInvocation("brew")?.argv).toEqual(["brew", "upgrade", "jimmy-guzman/tap/stet"]);
+    expect(upgradeInvocation("brew")?.argv).toEqual([
+      "brew",
+      "upgrade",
+      "jimmy-guzman/tap/stet",
+    ]);
   });
 
   test("unknown has no command", () => {

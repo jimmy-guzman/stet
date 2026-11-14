@@ -1,8 +1,14 @@
 import { afterEach } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import path from "node:path";
 
 import { Effect, Layer } from "effect";
 import { batch } from "solid-js";
@@ -24,85 +30,96 @@ const FileTestLive = FileLive.pipe(Layer.provide(ProcessLive));
 
 // Run the File service against a fixture repo's git-show path, the same path the
 // App uses for deleted files, so tests exercise the production classification.
-export function loadGitShowContent(repoRoot: string, path: string) {
-  return Effect.runPromise(
+export const loadGitShowContent = async (repoRoot: string, file: string) =>
+  await Effect.runPromise(
     File.pipe(
-      Effect.flatMap((file) =>
-        file.content(repoRoot, path, { full: false, gitSpec: `HEAD:${path}` }),
+      Effect.flatMap((service) =>
+        service.content(repoRoot, file, {
+          full: false,
+          gitSpec: `HEAD:${file}`,
+        })
       ),
-      Effect.provide(FileTestLive),
-    ),
+      Effect.provide(FileTestLive)
+    )
   );
-}
 
 // Run the Git service against a fixture repo, the same path the app uses, so
 // Tests exercise the production load instead of a mock.
-export function loadModel(repoRoot: string, scope: DiffScope) {
-  return Effect.runPromise(
+export const loadModel = async (repoRoot: string, scope: DiffScope) =>
+  await Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.loadModel(repoRoot, scope)),
-      Effect.provide(GitTestLive),
-    ),
+      Effect.provide(GitTestLive)
+    )
   );
-}
 
-export function loadWorktrees(repoRoot: string) {
-  return Effect.runPromise(
+export const loadWorktrees = async (repoRoot: string) =>
+  await Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.worktrees(repoRoot)),
-      Effect.provide(GitTestLive),
-    ),
+      Effect.provide(GitTestLive)
+    )
   );
-}
 
-export function loadWorktreeSummaries(worktrees: readonly Worktree[], repoRoot: string) {
-  return Effect.runPromise(
+export const loadWorktreeSummaries = async (
+  worktrees: readonly Worktree[],
+  repoRoot: string
+) =>
+  await Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.worktreeSummaries(worktrees, repoRoot)),
-      Effect.provide(GitTestLive),
-    ),
+      Effect.provide(GitTestLive)
+    )
   );
-}
 
-export function loadRecentCommits(repoRoot: string, limit: number) {
-  return Effect.runPromise(
+export const loadRecentCommits = async (repoRoot: string, limit: number) =>
+  await Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.recentCommits(repoRoot, limit)),
-      Effect.provide(GitTestLive),
-    ),
+      Effect.provide(GitTestLive)
+    )
   );
-}
 
-export function loadFileDiff(repoRoot: string, scope: DiffScope, changed: ChangedFile) {
-  return Effect.runPromise(
+export const loadFileDiff = async (
+  repoRoot: string,
+  scope: DiffScope,
+  changed: ChangedFile
+) =>
+  await Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.fileDiff(repoRoot, scope, changed)),
-      Effect.provide(GitTestLive),
-    ),
+      Effect.provide(GitTestLive)
+    )
   );
-}
 
-export function loadBinaryMeta(repoRoot: string, scope: DiffScope, changed: ChangedFile) {
-  return Effect.runPromise(
+export const loadBinaryMeta = async (
+  repoRoot: string,
+  scope: DiffScope,
+  changed: ChangedFile
+) =>
+  await Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.binaryMeta(repoRoot, scope, changed)),
-      Effect.provide(GitTestLive),
-    ),
+      Effect.provide(GitTestLive)
+    )
   );
-}
 
 // State is a global singleton, so render tests seed it fresh (and reset the UI
 // Signals that might bleed from a prior test) before rendering App. Mirrors the
 // Startup seeding in main.tsx.
-export function seedState(
+export const seedState = (
   model: GitModel,
   scope: DiffScope,
-  emptyTree = emptyTreeForFormat("sha1"),
-) {
+  emptyTree = emptyTreeForFormat("sha1")
+) => {
   const selected = model.changed[0]?.path ?? model.repoFiles[0]?.path;
-  const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));
+  const baseExpanded = defaultExpandedDirectories(
+    model.changed.map((file) => file.path)
+  );
   const expanded =
-    selected === undefined ? baseExpanded : expandAncestorsForPath(baseExpanded, selected);
+    selected === undefined
+      ? baseExpanded
+      : expandAncestorsForPath(baseExpanded, selected);
   batch(() => {
     state.setScope(scope);
     state.setCliBaseRef(scope.ref);
@@ -157,23 +174,28 @@ export function seedState(
     state.setThemeComboboxQuery("");
     state.setThemeComboboxIndex(0);
   });
-}
+};
 
-export function focusedRow(): FileTreeRow | undefined {
-  return state.treeRows()[state.focusedRowIndex()];
-}
+export const focusedRow = (): FileTreeRow | undefined =>
+  state.treeRows()[state.focusedRowIndex()];
 
-export function runGit(repoRoot: string, args: string[]) {
+export const runGit = (repoRoot: string, args: string[]) => {
   execFileSync(
     "git",
-    ["-c", "user.name=Stet Test", "-c", "user.email=stet-test@example.com", ...args],
+    [
+      "-c",
+      "user.name=Stet Test",
+      "-c",
+      "user.email=stet-test@example.com",
+      ...args,
+    ],
     {
       cwd: repoRoot,
       env: stripGitEnv(process.env),
       stdio: "ignore",
-    },
+    }
   );
-}
+};
 
 const fixtureRepoRoots = new Set<string>();
 
@@ -193,21 +215,21 @@ afterEach(() => {
  * @param commit Whether to commit the seeded files. `false` leaves `HEAD` unborn, the state the
  *   commitless cases need.
  */
-export function createFixtureRepo(
+export const createFixtureRepo = (
   prefix: string,
   files: Record<string, string>,
-  { commit = true, objectFormat = "sha1" } = {},
-) {
+  { commit = true, objectFormat = "sha1" } = {}
+) => {
   // Realpath, because that is what the app gets: it takes repoRoot from `git rev-parse
   // --show-toplevel`, and git resolves symlinks (on macOS /var/folders is a link to /private/var).
   // A fixture rooted at the unresolved path would not match the paths git reports back, so anything
   // Comparing the two (the picker's current-worktree marker, a worktree summary's key) would miss.
-  const repoRoot = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  const repoRoot = realpathSync(mkdtempSync(path.join(tmpdir(), prefix)));
   fixtureRepoRoots.add(repoRoot);
 
-  for (const [path, content] of Object.entries(files)) {
-    mkdirSync(dirname(join(repoRoot, path)), { recursive: true });
-    writeFileSync(join(repoRoot, path), content);
+  for (const [file, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(repoRoot, file)), { recursive: true });
+    writeFileSync(path.join(repoRoot, file), content);
   }
 
   runGit(repoRoot, ["init", `--object-format=${objectFormat}`]);
@@ -217,7 +239,7 @@ export function createFixtureRepo(
   }
 
   return repoRoot;
-}
+};
 
 interface FrameSource {
   renderOnce: () => Promise<void>;
@@ -229,17 +251,18 @@ interface FrameSource {
 // Explicit override: a fixed low ceiling at a nominal per-tick cost silently
 // Shrinks on a slower/loaded runner (macOS CI has flaked this way), well under
 // The generous per-test timeout callers already declare.
-export function makeSettleUntil({ renderOnce, captureCharFrame }: FrameSource) {
-  return async (
+export const makeSettleUntil =
+  ({ renderOnce, captureCharFrame }: FrameSource) =>
+  async (
     label: string,
     predicate: (frame: string) => boolean,
     minAttempts = 1,
-    maxAttempts = 400,
+    maxAttempts = 400
   ) => {
     let frame = "";
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       // oxlint-disable-next-line no-await-in-loop -- polling retry: each tick must complete before the next check
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await Bun.sleep(10);
       // oxlint-disable-next-line no-await-in-loop -- polling retry: each tick must complete before the next check
       await renderOnce();
       frame = captureCharFrame();
@@ -250,4 +273,3 @@ export function makeSettleUntil({ renderOnce, captureCharFrame }: FrameSource) {
 
     throw new Error(`timed out waiting for ${label}\n\n${frame}`);
   };
-}

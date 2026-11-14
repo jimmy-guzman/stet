@@ -5,7 +5,8 @@
  */
 
 import { isMarkdownPreferred, rewritePath } from "fumadocs-core/negotiation";
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 const mdxSuffix = rewritePath("/docs{/*path}.mdx", "/llms.mdx/docs{/*path}");
 const mdSuffix = rewritePath("/docs{/*path}.md", "/llms.mdx/docs{/*path}");
@@ -17,13 +18,18 @@ export const config = {
 
 export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const suffixed = mdxSuffix.rewrite(pathname) || mdSuffix.rewrite(pathname);
+  const mdx = mdxSuffix.rewrite(pathname);
+  const suffixed = mdx === false ? mdSuffix.rewrite(pathname) : mdx;
 
-  if (suffixed) return NextResponse.rewrite(new URL(suffixed, request.nextUrl));
+  if (suffixed !== false) {
+    return NextResponse.rewrite(new URL(suffixed, request.nextUrl));
+  }
 
   const negotiated = isMarkdownPreferred(request) && page.rewrite(pathname);
 
-  if (negotiated) return NextResponse.rewrite(new URL(negotiated, request.nextUrl));
+  if (negotiated !== false) {
+    return NextResponse.rewrite(new URL(negotiated, request.nextUrl));
+  }
 
   return NextResponse.next();
 }

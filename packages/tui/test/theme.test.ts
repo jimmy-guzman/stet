@@ -6,11 +6,15 @@ import { darkTheme } from "@/theme/dark";
 import { lightTheme } from "@/theme/light";
 import { resolveTheme } from "@/theme/resolve";
 
-const HEX = /^#[0-9a-f]{6}$/;
+const HEX = /^#[0-9a-f]{6}$/u;
 
 // Walks the theme and collects every string leaf; syntax style objects mix
 // Booleans (bold/italic/…) with color strings, and only the strings matter here
-function collectColors(value: unknown, path: string, out: [path: string, color: string][]) {
+const collectColors = (
+  value: unknown,
+  path: string,
+  out: [path: string, color: string][]
+) => {
   if (typeof value === "string") {
     out.push([path, value]);
     return;
@@ -21,7 +25,7 @@ function collectColors(value: unknown, path: string, out: [path: string, color: 
       collectColors(child, `${path}.${key}`, out);
     }
   }
-}
+};
 
 describe.each([
   ["darkTheme", darkTheme],
@@ -36,17 +40,26 @@ describe.each([
   });
 });
 
+const paths = (theme: unknown) => {
+  const out: [path: string, color: string][] = [];
+  collectColors(theme, "theme", out);
+  return out.map(([path]) => path).toSorted();
+};
+
 describe("theme parity", () => {
   test("light and dark expose the exact same token paths", () => {
-    const paths = (theme: unknown) => {
-      const out: [path: string, color: string][] = [];
-      collectColors(theme, "theme", out);
-      return out.map(([path]) => path).toSorted();
-    };
-
     expect(paths(lightTheme)).toEqual(paths(darkTheme));
   });
 });
+
+const activeVariants = (theme: typeof darkTheme) => {
+  const resolved = resolveTheme(theme);
+  return [
+    [resolved.rgba.addedBgActive, theme.diff.addedBg],
+    [resolved.rgba.removedBgActive, theme.diff.removedBg],
+    [resolved.rgba.findMatchBgActive, theme.find.matchBg],
+  ] as const;
+};
 
 describe("resolveTheme", () => {
   test("transparent is the zero RGBA singleton", () => {
@@ -55,15 +68,6 @@ describe("resolveTheme", () => {
     expect(resolved.colors).toBe(darkTheme);
     expect(resolved.rgba.transparent).toEqual(RGBA.fromValues(0, 0, 0, 0));
   });
-
-  const activeVariants = (theme: typeof darkTheme) => {
-    const resolved = resolveTheme(theme);
-    return [
-      [resolved.rgba.addedBgActive, theme.diff.addedBg],
-      [resolved.rgba.removedBgActive, theme.diff.removedBg],
-      [resolved.rgba.findMatchBgActive, theme.find.matchBg],
-    ] as const;
-  };
 
   test("dark active variants brighten their base token and stay clamped", () => {
     for (const [active, baseHex] of activeVariants(darkTheme)) {
@@ -74,7 +78,9 @@ describe("resolveTheme", () => {
         expect(active[channel]).toBeLessThanOrEqual(1);
       }
       // ...and the variant is genuinely brighter than its base, not a no-op.
-      expect(active.r + active.g + active.b).toBeGreaterThan(base.r + base.g + base.b);
+      expect(active.r + active.g + active.b).toBeGreaterThan(
+        base.r + base.g + base.b
+      );
     }
   });
 
@@ -87,7 +93,9 @@ describe("resolveTheme", () => {
         expect(active[channel]).toBeGreaterThanOrEqual(0);
       }
       // ...and the variant is genuinely darker than its base, never clamped to white.
-      expect(active.r + active.g + active.b).toBeLessThan(base.r + base.g + base.b);
+      expect(active.r + active.g + active.b).toBeLessThan(
+        base.r + base.g + base.b
+      );
     }
   });
 });

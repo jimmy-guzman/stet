@@ -3,40 +3,38 @@ title: Keybindings
 description: Every rebindable stet shortcut, grouped by what it acts on. Press ? in the app for the same list.
 ---
 
-The keyboard drives everything in stet. Press `?` at any time to see this list
-inside the app. Overlays (pickers, menus, the quit confirm) carry their own keys
-in a hint row along their bottom edge, so those are not repeated here.
+The keyboard drives everything in stet. Press `?` at any time to see this list inside the app. Overlays (pickers, menus, the quit confirm) carry their own keys in a hint row along their bottom edge, so those are not repeated here.
 
 {/* GENERATED-KEYS: edit src/help/keys.ts then run bun run gen:keys */}
 
 ## Navigation
 
-| Key      | Action                                                                            | Rebind id                                            |
-| -------- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `j / k`  | move in the tree or viewer                                                        | `focus-down`, `focus-up`, `cursor-down`, `cursor-up` |
-| `h / l`  | collapse / expand folders (tree) or hop the caret by word (viewer)                | `collapse`, `expand`, `caret-prev`, `caret-next`     |
-| `tab`    | switch focus between the tree and viewer; the search pane's tab cycles its fields | `switch-pane`                                        |
-| `enter`  | open the focused item                                                             | `open`                                               |
-| `ctrl-p` | go to file: fuzzy-search the whole repo                                           | `go-to-file`                                         |
-| `.`      | jump to the most recently changed file                                            | `latest-file`                                        |
+| Key | Action | Rebind id |
+| --- | --- | --- |
+| `j / k` | move in the tree or viewer | `focus-down`, `focus-up`, `cursor-down`, `cursor-up` |
+| `h / l` | collapse / expand folders (tree) or hop the caret by word (viewer) | `collapse`, `expand`, `caret-prev`, `caret-next` |
+| `tab` | switch focus between the tree and viewer; the search pane's tab cycles its fields | `switch-pane` |
+| `enter` | open the focused item | `open` |
+| `ctrl-p` | go to file: fuzzy-search the whole repo | `go-to-file` |
+| `.` | jump to the most recently changed file | `latest-file` |
 
 ## Viewer
 
-| Key           | Action                                                           | Rebind id                        |
-| ------------- | ---------------------------------------------------------------- | -------------------------------- |
-| `/`           | find in the viewer; n/N cycle matches, esc clears                | `find`                           |
-| `ctrl-f`      | project search pane; regex/case/scope/glob toggles               | `search`                         |
-| `v`           | toggle diff ↔ full file view for a changed file                  | `toggle-view`                    |
-| `z`           | fold / unfold the region at the caret                            | `fold`                           |
-| `x`           | toggle long-line wrap in the viewer                              | `toggle-wrap`                    |
-| `f`           | load full content when truncated                                 | `load-full`                      |
-| `ctrl-d / u`  | half-page cursor movement in the viewer                          | `half-page-down`, `half-page-up` |
-| `g / G`       | jump to first / last line                                        | `first-line`, `last-line`        |
-| `< / >`       | back / forward through viewer history                            | `back`, `forward`                |
-| `y`           | copy path (tree), path:line:col (viewer), or the selected result | `copy-reference`                 |
-| `Y`           | copy the file                                                    | `copy-file`                      |
-| `Shift+↑ / ↓` | extend a line selection (drag also selects)                      | `select-up`, `select-down`       |
-| `C`           | copy the selected lines (or the caret line)                      | `copy-selection`                 |
+| Key | Action | Rebind id |
+| --- | --- | --- |
+| `/` | find in the viewer; n/N cycle matches, esc clears | `find` |
+| `ctrl-f` | project search pane; regex/case/scope/glob toggles | `search` |
+| `v` | toggle diff ↔ full file view for a changed file | `toggle-view` |
+| `z` | fold / unfold the region at the caret | `fold` |
+| `x` | toggle long-line wrap in the viewer | `toggle-wrap` |
+| `f` | load full content when truncated | `load-full` |
+| `ctrl-d / u` | half-page cursor movement in the viewer | `half-page-down`, `half-page-up` |
+| `g / G` | jump to first / last line | `first-line`, `last-line` |
+| `< / >` | back / forward through viewer history | `back`, `forward` |
+| `y` | copy path (tree), path:line:col (viewer), or the selected result | `copy-reference` |
+| `Y` | copy the file | `copy-file` |
+| `Shift+↑ / ↓` | extend a line selection (drag also selects) | `select-up`, `select-down` |
+| `C` | copy the selected lines (or the caret line) | `copy-selection` |
 
 ## Tabs
 
@@ -48,41 +46,39 @@ in a hint row along their bottom edge, so those are not repeated here.
 
 ## Workspace
 
-| Key      | Action                                            | Rebind id       |
-| -------- | ------------------------------------------------- | --------------- |
-| `s`      | scope picker: kinds, or drill into recent commits | `scope`         |
-| `t`      | theme switcher: filter, live-preview, apply       | `theme`         |
-| `w`      | switch to another git worktree                    | `worktrees`     |
-| `c`      | toggle changes-only filter for the tree           | `changes-only`  |
-| `ctrl-s` | save current settings to config                   | `save-settings` |
+| Key | Action | Rebind id |
+| --- | --- | --- |
+| `s` | scope picker: kinds, or drill into recent commits | `scope` |
+| `t` | theme switcher: filter, live-preview, apply | `theme` |
+| `w` | switch to another git worktree | `worktrees` |
+| `c` | toggle changes-only filter for the tree | `changes-only` |
+| `ctrl-s` | save current settings to config | `save-settings` |
 
 ## Layout
 
-| Key         | Action                                             | Rebind id                                |
-| ----------- | -------------------------------------------------- | ---------------------------------------- |
-| `ctrl-b`    | toggle the file tree sidebar                       | `toggle-sidebar`                         |
-| `[ / ] / \` | shrink (closes past min) / grow / reset the tree   | `shrink-pane`, `grow-pane`, `reset-pane` |
-| `d`         | dock the tree to the next edge, clockwise          | `move-pane`                              |
-| `m`         | toggle zooming the focused pane to fill the window | `zoom-pane`                              |
+| Key | Action | Rebind id |
+| --- | --- | --- |
+| `ctrl-b` | toggle the file tree sidebar | `toggle-sidebar` |
+| `[ / ] / \` | shrink (closes past min) / grow / reset the tree | `shrink-pane`, `grow-pane`, `reset-pane` |
+| `d` | dock the tree to the next edge, clockwise | `move-pane` |
+| `m` | toggle zooming the focused pane to fill the window | `zoom-pane` |
 
 ## App
 
-| Key         | Action                                                         | Rebind id       |
-| ----------- | -------------------------------------------------------------- | --------------- |
-| `e`         | open in terminal editor (suspends TUI, --editor template)      | `open-editor`   |
-| `o`         | open in GUI / IDE (renderer stays live, --ide template)        | `open-ide`      |
-| `O`         | open externally in the OS default app (images, PDFs, binaries) | `open-external` |
-| `Shift+F10` | context menu for the focused row or caret (or right-click)     | `context-menu`  |
-| `?`         | show all keybindings and the marks legend                      | `help`          |
-| `q`         | quit (confirm with y)                                          | `quit`          |
+| Key | Action | Rebind id |
+| --- | --- | --- |
+| `e` | open in terminal editor (suspends TUI, --editor template) | `open-editor` |
+| `o` | open in GUI / IDE (renderer stays live, --ide template) | `open-ide` |
+| `O` | open externally in the OS default app (images, PDFs, binaries) | `open-external` |
+| `Shift+F10` | context menu for the focused row or caret (or right-click) | `context-menu` |
+| `?` | show all keybindings and the marks legend | `help` |
+| `q` | quit (confirm with y) | `quit` |
 
 {/* /GENERATED-KEYS */}
 
 ## Custom keybindings
 
-Every key above is rebindable through the `keybindings` section of your
-[configuration](/docs/reference/configuration): map a rebind id from the tables
-to a combo, a list of combos, or `false` to unbind it.
+Every key above is rebindable through the `keybindings` section of your [configuration](/docs/reference/configuration): map a rebind id from the tables to a combo, a list of combos, or `false` to unbind it.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -94,47 +90,20 @@ to a combo, a list of combos, or `false` to unbind it.
 }
 ```
 
-A combo is optional `ctrl`/`shift` modifiers joined by `+` or `-`, then a key:
-a letter, a symbol (`?`, `[`), an arrow (`↑` or `up`), an F-key, or one of
-`tab`, `enter`, `return`, `esc`, `space`, `backspace`, `delete`, `insert`,
-`home`, `end`, `pageup`, `pagedown`. A single uppercase letter means shift
-(`"G"` is `"shift+g"`). Modifiers match exactly, so binding `"s"` never fires on
-`ctrl+s`; the one exception is shift on a symbol key, which is ignored.
+A combo is optional `ctrl`/`shift` modifiers joined by `+` or `-`, then a key: a letter, a symbol (`?`, `[`), an arrow (`↑` or `up`), an F-key, or one of `tab`, `enter`, `return`, `esc`, `space`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup`, `pagedown`. A single uppercase letter means shift (`"G"` is `"shift+g"`). Modifiers match exactly, so binding `"s"` never fires on `ctrl+s`; the one exception is shift on a symbol key, which is ignored.
 
-The tables list each action's primary combo. Several movement actions keep an
-arrow as a second default: `↑` / `↓` beside `j` / `k`, and `←` / `→` beside
-`h` / `l`.
+The tables list each action's primary combo. Several movement actions keep an arrow as a second default: `↑` / `↓` beside `j` / `k`, and `←` / `→` beside `h` / `l`.
 
-An unknown id, or a combo that does not parse, keeps the default. Binding one
-combo to two actions leaves both registered, and which of them fires follows
-stet's internal dispatch order rather than the order of these tables, so unbind
-the one you do not want with `false` rather than relying on the winner. Startup
-surfaces only the first configuration problem it finds, so a keybinding issue
-can sit behind an unrelated one; `?` and `--help` always show the bindings
-actually in effect.
+An unknown id, or a combo that does not parse, keeps the default. Binding one combo to two actions leaves both registered, and which of them fires follows stet's internal dispatch order rather than the order of these tables, so unbind the one you do not want with `false` rather than relying on the winner. Startup surfaces only the first configuration problem it finds, so a keybinding issue can sit behind an unrelated one; `?` and `--help` always show the bindings actually in effect.
 
-Keys inside overlays (pickers, menus, the quit confirm, the search pane) and
-`ctrl+c` are fixed. A committed find also holds `n` and `N` to cycle its matches
-until `esc` clears it.
+Keys inside overlays (pickers, menus, the quit confirm, the search pane) and `ctrl+c` are fixed. A committed find also holds `n` and `N` to cycle its matches until `esc` clears it.
 
 ## Mouse
 
-The keyboard drives everything, but the mouse works too. Click a file to open
-it, a folder to expand or collapse it, or a diff line to move the cursor there.
-Double-click a file in the tree, or a tab in the strip, to pin it as a tab.
-Clicks also work in the overlays and the search pane, and hovering a theme in
-the switcher previews it live. Clicking a pane focuses it, and the wheel
-scrolls whichever pane the pointer is over. Right-click a tree row or a viewer line for a context
-menu of the actions that apply there, the same menu `Shift+F10` opens on the
-focused pane.
+The keyboard drives everything, but the mouse works too. Click a file to open it, a folder to expand or collapse it, or a diff line to move the cursor there. Double-click a file in the tree, or a tab in the strip, to pin it as a tab. Clicks also work in the overlays and the search pane, and hovering a theme in the switcher previews it live. Clicking a pane focuses it, and the wheel scrolls whichever pane the pointer is over. Right-click a tree row or a viewer line for a context menu of the actions that apply there, the same menu `Shift+F10` opens on the focused pane.
 
 ![The viewer's context menu listing its copy and open actions](/screenshots/context-menu.png)
 
-The menu carries whatever applies where you opened it, so it is shorter
-elsewhere: a directory in the tree offers only Copy path. Nothing in it is shown
-greyed out.
+The menu carries whatever applies where you opened it, so it is shorter elsewhere: a directory in the tree offers only Copy path. Nothing in it is shown greyed out.
 
-Drag across diff lines to select a range. Holding the pointer at the top or
-bottom edge scrolls the viewer and continues the selection. Shift-click extends
-the range when the terminal forwards `Shift+mouse`; some terminals reserve that
-gesture for native text selection, so drag or `Shift+↑` / `Shift+↓` is portable.
+Drag across diff lines to select a range. Holding the pointer at the top or bottom edge scrolls the viewer and continues the selection. Shift-click extends the range when the terminal forwards `Shift+mouse`; some terminals reserve that gesture for native text selection, so drag or `Shift+↑` / `Shift+↓` is portable.

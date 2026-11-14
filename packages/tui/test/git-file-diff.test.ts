@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import type { DiffScope } from "@/cli";
 import { structureDiff } from "@/diff/engine";
@@ -18,11 +18,16 @@ import {
   runGit,
 } from "../test/helpers";
 
+const u32be = (n: number) => {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, n);
+  return [...bytes];
+};
+
 // A minimal valid PNG header (width/height in the IHDR) plus optional trailing padding
 // To vary the byte size; the NUL bytes make git and stet both classify it binary.
-function png(width: number, height: number, pad = 0): Uint8Array {
-  const u32be = (n: number) => [(n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-  return Uint8Array.from([
+const png = (width: number, height: number, pad = 0): Uint8Array =>
+  Uint8Array.from([
     0x89,
     0x50,
     0x4e,
@@ -43,25 +48,30 @@ function png(width: number, height: number, pad = 0): Uint8Array {
     ...u32be(height),
     ...Array.from({ length: pad }, () => 0),
   ]);
-}
 
 // The slow pathspec invocation this change replaced, captured directly so a test
 // Asserts the in-process patch renders the same rows git's own diff would.
-function pathspecDiff(repoRoot: string, scope: DiffScope, file: ChangedFile) {
+const pathspecDiff = (
+  repoRoot: string,
+  scope: DiffScope,
+  file: ChangedFile
+) => {
   const args =
     file.kind === "untracked"
       ? untrackedDiffArgs(file.path).slice(1)
       : [
           ...diffArgs(scope).slice(1),
           "--",
-          ...(file.oldPath === undefined ? [file.path] : [file.oldPath, file.path]),
+          ...(file.oldPath === undefined
+            ? [file.path]
+            : [file.oldPath, file.path]),
         ];
   // `git diff` exits 1 when there are differences (and always with --no-index),
   // Which execFileSync throws on; the patch text is still on stdout.
   try {
     return execFileSync("git", args, {
       cwd: repoRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: stripGitEnv(process.env),
     });
   } catch (error) {
@@ -70,35 +80,42 @@ function pathspecDiff(repoRoot: string, scope: DiffScope, file: ChangedFile) {
     }
     throw error;
   }
-}
+};
 
-function rows(patch: string): NavigableLine[] {
-  return structureDiff({ full: true, maxLines: 4000, patch }).navigable;
-}
+const rows = (patch: string): NavigableLine[] =>
+  structureDiff({ full: true, maxLines: 4000, patch }).navigable;
 
-async function changedFile(repoRoot: string, scope: DiffScope, path: string) {
+const changedFile = async (
+  repoRoot: string,
+  scope: DiffScope,
+  file: string
+) => {
   const model = await loadModel(repoRoot, scope);
-  const file = model.changedByPath.get(path);
-  if (file === undefined) {
-    throw new Error(`${path} not in the ${scope.kind} changed set`);
+  const changed = model.changedByPath.get(file);
+  if (changed === undefined) {
+    throw new Error(`${file} not in the ${scope.kind} changed set`);
   }
-  return file;
-}
+  return changed;
+};
 
 // The in-process fileDiff and git's own pathspec diff must render identical rows.
 // Row equality (not patch bytes) tolerates legitimate equal-cost hunk-placement
 // Drift between jsdiff's Myers and git's xdiff.
-async function expectSameRows(repoRoot: string, scope: DiffScope, path: string) {
-  const file = await changedFile(repoRoot, scope, path);
+const expectSameRows = async (
+  repoRoot: string,
+  scope: DiffScope,
+  filePath: string
+) => {
+  const file = await changedFile(repoRoot, scope, filePath);
   const inProcess = await loadFileDiff(repoRoot, scope, file);
   expect(rows(inProcess)).toEqual(rows(pathspecDiff(repoRoot, scope, file)));
   return inProcess;
-}
+};
 
 const head = (repoRoot: string) =>
   execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: repoRoot,
-    encoding: "utf8",
+    encoding: "utf-8",
     env: stripGitEnv(process.env),
   }).trim();
 
@@ -107,7 +124,10 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-mod-", {
       "src/a.ts": "one\ntwo\nthree\nfour\nfive\n",
     });
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\ntwo\nCHANGED\nfour\nfive\n");
+    writeFileSync(
+      path.join(repoRoot, "src/a.ts"),
+      "one\ntwo\nCHANGED\nfour\nfive\n"
+    );
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "src/a.ts");
   });
 
@@ -115,20 +135,24 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-unstaged-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\nstaged\nthree\n");
+    writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nstaged\nthree\n");
     runGit(repoRoot, ["add", "src/a.ts"]);
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\nstaged\nworktree\n");
-    await expectSameRows(repoRoot, { kind: "unstaged", ref: "HEAD" }, "src/a.ts");
+    writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nstaged\nworktree\n");
+    await expectSameRows(
+      repoRoot,
+      { kind: "unstaged", ref: "HEAD" },
+      "src/a.ts"
+    );
   });
 
   test("staged edit does not leak the worktree edit stacked on top", async () => {
     const repoRoot = createFixtureRepo("stet-fd-staged-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\nSTAGED\nthree\n");
+    writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nSTAGED\nthree\n");
     runGit(repoRoot, ["add", "src/a.ts"]);
     // A further worktree-only edit that must NOT appear in the staged diff.
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\nSTAGED\nWORKTREE\n");
+    writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nSTAGED\nWORKTREE\n");
 
     const scope: DiffScope = { kind: "staged", ref: "HEAD" };
     const inProcess = await expectSameRows(repoRoot, scope, "src/a.ts");
@@ -140,16 +164,20 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-add-staged-", {
       "src/keep.ts": "keep\n",
     });
-    writeFileSync(join(repoRoot, "src/new.ts"), "hello\nworld\n");
+    writeFileSync(path.join(repoRoot, "src/new.ts"), "hello\nworld\n");
     runGit(repoRoot, ["add", "src/new.ts"]);
-    await expectSameRows(repoRoot, { kind: "staged", ref: "HEAD" }, "src/new.ts");
+    await expectSameRows(
+      repoRoot,
+      { kind: "staged", ref: "HEAD" },
+      "src/new.ts"
+    );
   });
 
   test("added file tracked in the all scope", async () => {
     const repoRoot = createFixtureRepo("stet-fd-add-all-", {
       "src/keep.ts": "keep\n",
     });
-    writeFileSync(join(repoRoot, "src/new.ts"), "hello\nworld\n");
+    writeFileSync(path.join(repoRoot, "src/new.ts"), "hello\nworld\n");
     runGit(repoRoot, ["add", "src/new.ts"]);
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "src/new.ts");
   });
@@ -158,8 +186,12 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-del-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
-    rmSync(join(repoRoot, "src/a.ts"));
-    await expectSameRows(repoRoot, { kind: "unstaged", ref: "HEAD" }, "src/a.ts");
+    rmSync(path.join(repoRoot, "src/a.ts"));
+    await expectSameRows(
+      repoRoot,
+      { kind: "unstaged", ref: "HEAD" },
+      "src/a.ts"
+    );
   });
 
   test("deleted file, staged scope (git rm)", async () => {
@@ -175,16 +207,20 @@ describe("in-process fileDiff matches git", () => {
       "src/old.ts": "keep\nbefore\nkeep2\n",
     });
     runGit(repoRoot, ["mv", "src/old.ts", "src/new.ts"]);
-    writeFileSync(join(repoRoot, "src/new.ts"), "keep\nafter\nkeep2\n");
+    writeFileSync(path.join(repoRoot, "src/new.ts"), "keep\nafter\nkeep2\n");
     runGit(repoRoot, ["add", "src/new.ts"]);
-    await expectSameRows(repoRoot, { kind: "staged", ref: "HEAD" }, "src/new.ts");
+    await expectSameRows(
+      repoRoot,
+      { kind: "staged", ref: "HEAD" },
+      "src/new.ts"
+    );
   });
 
   test("no trailing newline change", async () => {
     const repoRoot = createFixtureRepo("stet-fd-nonl-", {
       "a.txt": "line\n",
     });
-    writeFileSync(join(repoRoot, "a.txt"), "line\nmore");
+    writeFileSync(path.join(repoRoot, "a.txt"), "line\nmore");
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "a.txt");
   });
 
@@ -192,7 +228,7 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-crlf-", {
       "a.txt": "one\r\ntwo\r\nthree\r\n",
     });
-    writeFileSync(join(repoRoot, "a.txt"), "one\r\nCHANGED\r\nthree\r\n");
+    writeFileSync(path.join(repoRoot, "a.txt"), "one\r\nCHANGED\r\nthree\r\n");
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "a.txt");
   });
 
@@ -200,19 +236,23 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-space-", {
       "src/a file café.ts": "one\ntwo\n",
     });
-    writeFileSync(join(repoRoot, "src/a file café.ts"), "one\nCHANGED\n");
-    await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "src/a file café.ts");
+    writeFileSync(path.join(repoRoot, "src/a file café.ts"), "one\nCHANGED\n");
+    await expectSameRows(
+      repoRoot,
+      { kind: "all", ref: "HEAD" },
+      "src/a file café.ts"
+    );
   });
 
   test("untracked file still routes through the /dev/null diff", async () => {
     const repoRoot = createFixtureRepo("stet-fd-untracked-", {
       "src/keep.ts": "keep\n",
     });
-    writeFileSync(join(repoRoot, "src/new.ts"), "brand\nnew\n");
+    writeFileSync(path.join(repoRoot, "src/new.ts"), "brand\nnew\n");
     const inProcess = await expectSameRows(
       repoRoot,
       { kind: "unstaged", ref: "HEAD" },
-      "src/new.ts",
+      "src/new.ts"
     );
     expect(rows(inProcess)).toEqual([
       { content: "brand", newLine: 1, oldLine: undefined, type: "add" },
@@ -224,7 +264,10 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-bin-", {
       "keep.ts": "keep\n",
     });
-    writeFileSync(join(repoRoot, "img.bin"), new Uint8Array([1, 2, 0, 3, 255, 0, 7]));
+    writeFileSync(
+      path.join(repoRoot, "img.bin"),
+      new Uint8Array([1, 2, 0, 3, 255, 0, 7])
+    );
     runGit(repoRoot, ["add", "img.bin"]);
     const scope: DiffScope = { kind: "staged", ref: "HEAD" };
     const file = await changedFile(repoRoot, scope, "img.bin");
@@ -236,17 +279,21 @@ describe("in-process fileDiff matches git", () => {
     const repoRoot = createFixtureRepo("stet-fd-lastcommit-", {
       "src/a.ts": "one\ntwo\nthree\n",
     });
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nthree\n");
-    writeFileSync(join(repoRoot, "src/added.ts"), "fresh\n");
+    writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nthree\n");
+    writeFileSync(path.join(repoRoot, "src/added.ts"), "fresh\n");
     runGit(repoRoot, ["add", "."]);
     runGit(repoRoot, ["commit", "-m", "second"]);
 
     const parent = execFileSync("git", ["rev-parse", "HEAD~1"], {
       cwd: repoRoot,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: stripGitEnv(process.env),
     }).trim();
-    const scope: DiffScope = { headRef: "HEAD", kind: "last-commit", ref: parent };
+    const scope: DiffScope = {
+      headRef: "HEAD",
+      kind: "last-commit",
+      ref: parent,
+    };
     await expectSameRows(repoRoot, scope, "src/a.ts");
     await expectSameRows(repoRoot, scope, "src/added.ts");
   });
@@ -256,10 +303,13 @@ describe("in-process fileDiff matches git", () => {
       "src/a.ts": "one\ntwo\nthree\n",
     });
     const base = head(repoRoot);
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nthree\n");
+    writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nthree\n");
     runGit(repoRoot, ["add", "."]);
     runGit(repoRoot, ["commit", "-m", "mid-session commit"]);
-    writeFileSync(join(repoRoot, "src/a.ts"), "one\nCOMMITTED\nWORKTREE\n");
+    writeFileSync(
+      path.join(repoRoot, "src/a.ts"),
+      "one\nCOMMITTED\nWORKTREE\n"
+    );
 
     await expectSameRows(repoRoot, { kind: "session", ref: base }, "src/a.ts");
   });
@@ -268,7 +318,7 @@ describe("in-process fileDiff matches git", () => {
 describe("binaryMeta reads both sides' size and dimensions", () => {
   test("an added binary reports only the new side", async () => {
     const repoRoot = createFixtureRepo("stet-bm-add-", { "keep.ts": "keep\n" });
-    writeFileSync(join(repoRoot, "logo.png"), png(16, 8));
+    writeFileSync(path.join(repoRoot, "logo.png"), png(16, 8));
     runGit(repoRoot, ["add", "logo.png"]);
 
     const scope: DiffScope = { kind: "staged", ref: "HEAD" };
@@ -282,7 +332,7 @@ describe("binaryMeta reads both sides' size and dimensions", () => {
 
   test("a deleted binary reports only the old side", async () => {
     const repoRoot = createFixtureRepo("stet-bm-del-", { "keep.ts": "keep\n" });
-    writeFileSync(join(repoRoot, "logo.png"), png(16, 8));
+    writeFileSync(path.join(repoRoot, "logo.png"), png(16, 8));
     runGit(repoRoot, ["add", "logo.png"]);
     runGit(repoRoot, ["commit", "-m", "add logo"]);
     runGit(repoRoot, ["rm", "logo.png"]);
@@ -297,10 +347,10 @@ describe("binaryMeta reads both sides' size and dimensions", () => {
 
   test("a modified binary reports both sides", async () => {
     const repoRoot = createFixtureRepo("stet-bm-mod-", { "keep.ts": "keep\n" });
-    writeFileSync(join(repoRoot, "logo.png"), png(16, 8));
+    writeFileSync(path.join(repoRoot, "logo.png"), png(16, 8));
     runGit(repoRoot, ["add", "logo.png"]);
     runGit(repoRoot, ["commit", "-m", "add logo"]);
-    writeFileSync(join(repoRoot, "logo.png"), png(32, 16, 100));
+    writeFileSync(path.join(repoRoot, "logo.png"), png(32, 16, 100));
 
     const scope: DiffScope = { kind: "all", ref: "HEAD" };
     const file = await changedFile(repoRoot, scope, "logo.png");

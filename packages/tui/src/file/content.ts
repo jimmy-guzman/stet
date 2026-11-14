@@ -20,11 +20,11 @@ export interface LoadFileContentOptions {
 
 // Local-file reads only; the File service intercepts the gitSpec (git show) path
 // And routes it through the Process service for interruptibility.
-export function loadFileContent(
+export const loadFileContent = (
   repoRoot: string,
   path: string,
-  options: { full: boolean },
-): FileContent {
+  options: { full: boolean }
+): FileContent => {
   const absolutePath = `${repoRoot}/${path}`;
   let size: number;
   try {
@@ -37,7 +37,7 @@ export function loadFileContent(
     if (!stat.isFile()) {
       return { bytes: 0, kind: "binary" };
     }
-    size = stat.size;
+    ({ size } = stat);
   } catch {
     return { kind: "missing" };
   }
@@ -54,16 +54,16 @@ export function loadFileContent(
   }
 
   return classifyFileBytes(buffer, options);
-}
+};
 
 // The File service's local-read path: same contract as loadFileContent, but the
 // IO awaits instead of blocking, so a burst of reads (search context fetches up
 // To 500 matched files per query) never freezes the render loop. Never rejects.
-export async function loadFileContentAsync(
+export const loadFileContentAsync = async (
   repoRoot: string,
   path: string,
-  options: { full: boolean },
-): Promise<FileContent> {
+  options: { full: boolean }
+): Promise<FileContent> => {
   const absolutePath = `${repoRoot}/${path}`;
   try {
     const stat = await lstat(absolutePath);
@@ -82,11 +82,14 @@ export async function loadFileContentAsync(
   } catch {
     return { kind: "missing" };
   }
-}
+};
 
 // Byte-level binary/size classification shared by the local-read path and the
 // File service's git-show path, so deleted binaries are caught before decoding.
-export function classifyFileBytes(bytes: Uint8Array, options: { full: boolean }): FileContent {
+export const classifyFileBytes = (
+  bytes: Uint8Array,
+  options: { full: boolean }
+): FileContent => {
   if (bytes.byteLength > MAX_FILE_BYTES && !options.full) {
     return { bytes: bytes.byteLength, kind: "too-large" };
   }
@@ -96,9 +99,9 @@ export function classifyFileBytes(bytes: Uint8Array, options: { full: boolean })
   }
 
   return textContent(new TextDecoder().decode(bytes), options.full);
-}
+};
 
-export function textContent(content: string, full: boolean): FileContent {
+export const textContent = (content: string, full: boolean): FileContent => {
   const normalized = content.endsWith("\n") ? content.slice(0, -1) : content;
   const lines = normalized === "" ? [] : normalized.split("\n");
 
@@ -111,10 +114,15 @@ export function textContent(content: string, full: boolean): FileContent {
     };
   }
 
-  return { content: normalized, kind: "text", lineCount: lines.length, truncated: false };
-}
+  return {
+    content: normalized,
+    kind: "text",
+    lineCount: lines.length,
+    truncated: false,
+  };
+};
 
-export function contentToContextPatch(path: string, content: string) {
+export const contentToContextPatch = (path: string, content: string) => {
   const header = [`--- a/${path}`, `+++ b/${path}`];
   if (content === "") {
     return header.join("\n");
@@ -126,4 +134,4 @@ export function contentToContextPatch(path: string, content: string) {
     `@@ -1,${lines.length} +1,${lines.length} @@`,
     ...lines.map((line) => ` ${line}`),
   ].join("\n");
-}
+};

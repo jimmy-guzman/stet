@@ -25,16 +25,26 @@ describe("sliceSpansWindow", () => {
       { fg: "#0f0", text: " value = 1" },
     ];
     // Skip 6 cols ("const "), then take 5 → "value".
-    expect(sliceSpansWindow(spans, 6, 5)).toEqual([{ fg: "#0f0", text: "value" }]);
+    expect(sliceSpansWindow(spans, 6, 5)).toEqual([
+      { fg: "#0f0", text: "value" },
+    ]);
   });
 
   test("drops spans entirely before or after the window", () => {
-    const spans = [{ text: "abcd" }, { fg: "#0f0", text: "EFGH" }, { text: "ijkl" }];
-    expect(sliceSpansWindow(spans, 4, 4)).toEqual([{ fg: "#0f0", text: "EFGH" }]);
+    const spans = [
+      { text: "abcd" },
+      { fg: "#0f0", text: "EFGH" },
+      { text: "ijkl" },
+    ];
+    expect(sliceSpansWindow(spans, 4, 4)).toEqual([
+      { fg: "#0f0", text: "EFGH" },
+    ]);
   });
 
   test("counts wide CJK glyphs as two columns", () => {
-    expect(sliceSpansWindow([{ text: "你好世" }], 0, 5)).toEqual([{ text: "你好" }]);
+    expect(sliceSpansWindow([{ text: "你好世" }], 0, 5)).toEqual([
+      { text: "你好" },
+    ]);
   });
 
   test("returns nothing for a non-positive width", () => {

@@ -1,7 +1,7 @@
 // Human-readable byte size (`0 B`, `945 B`, `4.5 KB`, `12 MB`), 1024-base to match
 // How file managers report a file's size. One fractional digit below 10, none above,
 // So the label stays short and stable.
-export function formatBytes(bytes: number) {
+export const formatBytes = (bytes: number) => {
   if (bytes < 1024) {
     return `${bytes} B`;
   }
@@ -10,4 +10,4 @@ export function formatBytes(bytes: number) {
   const value = bytes / 1024 ** exponent;
   const rounded = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
   return `${rounded} ${units[exponent - 1]}`;
-}
+};

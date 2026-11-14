@@ -39,33 +39,39 @@ const STAGE_ORDER = [
  * apart. A `color` accessor is optional: the change letters read neutral, since their color in the
  * tree is the separate stage axis.
  */
-export function legendGroups(): {
-  entries: { color?: (colors: Theme) => string; glyph: string; meaning: string }[];
+export const legendGroups = (): {
+  entries: {
+    color?: (colors: Theme) => string;
+    glyph: string;
+    meaning: string;
+  }[];
   heading: string;
-}[] {
-  return [
-    {
-      entries: CHANGE_KIND_ORDER.map((kind) => ({
-        glyph: kindLetter(kind),
-        meaning: CHANGE_KIND_MEANINGS[kind],
-      })),
-      heading: "changes",
-    },
-    {
-      entries: STAGE_ORDER.map((stage) => ({
-        color: (colors: Theme) => colors.stage[stage],
-        glyph: "█",
-        meaning: STAGE_MEANINGS[stage],
-      })),
-      heading: "stage (colors the change letter)",
-    },
-    {
-      // The `●` matches the mark `RecencyDot` draws; a lone decorative dot, not an enum, so it
-      // Stays a literal rather than earning its own shared constant.
-      entries: [
-        { color: (colors: Theme) => colors.recency.fresh, glyph: "●", meaning: "recently changed" },
-      ],
-      heading: "recency",
-    },
-  ];
-}
+}[] => [
+  {
+    entries: CHANGE_KIND_ORDER.map((kind) => ({
+      glyph: kindLetter(kind),
+      meaning: CHANGE_KIND_MEANINGS[kind],
+    })),
+    heading: "changes",
+  },
+  {
+    entries: STAGE_ORDER.map((stage) => ({
+      color: (colors: Theme) => colors.stage[stage],
+      glyph: "█",
+      meaning: STAGE_MEANINGS[stage],
+    })),
+    heading: "stage (colors the change letter)",
+  },
+  {
+    // The `●` matches the mark `RecencyDot` draws; a lone decorative dot, not an enum, so it
+    // Stays a literal rather than earning its own shared constant.
+    entries: [
+      {
+        color: (colors: Theme) => colors.recency.fresh,
+        glyph: "●",
+        meaning: "recently changed",
+      },
+    ],
+    heading: "recency",
+  },
+];

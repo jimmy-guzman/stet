@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import path from "node:path";
 
 import type { CliRenderer } from "@opentui/core";
 import { Effect } from "effect";
@@ -17,34 +17,42 @@ import { Editor } from "./service";
  * only reports a non-zero exit. The renderer is passed in rather than reached from `state`, which
  * must stay free of render-tree resources.
  */
-export async function openInEditor(
+export const openInEditor = async (
   renderer: CliRenderer,
   filePath: string,
   line: number | undefined,
-  mode: "terminal" | "ide",
-) {
-  const template = mode === "ide" ? state.ideTemplate() : state.editorTemplate();
+  mode: "terminal" | "ide"
+) => {
+  const template =
+    mode === "ide" ? state.ideTemplate() : state.editorTemplate();
   if (template === undefined) {
     state.notify(
       mode === "ide"
         ? "no IDE configured; set 'ide' or --ide"
-        : "no editor configured; set 'editor' or --editor",
+        : "no editor configured; set 'editor' or --editor"
     );
     return;
   }
   const cwd = state.gitModel().repoRoot;
-  const argv = buildEditorCommand(template, join(cwd, filePath), line, cwd);
+  const argv = buildEditorCommand(
+    template,
+    path.join(cwd, filePath),
+    line,
+    cwd
+  );
   if (argv.length === 0) {
     return;
   }
   if (mode === "terminal") {
     renderer.suspend();
     try {
-      await runtime.runPromise(Editor.use((editor) => editor.openTerminal(argv, cwd)));
+      await runtime.runPromise(
+        Editor.use((editor) => editor.openTerminal(argv, cwd))
+      );
     } catch (error) {
       state.notify(
         `couldn't open the editor: ${error instanceof Error ? error.message : String(error)}`,
-        "error",
+        "error"
       );
     } finally {
       renderer.resume();
@@ -54,13 +62,17 @@ export async function openInEditor(
   runtime.runFork(
     Editor.use((editor) => editor.openIde(argv, cwd)).pipe(
       Effect.tap((code) =>
-        code !== 0
-          ? Effect.sync(() => state.notify("IDE exited with an error", "warning"))
-          : Effect.void,
+        code === 0
+          ? Effect.void
+          : Effect.sync(() => {
+              state.notify("IDE exited with an error", "warning");
+            })
       ),
-      Effect.catchTag("EditorError", (error) =>
-        Effect.sync(() => state.notify(`couldn't open the IDE: ${error.message}`, "error")),
-      ),
-    ),
+      Effect.catchTag("EditorError", (failure) =>
+        Effect.sync(() => {
+          state.notify(`couldn't open the IDE: ${failure.message}`, "error");
+        })
+      )
+    )
   );
-}
+};

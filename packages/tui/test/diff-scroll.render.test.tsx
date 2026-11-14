@@ -3,38 +3,52 @@ import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
 
 // A long unchanged file viewed as full content. The viewer mounts only a windowed
 // Row slice, so a scroll offset that the window can't follow leaves the lower pane
 // Blank. These two cases guard the two writers of that offset: the mouse wheel and
 // Keyboard cursor-follow.
-function longFileRepo(prefix: string) {
-  const lines = Array.from({ length: 120 }, (_, i) => `const line_${i + 1} = ${i + 1}`);
+const longFileRepo = (prefix: string) => {
+  const lines = Array.from(
+    { length: 120 },
+    (_, i) => `const line_${i + 1} = ${i + 1}`
+  );
   return createFixtureRepo(prefix, { "long.ts": `${lines.join("\n")}\n` });
-}
+};
 
-function visibleLineNumbers(frame: string) {
-  return (frame.match(/line_\d+ =/g) ?? []).map((match) => Number(match.replace(/\D/g, "")));
-}
+const visibleLineNumbers = (frame: string) =>
+  (frame.match(/line_\d+ =/gu) ?? []).map((match) =>
+    Number(match.replaceAll(/\D/gu, ""))
+  );
 
 describe("diff viewer vertical scroll", () => {
   test("wheel-down scrolls deep and keeps the viewport full of real lines", async () => {
     const repoRoot = longFileRepo("stet-wheel-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
-      height: 34,
-      useMouse: true,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockMouse } =
+      await testRender(() => <App />, {
+        height: 34,
+        useMouse: true,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("file content", (frame) => frame.includes("line_1 ="), 5);
+      await settleUntil(
+        "file content",
+        (frame) => frame.includes("line_1 ="),
+        5
+      );
 
       await mockMouse.moveTo(90, 20);
       for (let tick = 0; tick < 40; tick += 1) {
@@ -60,23 +74,28 @@ describe("diff viewer vertical scroll", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setFocusedPane("diff");
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      useMouse: true,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        useMouse: true,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("file content", (frame) => frame.includes("line_1 ="), 5);
+      await settleUntil(
+        "file content",
+        (frame) => frame.includes("line_1 ="),
+        5
+      );
 
       mockInput.pressKey("G");
-      await settleUntil("bottom", (frame) => /line_120 =/.test(frame));
+      await settleUntil("bottom", (frame) => frame.includes("line_120 ="));
 
       mockInput.pressKey("g");
       const top = await settleUntil(
         "top",
-        (frame) => /line_1 =/.test(frame) && !/line_120 =/.test(frame),
+        (frame) => frame.includes("line_1 =") && !frame.includes("line_120 =")
       );
       expect(top).toContain("line_1 =");
     } finally {
@@ -90,15 +109,20 @@ describe("diff viewer vertical scroll", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setFocusedPane("diff");
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      useMouse: true,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        useMouse: true,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("file content", (frame) => frame.includes("line_1 ="), 5);
+      await settleUntil(
+        "file content",
+        (frame) => frame.includes("line_1 ="),
+        5
+      );
 
       // Walk the cursor down one line per render pass; it must never leave the
       // Viewport (the reported bug: the highlight scrolls off the bottom edge).

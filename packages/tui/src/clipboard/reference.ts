@@ -4,7 +4,7 @@ export interface CopyReferencePayload {
   column?: number;
 }
 
-export function formatCopyReference(payload: CopyReferencePayload) {
+export const formatCopyReference = (payload: CopyReferencePayload) => {
   if (payload.line === undefined) {
     return payload.path;
   }
@@ -13,7 +13,7 @@ export function formatCopyReference(payload: CopyReferencePayload) {
   }
 
   return `${payload.path}:${payload.line}:${payload.column}`;
-}
+};
 
 const LINUX_CLIPBOARD_COMMANDS = [
   ["wl-copy"],
@@ -21,10 +21,12 @@ const LINUX_CLIPBOARD_COMMANDS = [
   ["xsel", "--clipboard", "--input"],
 ];
 
-export function clipboardCommand() {
+export const clipboardCommand = () => {
   if (process.platform === "darwin") {
     return ["pbcopy"];
   }
 
-  return LINUX_CLIPBOARD_COMMANDS.find((command) => Bun.which(command[0] ?? "") !== null);
-}
+  return LINUX_CLIPBOARD_COMMANDS.find(
+    (command) => Bun.which(command[0] ?? "") !== null
+  );
+};

@@ -40,7 +40,9 @@ describe("isNewer", () => {
 
 describe("formatUpdateNotice", () => {
   test("stacks the versions, upgrade hint, and releases link on their own lines", () => {
-    expect(formatUpdateNotice({ current: "0.3.3", latest: "0.4.0" }).split("\n")).toEqual([
+    expect(
+      formatUpdateNotice({ current: "0.3.3", latest: "0.4.0" }).split("\n")
+    ).toEqual([
       "A new release of stet is available: 0.3.3 -> 0.4.0",
       '  run "stet upgrade" to update',
       "  https://github.com/jimmy-guzman/stet/releases/latest",

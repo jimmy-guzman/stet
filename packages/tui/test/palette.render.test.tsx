@@ -3,9 +3,14 @@ import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
 
 describe("go-to-file palette", () => {
   test("opens with ctrl-p, swallows global keys, fuzzy-jumps on enter", async () => {
@@ -17,19 +22,24 @@ describe("go-to-file palette", () => {
     });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      const initial = await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
+      const initial = await settleUntil(
+        "app chrome",
+        (frame) => frame.includes("q quit"),
+        5
+      );
       expect(initial).toContain("q quit");
 
       mockInput.pressKey("p", { ctrl: true });
       const palette = await settleUntil("go-to-file palette", (frame) =>
-        frame.includes("go to file"),
+        frame.includes("go to file")
       );
       expect(palette).toContain("go to file");
 
@@ -37,7 +47,7 @@ describe("go-to-file palette", () => {
       await mockInput.typeText("qqqq");
       const afterTyping = await settleUntil(
         "empty palette results",
-        (frame) => frame.includes("q quit") && frame.includes("no matches"),
+        (frame) => frame.includes("q quit") && frame.includes("no matches")
       );
       expect(afterTyping).toContain("q quit");
       expect(afterTyping).toContain("no matches");
@@ -47,14 +57,15 @@ describe("go-to-file palette", () => {
       }
       await mockInput.typeText("treets");
       const afterSearch = await settleUntil("tree search result", (frame) =>
-        frame.includes("src/tree.ts"),
+        frame.includes("src/tree.ts")
       );
       expect(afterSearch).toContain("src/tree.ts");
 
       mockInput.pressEnter();
       const after = await settleUntil(
         "selected tree file",
-        (frame) => frame.includes("src/tree.ts") && !frame.includes("go to file"),
+        (frame) =>
+          frame.includes("src/tree.ts") && !frame.includes("go to file")
       );
       expect(after).toContain("src/tree.ts");
       expect(after).not.toContain("go to file");
@@ -68,26 +79,31 @@ describe("go-to-file palette", () => {
     // Every result matches "references" only in a mid-path directory; a plain
     // Keep-the-tail truncation would hide exactly what was typed.
     const repoRoot = createFixtureRepo("stet-palette-mid-", {
-      ".agents/skills/effect-best-practices/references/error-patterns.md": "a\n",
-      ".agents/skills/effect-best-practices/references/language-server.md": "b\n",
+      ".agents/skills/effect-best-practices/references/error-patterns.md":
+        "a\n",
+      ".agents/skills/effect-best-practices/references/language-server.md":
+        "b\n",
       "README.md": "# Fixture\n",
     });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 34,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 34,
+        width: 100,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
       mockInput.pressKey("p", { ctrl: true });
-      await settleUntil("go-to-file palette", (frame) => frame.includes("go to file"));
+      await settleUntil("go-to-file palette", (frame) =>
+        frame.includes("go to file")
+      );
 
       await mockInput.typeText("references");
       const results = await settleUntil("mid-dir match visible", (frame) =>
-        frame.includes("references"),
+        frame.includes("references")
       );
       // The matched directory is on screen (the leading dirs were truncated, not it).
       expect(results).toContain("references");

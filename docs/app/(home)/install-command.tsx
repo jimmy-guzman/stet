@@ -2,12 +2,27 @@
 
 import { Check, Copy, X } from "lucide-react";
 import { useRef, useState } from "react";
+import type { ReactNode } from "react";
 
-export function InstallCommand({ command }: { command: string }) {
-  const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
+type Status = "idle" | "copied" | "error";
+
+const labels: Record<Status, string> = {
+  idle: "Copy install command",
+  copied: "Copied",
+  error: "Copy failed",
+};
+
+const icons: Record<Status, ReactNode> = {
+  idle: <Copy className="size-4" />,
+  copied: <Check className="text-fd-primary size-4" />,
+  error: <X className="text-fd-muted-foreground size-4" />,
+};
+
+export const InstallCommand = ({ command }: { command: string }) => {
+  const [status, setStatus] = useState<Status>("idle");
   const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  async function copy() {
+  const copy = async () => {
     clearTimeout(resetTimer.current);
     try {
       await navigator.clipboard.writeText(command);
@@ -15,30 +30,27 @@ export function InstallCommand({ command }: { command: string }) {
     } catch {
       setStatus("error");
     }
-    resetTimer.current = setTimeout(() => setStatus("idle"), 1500);
-  }
-
-  const label =
-    status === "copied" ? "Copied" : status === "error" ? "Copy failed" : "Copy install command";
+    resetTimer.current = setTimeout(() => {
+      setStatus("idle");
+    }, 1500);
+  };
 
   return (
-    <div className="flex w-full max-w-xl items-center gap-3 rounded-lg border border-fd-border bg-fd-card px-4 py-3 text-left font-mono text-sm">
+    <div className="border-fd-border bg-fd-card flex w-full max-w-xl items-center gap-3 rounded-lg border px-4 py-3 text-left font-mono text-sm">
       <span className="text-fd-muted-foreground select-none">$</span>
-      <code className="flex-1 overflow-x-auto whitespace-nowrap text-fd-foreground">{command}</code>
+      <code className="text-fd-foreground flex-1 overflow-x-auto whitespace-nowrap">
+        {command}
+      </code>
       <button
         type="button"
-        onClick={copy}
-        aria-label={label}
-        className="shrink-0 text-fd-muted-foreground transition-colors hover:text-fd-foreground"
+        onClick={() => {
+          void copy();
+        }}
+        aria-label={labels[status]}
+        className="text-fd-muted-foreground hover:text-fd-foreground shrink-0 transition-colors"
       >
-        {status === "copied" ? (
-          <Check className="size-4 text-fd-primary" />
-        ) : status === "error" ? (
-          <X className="size-4 text-fd-muted-foreground" />
-        ) : (
-          <Copy className="size-4" />
-        )}
+        {icons[status]}
       </button>
     </div>
   );
-}
+};

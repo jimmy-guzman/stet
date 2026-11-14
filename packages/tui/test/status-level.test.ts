@@ -34,23 +34,34 @@ test("an error notice carries the error level", () => {
 });
 
 test("an idle bar shows guidance", () => {
-  expect(state.statusBarModel()).toMatchObject({ kind: "guidance", text: "? help · q quit" });
+  expect(state.statusBarModel()).toMatchObject({
+    kind: "guidance",
+    text: "? help · q quit",
+  });
 });
 
 test("the find modes carry their own guidance", () => {
   state.setFindOpen(true);
-  expect(state.statusBarModel()).toMatchObject({ text: "enter find · esc cancel" });
+  expect(state.statusBarModel()).toMatchObject({
+    text: "enter find · esc cancel",
+  });
 
   // Committing the find closes the input and leaves the matches navigable.
   state.setFindOpen(false);
   state.setFindActive(true);
-  expect(state.statusBarModel()).toMatchObject({ text: "n/N next/prev · esc clear" });
+  expect(state.statusBarModel()).toMatchObject({
+    text: "n/N next/prev · esc clear",
+  });
 });
 
 test("a recent changed file surfaces as ambient activity", () => {
   state.setTerminalWidth(300);
   state.setActivityLog(
-    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
+    recordActivity(
+      emptyActivityLog,
+      [{ kind: "changed", path: "src/foo.ts" }],
+      Date.now()
+    )
   );
 
   expect(state.statusBarModel()).toMatchObject({
@@ -63,7 +74,11 @@ test("a long recent path is shortened from the front, keeping the filename", () 
   state.setTerminalWidth(400);
   const deep = `src/${"components/".repeat(50)}DiffView.tsx`;
   state.setActivityLog(
-    recordActivity(emptyActivityLog, [{ kind: "changed", path: deep }], Date.now()),
+    recordActivity(
+      emptyActivityLog,
+      [{ kind: "changed", path: deep }],
+      Date.now()
+    )
   );
 
   const model = state.statusBarModel();
@@ -79,8 +94,8 @@ test("activity older than the recency window drops off the status line", () => {
     recordActivity(
       emptyActivityLog,
       [{ kind: "changed", path: "src/foo.ts" }],
-      Date.now() - 60_000,
-    ),
+      Date.now() - 60_000
+    )
   );
 
   expect(state.statusBarModel()).toMatchObject({ kind: "guidance" });
@@ -90,7 +105,11 @@ test("the recent activity timestamp reaches the bar, then drops once it ages out
   state.setTerminalWidth(300);
   const at = Date.now();
   state.setActivityLog(
-    recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], at),
+    recordActivity(
+      emptyActivityLog,
+      [{ kind: "changed", path: "src/foo.ts" }],
+      at
+    )
   );
 
   expect(state.statusBarModel()).toMatchObject({ activity: { at } });
@@ -99,8 +118,8 @@ test("the recent activity timestamp reaches the bar, then drops once it ages out
     recordActivity(
       emptyActivityLog,
       [{ kind: "changed", path: "src/foo.ts" }],
-      Date.now() - 60_000,
-    ),
+      Date.now() - 60_000
+    )
   );
   expect(state.statusBarModel()).toMatchObject({ kind: "guidance" });
 });

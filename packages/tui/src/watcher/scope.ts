@@ -1,4 +1,4 @@
-import { sep } from "node:path";
+import path from "node:path";
 
 /**
  * The filesystem roots to watch for a worktree, each paired with the path prefix under which every
@@ -9,10 +9,14 @@ import { sep } from "node:path";
  * dir resolves outside the tree and is watched as a second root, where the entire root is
  * internal.
  */
-export function watchRoots(repoRoot: string, gitDir: string | undefined) {
-  const worktree = { gitInternalPrefix: `.git${sep}`, path: repoRoot };
-  if (gitDir === undefined || gitDir === repoRoot || gitDir.startsWith(repoRoot + sep)) {
+export const watchRoots = (repoRoot: string, gitDir: string | undefined) => {
+  const worktree = { gitInternalPrefix: `.git${path.sep}`, path: repoRoot };
+  if (
+    gitDir === undefined ||
+    gitDir === repoRoot ||
+    gitDir.startsWith(repoRoot + path.sep)
+  ) {
     return [worktree];
   }
   return [worktree, { gitInternalPrefix: "", path: gitDir }];
-}
+};

@@ -1,0 +1,531 @@
+import type { InputRenderable } from "@opentui/core";
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createSignal,
+  Index,
+  onCleanup,
+  Show,
+} from "solid-js";
+
+import { highlightSnippet, languageForPath } from "@/diff/engine";
+import type { RenderSpan } from "@/diff/hast";
+import { levelColor, levelGlyph } from "@/log/levels";
+import { state } from "@/state";
+import { activeThemeName } from "@/theme/active";
+import { theme } from "@/theme/context";
+import { createDoubleClickGuard } from "@/utils/double-click";
+import { truncate } from "@/utils/text";
+import { isNavigableSearchItem } from "@/viewer/search-items";
+import type { SearchItem } from "@/viewer/search-items";
+
+import { CodeLine } from "./code-line";
+import { FileIcon } from "./file-icon";
+import { ListScrollbar } from "./list-scrollbar";
+import { windowWheelHandler } from "./wheel";
+
+// A contiguous run of line rows (one excerpt): highlighted as a block so Shiki
+// Tokenizes with real surrounding context, then mapped back to rows by offset.
+interface Excerpt {
+  key: string;
+  path: string;
+  texts: string[];
+  itemStart: number;
+}
+
+const asHeader = (item: SearchItem) =>
+  item.kind === "header" ? item : undefined;
+const asLine = (item: SearchItem) => (item.kind === "line" ? item : undefined);
+
+const innerWidth = () => Math.max(1, state.layout().viewer.content.width);
+// The results band reserves a width-1 scrollbar column; the full-width chrome
+// Rows (inputs, status, footer) keep `innerWidth`.
+const resultsWidth = () => Math.max(1, innerWidth() - 1);
+// The cell names the *effective* universe: widened -> repo; otherwise the
+// Active diff scope, so a staged/session lens is never misread as uncommitted.
+const scopeLabel = () => {
+  if (state.searchScope() === "repo") {
+    return "repo";
+  }
+  const { kind } = state.scope();
+  if (kind === "all") {
+    return "changes";
+  }
+  return kind === "last-commit" ? "last commit" : kind;
+};
+const focusIn = (target: "query" | "glob") =>
+  state.focusedPane() === "search" && state.searchFocus() === target;
+
+const statusColor = () =>
+  state.searchStatus() === "error"
+    ? levelColor(theme.colors, "error")
+    : theme.colors.text.muted;
+
+const rowBackground = (item: SearchItem, index: number) => {
+  const selected = index === state.searchIndex();
+  if (item.kind === "line" && item.match !== undefined) {
+    return selected ? theme.rgba.findMatchBgActive : theme.colors.find.matchBg;
+  }
+  return selected ? theme.colors.surface.cursor : undefined;
+};
+
+const submit = () => {
+  const items = state.searchItems();
+  const selected = items[state.searchIndex()];
+  const target =
+    selected?.kind === "line" && selected.match !== undefined
+      ? state.searchIndex()
+      : items.findIndex(
+          (item) => item.kind === "line" && item.match !== undefined
+        );
+  if (target !== -1) {
+    state.jumpToSearchItem(target);
+  }
+};
+
+const onQueryInput = (value: string) => {
+  batch(() => {
+    state.setSearchQuery(value);
+    state.setSearchIndex(0);
+    state.setSearchScrollTop(0);
+  });
+};
+
+const onGlobInput = (value: string) => {
+  batch(() => {
+    state.setSearchGlob(value);
+    state.setSearchIndex(0);
+    state.setSearchScrollTop(0);
+  });
+};
+
+// Toggle cells signal state by shape (brackets) as well as color, so on/off
+// Reads under NO_COLOR; the whole cell is the click target.
+const toggleCell = (on: boolean, glyph: string) =>
+  on ? `[${glyph}]` : ` ${glyph} `;
+const toggleColor = (on: boolean) =>
+  on ? theme.colors.accent.primary : theme.colors.text.muted;
+
+const emptyText = () => {
+  if (state.searchStatus() === "searching") {
+    return "searching…";
+  }
+  return state.searchStatus() === "ready" ? "no matches" : "type to search";
+};
+
+/**
+ * The full-view project search pane: it swaps in for the file view inside the Viewer's border
+ * (`mainView === "search"`). Chrome rows (query, filter, summary, footer) are fixed-height in every
+ * state, so idle/searching/ready/ error swaps never shift layout; the results band windows over the
+ * flat `searchItems` list, one terminal row per item.
+ */
+export const SearchPane = () => {
+  const fileCount = createMemo(
+    () => new Set(state.searchResults().map((m) => m.path)).size
+  );
+  const summary = () => {
+    const count = state.searchResults().length;
+    const more = state.searchTruncated() ? "+" : "";
+    return `${count}${more} match${count === 1 ? "" : "es"} in ${fileCount()} file${fileCount() === 1 ? "" : "s"}`;
+  };
+  const statusText = () => {
+    const status = state.searchStatus();
+    if (status === "idle") {
+      return "type to search";
+    }
+    if (status === "searching") {
+      return state.searchResults().length === 0
+        ? "searching…"
+        : `${summary()} · searching…`;
+    }
+    if (status === "error") {
+      return `${levelGlyph("error")} search failed · check the pattern`;
+    }
+    return state.searchResults().length === 0 ? "no matches" : summary();
+  };
+
+  // Group the visible flat items back into excerpts for highlighting, and map
+  // Each line item to its excerpt + offset so a row can find its spans.
+  const excerptData = createMemo(() => {
+    const excerpts: Excerpt[] = [];
+    const byItem = new Map<number, { key: string; offset: number }>();
+    let current: Excerpt | undefined;
+    let currentLine = 0;
+    for (const [index, item] of state.searchItems().entries()) {
+      if (item.kind !== "line") {
+        current = undefined;
+        continue;
+      }
+      if (
+        current !== undefined &&
+        item.path === current.path &&
+        item.line === currentLine + 1
+      ) {
+        current.texts.push(item.text);
+      } else {
+        current = {
+          itemStart: index,
+          key: `${item.path}:${item.line}`,
+          path: item.path,
+          texts: [item.text],
+        };
+        excerpts.push(current);
+      }
+      currentLine = item.line;
+      byItem.set(index, { key: current.key, offset: current.texts.length - 1 });
+    }
+    return { byItem, excerpts };
+  });
+
+  // Highlighted spans per excerpt, keyed path:startLine. A new snapshot or a
+  // Theme flip invalidates everything; rows render plain and upgrade in place
+  // (identical text, so the swap never shifts layout).
+  const [spanCache, setSpanCache] = createSignal(
+    new Map<string, RenderSpan[][]>()
+  );
+  createEffect(() => {
+    state.searchResults();
+    activeThemeName();
+    setSpanCache(new Map());
+  });
+
+  // Highlight only the excerpts intersecting the viewport, on demand, through
+  // The diff's shared highlighter (never rejects; falls back to plain spans).
+  createEffect(() => {
+    const from = state.searchScrollTop();
+    const to = from + state.searchListHeight();
+    const cache = spanCache();
+    const pending = excerptData().excerpts.filter(
+      (excerpt) =>
+        excerpt.itemStart < to &&
+        excerpt.itemStart + excerpt.texts.length > from &&
+        !cache.has(excerpt.key)
+    );
+    if (pending.length === 0) {
+      return;
+    }
+    const cancelled = { current: false };
+    onCleanup(() => {
+      cancelled.current = true;
+    });
+    const highlightExcerpt = async (excerpt: Excerpt) => {
+      const lines = await highlightSnippet(
+        excerpt.texts.join("\n"),
+        languageForPath(excerpt.path)
+      );
+      if (!cancelled.current) {
+        setSpanCache((previous) => new Map(previous).set(excerpt.key, lines));
+      }
+    };
+    for (const excerpt of pending) {
+      void highlightExcerpt(excerpt);
+    }
+  });
+
+  const rowSpans = (item: { text: string }, index: number): RenderSpan[] => {
+    const ref = excerptData().byItem.get(index);
+    const lines = ref === undefined ? undefined : spanCache().get(ref.key);
+    return lines?.[ref?.offset ?? 0] ?? [{ text: item.text }];
+  };
+
+  const visibleItems = createMemo(() => {
+    const start = state.searchScrollTop();
+    return state
+      .searchItems()
+      .slice(start, start + state.searchListHeight())
+      .map((item, offset) => ({ index: start + offset, item }));
+  });
+
+  const onWheel = windowWheelHandler({
+    rowCount: () => state.searchItems().length,
+    scrollTop: state.searchScrollTop,
+    setScrollTop: (next) => {
+      state.setSearchScrollTop(next);
+    },
+    viewport: state.searchListHeight,
+  });
+
+  // A single click selects (a focus-intent click must never navigate the whole
+  // View away, mirroring the diff where a click only moves the cursor); a
+  // Double click opens. Headers keep single-click collapse (non-destructive).
+  const isDoubleClick = createDoubleClickGuard();
+  const clickRow = (item: SearchItem, index: number) => {
+    batch(() => {
+      state.setFocusedPane("search");
+      state.setSearchFocus("results");
+      // Advance the double-click tracker on every row, before the early returns for a
+      // Header (collapse) or context/gap row, so a click on one of those between two
+      // Clicks on the same match breaks the sequence, rather than being invisible to
+      // The tracker and letting the second match click read as a double.
+      const isDouble = isDoubleClick(item.id);
+      if (item.kind === "header") {
+        state.toggleSearchGroup(item.path);
+        return;
+      }
+      if (item.kind !== "line") {
+        return;
+      }
+      if (isDouble) {
+        state.jumpToSearchItem(index);
+        return;
+      }
+      // Select the clicked row, or the nearest navigable one above a context row.
+      const items = state.searchItems();
+      const selected = items.findLastIndex(
+        (candidate, candidateIndex) =>
+          candidateIndex <= index && isNavigableSearchItem(candidate)
+      );
+      if (selected !== -1) {
+        state.setSearchSelection(selected);
+      }
+    });
+  };
+
+  const inputColors = {
+    backgroundColor: theme.colors.surface.panel,
+    cursorColor: theme.colors.accent.primary,
+    focusedBackgroundColor: theme.colors.surface.panel,
+    focusedTextColor: theme.colors.text.primary,
+    textColor: theme.colors.text.primary,
+  };
+
+  return (
+    <box flexDirection="column" flexGrow={1}>
+      <box
+        height={1}
+        flexDirection="row"
+        paddingLeft={1}
+        paddingRight={1}
+        backgroundColor={theme.colors.surface.panel}
+      >
+        <box flexGrow={1}>
+          <input
+            ref={(el: InputRenderable) => {
+              el.value = state.searchQuery();
+            }}
+            focused={focusIn("query")}
+            width="100%"
+            placeholder="search…"
+            {...inputColors}
+            onInput={onQueryInput}
+            onSubmit={submit}
+          />
+        </box>
+        <box
+          ref={(el) => {
+            el.selectable = false;
+          }}
+          onMouseDown={() => {
+            state.toggleSearchRegex();
+          }}
+        >
+          <text fg={toggleColor(state.searchRegex())}>
+            {toggleCell(state.searchRegex(), ".*")}
+          </text>
+        </box>
+        <text> </text>
+        <box
+          ref={(el) => {
+            el.selectable = false;
+          }}
+          onMouseDown={() => {
+            state.toggleSearchCase();
+          }}
+        >
+          <text fg={toggleColor(state.searchCaseSensitive())}>
+            {toggleCell(state.searchCaseSensitive(), "Aa")}
+          </text>
+        </box>
+      </box>
+      <box
+        height={1}
+        flexDirection="row"
+        paddingLeft={1}
+        paddingRight={1}
+        backgroundColor={theme.colors.surface.panel}
+      >
+        <text fg={theme.colors.text.muted}>{"in "}</text>
+        <box flexGrow={1}>
+          <input
+            ref={(el: InputRenderable) => {
+              el.value = state.searchGlob();
+            }}
+            focused={focusIn("glob")}
+            width="100%"
+            placeholder="src/ *.ts !*.test.ts"
+            {...inputColors}
+            onInput={onGlobInput}
+            onSubmit={submit}
+          />
+        </box>
+        <box
+          ref={(el) => {
+            el.selectable = false;
+          }}
+          onMouseDown={() => {
+            state.toggleSearchScope();
+          }}
+        >
+          <text fg={theme.colors.text.muted}>{`[${scopeLabel()}]`}</text>
+        </box>
+      </box>
+      <box height={1} paddingLeft={1} paddingRight={1}>
+        <text fg={statusColor()}>
+          {truncate(statusText(), Math.max(8, innerWidth() - 2))}
+        </text>
+      </box>
+      <box flexGrow={1} flexDirection="row" onMouseScroll={onWheel}>
+        <box
+          ref={(el) => {
+            el.selectable = false;
+          }}
+          flexGrow={1}
+          flexDirection="column"
+        >
+          <Show
+            when={state.searchItems().length > 0}
+            fallback={
+              <box
+                height={state.searchListHeight()}
+                flexDirection="column"
+                justifyContent="center"
+                alignItems="center"
+              >
+                <Show
+                  when={state.searchStatus() === "error"}
+                  fallback={
+                    <>
+                      <text fg={theme.colors.text.muted}>{emptyText()}</text>
+                      <text fg={theme.colors.text.faint}>
+                        {state.searchScope() === "changed"
+                          ? `in ${scopeLabel()} · ctrl-g for the whole repo`
+                          : "across the whole repo"}
+                      </text>
+                    </>
+                  }
+                >
+                  <text fg={levelColor(theme.colors, "error")}>
+                    {`${levelGlyph("error")} search failed`}
+                  </text>
+                  <text fg={theme.colors.text.faint}>
+                    {state.searchRegex()
+                      ? "check the pattern · ctrl-r for literal"
+                      : "try again"}
+                  </text>
+                </Show>
+              </box>
+            }
+          >
+            <Index each={visibleItems()}>
+              {(row) => (
+                <box
+                  ref={(el) => {
+                    el.selectable = false;
+                  }}
+                  height={1}
+                  width="100%"
+                  flexDirection="row"
+                  backgroundColor={rowBackground(row().item, row().index)}
+                  onMouseDown={() => {
+                    clickRow(row().item, row().index);
+                  }}
+                >
+                  <Show when={asHeader(row().item)}>
+                    {(header) => (
+                      <box
+                        height={1}
+                        flexGrow={1}
+                        flexDirection="row"
+                        justifyContent="space-between"
+                        paddingLeft={1}
+                        paddingRight={1}
+                      >
+                        <box flexDirection="row">
+                          <text
+                            fg={
+                              row().index === state.searchIndex()
+                                ? theme.colors.text.selected
+                                : theme.colors.text.strong
+                            }
+                          >
+                            {`${header().collapsed ? "▸" : "▾"} `}
+                          </text>
+                          <FileIcon path={header().path} />
+                          <text
+                            fg={
+                              row().index === state.searchIndex()
+                                ? theme.colors.text.selected
+                                : theme.colors.text.strong
+                            }
+                          >
+                            {truncate(
+                              header().path,
+                              Math.max(
+                                8,
+                                resultsWidth() - (state.iconsEnabled() ? 10 : 8)
+                              )
+                            )}
+                          </text>
+                        </box>
+                        <text fg={theme.colors.text.muted}>
+                          {String(header().count)}
+                        </text>
+                      </box>
+                    )}
+                  </Show>
+                  <Show when={asLine(row().item)}>
+                    {(line) => (
+                      <>
+                        <text
+                          fg={
+                            line().match === undefined
+                              ? theme.colors.text.faint
+                              : theme.colors.text.muted
+                          }
+                        >
+                          {` ${String(line().line).padStart(line().lineWidth)} `}
+                        </text>
+                        <CodeLine
+                          spans={() => rowSpans(line(), row().index)}
+                          width={() =>
+                            Math.max(1, resultsWidth() - line().lineWidth - 2)
+                          }
+                        />
+                      </>
+                    )}
+                  </Show>
+                  <Show when={row().item.kind === "gap"}>
+                    <text fg={theme.colors.text.faint}>{" ⋯"}</text>
+                  </Show>
+                </box>
+              )}
+            </Index>
+          </Show>
+        </box>
+        <ListScrollbar
+          rowCount={() => state.searchItems().length}
+          viewport={state.searchListHeight}
+          scrollTop={state.searchScrollTop}
+        />
+      </box>
+      {/* Contextual per sub-focus, naming only the keys that focus honors: the
+          inputs surface the query toggles, the results surface the result
+          actions. Both fit narrower panes than one exhaustive line would. */}
+      <box
+        height={1}
+        paddingLeft={1}
+        backgroundColor={theme.colors.surface.panel}
+      >
+        <text fg={theme.colors.text.muted}>
+          {truncate(
+            state.searchFocus() === "results"
+              ? "⏎ open · e editor · y copy · h/l fold · g/G ends · esc"
+              : "⏎ open · ↓ results · ctrl-r regex · ctrl-x case · ctrl-g repo · ctrl-o scope · esc",
+            Math.max(8, innerWidth() - 2)
+          )}
+        </text>
+      </box>
+    </box>
+  );
+};

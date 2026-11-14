@@ -20,11 +20,11 @@ const unknownGuidance = `could not determine how stet was installed. upgrade wit
  * the channel update as before, leaving each tool to resolve `@latest` itself. `fetchLatest` is the
  * injectable seam the tests drive without hitting the network.
  */
-export async function runUpgrade(input: {
+export const runUpgrade = async (input: {
   execPath: string;
   currentVersion: string;
   fetchLatest?: () => Promise<string | undefined>;
-}) {
+}) => {
   const latest = await (input.fetchLatest ?? fetchLatestVersion)();
   if (latest !== undefined && !isNewer(latest, input.currentVersion)) {
     logSuccess(`stet ${input.currentVersion} is already up to date`);
@@ -46,4 +46,4 @@ export async function runUpgrade(input: {
   });
 
   return await proc.exited;
-}
+};

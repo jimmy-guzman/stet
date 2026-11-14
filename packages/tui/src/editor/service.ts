@@ -1,11 +1,11 @@
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 
-export class EditorError extends Data.TaggedError("EditorError")<{
-  readonly message: string;
-}> {}
+import { EditorError } from "./error";
 
 const toEditorError = (cause: unknown) =>
-  new EditorError({ message: cause instanceof Error ? cause.message : String(cause) });
+  new EditorError({
+    message: cause instanceof Error ? cause.message : String(cause),
+  });
 
 export class Editor extends Context.Service<
   Editor,
@@ -14,7 +14,10 @@ export class Editor extends Context.Service<
      * Opens a file in the OS default application (`open`/`xdg-open`), fork-and-forget like
      * `openIde`.
      */
-    readonly openExternal: (argv: string[], cwd: string) => Effect.Effect<number, EditorError>;
+    readonly openExternal: (
+      argv: string[],
+      cwd: string
+    ) => Effect.Effect<number, EditorError>;
     /**
      * Spawns a GUI/IDE with ignored stdio and blocks until it exits, returning the exit code so the
      * caller can surface non-zero exits to the user.
@@ -24,9 +27,15 @@ export class Editor extends Context.Service<
      * drawing to the TTY and kill it on watcher refresh. See AGENTS.md for the documented
      * exception.
      */
-    readonly openIde: (argv: string[], cwd: string) => Effect.Effect<number, EditorError>;
+    readonly openIde: (
+      argv: string[],
+      cwd: string
+    ) => Effect.Effect<number, EditorError>;
     /** Spawns a terminal editor with inherited stdio and blocks until it exits. */
-    readonly openTerminal: (argv: string[], cwd: string) => Effect.Effect<void, EditorError>;
+    readonly openTerminal: (
+      argv: string[],
+      cwd: string
+    ) => Effect.Effect<void, EditorError>;
   }
 >()("stet/Editor") {}
 
@@ -35,14 +44,20 @@ export class Editor extends Context.Service<
 const spawnGuiAwaitingExit = (argv: string[], cwd: string) =>
   Effect.try({
     catch: toEditorError,
-    try: () => Bun.spawn(argv, { cwd, stderr: "ignore", stdin: "ignore", stdout: "ignore" }),
+    try: () =>
+      Bun.spawn(argv, {
+        cwd,
+        stderr: "ignore",
+        stdin: "ignore",
+        stdout: "ignore",
+      }),
   }).pipe(
     Effect.flatMap((proc) =>
       Effect.tryPromise({
         catch: toEditorError,
-        try: () => proc.exited,
-      }),
-    ),
+        try: async () => await proc.exited,
+      })
+    )
   );
 
 export const EditorLive = Layer.succeed(Editor)({
@@ -51,17 +66,29 @@ export const EditorLive = Layer.succeed(Editor)({
   openTerminal: (argv, cwd) =>
     Effect.try({
       catch: toEditorError,
-      try: () => Bun.spawn(argv, { cwd, stderr: "inherit", stdin: "inherit", stdout: "inherit" }),
+      try: () =>
+        Bun.spawn(argv, {
+          cwd,
+          stderr: "inherit",
+          stdin: "inherit",
+          stdout: "inherit",
+        }),
     }).pipe(
       Effect.flatMap((proc) =>
         Effect.tryPromise({
           catch: toEditorError,
-          try: (signal) => {
-            signal.addEventListener("abort", () => proc.kill(), { once: true });
-            return proc.exited;
+          try: async (signal) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                proc.kill();
+              },
+              { once: true }
+            );
+            return await proc.exited;
           },
-        }),
+        })
       ),
-      Effect.asVoid,
+      Effect.asVoid
     ),
 });

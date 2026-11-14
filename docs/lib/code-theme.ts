@@ -21,77 +21,112 @@ interface Tokens {
   type: string;
 }
 
-function buildTheme(name: string, type: "dark" | "light", t: Tokens) {
-  return {
-    name,
-    type,
-    bg: t.bg,
-    fg: t.fg,
-    settings: [
-      { scope: ["comment"], settings: { fontStyle: "italic", foreground: t.comment } },
-      {
-        scope: ["keyword", "storage", "storage.type", "storage.modifier", "keyword.control"],
-        settings: { fontStyle: "bold", foreground: t.keyword },
-      },
-      {
-        scope: [
-          "keyword.control.import",
-          "keyword.control.export",
-          "keyword.control.from",
-          "keyword.control.default",
-        ],
-        settings: { fontStyle: "bold", foreground: t.keywordImport },
-      },
-      {
-        scope: ["keyword.control.flow", "storage.modifier.async"],
-        settings: { fontStyle: "bold", foreground: t.keywordControl },
-      },
-      {
-        scope: ["keyword.operator", "punctuation.accessor", "operator"],
-        settings: { foreground: t.operator },
-      },
-      { scope: ["string", "string.quoted", "string.template"], settings: { foreground: t.string } },
-      {
-        scope: ["constant.character.escape", "string.regexp"],
-        settings: { foreground: t.operator },
-      },
-      { scope: ["constant.numeric"], settings: { foreground: t.number } },
-      { scope: ["constant.language"], settings: { fontStyle: "bold", foreground: t.number } },
-      {
-        scope: ["constant", "support.constant", "variable.other.constant"],
-        settings: { foreground: t.number },
-      },
-      {
-        scope: ["entity.name.function", "support.function", "meta.function-call.generic"],
-        settings: { foreground: t.function },
-      },
-      {
-        scope: ["entity.name.type", "support.type", "support.class", "entity.name.class"],
-        settings: { foreground: t.type },
-      },
-      {
-        scope: ["variable.other.property", "meta.object-literal.key", "support.variable"],
-        settings: { foreground: t.member },
-      },
-      { scope: ["entity.name.namespace", "entity.name.label"], settings: { foreground: t.member } },
-      { scope: ["entity.name.tag"], settings: { foreground: t.tag } },
-      {
-        scope: ["entity.other.attribute-name"],
-        settings: { fontStyle: "italic", foreground: t.type },
-      },
-      { scope: ["variable"], settings: { foreground: t.fg } },
-      { scope: ["punctuation"], settings: { foreground: t.punctuation } },
-      { scope: ["markup.heading"], settings: { fontStyle: "bold", foreground: t.keyword } },
-      { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
-      { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
-      { scope: ["markup.inline.raw", "markup.raw"], settings: { foreground: t.string } },
-      {
-        scope: ["markup.underline.link"],
-        settings: { fontStyle: "underline", foreground: t.function },
-      },
-    ],
-  };
-}
+const buildTheme = (name: string, type: "dark" | "light", t: Tokens) => ({
+  name,
+  type,
+  bg: t.bg,
+  fg: t.fg,
+  settings: [
+    {
+      scope: ["comment"],
+      settings: { fontStyle: "italic", foreground: t.comment },
+    },
+    {
+      scope: [
+        "keyword",
+        "storage",
+        "storage.type",
+        "storage.modifier",
+        "keyword.control",
+      ],
+      settings: { fontStyle: "bold", foreground: t.keyword },
+    },
+    {
+      scope: [
+        "keyword.control.import",
+        "keyword.control.export",
+        "keyword.control.from",
+        "keyword.control.default",
+      ],
+      settings: { fontStyle: "bold", foreground: t.keywordImport },
+    },
+    {
+      scope: ["keyword.control.flow", "storage.modifier.async"],
+      settings: { fontStyle: "bold", foreground: t.keywordControl },
+    },
+    {
+      scope: ["keyword.operator", "punctuation.accessor", "operator"],
+      settings: { foreground: t.operator },
+    },
+    {
+      scope: ["string", "string.quoted", "string.template"],
+      settings: { foreground: t.string },
+    },
+    {
+      scope: ["constant.character.escape", "string.regexp"],
+      settings: { foreground: t.operator },
+    },
+    { scope: ["constant.numeric"], settings: { foreground: t.number } },
+    {
+      scope: ["constant.language"],
+      settings: { fontStyle: "bold", foreground: t.number },
+    },
+    {
+      scope: ["constant", "support.constant", "variable.other.constant"],
+      settings: { foreground: t.number },
+    },
+    {
+      scope: [
+        "entity.name.function",
+        "support.function",
+        "meta.function-call.generic",
+      ],
+      settings: { foreground: t.function },
+    },
+    {
+      scope: [
+        "entity.name.type",
+        "support.type",
+        "support.class",
+        "entity.name.class",
+      ],
+      settings: { foreground: t.type },
+    },
+    {
+      scope: [
+        "variable.other.property",
+        "meta.object-literal.key",
+        "support.variable",
+      ],
+      settings: { foreground: t.member },
+    },
+    {
+      scope: ["entity.name.namespace", "entity.name.label"],
+      settings: { foreground: t.member },
+    },
+    { scope: ["entity.name.tag"], settings: { foreground: t.tag } },
+    {
+      scope: ["entity.other.attribute-name"],
+      settings: { fontStyle: "italic", foreground: t.type },
+    },
+    { scope: ["variable"], settings: { foreground: t.fg } },
+    { scope: ["punctuation"], settings: { foreground: t.punctuation } },
+    {
+      scope: ["markup.heading"],
+      settings: { fontStyle: "bold", foreground: t.keyword },
+    },
+    { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
+    { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
+    {
+      scope: ["markup.inline.raw", "markup.raw"],
+      settings: { foreground: t.string },
+    },
+    {
+      scope: ["markup.underline.link"],
+      settings: { fontStyle: "underline", foreground: t.function },
+    },
+  ],
+});
 
 export const stetDark = buildTheme("stet-dark", "dark", {
   bg: "#191b1d",

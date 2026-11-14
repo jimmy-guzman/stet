@@ -25,17 +25,17 @@ export interface ResolvedTheme {
 // So a dark red stays red as it brightens and a light green stays green as it
 // Darkens, rather than washing toward neutral grey. factor > 1 brightens toward
 // White (clamped); factor < 1 darkens toward black.
-function scaleRgba(hex: string, factor: number) {
+const scaleRgba = (hex: string, factor: number) => {
   const base = RGBA.fromHex(hex);
   const lift = (channel: number) => Math.min(1, channel * factor);
   return RGBA.fromValues(lift(base.r), lift(base.g), lift(base.b), base.a);
-}
+};
 
 // Perceptual luminance (Rec. 601) of surface.base decides the emphasis direction.
-function surfaceIsLight(hex: string) {
+const surfaceIsLight = (hex: string) => {
   const { r, g, b } = RGBA.fromHex(hex);
   return 0.299 * r + 0.587 * g + 0.114 * b > 0.5;
-}
+};
 
 // Brighten dark diff backgrounds toward white; darken light ones toward their own
 // Hue (a brighten would clamp the already near-white light palette to pure white).
@@ -46,8 +46,10 @@ const LIGHT_ACTIVE_FACTOR = 0.82;
 // Light enough that the dimmed content stays legible behind it.
 const SCRIM_ALPHA = 0.5;
 
-export function resolveTheme(theme: Theme): ResolvedTheme {
-  const factor = surfaceIsLight(theme.surface.base) ? LIGHT_ACTIVE_FACTOR : DARK_ACTIVE_FACTOR;
+export const resolveTheme = (theme: Theme): ResolvedTheme => {
+  const factor = surfaceIsLight(theme.surface.base)
+    ? LIGHT_ACTIVE_FACTOR
+    : DARK_ACTIVE_FACTOR;
   const active = (hex: string) => scaleRgba(hex, factor);
   const scrim = RGBA.fromHex(theme.surface.scrim);
   return {
@@ -60,4 +62,4 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
       transparent: RGBA.fromValues(0, 0, 0, 0),
     },
   };
-}
+};

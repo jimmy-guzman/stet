@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import { ImageResponse } from "next/og";
 
@@ -9,15 +8,16 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 /**
- * Turbopack rewrites `require.resolve` to its own module id, so it cannot locate a file on disk;
- * `import.meta.url` it leaves alone. Resolve to a plain string rather than handing `node:fs` a
- * `URL`, which fails its `instanceof` check across the bundler's realm. The read itself stays
- * inside the render: Next imports this module for `alt`/`size` alone when building page metadata,
- * and that import must not touch the filesystem.
+ * Turbopack rewrites `require.resolve` to its own module id, and leaves `import.meta.dirname`
+ * undefined, so neither can locate a file on disk. `next build` runs from the docs workspace, so
+ * the font resolves from `process.cwd()` into the hoisted root `node_modules`, the pattern Next's
+ * own OG image examples use. The read itself stays inside the render: Next imports this module
+ * for `alt`/`size` alone when building page metadata, and that import must not touch the
+ * filesystem.
  */
-const geistMonoPath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../node_modules/geist/dist/fonts/geist-mono/GeistMono-SemiBold.ttf",
+const geistMonoPath = path.join(
+  process.cwd(),
+  "../node_modules/geist/dist/fonts/geist-mono/GeistMono-SemiBold.ttf"
 );
 
 let geistMonoPromise: Promise<Buffer> | undefined;
@@ -60,7 +60,13 @@ export default async function Image() {
         fontFamily: "Geist Mono",
       }}
     >
-      <div style={{ display: "flex", position: "relative", width: cell * letters.length }}>
+      <div
+        style={{
+          display: "flex",
+          position: "relative",
+          width: cell * letters.length,
+        }}
+      >
         <div style={{ display: "flex" }}>
           {letters.map(({ id, letter }) => (
             <div
@@ -92,9 +98,20 @@ export default async function Image() {
             backgroundColor: "#5c5e60",
           }}
         />
-        <div style={{ display: "flex", position: "absolute", top: dotsTop, left: 0, right: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            position: "absolute",
+            top: dotsTop,
+            left: 0,
+            right: 0,
+          }}
+        >
           {letters.map(({ id }) => (
-            <div key={id} style={{ display: "flex", width: cell, justifyContent: "center" }}>
+            <div
+              key={id}
+              style={{ display: "flex", width: cell, justifyContent: "center" }}
+            >
               <div
                 style={{
                   width: dotSize,
@@ -107,16 +124,32 @@ export default async function Image() {
           ))}
         </div>
       </div>
-      <div style={{ display: "flex", marginTop: 72, fontSize: 44, color: "#e9ebee" }}>
+      <div
+        style={{
+          display: "flex",
+          marginTop: 72,
+          fontSize: 44,
+          color: "#e9ebee",
+        }}
+      >
         read-only companion TUI
       </div>
-      <div style={{ display: "flex", marginTop: 24, fontSize: 30, color: "#848688" }}>
-        Inspect an agent's changes as they happen.
+      <div
+        style={{
+          display: "flex",
+          marginTop: 24,
+          fontSize: 30,
+          color: "#848688",
+        }}
+      >
+        Inspect an agent&apos;s changes as they happen.
       </div>
     </div>,
     {
       ...size,
-      fonts: [{ name: "Geist Mono", data: geistMono, weight: 600, style: "normal" }],
-    },
+      fonts: [
+        { name: "Geist Mono", data: geistMono, weight: 600, style: "normal" },
+      ],
+    }
   );
 }

@@ -6,9 +6,10 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { batch } from "solid-js";
 
 import packageJson from "../package.json";
-import { App } from "./App";
+import { App } from "./app";
 import { helpText, parseCommand } from "./cli";
 import { configDefaults } from "./config/schema";
+import type { UserConfig } from "./config/schema";
 import { Config, ConfigLive } from "./config/service";
 import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
 import { resolveFileSupportConfig } from "./file-support/config";
@@ -26,19 +27,51 @@ import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance, setSelection } from "./theme/active";
 import { prefersMonochrome } from "./theme/mono";
-import { hasTheme, registerThemes, resolveThemes, selectThemeName } from "./theme/registry";
+import {
+  hasTheme,
+  registerThemes,
+  resolveThemes,
+  selectThemeName,
+} from "./theme/registry";
 import { runUpgrade } from "./upgrade/run";
+
+const seedSidebar = (config: UserConfig) => {
+  state.setSidebarPosition(
+    config.sidebar?.position ?? configDefaults.sidebar.position
+  );
+  state.setSidebarWidthOverride(config.sidebar?.width ?? null);
+  state.setSidebarHeightOverride(config.sidebar?.height ?? null);
+  state.setChangesOnly(
+    config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly
+  );
+  if (!(config.sidebar?.open ?? configDefaults.sidebar.open)) {
+    // The one close path rather than a copy of it, so focus leaving the hidden tree is
+    // Decided in the same place here as it is for `ctrl-b` and a shrink past the minimum.
+    state.collapseSidebar();
+  }
+};
+
+const seedSearch = (config: UserConfig) => {
+  state.setSearchRegex(config.search?.regex ?? configDefaults.search.regex);
+  state.setSearchCaseSensitive(
+    config.search?.caseSensitive ?? configDefaults.search.caseSensitive
+  );
+  state.setSearchScope(config.search?.scope ?? configDefaults.search.scope);
+};
 
 try {
   const command = parseCommand(Bun.argv.slice(2));
 
   if (command.kind === "upgrade") {
     process.exit(
-      await runUpgrade({ currentVersion: packageJson.version, execPath: process.execPath }),
+      await runUpgrade({
+        currentVersion: packageJson.version,
+        execPath: process.execPath,
+      })
     );
   }
 
-  const options = command.options;
+  const { options } = command;
 
   if (options.help) {
     console.log(helpText());
@@ -65,7 +98,9 @@ try {
       // Only `HEAD` is substituted: a ref the user named still resolves on an orphan branch, where
       // Diffing against the empty tree instead would silently show the wrong base.
       const unborn = options.scope.ref === "HEAD" && head === undefined;
-      const scope = unborn ? { ...options.scope, ref: emptyTree } : options.scope;
+      const scope = unborn
+        ? { ...options.scope, ref: emptyTree }
+        : options.scope;
       const changed = yield* git.changedFiles(repoRoot, scope);
       return { changed, scope, sessionBase: head ?? emptyTree, unborn };
     });
@@ -90,7 +125,7 @@ try {
   // It. ConfigLive has no dependencies, so this builds nothing heavy.
   const configRuntime = ManagedRuntime.make(ConfigLive);
   const { config, issues: configIssues } = await configRuntime.runPromise(
-    Config.pipe(Effect.flatMap((service) => service.load())),
+    Config.pipe(Effect.flatMap((service) => service.load()))
   );
   await configRuntime.dispose();
 
@@ -111,13 +146,14 @@ try {
 
   // Registers before the runtime builds, so the diff and icons share one startup snapshot for the
   // Full session.
-  const { issues: fileSupportIssues, registry: fileSupport } = resolveFileSupportConfig({
-    files: config.files,
-    icons: config.icons?.glyphs,
-  });
+  const { issues: fileSupportIssues, registry: fileSupport } =
+    resolveFileSupportConfig({
+      files: config.files,
+      icons: config.icons?.glyphs,
+    });
   registerFileSupport(fileSupport);
   const { issues: keybindingIssues, set: keybindings } = resolveKeybindings(
-    config.keybindings ?? {},
+    config.keybindings ?? {}
   );
   registerKeybindings(keybindings);
 
@@ -125,10 +161,13 @@ try {
   // Prints on the normal terminal instead of flashing an empty shell first. On its own runtime for
   // The same reason the config load has one: the first use of the app runtime builds DiffEngineLive,
   // Whose highlighter warm-up must stay behind the first paint.
-  const preflightRuntime = ManagedRuntime.make(GitLive.pipe(Layer.provide(ProcessLive)));
-  const { emptyTree, mainWorktreePath, repoRoot } = await preflightRuntime.runPromise(
-    Git.pipe(Effect.flatMap((git) => git.repoContext(process.cwd()))),
+  const preflightRuntime = ManagedRuntime.make(
+    GitLive.pipe(Layer.provide(ProcessLive))
   );
+  const { emptyTree, mainWorktreePath, repoRoot } =
+    await preflightRuntime.runPromise(
+      Git.pipe(Effect.flatMap((git) => git.repoContext(process.cwd())))
+    );
   await preflightRuntime.dispose();
 
   // Create the renderer up front and detect the terminal's dark/light appearance
@@ -140,7 +179,10 @@ try {
   // (`autoFocus`), which would otherwise draw the terminal cursor in a clicked
   // Renderable (e.g. a tab). stet drives focus through its own keymap, and
   // Overlay inputs focus via their explicit `focused` prop, so nothing relies on it.
-  const renderer = await createCliRenderer({ autoFocus: false, exitOnCtrlC: false });
+  const renderer = await createCliRenderer({
+    autoFocus: false,
+    exitOnCtrlC: false,
+  });
   const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
 
   // Restore the terminal on every exit path, not just a clean quit. In raw mode a
@@ -174,7 +216,9 @@ try {
   setAppearance(appearance);
   const activeName = selectThemeName(themeSelection, appearance);
   if (!hasTheme(activeName)) {
-    themeIssues.push(`theme "${activeName}" not found; using the ${appearance} default`);
+    themeIssues.push(
+      `theme "${activeName}" not found; using the ${appearance} default`
+    );
   }
 
   // The CLI- and config-derived state needs no git, so seed it before the first
@@ -183,32 +227,25 @@ try {
   batch(() => {
     state.setScope(options.scope);
     state.setCliBaseRef(options.scope.ref);
-    state.setIconsEnabled(options.icons && (config.icons?.enabled ?? configDefaults.icons.enabled));
-    state.setOverflow(
-      options.overflow === "wrap" || (config.viewer?.wrap ?? configDefaults.viewer.wrap)
-        ? "wrap"
-        : "scroll",
+    state.setIconsEnabled(
+      options.icons && (config.icons?.enabled ?? configDefaults.icons.enabled)
     );
-    state.setEditorTemplate(resolveEditorTemplate(options.editor ?? config.editor));
+    state.setOverflow(
+      options.overflow === "wrap" ||
+        (config.viewer?.wrap ?? configDefaults.viewer.wrap)
+        ? "wrap"
+        : "scroll"
+    );
+    state.setEditorTemplate(
+      resolveEditorTemplate(options.editor ?? config.editor)
+    );
     state.setIdeTemplate(resolveIdeTemplate(options.ide ?? config.ide));
     // The raw flags, so ctrl-s can persist a literal --editor/--ide (never the
     // Resolved template, which folds in environment fallbacks).
     state.setEditorFlag(options.editor);
     state.setIdeFlag(options.ide);
-    state.setSidebarPosition(config.sidebar?.position ?? configDefaults.sidebar.position);
-    state.setSidebarWidthOverride(config.sidebar?.width ?? null);
-    state.setSidebarHeightOverride(config.sidebar?.height ?? null);
-    state.setChangesOnly(config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly);
-    if (!(config.sidebar?.open ?? configDefaults.sidebar.open)) {
-      // The one close path rather than a copy of it, so focus leaving the hidden tree is
-      // Decided in the same place here as it is for `ctrl-b` and a shrink past the minimum.
-      state.collapseSidebar();
-    }
-    state.setSearchRegex(config.search?.regex ?? configDefaults.search.regex);
-    state.setSearchCaseSensitive(
-      config.search?.caseSensitive ?? configDefaults.search.caseSensitive,
-    );
-    state.setSearchScope(config.search?.scope ?? configDefaults.search.scope);
+    seedSidebar(config);
+    seedSearch(config);
     // Seed the real terminal size before the first paint. Without this, the shell
     // Paints once at the default 24 rows (a 20-row tree viewport) before App's terminal
     // Dimensions effect supplies the true size, so a tree that fits the real pane
@@ -232,12 +269,31 @@ try {
     void state.checkForUpdate(packageJson.version);
   }
 
-  runtime
-    .runPromise(startup(repoRoot, emptyTree))
-    .then(({ changed, scope, sessionBase, unborn }) => {
-      const model: GitModel = { repoRoot, ...changed, repoFiles: [], repoFilesKey: "" };
-      const initialSelectedPath = model.changed[0]?.path ?? model.repoFiles[0]?.path;
-      const baseExpanded = defaultExpandedDirectories(model.changed.map((file) => file.path));
+  // The startup diff already failed, so a failure to explain it falls back to the raw message.
+  const explainFailure = async (error: unknown) => {
+    try {
+      return await runtime.runPromise(startupFailure(repoRoot, error));
+    } catch {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
+
+  const loadModel = async () => {
+    try {
+      const { changed, scope, sessionBase, unborn } = await runtime.runPromise(
+        startup(repoRoot, emptyTree)
+      );
+      const model: GitModel = {
+        repoRoot,
+        ...changed,
+        repoFiles: [],
+        repoFilesKey: "",
+      };
+      const initialSelectedPath =
+        model.changed[0]?.path ?? model.repoFiles[0]?.path;
+      const baseExpanded = defaultExpandedDirectories(
+        model.changed.map((file) => file.path)
+      );
       const initialExpanded =
         initialSelectedPath === undefined
           ? baseExpanded
@@ -247,7 +303,10 @@ try {
         state.setHeadUnborn(unborn);
         // The shell painted before this resolved, so the user may already have picked a scope from
         // The menu; only the untouched CLI scope is re-pointed at the resolved base.
-        if (state.scope().kind === options.scope.kind && state.scope().ref === options.scope.ref) {
+        if (
+          state.scope().kind === options.scope.kind &&
+          state.scope().ref === options.scope.ref
+        ) {
           state.setScope(scope);
         }
         state.setSessionBase(sessionBase);
@@ -258,27 +317,29 @@ try {
         state.setLastChange(Date.now());
         state.seedNav(initialSelectedPath);
         state.setFocusedNodeId(
-          initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`,
+          initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`
         );
         state.setExpandedDirectories(initialExpanded);
       });
 
       // A bad config never blocks startup; the first issue surfaces as a notice.
-      const issues = [...configIssues, ...themeIssues, ...fileSupportIssues, ...keybindingIssues];
+      const issues = [
+        ...configIssues,
+        ...themeIssues,
+        ...fileSupportIssues,
+        ...keybindingIssues,
+      ];
       if (issues.length > 0) {
         state.notify(issues[0] ?? "config has issues");
       }
-    })
-    .catch((error: unknown) =>
-      runtime
-        .runPromise(startupFailure(repoRoot, error))
-        .catch(() => (error instanceof Error ? error.message : String(error)))
-        .then((message) => {
-          restoreTerminal();
-          logError(message);
-          process.exit(1);
-        }),
-    );
+    } catch (error) {
+      const message = await explainFailure(error);
+      restoreTerminal();
+      logError(message);
+      process.exit(1);
+    }
+  };
+  void loadModel();
 } catch (error) {
   logError(error instanceof Error ? error.message : String(error));
   process.exit(1);

@@ -1,13 +1,13 @@
 // Split into Unicode code points (not UTF-16 code units), so an astral char
 // Stays one entry. oxlint forbids both string spread and Array.from(string), so
 // The split is an explicit iteration.
-export function toCodePoints(text: string): string[] {
+export const toCodePoints = (text: string): string[] => {
   const chars: string[] = [];
   for (const char of text) {
     chars.push(char);
   }
   return chars;
-}
+};
 
 // One shared segmenter: constructing one costs more than the truncation it serves.
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
@@ -18,7 +18,7 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 // The code point: `Bun.stringWidth` measures a whole cluster (a ZWJ emoji, a flag, a skin-tone
 // Sequence) as the cells it paints, while its parts sum to more, so a per-code-point walk both
 // Mismeasures the budget and cuts inside a cluster, leaving a dangling joiner or a stripped modifier.
-export function truncate(text: string, max: number) {
+export const truncate = (text: string, max: number) => {
   if (max <= 0) {
     return "";
   }
@@ -37,9 +37,9 @@ export function truncate(text: string, max: number) {
     kept += segment;
   }
   return `${kept}…`;
-}
+};
 
-export function truncateLeft(text: string, max: number) {
+export const truncateLeft = (text: string, max: number) => {
   if (Bun.stringWidth(text) <= max) {
     return text;
   }
@@ -62,7 +62,7 @@ export function truncateLeft(text: string, max: number) {
     kept = `${segment}${kept}`;
   }
   return `…${kept}`;
-}
+};
 
 // Truncate `text` to `max` cells while keeping every matched character (offsets
 // Into the code points of `text`) visible, so a fuzzy match is never hidden.
@@ -70,7 +70,11 @@ export function truncateLeft(text: string, max: number) {
 // Match when that match would otherwise be clipped. Returns the display string
 // (a leading/trailing … marks each clipped side) and the matched offsets
 // Remapped into that display string, so a caller can highlight them.
-export function truncateAroundMatch(text: string, matched: number[], max: number) {
+export const truncateAroundMatch = (
+  text: string,
+  matched: number[],
+  max: number
+) => {
   const chars = toCodePoints(text);
   if (chars.length <= max) {
     return { matched, text };
@@ -79,7 +83,12 @@ export function truncateAroundMatch(text: string, matched: number[], max: number
     return { matched: [], text: max === 1 ? "…" : "" };
   }
 
-  const window = (start: number, end: number, lead: boolean, trail: boolean) => {
+  const window = (
+    start: number,
+    end: number,
+    lead: boolean,
+    trail: boolean
+  ) => {
     const prefix = lead ? "…" : "";
     return {
       matched: matched
@@ -92,7 +101,7 @@ export function truncateAroundMatch(text: string, matched: number[], max: number
   // Tail-anchored: keep the filename end and drop the head. Used as-is when
   // There is no match to preserve, or when the match already sits in that tail.
   const tailStart = chars.length - (max - 1);
-  const firstMatch = matched[0];
+  const [firstMatch] = matched;
   if (firstMatch === undefined || firstMatch >= tailStart) {
     return window(tailStart, chars.length, true, false);
   }
@@ -102,15 +111,16 @@ export function truncateAroundMatch(text: string, matched: number[], max: number
   // Window (e.g. two terms matched far apart, a leading dir and the basename),
   // Keep its basename-side end visible rather than its head, since that is the
   // More identifying match.
-  const lastMatch = matched[matched.length - 1];
+  const lastMatch = matched.at(-1) ?? firstMatch;
   const inner = max - 2;
-  const start = lastMatch - firstMatch < inner ? firstMatch : lastMatch + 1 - inner;
+  const start =
+    lastMatch - firstMatch < inner ? firstMatch : lastMatch + 1 - inner;
   const lead = start > 0;
   const end = start + max - (lead ? 1 : 0) - 1;
   return window(start, end, lead, end < chars.length);
-}
+};
 
-export function truncateName(name: string, max: number) {
+export const truncateName = (name: string, max: number) => {
   if (name.length <= max) {
     return name;
   }
@@ -124,12 +134,14 @@ export function truncateName(name: string, max: number) {
     return `${name.slice(0, max - 1)}…`;
   }
   return `${name.slice(0, keep)}…${ext}`;
-}
+};
 
-export function collapseHome(path: string) {
+export const collapseHome = (path: string) => {
   const home = Bun.env.HOME;
   if (home === undefined || home === "") {
     return path;
   }
-  return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
-}
+  return path === home || path.startsWith(`${home}/`)
+    ? `~${path.slice(home.length)}`
+    : path;
+};

@@ -21,17 +21,15 @@ export interface GapSource {
   lines: string[];
 }
 
-export function foldKey(line: NavigableLine) {
-  return line.newLine === undefined ? `fold:o${line.oldLine}` : `fold:n${line.newLine}`;
-}
+export const foldKey = (line: NavigableLine) =>
+  line.newLine === undefined
+    ? `fold:o${line.oldLine}`
+    : `fold:n${line.newLine}`;
 
-function indentWidth(content: string) {
-  return content.length - content.trimStart().length;
-}
+const indentWidth = (content: string) =>
+  content.length - content.trimStart().length;
 
-function isBlank(content: string) {
-  return content.trim().length === 0;
-}
+const isBlank = (content: string) => content.trim().length === 0;
 
 /**
  * Indent-based fold regions over a navigable line list. Every non-blank line whose following
@@ -39,7 +37,9 @@ function isBlank(content: string) {
  * fold with it, trailing blanks do not). Nesting falls out naturally: an inner block heads its own
  * region inside its parent's. Pure and language-agnostic, mirroring `flattenTree`.
  */
-export function computeFoldRegions(navigable: NavigableLine[]): FoldRegion[] {
+export const computeFoldRegions = (
+  navigable: NavigableLine[]
+): FoldRegion[] => {
   const regions: FoldRegion[] = [];
 
   for (let index = 0; index < navigable.length; index += 1) {
@@ -76,14 +76,13 @@ export function computeFoldRegions(navigable: NavigableLine[]): FoldRegion[] {
   }
 
   return regions;
-}
+};
 
-const ATX_HEADING = /^ {0,3}(?<hashes>#{1,6})(?:\s|$)/;
-const CODE_FENCE = /^ {0,3}(?:```|~~~)/;
+const ATX_HEADING = /^ {0,3}(?<hashes>#{1,6})(?:\s|$)/u;
+const CODE_FENCE = /^ {0,3}(?:```|~~~)/u;
 
-function headingLevel(content: string) {
-  return ATX_HEADING.exec(content)?.groups?.hashes.length ?? 0;
-}
+const headingLevel = (content: string) =>
+  ATX_HEADING.exec(content)?.groups?.hashes.length ?? 0;
 
 /**
  * Heading-based fold regions for markdown. A section headed by an ATX heading (`#`..`######`) folds
@@ -93,7 +92,9 @@ function headingLevel(content: string) {
  * and the fold `Set` are unchanged. Indent-based folding does almost nothing here (markdown sits at
  * column 0), so this is the language-aware alternative.
  */
-export function computeMarkdownFoldRegions(navigable: NavigableLine[]): FoldRegion[] {
+export const computeMarkdownFoldRegions = (
+  navigable: NavigableLine[]
+): FoldRegion[] => {
   const inFence: boolean[] = [];
   let fenced = false;
   for (let index = 0; index < navigable.length; index += 1) {
@@ -105,7 +106,9 @@ export function computeMarkdownFoldRegions(navigable: NavigableLine[]): FoldRegi
 
   const levelAt = (index: number) => {
     const line = navigable[index];
-    return line === undefined || inFence[index] ? 0 : headingLevel(line.content);
+    return line === undefined || inFence[index]
+      ? 0
+      : headingLevel(line.content);
   };
 
   const regions: FoldRegion[] = [];
@@ -138,26 +141,24 @@ export function computeMarkdownFoldRegions(navigable: NavigableLine[]): FoldRegi
   }
 
   return regions;
-}
+};
 
 export type FoldMode = "indent" | "markdown";
 
 /** Pick the region model for a file's language: heading-based for markdown, else indentation. */
-export function foldRegionsFor(navigable: NavigableLine[], mode: FoldMode) {
-  return mode === "markdown"
+export const foldRegionsFor = (navigable: NavigableLine[], mode: FoldMode) =>
+  mode === "markdown"
     ? computeMarkdownFoldRegions(navigable)
     : computeFoldRegions(navigable);
-}
 
-function nextLineRow(rows: DiffRow[], from: number) {
-  for (let index = from; index < rows.length; index += 1) {
-    const row = rows[index];
-    if (row?.kind === "line") {
-      return row;
-    }
+const nextLineRow = (rows: DiffRow[], from: number) => {
+  let index = from;
+  while (index < rows.length && rows[index]?.kind !== "line") {
+    index += 1;
   }
-  return undefined;
-}
+  const row = rows[index];
+  return row?.kind === "line" ? row : undefined;
+};
 
 interface ApplyOptions {
   folded: ReadonlySet<string>;
@@ -174,12 +175,17 @@ interface ApplyOptions {
  * can never land inside a collapsed region. Markers are non-navigable, exactly like the separators
  * they replace.
  */
-export function applyCollapsedRegions(rows: DiffRow[], options: ApplyOptions) {
+export const applyCollapsedRegions = (
+  rows: DiffRow[],
+  options: ApplyOptions
+) => {
   const foldedRegions = foldRegionsFor(
     navigableLinesFromRows(rows),
-    options.mode ?? "indent",
+    options.mode ?? "indent"
   ).filter((region) => options.folded.has(region.key));
-  const regionByHeader = new Map(foldedRegions.map((region) => [region.headerNavIndex, region]));
+  const regionByHeader = new Map(
+    foldedRegions.map((region) => [region.headerNavIndex, region])
+  );
 
   const out: DiffRow[] = [];
   let navIndex = 0;
@@ -190,7 +196,7 @@ export function applyCollapsedRegions(rows: DiffRow[], options: ApplyOptions) {
     type: NavigableLine["type"],
     oldLine: number | undefined,
     newLine: number | undefined,
-    spans: RenderSpan[],
+    spans: RenderSpan[]
   ) => {
     out.push({ kind: "line", navIndex, newLine, oldLine, spans, type });
     navIndex += 1;
@@ -212,24 +218,40 @@ export function applyCollapsedRegions(rows: DiffRow[], options: ApplyOptions) {
       if (following !== undefined && following.navIndex <= skipUntil) {
         continue;
       }
-      const canReveal =
-        options.expandedGaps.has(key) &&
-        options.gapSource !== undefined &&
-        following?.newLine !== undefined &&
-        following.oldLine !== undefined;
+      const revealSource = options.expandedGaps.has(key)
+        ? options.gapSource
+        : undefined;
 
-      if (canReveal && following?.newLine !== undefined && following.oldLine !== undefined) {
-        out.push({ collapsed: false, count: row.count, key, kind: "marker", regionKind: "gap" });
+      if (
+        revealSource !== undefined &&
+        following?.newLine !== undefined &&
+        following.oldLine !== undefined
+      ) {
+        out.push({
+          collapsed: false,
+          count: row.count,
+          key,
+          kind: "marker",
+          regionKind: "gap",
+        });
         const firstNew = following.newLine - row.count;
         const firstOld = following.oldLine - row.count;
         for (let offset = 0; offset < row.count; offset += 1) {
-          const source = options.gapSource?.lines[firstNew - 1 + offset] ?? "";
-          pushLine("context", firstOld + offset, firstNew + offset, [{ text: source }]);
+          const source = revealSource.lines[firstNew - 1 + offset] ?? "";
+          pushLine("context", firstOld + offset, firstNew + offset, [
+            { text: source },
+          ]);
         }
         continue;
       }
 
-      out.push({ collapsed: true, count: row.count, key, kind: "marker", regionKind: "gap" });
+      out.push({
+        collapsed: true,
+        count: row.count,
+        key,
+        kind: "marker",
+        regionKind: "gap",
+      });
       continue;
     }
 
@@ -258,18 +280,18 @@ export function applyCollapsedRegions(rows: DiffRow[], options: ApplyOptions) {
   }
 
   return { navigable: navigableLinesFromRows(out), rows: out };
-}
+};
 
 /**
  * After a toggle changes which lines are navigable, keep the caret on the same file line; if that
  * line was hidden by a fold, fall back to the nearest visible line above it (the fold header). Same
  * "store as a file line, map it back" idea the navigation history uses.
  */
-export function remapCursorAfterToggle(
+export const remapCursorAfterToggle = (
   previous: NavigableLine[],
   cursorIndex: number,
-  next: NavigableLine[],
-) {
+  next: NavigableLine[]
+) => {
   const anchor = previous[cursorIndex];
   if (anchor === undefined) {
     return Math.max(0, Math.min(cursorIndex, next.length - 1));
@@ -299,4 +321,4 @@ export function remapCursorAfterToggle(
     break;
   }
   return fallback;
-}
+};

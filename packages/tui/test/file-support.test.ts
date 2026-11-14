@@ -8,16 +8,34 @@ import {
   registerFileSupport,
 } from "@/file-support/registry";
 
-function withFileSupport(
+const withFileSupport = async (
   raw: Parameters<typeof resolveFileSupportConfig>[0],
-  run: (issues: string[]) => void | Promise<void>,
-) {
+  run: (issues: string[]) => void | Promise<void>
+) => {
   const resolved = resolveFileSupportConfig(raw);
   registerFileSupport(resolved.registry);
-  return Promise.resolve(run(resolved.issues)).finally(() =>
-    registerFileSupport(defaultFileSupportRegistry()),
-  );
-}
+  try {
+    await run(resolved.issues);
+  } finally {
+    registerFileSupport(defaultFileSupportRegistry());
+  }
+};
+
+test("the default registry comes back when a callback throws synchronously", async () => {
+  const before = fileSupportForPath("a.probe").syntax;
+  expect(before).not.toBe("json");
+
+  const failure = await withFileSupport(
+    { files: { probe: { extensions: ["probe"], syntax: "json" } } },
+    () => {
+      throw new Error("assertion failed inside the callback");
+    }
+  ).catch((error: unknown) => error);
+
+  expect(failure).toEqual(new Error("assertion failed inside the callback"));
+
+  expect(fileSupportForPath("a.probe").syntax).toBe(before);
+});
 
 test("file matching resolves exact name, glob, extension, and dotfile specificity", async () => {
   await withFileSupport(
@@ -34,7 +52,7 @@ test("file matching resolves exact name, glob, extension, and dotfile specificit
       expect(fileSupportForPath("nested/special.probe").syntax).toBe("toml");
       expect(fileSupportForPath("nested/other.probe").syntax).toBe("json");
       expect(fileSupportForPath("nested/.unknown").syntax).toBe("ini");
-    },
+    }
   );
 });
 
@@ -51,7 +69,7 @@ test("later user associations win a tie and path globs see repo-relative paths",
       expect(issues).toEqual([]);
       expect(fileSupportForPath("other/a.probe").syntax).toBe("yaml");
       expect(fileSupportForPath("src/nested/a.probe").syntax).toBe("toml");
-    },
+    }
   );
 });
 
@@ -71,7 +89,7 @@ test("false facets block lower matches independently", async () => {
       const support = fileSupportForPath("src/private.ts");
       expect(support.icon).toBe("file");
       expect(support.syntax).toBe("text");
-    },
+    }
   );
 });
 
@@ -96,7 +114,7 @@ test("matching is case-insensitive by default and may opt into case sensitivity"
       expect(fileSupportForPath("a.up").syntax).not.toBe("yaml");
       expect(fileSupportForPath("a.LOW").syntax).toBe("json");
       expect(fileSupportForPath("a.low").syntax).toBe("json");
-    },
+    }
   );
 });
 
@@ -121,28 +139,39 @@ test("invalid overrides retain built-ins while an invalid reference drops only i
     {
       files: {
         "icon-typescript": { extensions: [".ts"] },
-        "probe": { extensions: ["probe"], icon: "missing", syntax: "json" },
+        probe: { extensions: ["probe"], icon: "missing", syntax: "json" },
       },
     },
     (issues) => {
       expect(issues).toContain(
-        'file "icon-typescript": extensions must be bare suffixes without a leading dot',
+        'file "icon-typescript": extensions must be bare suffixes without a leading dot'
       );
-      expect(issues).toContain('file "probe": unknown icon "missing"; dropping the icon facet');
+      expect(issues).toContain(
+        'file "probe": unknown icon "missing"; dropping the icon facet'
+      );
       expect(fileSupportForPath("src/a.ts").icon).toBe("typescript");
       expect(fileSupportForPath("src/a.probe").syntax).toBe("json");
       expect(fileSupportForPath("src/a.probe").icon).toBe("file");
-    },
+    }
   );
 });
 
 test("an unknown field drops the whole entry", async () => {
   await withFileSupport(
-    { files: { probe: { colour: "red", extensions: ["probe"], icon: "json", syntax: "yaml" } } },
+    {
+      files: {
+        probe: {
+          colour: "red",
+          extensions: ["probe"],
+          icon: "json",
+          syntax: "yaml",
+        },
+      },
+    },
     (issues) => {
       expect(issues).toEqual(['file "probe": unknown field "colour"']);
       expect(fileSupportForPath("a.probe").syntax).toBe("text");
       expect(fileSupportForPath("a.probe").icon).toBe("file");
-    },
+    }
   );
 });

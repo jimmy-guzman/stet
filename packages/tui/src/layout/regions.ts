@@ -87,7 +87,8 @@ const responsiveWidth = (available: number) =>
   Math.max(34, Math.min(54, Math.floor(available * 0.34)));
 
 /** Whether an edge sizes in columns; a top or bottom dock sizes in rows. */
-export const horizontalDock = (position: Dock) => position === "left" || position === "right";
+export const horizontalDock = (position: Dock) =>
+  position === "left" || position === "right";
 
 // A manual extent is stored raw and only clamped here, so it never overflows a
 // Shrunken terminal yet is restored intact when the terminal grows back. The
@@ -95,10 +96,18 @@ export const horizontalDock = (position: Dock) => position === "left" || positio
 // The carve holds in both cases; the outer floor covers a band too small to
 // Satisfy both minimums, where the pane falls back to its own and takes what
 // There is.
-const clampExtent = (desired: number, available: number, paneMin: number, reserved: number) =>
+const clampExtent = (
+  desired: number,
+  available: number,
+  paneMin: number,
+  reserved: number
+) =>
   Math.min(
     available,
-    Math.max(paneMin, Math.min(desired, Math.max(paneMin, available - reserved))),
+    Math.max(
+      paneMin,
+      Math.min(desired, Math.max(paneMin, available - reserved))
+    )
   );
 
 /**
@@ -107,7 +116,10 @@ const clampExtent = (desired: number, available: number, paneMin: number, reserv
  * @param band - The area between the header and status rows, in absolute terminal cells.
  * @param pane - The pane to place; a closed one claims nothing and yields a zero rect.
  */
-function carve(band: Rect, pane: DockedPane): { band: Rect; rect: PaneRect } {
+const carve = (
+  band: Rect,
+  pane: DockedPane
+): { band: Rect; rect: PaneRect } => {
   if (!pane.open) {
     return { band, rect: EMPTY_PANE };
   }
@@ -116,11 +128,15 @@ function carve(band: Rect, pane: DockedPane): { band: Rect; rect: PaneRect } {
       pane.widthOverride ?? responsiveWidth(band.width),
       band.width,
       PANE_MIN_WIDTH,
-      VIEWER_MIN_WIDTH,
+      VIEWER_MIN_WIDTH
     );
     const leading = pane.position === "left";
     return {
-      band: { ...band, width: band.width - extent, x: leading ? band.x + extent : band.x },
+      band: {
+        ...band,
+        width: band.width - extent,
+        x: leading ? band.x + extent : band.x,
+      },
       rect: withContent({
         height: band.height,
         width: extent,
@@ -133,11 +149,15 @@ function carve(band: Rect, pane: DockedPane): { band: Rect; rect: PaneRect } {
     pane.heightOverride ?? PANE_DEFAULT_HEIGHT,
     band.height,
     PANE_MIN_HEIGHT,
-    VIEWER_MIN_HEIGHT,
+    VIEWER_MIN_HEIGHT
   );
   const leading = pane.position === "top";
   return {
-    band: { ...band, height: band.height - extent, y: leading ? band.y + extent : band.y },
+    band: {
+      ...band,
+      height: band.height - extent,
+      y: leading ? band.y + extent : band.y,
+    },
     rect: withContent({
       height: extent,
       width: band.width,
@@ -145,15 +165,20 @@ function carve(band: Rect, pane: DockedPane): { band: Rect; rect: PaneRect } {
       y: leading ? band.y : band.y + band.height - extent,
     }),
   };
-}
+};
 
 /**
  * Partition the terminal into the header row, the two panes, and the status row.
  *
  * @returns Every region in absolute terminal cells; a closed or zoomed-out pane is all zeros.
  */
-export function computeLayout(input: LayoutInput): Layout {
-  const header = { height: HEADER_ROWS, width: input.terminalWidth, x: 0, y: 0 };
+export const computeLayout = (input: LayoutInput): Layout => {
+  const header = {
+    height: HEADER_ROWS,
+    width: input.terminalWidth,
+    x: 0,
+    y: 0,
+  };
   const status = {
     height: STATUS_ROWS,
     width: input.terminalWidth,
@@ -185,4 +210,4 @@ export function computeLayout(input: LayoutInput): Layout {
     status,
     viewer: withContent(sidebar.band),
   };
-}
+};

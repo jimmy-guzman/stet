@@ -7,9 +7,9 @@ import type { WidthMethod } from "@opentui/core";
 // And cursor-follow match the rendered height instead of estimating it. One
 // Scratch view is reused across all rows; the width method must mirror the
 // Renderer's so column widths agree with what is painted.
-const LARGE_HEIGHT = 1 << 24;
+const LARGE_HEIGHT = 2 ** 24;
 
-export function createLineMeasurer(widthMethod: WidthMethod) {
+export const createLineMeasurer = (widthMethod: WidthMethod) => {
   const buffer = TextBuffer.create(widthMethod);
   const view = TextBufferView.create(buffer);
   view.setWrapMode("word");
@@ -21,7 +21,10 @@ export function createLineMeasurer(widthMethod: WidthMethod) {
     },
     measure(text: string, width: number) {
       buffer.setText(text);
-      const result = view.measureForDimensions(Math.max(1, width), LARGE_HEIGHT);
+      const result = view.measureForDimensions(
+        Math.max(1, width),
+        LARGE_HEIGHT
+      );
       return Math.max(1, result?.lineCount ?? 1);
     },
     offsetForVisualRow(text: string, width: number, visualRow: number) {
@@ -29,7 +32,9 @@ export function createLineMeasurer(widthMethod: WidthMethod) {
       buffer.setText(text);
       view.setWrapWidth(wrapWidth);
       view.measureForDimensions(wrapWidth, LARGE_HEIGHT);
-      return view.lineInfo.lineStartCols[Math.max(0, Math.floor(visualRow))] ?? 0;
+      return (
+        view.lineInfo.lineStartCols[Math.max(0, Math.floor(visualRow))] ?? 0
+      );
     },
   };
-}
+};

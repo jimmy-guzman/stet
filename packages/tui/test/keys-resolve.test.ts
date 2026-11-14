@@ -28,7 +28,9 @@ describe("resolveKeybindings", () => {
     const { issues, set } = resolveKeybindings({ "toggle-sidebar": "ctrl+e" });
 
     expect(issues).toEqual([]);
-    expect(set.combos.get("toggle-sidebar")).toEqual([{ ctrl: true, name: "e", shift: false }]);
+    expect(set.combos.get("toggle-sidebar")).toEqual([
+      { ctrl: true, name: "e", shift: false },
+    ]);
     expect(set.texts.get("toggle-sidebar")).toEqual(["ctrl+e"]);
     expect(set.texts.get("help")).toEqual(["?"]);
   });
@@ -66,7 +68,9 @@ describe("resolveKeybindings", () => {
   test("an invalid combo is reported and the default retained", () => {
     const { issues, set } = resolveKeybindings({ "toggle-sidebar": "meta+e" });
 
-    expect(issues).toEqual(['keybinding "toggle-sidebar": invalid combo "meta+e"']);
+    expect(issues).toEqual([
+      'keybinding "toggle-sidebar": invalid combo "meta+e"',
+    ]);
     expect(set.texts.get("toggle-sidebar")).toEqual(["ctrl-b"]);
   });
 

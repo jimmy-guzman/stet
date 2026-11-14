@@ -2,10 +2,17 @@ import { describe, expect, test } from "bun:test";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
+
+const focusedName = () => state.treeRows()[state.focusedRowIndex()].node.name;
 
 // The sidebar windows the tree to the viewport (only ~viewport rows are ever
 // Mounted), so these tests pin the behaviors that windowing must preserve: the
@@ -24,19 +31,18 @@ describe("sidebar windowing", () => {
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
-    const { renderer, mockMouse, mockInput, renderOnce, captureCharFrame } = await testRender(
-      () => <App />,
-      { height: 16, width: 90 },
-    );
+    const { renderer, mockMouse, mockInput, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, { height: 16, width: 90 });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-    await settleUntil("first render", (current) => current.includes("f000.txt"));
+    await settleUntil("first render", (current) =>
+      current.includes("f000.txt")
+    );
 
     const sidebarFrame = () =>
       captureCharFrame()
         .split("\n")
         .map((line) => line.split("││")[0])
         .join("\n");
-    const focusedName = () => state.treeRows()[state.focusedRowIndex()].node.name;
 
     // Navigate far past the first window; the focused row must stay visible and
     // The window must have moved off the top of the directory.

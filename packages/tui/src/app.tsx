@@ -1,0 +1,257 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+
+import type { ThemeMode } from "@opentui/core";
+import {
+  useKeyboard,
+  useRenderer,
+  useTerminalDimensions,
+} from "@opentui/solid";
+import { createEffect, onCleanup, Show } from "solid-js";
+
+import { CommandMenu } from "./components/command-menu";
+import { FileCombobox } from "./components/file-combobox";
+import { HeaderBar } from "./components/header-bar";
+import { HelpDialog } from "./components/help-dialog";
+import { QuitConfirm } from "./components/quit-confirm";
+import { ScopeMenu } from "./components/scope-menu";
+import { Sidebar } from "./components/sidebar";
+import { StatusBar } from "./components/status-bar";
+import { ThemeCombobox } from "./components/theme-combobox";
+import { Viewer } from "./components/viewer";
+import { WorktreeCombobox } from "./components/worktree-combobox";
+import { openInEditor } from "./editor/open";
+import type { Worktree } from "./git/worktree";
+import { createKeyHandler } from "./keymap";
+import type { LogLevel } from "./log/levels";
+import { log } from "./log/terminal";
+import { state } from "./state";
+import { setAppearance } from "./theme/active";
+import { theme } from "./theme/context";
+import { worktreeLabel } from "./ui-helpers";
+import { formatUpdateNotice } from "./upgrade/release";
+
+// Follow the terminal's appearance at runtime: when the OS flips dark/light
+// Mid-session, the renderer emits theme_mode and the reactive theme state
+// Re-themes the UI and re-renders the diff with the new palette.
+const onThemeMode = (mode: ThemeMode | null) => {
+  if (mode !== null) {
+    setAppearance(mode);
+  }
+};
+
+export const App = () => {
+  const renderer = useRenderer();
+  const dimensions = useTerminalDimensions();
+
+  createEffect(() => {
+    state.setTerminalWidth(dimensions().width);
+    state.setTerminalHeight(dimensions().height);
+  });
+
+  renderer.on("theme_mode", onThemeMode);
+  onCleanup(() => renderer.off("theme_mode", onThemeMode));
+
+  createEffect(() => {
+    const dir = path.basename(state.gitModel().repoRoot);
+    if (dir === "") {
+      renderer.setTerminalTitle("stet");
+      return;
+    }
+    const repo = path.basename(state.mainWorktreePath()) || dir;
+    const segments = dir === repo ? [repo] : [dir, repo];
+    renderer.setTerminalTitle([...segments, "stet"].join(" · "));
+  });
+
+  // A read-only TUI should not show a stray terminal cursor outside its inputs.
+  // The renderer shows one by default, so hide it whenever no input overlay is
+  // Open (each input shows its own caret while focused); `autoFocus: false` on the
+  // Renderer keeps a click from re-showing it by focusing the clicked renderable.
+  createEffect(() => {
+    const inputFocused =
+      state.fileComboboxOpen() ||
+      (state.mainView() === "search" &&
+        state.focusedPane() === "search" &&
+        state.searchFocus() !== "results") ||
+      state.themeComboboxOpen() ||
+      state.worktreeComboboxOpen() ||
+      state.findOpen();
+    if (!inputFocused) {
+      renderer.setCursorPosition(0, 0, false);
+    }
+  });
+
+  const quit = (message?: { text: string; level: LogLevel }) => {
+    // The renderer no longer owns the background fibers (the git poll runs on the
+    // Shared runtime, not the render tree), so tear down the screen and exit
+    // Rather than waiting for an event loop that the poll keeps alive.
+    renderer.setTerminalTitle("");
+    renderer.destroy();
+    // Log after destroy so the message lands on the restored screen, not the alt
+    // Buffer, at its own severity rather than a hardcoded one.
+    if (message !== undefined) {
+      log(message.level, message.text);
+    }
+    process.exit(0);
+  };
+
+  // The user-initiated quit (keyboard) surfaces a pending update on the way out, gh-style. The
+  // Worktree-recovery exit reports its degraded shutdown through the same path; the crash/signal
+  // Backstops in main.tsx never route here.
+  const quitWithUpdateNotice = () => {
+    const update = state.availableUpdate();
+    quit(
+      update === undefined
+        ? undefined
+        : { level: "info", text: formatUpdateNotice(update) }
+    );
+  };
+
+  // The heartbeat flags a deleted current worktree; recover by switching to the
+  // Main worktree (the parent repo), or exit cleanly when it too is gone.
+  createEffect(() => {
+    if (!state.currentWorktreeDeleted()) {
+      return;
+    }
+    const main = state.mainWorktreePath();
+    const root = state.gitModel().repoRoot;
+    // The flag can outlive its cause (a fresh model was seeded, or we already
+    // Switched away). Act only while something is genuinely gone.
+    if (existsSync(root) && (main === "" || existsSync(main))) {
+      state.setCurrentWorktreeDeleted(false);
+      return;
+    }
+    // The main worktree survives and isn't where we already are: switch to it.
+    if (main !== "" && main !== root && existsSync(main)) {
+      const cached = state
+        .worktrees()
+        ?.find((worktree) => worktree.path === main);
+      const label =
+        cached === undefined
+          ? (main.split("/").pop() ?? main)
+          : worktreeLabel(cached);
+      const target: Worktree = cached ?? {
+        bare: false,
+        detached: false,
+        head: "",
+        locked: false,
+        path: main,
+        prunable: false,
+      };
+      // Nobody asked for this switch, so it has to announce itself; a warning, because losing the
+      // Worktree under you is a degraded condition, not a routine move.
+      void state.switchWorktree(target, {
+        label,
+        successNotice: {
+          level: "warning",
+          text: `worktree deleted, switched to ${label}`,
+        },
+      });
+      return;
+    }
+    // Nothing recoverable: the repository itself is gone. A clean exit (code 0) of a
+    // Degraded condition reads as a warning, not a crash.
+    quit({
+      level: "warning",
+      text: "stet: worktree deleted, nothing left to inspect",
+    });
+  });
+
+  useKeyboard(
+    createKeyHandler({
+      openInEditor: async (file, line, mode) => {
+        await openInEditor(renderer, file, line, mode);
+      },
+      quit: quitWithUpdateNotice,
+    })
+  );
+
+  return (
+    <box
+      width="100%"
+      height="100%"
+      flexDirection="column"
+      backgroundColor={theme.colors.surface.base}
+    >
+      {/* Every region is placed at the rect `computeLayout` returned, in terminal
+          cells. Nothing here re-derives a position or a size, so a pane that docks
+          to another edge moves by changing the model's input, not this markup. */}
+      <box
+        position="absolute"
+        left={state.layout().header.x}
+        top={state.layout().header.y}
+        width={state.layout().header.width}
+        height={state.layout().header.height}
+      >
+        <HeaderBar />
+      </box>
+      <Show when={state.layout().sidebar.width > 0}>
+        <box
+          position="absolute"
+          left={state.layout().sidebar.x}
+          top={state.layout().sidebar.y}
+          width={state.layout().sidebar.width}
+          height={state.layout().sidebar.height}
+        >
+          <Sidebar />
+        </box>
+      </Show>
+      {/* Gated like the other two panes: zoom gives one pane the whole band and leaves
+          the rest a zero rect, and a zero-sized box still paints its frame, which stamped
+          a collapsed `┌┐` over the header. The viewer used to be exempt only because it
+          was the center and always had a rect. */}
+      <Show when={state.layout().viewer.width > 0}>
+        <box
+          position="absolute"
+          left={state.layout().viewer.x}
+          top={state.layout().viewer.y}
+          width={state.layout().viewer.width}
+          height={state.layout().viewer.height}
+        >
+          <Viewer />
+        </box>
+      </Show>
+      <box
+        position="absolute"
+        left={state.layout().status.x}
+        top={state.layout().status.y}
+        width={state.layout().status.width}
+        height={state.layout().status.height}
+      >
+        <StatusBar />
+      </box>
+      <Show when={state.fileComboboxOpen()}>
+        <FileCombobox />
+      </Show>
+      <Show when={state.worktreeComboboxOpen()}>
+        <WorktreeCombobox />
+      </Show>
+      <Show when={state.scopeMenuOpen()}>
+        <ScopeMenu />
+      </Show>
+      {/* The tree context menu anchors in global terminal coordinates (the viewer's
+          own instance lives inside DiffView, in viewer-content space). */}
+      <Show
+        when={state.commandMenuOpen() && state.commandMenuContext() === "tree"}
+      >
+        <CommandMenu
+          anchor={() => {
+            const at = state.commandMenuAnchor();
+            return at === undefined ? undefined : { col: at.x, row: at.y };
+          }}
+          viewportWidth={state.terminalWidth}
+          viewportHeight={state.terminalHeight}
+        />
+      </Show>
+      <Show when={state.themeComboboxOpen()}>
+        <ThemeCombobox />
+      </Show>
+      <Show when={state.helpDialogOpen()}>
+        <HelpDialog />
+      </Show>
+      <Show when={state.quitConfirmOpen()}>
+        <QuitConfirm />
+      </Show>
+    </box>
+  );
+};

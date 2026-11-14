@@ -98,8 +98,10 @@ test("a closed sidebar has zero width regardless of override", () => {
 
 test("growing re-opens a sidebar collapsed by the toggle at its remembered width", () => {
   state.setTerminalWidth(80);
-  grow(8); // 34 -> 50, stored
-  state.toggleSidebar(); // Closing this way never touches the width
+  // 34 -> 50, stored
+  grow(8);
+  // Closing this way never touches the width
+  state.toggleSidebar();
 
   grow(1);
 
@@ -109,9 +111,11 @@ test("growing re-opens a sidebar collapsed by the toggle at its remembered width
 
 test("shrinking all the way down leaves the minimum as the remembered width", () => {
   state.setTerminalWidth(80);
-  grow(8); // 34 -> 50
+  // 34 -> 50
+  grow(8);
 
-  shrink(20); // Steps down to 24, then one more step closes it
+  // Steps down to 24, then one more step closes it
+  shrink(20);
   expect(state.sidebarOpen()).toBe(false);
 
   // Reopening restores where the shrinking actually stopped, not where it began:
@@ -141,13 +145,15 @@ test("collapsing a minimum-sized tree with no override reopens at the same width
 
 test("resetting while collapsed keeps the remembered width", () => {
   state.setTerminalWidth(80);
-  grow(8); // 34 -> 50, stored
+  // 34 -> 50, stored
+  grow(8);
   state.toggleSidebar();
   state.setFocusedPane("diff");
 
   state.resetPane();
 
-  grow(1); // Reopens
+  // Reopens
+  grow(1);
   expect(state.layout().sidebar.width).toBe(50);
 });
 

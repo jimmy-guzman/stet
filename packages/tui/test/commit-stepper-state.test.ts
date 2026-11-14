@@ -1,12 +1,18 @@
 import { afterEach, expect, test } from "bun:test";
-import { join } from "node:path";
+import path from "node:path";
 
 import { batch } from "solid-js";
 
 import type { Commit } from "@/git/log";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, loadWorktrees, runGit, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  loadWorktrees,
+  runGit,
+  seedState,
+} from "./helpers";
 
 const commit = (n: number, subject: string): Commit => ({
   author: "Jimmy",
@@ -42,7 +48,8 @@ test("commitScopeLabel is the active commit's subject", () => {
 
 test("commitScopeLabel follows the pinned commit even after it ages out of the list", () => {
   state.setCommits(three);
-  state.selectCommit(1); // Pin the "middle" commit (sha1).
+  // Pin the "middle" commit (sha1).
+  state.selectCommit(1);
 
   // Enough new commits land that the reloaded window no longer contains the pinned
   // Commit at all (it fell past LOG_LIMIT). The label must still name it, not degrade.
@@ -60,8 +67,10 @@ test("selecting out of range is a no-op", () => {
 // The rebaselineScope commit branch is reached only through switchWorktree (the
 // Helper isn't exported and shouldn't be exposed just to test it).
 test("switching worktrees while viewing a commit resets the scope to all", async () => {
-  const repoRoot = createFixtureRepo("stet-commit-rebaseline-", { "notes.txt": "one\n" });
-  const linkedRoot = join(repoRoot, ".wt");
+  const repoRoot = createFixtureRepo("stet-commit-rebaseline-", {
+    "notes.txt": "one\n",
+  });
+  const linkedRoot = path.join(repoRoot, ".wt");
   runGit(repoRoot, ["worktree", "add", "-b", "side-branch", linkedRoot]);
 
   const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
@@ -72,7 +81,9 @@ test("switching worktrees while viewing a commit resets the scope to all", async
   state.setScope({ headRef: "deadbeef", kind: "commit", ref: "cafebabe" });
 
   const worktrees = await loadWorktrees(repoRoot);
-  const linked = worktrees.find((worktree) => worktree.branch === "side-branch");
+  const linked = worktrees.find(
+    (worktree) => worktree.branch === "side-branch"
+  );
   if (linked === undefined) {
     throw new Error("linked worktree missing");
   }

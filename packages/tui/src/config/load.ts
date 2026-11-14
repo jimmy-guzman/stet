@@ -17,7 +17,9 @@ const knownKeys = new Set(Object.keys(UserConfigSchema.fields));
 
 // Where the config restructure moved a key, the unknown-key report names the
 // Destination instead of calling the old key a typo.
-const movedSectionKeys = new Map([["icons", `glyph overrides moved to "icons.glyphs"`]]);
+const movedSectionKeys = new Map([
+  ["icons", `glyph overrides moved to "icons.glyphs"`],
+]);
 
 const trivia = new Set([
   SyntaxKind.Trivia,
@@ -32,44 +34,51 @@ const trivia = new Set([
  * Trivia is walked rather than skipped because the scanner drops an unterminated block comment's
  * error on its way to EOF, and that document is malformed, not empty.
  */
-export function isEmptyJsonc(text: string) {
+export const isEmptyJsonc = (text: string) => {
   const scanner = createScanner(text, false);
-  for (let kind = scanner.scan(); kind !== SyntaxKind.EOF; kind = scanner.scan()) {
+  for (
+    let kind = scanner.scan();
+    kind !== SyntaxKind.EOF;
+    kind = scanner.scan()
+  ) {
     if (!trivia.has(kind) || scanner.getTokenError() !== ScanError.None) {
       return false;
     }
   }
   return true;
-}
+};
 
 /**
  * Parses as a `Result` so the parse and decode failures compose in the pipe below; the annotation
  * unifies the two branches' Result types.
  */
-function parseJsonc(text: string): Result.Result<unknown, string> {
+const parseJsonc = (text: string): Result.Result<unknown, string> => {
   try {
     return Result.succeed(isEmptyJsonc(text) ? {} : Bun.JSONC.parse(text));
   } catch (error) {
     return Result.fail(
-      `config is not valid JSONC: ${error instanceof Error ? error.message : String(error)}`,
+      `config is not valid JSONC: ${error instanceof Error ? error.message : String(error)}`
     );
   }
-}
+};
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 // One line (the status notice renders one), without the SchemaError() wrapper.
-function formatIssue(error: unknown) {
-  const text = String(error).replaceAll(/\s+/g, " ");
-  return /^SchemaError\((?<detail>.*)\)$/.exec(text)?.groups?.detail ?? text;
-}
+const formatIssue = (error: unknown) => {
+  const text = String(error).replaceAll(/\s+/gu, " ");
+  return /^SchemaError\((?<detail>.*)\)$/u.exec(text)?.groups?.detail ?? text;
+};
 
 // The decode strips unknown keys inside a typed section, so diffing the raw
 // Keys against the kept ones reports them; a raw registry (glyphs, themes,
 // Files...) decodes verbatim, diffs empty, and stays its resolver's job.
-function unknownSectionKeys(section: string, rawValue: unknown, decodedValue: unknown) {
+const unknownSectionKeys = (
+  section: string,
+  rawValue: unknown,
+  decodedValue: unknown
+) => {
   if (!isRecord(rawValue) || !isRecord(decodedValue)) {
     return [];
   }
@@ -78,9 +87,10 @@ function unknownSectionKeys(section: string, rawValue: unknown, decodedValue: un
   return Object.keys(rawValue)
     .filter((key) => !kept.has(key))
     .map(
-      (key) => `config ${section}: unknown key "${key}"${hint === undefined ? "" : ` (${hint})`}`,
+      (key) =>
+        `config ${section}: unknown key "${key}"${hint === undefined ? "" : ` (${hint})`}`
     );
-}
+};
 
 /**
  * Each top-level key decodes on its own (every schema key is optional, so a one-key object is a
@@ -88,39 +98,38 @@ function unknownSectionKeys(section: string, rawValue: unknown, decodedValue: un
  * config, and a typo'd key is reported rather than silently stripped, which is what `Schema.Struct`
  * does alone.
  */
-export function loadConfigText(text: string): LoadedConfig {
-  return parseJsonc(text).pipe(
+export const loadConfigText = (text: string): LoadedConfig =>
+  parseJsonc(text).pipe(
     Result.match({
       onFailure: (error) => ({ config: emptyConfig, issues: [error] }),
       onSuccess: (raw) => decodeConfig(raw),
-    }),
+    })
   );
-}
 
-function decodeConfig(raw: unknown): LoadedConfig {
+const decodeConfig = (raw: unknown): LoadedConfig => {
   if (!isRecord(raw)) {
     return { config: emptyConfig, issues: ["config must be a JSONC object"] };
   }
   const issues = Object.keys(raw)
     .filter((key) => !knownKeys.has(key))
     .map((key) => `config: unknown key "${key}"`);
-  const config = Object.keys(raw)
-    .filter((key) => knownKeys.has(key))
-    .reduce<UserConfig>(
-      (acc, key) =>
-        decode({ [key]: raw[key] }).pipe(
-          Result.match({
-            onFailure: (error) => {
-              issues.push(formatIssue(error));
-              return acc;
-            },
-            onSuccess: (part) => {
-              issues.push(...unknownSectionKeys(key, raw[key], Object.values(part)[0]));
-              return { ...acc, ...part };
-            },
-          }),
-        ),
-      emptyConfig,
+  let config: UserConfig = emptyConfig;
+  for (const key of Object.keys(raw).filter((name) => knownKeys.has(name))) {
+    const acc = config;
+    config = decode({ [key]: raw[key] }).pipe(
+      Result.match({
+        onFailure: (error) => {
+          issues.push(formatIssue(error));
+          return acc;
+        },
+        onSuccess: (part) => {
+          issues.push(
+            ...unknownSectionKeys(key, raw[key], Object.values(part)[0])
+          );
+          return { ...acc, ...part };
+        },
+      })
     );
+  }
   return { config, issues };
-}
+};

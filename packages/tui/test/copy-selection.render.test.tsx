@@ -1,49 +1,61 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { createMockMouse } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
 
 // One committed line plus two appended lines, so the whole small file shows in the
 // Diff (one context row + two adds) with clean per-line content and stable navIndices
 // 0/1/2 — no remove rows to interleave.
-function snippetRepo(prefix: string) {
+const snippetRepo = (prefix: string) => {
   const repoRoot = createFixtureRepo(prefix, {
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
     "src/snippet.ts": "alpha\n",
   });
-  writeFileSync(join(repoRoot, "src", "snippet.ts"), "alpha\nbeta\ngamma\n");
+  writeFileSync(
+    path.join(repoRoot, "src", "snippet.ts"),
+    "alpha\nbeta\ngamma\n"
+  );
   return repoRoot;
-}
+};
 
-function longSnippetRepo(prefix: string) {
+const longSnippetRepo = (prefix: string) => {
   const repoRoot = createFixtureRepo(prefix, {
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
     "src/snippet.ts": "// base\n",
   });
   const additions = Array.from(
     { length: 40 },
-    (_, index) => `// line-${String(index + 1).padStart(2, "0")}`,
+    (_, index) => `// line-${String(index + 1).padStart(2, "0")}`
   );
-  writeFileSync(join(repoRoot, "src", "snippet.ts"), ["// base", ...additions, ""].join("\n"));
+  writeFileSync(
+    path.join(repoRoot, "src", "snippet.ts"),
+    ["// base", ...additions, ""].join("\n")
+  );
   return repoRoot;
-}
+};
 
 describe("line selection copy", () => {
   test("Shift+arrow builds a selection, C copies its lines, a plain move clears it", async () => {
     const repoRoot = snippetRepo("stet-copy-sel-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 110,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     // Verify the C key reaches copySelection without depending on the clipboard
@@ -56,10 +68,16 @@ describe("line selection copy", () => {
     };
 
     try {
-      await settleUntil("diff shown", (frame) => frame.includes("beta") && frame.includes("gamma"));
+      await settleUntil(
+        "diff shown",
+        (frame) => frame.includes("beta") && frame.includes("gamma")
+      );
       mockInput.pressTab();
       mockInput.pressKey("g");
-      await settleUntil("caret at the top line", () => state.cursorIndex() === 0);
+      await settleUntil(
+        "caret at the top line",
+        () => state.cursorIndex() === 0
+      );
 
       // No selection yet: the caret line is what `C` would copy.
       expect(state.selectionRange()).toBeUndefined();
@@ -80,7 +98,10 @@ describe("line selection copy", () => {
 
       // A plain vertical move drops the selection.
       mockInput.pressKey("k");
-      await settleUntil("selection cleared", () => state.selectionRange() === undefined);
+      await settleUntil(
+        "selection cleared",
+        () => state.selectionRange() === undefined
+      );
       expect(state.selectionAnchor()).toBeUndefined();
     } finally {
       state.copySelection = realCopySelection;
@@ -93,17 +114,18 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-copy-sel-mouse-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 110,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
     try {
       const frame = await settleUntil(
         "diff shown",
-        (current) => current.includes("alpha") && current.includes("gamma"),
+        (current) => current.includes("alpha") && current.includes("gamma")
       );
       const rows = frame.split("\n");
       const alphaRow = rows.findIndex((row) => row.includes("alpha"));
@@ -113,7 +135,10 @@ describe("line selection copy", () => {
 
       const contentX = state.layout().viewer.x + 5;
       await mouse.click(contentX, alphaRow);
-      await settleUntil("caret on the first line", () => state.cursorIndex() === 0);
+      await settleUntil(
+        "caret on the first line",
+        () => state.cursorIndex() === 0
+      );
       expect(state.selectionRange()).toBeUndefined();
 
       // Start the range from the keyboard, then shift-click the last line. A
@@ -132,7 +157,10 @@ describe("line selection copy", () => {
 
       // A plain click collapses back to a caret.
       await mouse.click(contentX, gammaRow);
-      await settleUntil("selection cleared", () => state.selectionRange() === undefined);
+      await settleUntil(
+        "selection cleared",
+        () => state.selectionRange() === undefined
+      );
 
       // Dragging from the first line down to the last follows the pointer (derived
       // From the drag event's y, not OpenTUI's captured row).
@@ -151,17 +179,20 @@ describe("line selection copy", () => {
     const repoRoot = longSnippetRepo("stet-copy-sel-edge-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 18,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 18,
+        width: 110,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
     try {
       const frame = await settleUntil(
         "long diff shown",
-        (current) => current.includes("base") && current.includes("line-01"),
+        (current) => current.includes("base") && current.includes("line-01")
       );
       const frameRows = frame.split("\n");
       const baseRow = frameRows.findIndex((row) => row.includes("base"));
@@ -172,10 +203,15 @@ describe("line selection copy", () => {
 
       await mouse.pressDown(contentX, baseRow);
       await mouse.moveTo(contentX, viewerBottom);
-      await settleUntil("held bottom edge advances without more pointer motion", () => {
-        const range = state.selectionRange();
-        return state.viewerScrollTop() >= 4 && range !== undefined && range[1] > 8;
-      });
+      await settleUntil(
+        "held bottom edge advances without more pointer motion",
+        () => {
+          const range = state.selectionRange();
+          return (
+            state.viewerScrollTop() >= 4 && range !== undefined && range[1] > 8
+          );
+        }
+      );
 
       // One cell inside the viewport cancels the timer while the drag stays held.
       await mouse.moveTo(contentX, viewerBottom - 1);
@@ -190,7 +226,8 @@ describe("line selection copy", () => {
       await mouse.moveTo(contentX, viewerTop);
       await settleUntil(
         "held top edge restarts auto-scroll",
-        () => state.viewerScrollTop() < stoppedInside && state.viewerScrollTop() > 0,
+        () =>
+          state.viewerScrollTop() < stoppedInside && state.viewerScrollTop() > 0
       );
       await mouse.release(contentX, viewerTop);
       const releasedAt = state.viewerScrollTop();
@@ -219,22 +256,23 @@ describe("line selection copy", () => {
     });
     // A trivial edit makes it a changed file so it auto-opens in the viewer.
     writeFileSync(
-      join(repoRoot, "src", "mod.ts"),
-      `${source.replace("const a = 1", "const a = 9")}\n`,
+      path.join(repoRoot, "src", "mod.ts"),
+      `${source.replace("const a = 1", "const a = 9")}\n`
     );
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 110,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       await settleUntil(
         "diff shown",
-        (f) => f.includes("const a = 9") && f.includes("const b = 2"),
+        (f) => f.includes("const a = 9") && f.includes("const b = 2")
       );
       mockInput.pressTab();
       // Full-file view so each line is a single navigable row (a diff would split the
@@ -242,7 +280,7 @@ describe("line selection copy", () => {
       mockInput.pressKey("v");
       await settleUntil(
         "file view",
-        (f) => f.includes("const a = 9") && !f.includes("const a = 1"),
+        (f) => f.includes("const a = 9") && !f.includes("const a = 1")
       );
 
       // Anchor below the block (on "after"), then extend up so the caret lands inside
@@ -250,14 +288,16 @@ describe("line selection copy", () => {
       // Header, and shifts the anchor up, so both endpoints must remap, not just one.
       mockInput.pressKey("G");
       await settleUntil("caret on the last line", () =>
-        state.cursorLineContent().includes("after"),
+        state.cursorLineContent().includes("after")
       );
       mockInput.pressArrow("up", { shift: true });
       mockInput.pressArrow("up", { shift: true });
       mockInput.pressArrow("up", { shift: true });
       await settleUntil("caret inside foo, anchor on after", () => {
         const range = state.selectionRange();
-        return state.cursorLineContent().includes("const a = 9") && range?.[1] === 5;
+        return (
+          state.cursorLineContent().includes("const a = 9") && range?.[1] === 5
+        );
       });
       expect(state.selectionRange()).toEqual([2, 5]);
 
@@ -265,12 +305,18 @@ describe("line selection copy", () => {
       // Caret re-homes to the fold header (index 1) and the anchor shifts up (5 -> 3),
       // So the full tuple must be [1, 3]; without the anchor remap it would clear.
       mockInput.pressKey("z");
-      const folded = await settleUntil("block folded and both endpoints remapped", (frame) => {
-        const range = state.selectionRange();
-        return (
-          !frame.includes("const b = 2") && range !== undefined && range[0] === 1 && range[1] === 3
-        );
-      });
+      const folded = await settleUntil(
+        "block folded and both endpoints remapped",
+        (frame) => {
+          const range = state.selectionRange();
+          return (
+            !frame.includes("const b = 2") &&
+            range !== undefined &&
+            range[0] === 1 &&
+            range[1] === 3
+          );
+        }
+      );
       expect(folded).not.toContain("const b = 2");
       expect(state.selectionRange()).toEqual([1, 3]);
     } finally {
@@ -283,19 +329,26 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-sel-scope-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 110,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff shown", (f) => f.includes("beta") && f.includes("gamma"));
+      await settleUntil(
+        "diff shown",
+        (f) => f.includes("beta") && f.includes("gamma")
+      );
       mockInput.pressTab();
       mockInput.pressKey("g");
       mockInput.pressArrow("down", { shift: true });
       mockInput.pressArrow("down", { shift: true });
-      await settleUntil("selection built", () => state.selectionRange() !== undefined);
+      await settleUntil(
+        "selection built",
+        () => state.selectionRange() !== undefined
+      );
 
       // Switching scope reloads the diff against a different line list, so a navIndex
       // Anchor is meaningless; the identity-drift effect must drop it even though this
@@ -303,7 +356,9 @@ describe("line selection copy", () => {
       state.selectScope("session");
       await settleUntil(
         "selection cleared on scope change",
-        () => state.selectionRange() === undefined && state.selectionAnchor() === undefined,
+        () =>
+          state.selectionRange() === undefined &&
+          state.selectionAnchor() === undefined
       );
       expect(state.selectionRange()).toBeUndefined();
     } finally {
@@ -316,19 +371,26 @@ describe("line selection copy", () => {
     const repoRoot = snippetRepo("stet-sel-find-esc-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 110,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff shown", (f) => f.includes("beta") && f.includes("gamma"));
+      await settleUntil(
+        "diff shown",
+        (f) => f.includes("beta") && f.includes("gamma")
+      );
       mockInput.pressTab();
       mockInput.pressKey("g");
       mockInput.pressArrow("down", { shift: true });
       mockInput.pressArrow("down", { shift: true });
-      await settleUntil("selection built", () => state.selectionRange() !== undefined);
+      await settleUntil(
+        "selection built",
+        () => state.selectionRange() !== undefined
+      );
 
       // Opening the find bar moves no caret, so the selection persists alongside it.
       mockInput.pressKey("/");
@@ -342,7 +404,10 @@ describe("line selection copy", () => {
 
       // A second esc then clears the selection.
       mockInput.pressEscape();
-      await settleUntil("selection cleared", () => state.selectionRange() === undefined);
+      await settleUntil(
+        "selection cleared",
+        () => state.selectionRange() === undefined
+      );
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

@@ -41,24 +41,39 @@ const namedKeys = new Set([
   ...Array.from({ length: 12 }, (_, index) => `f${index + 1}`),
 ]);
 
-const isLetter = (text: string) => /^[a-z]$/i.test(text);
+const isLetter = (text: string) => /^[A-Za-z]$/u.test(text);
 
 /**
  * @returns The parsed combo, or undefined for text the grammar does not accept (empty, an unknown
  *   dangling modifier, or `shift+` on a character that already encodes its shift, like `?`).
  */
-export function parseCombo(text: string): Combo | undefined {
-  const read = (rest: string, ctrl: boolean, shift: boolean): Combo | undefined => {
-    const modifier = /^(?<name>ctrl|shift)[+-](?<rest>.+)$/i.exec(rest);
-    if (modifier?.groups?.name !== undefined && modifier.groups.rest !== undefined) {
+export const parseCombo = (text: string): Combo | undefined => {
+  const read = (
+    rest: string,
+    ctrl: boolean,
+    shift: boolean
+  ): Combo | undefined => {
+    const modifier = /^(?<name>ctrl|shift)[+-](?<rest>.+)$/iu.exec(rest);
+    if (
+      modifier?.groups?.name !== undefined &&
+      modifier.groups.rest !== undefined
+    ) {
       const lower = modifier.groups.name.toLowerCase();
-      return read(modifier.groups.rest, ctrl || lower === "ctrl", shift || lower === "shift");
+      return read(
+        modifier.groups.rest,
+        ctrl || lower === "ctrl",
+        shift || lower === "shift"
+      );
     }
     const name = aliases.get(rest.toLowerCase()) ?? rest;
     if (name.length === 1) {
       if (isLetter(name)) {
         // "G" and "shift+g" are the same combo.
-        return { ctrl, name: name.toLowerCase(), shift: shift || name !== name.toLowerCase() };
+        return {
+          ctrl,
+          name: name.toLowerCase(),
+          shift: shift || name !== name.toLowerCase(),
+        };
       }
       // A symbol carries its own shift (typing "?" needs it on most layouts),
       // So a shift modifier on one is meaningless and rejected as a typo.
@@ -69,7 +84,7 @@ export function parseCombo(text: string): Combo | undefined {
       : undefined;
   };
   return text === "" ? undefined : read(text.trim(), false, false);
-}
+};
 
 /**
  * Whether a key event matches a combo, normalizing the terminal shift-letter ambiguity in this one
@@ -78,10 +93,10 @@ export function parseCombo(text: string): Combo | undefined {
  * about whether `?` carries it). Modifiers otherwise match exactly, which is what keeps `"s"` from
  * firing on `ctrl+s` or `Shift+S` without any per-site exclusion guard.
  */
-export function matchesKey(
+export const matchesKey = (
   key: { ctrl: boolean; name: string; shift: boolean },
-  combo: Combo,
-): boolean {
+  combo: Combo
+): boolean => {
   if (key.ctrl !== combo.ctrl) {
     return false;
   }
@@ -93,4 +108,4 @@ export function matchesKey(
     return key.name === combo.name;
   }
   return key.name.toLowerCase() === combo.name && key.shift === combo.shift;
-}
+};

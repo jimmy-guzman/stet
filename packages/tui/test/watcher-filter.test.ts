@@ -1,15 +1,17 @@
 import { expect, test } from "bun:test";
-import { sep } from "node:path";
+import path from "node:path";
 
 import { classify } from "@/watcher/filter";
 
-const WORKTREE = `.git${sep}`;
+const WORKTREE = `.git${path.sep}`;
 const GIT_DIR = "";
 
-const g = (...parts: string[]) => parts.join(sep);
+const g = (...parts: string[]) => parts.join(path.sep);
 
 test("worktree root drops high-churn git internals", () => {
-  expect(classify(WORKTREE, g(".git", "objects", "ab", "cdef"))).toBe("ignored");
+  expect(classify(WORKTREE, g(".git", "objects", "ab", "cdef"))).toBe(
+    "ignored"
+  );
   expect(classify(WORKTREE, g(".git", "logs", "HEAD"))).toBe("ignored");
   expect(classify(WORKTREE, g(".git", "rebase-merge", "done"))).toBe("ignored");
   expect(classify(WORKTREE, g(".git", "index.lock"))).toBe("ignored");
@@ -22,7 +24,9 @@ test("worktree root drops high-churn git internals", () => {
 test("worktree root keeps meaningful git state changes as internal (tick, no content change)", () => {
   expect(classify(WORKTREE, g(".git", "HEAD"))).toBe("internal");
   expect(classify(WORKTREE, g(".git", "index"))).toBe("internal");
-  expect(classify(WORKTREE, g(".git", "refs", "heads", "main"))).toBe("internal");
+  expect(classify(WORKTREE, g(".git", "refs", "heads", "main"))).toBe(
+    "internal"
+  );
   expect(classify(WORKTREE, g(".git", "packed-refs"))).toBe("internal");
   expect(classify(WORKTREE, g(".git", "ORIG_HEAD"))).toBe("internal");
   expect(classify(WORKTREE, g(".git", "MERGE_HEAD"))).toBe("internal");
@@ -31,7 +35,9 @@ test("worktree root keeps meaningful git state changes as internal (tick, no con
 test("worktree root marks working-tree edits, incl. lookalikes outside .git/", () => {
   expect(classify(WORKTREE, g("src", "foo.ts"))).toBe("worktree");
   expect(classify(WORKTREE, ".gitignore")).toBe("worktree");
-  expect(classify(WORKTREE, g(".github", "workflows", "ci.yml"))).toBe("worktree");
+  expect(classify(WORKTREE, g(".github", "workflows", "ci.yml"))).toBe(
+    "worktree"
+  );
 });
 
 test("a nameless event fails toward correctness (worktree root: content; git dir: internal)", () => {

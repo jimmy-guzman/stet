@@ -12,18 +12,20 @@ export interface KeybindingSet {
   texts: Map<KeyActionId, string[]>;
 }
 
-export function defaultKeybindings(): KeybindingSet {
+export const defaultKeybindings = (): KeybindingSet => {
   const combos = new Map<KeyActionId, Combo[]>();
   const texts = new Map<KeyActionId, string[]>();
   for (const action of keyActions) {
     combos.set(
       action.id,
-      action.combos.map(parseCombo).filter((combo): combo is Combo => combo !== undefined),
+      action.combos
+        .map(parseCombo)
+        .filter((combo): combo is Combo => combo !== undefined)
     );
     texts.set(action.id, [...action.combos]);
   }
   return { combos, texts };
-}
+};
 
 export interface ResolvedKeybindings {
   issues: string[];
@@ -31,12 +33,10 @@ export interface ResolvedKeybindings {
 }
 
 const contextById = new Map<string, KeyContext>(
-  keyActions.map((action) => [action.id, action.context]),
+  keyActions.map((action) => [action.id, action.context])
 );
 
-function isKeyActionId(id: string): id is KeyActionId {
-  return contextById.has(id);
-}
+const isKeyActionId = (id: string): id is KeyActionId => contextById.has(id);
 
 /**
  * Ids that moved, mirroring `config/load.ts`'s `movedKeys`. The resize keys grew from sidebar-only
@@ -56,7 +56,9 @@ const renamedIds = new Map([
  * global section dispatches first, so the pane binding would be unreachable), is reported as a
  * conflict but left as merged: the chain's order decides, and the issue says so.
  */
-export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybindings {
+export const resolveKeybindings = (
+  raw: Record<string, unknown>
+): ResolvedKeybindings => {
   const issues: string[] = [];
   const set = defaultKeybindings();
 
@@ -66,7 +68,7 @@ export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybin
       issues.push(
         renamed === undefined
           ? `keybinding "${id}": unknown action`
-          : `keybinding "${id}" is now "${renamed}"`,
+          : `keybinding "${id}" is now "${renamed}"`
       );
       continue;
     }
@@ -76,11 +78,18 @@ export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybin
       continue;
     }
     const entries = typeof value === "string" ? [value] : value;
-    if (!Array.isArray(entries) || entries.some((text) => typeof text !== "string")) {
-      issues.push(`keybinding "${id}": must be a combo, a list of combos, or false`);
+    if (
+      !Array.isArray(entries) ||
+      entries.some((text) => typeof text !== "string")
+    ) {
+      issues.push(
+        `keybinding "${id}": must be a combo, a list of combos, or false`
+      );
       continue;
     }
-    const texts = entries.filter((text): text is string => typeof text === "string");
+    const texts = entries.filter(
+      (text): text is string => typeof text === "string"
+    );
     const parsed = texts.map((text) => ({ combo: parseCombo(text), text }));
     const bad = parsed.find((entry) => entry.combo === undefined);
     if (bad !== undefined) {
@@ -89,7 +98,9 @@ export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybin
     }
     set.combos.set(
       id,
-      parsed.map((entry) => entry.combo).filter((combo): combo is Combo => combo !== undefined),
+      parsed
+        .map((entry) => entry.combo)
+        .filter((combo): combo is Combo => combo !== undefined)
     );
     set.texts.set(id, texts);
   }
@@ -102,17 +113,22 @@ export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybin
   const reported = new Set<string>();
   for (const action of keyActions) {
     const scopes: KeyContext[] =
-      action.context === "global" ? ["global", "tree", "viewer"] : [action.context];
+      action.context === "global"
+        ? ["global", "tree", "viewer"]
+        : [action.context];
     for (const combo of set.combos.get(action.id) ?? []) {
       for (const scope of scopes) {
         const signature = `${scope}:${combo.ctrl}:${combo.shift}:${combo.name}`;
         const holder = claims.get(signature);
         if (holder === undefined) {
           claims.set(signature, action.id);
-        } else if (holder !== action.id && !reported.has(`${holder}:${action.id}`)) {
+        } else if (
+          holder !== action.id &&
+          !reported.has(`${holder}:${action.id}`)
+        ) {
           reported.add(`${holder}:${action.id}`);
           issues.push(
-            `keybinding "${action.id}" (${set.texts.get(action.id)?.join(", ") ?? ""}) conflicts with "${holder}"; the earlier binding wins`,
+            `keybinding "${action.id}" (${set.texts.get(action.id)?.join(", ") ?? ""}) conflicts with "${holder}"; the earlier binding wins`
           );
         }
       }
@@ -120,4 +136,4 @@ export function resolveKeybindings(raw: Record<string, unknown>): ResolvedKeybin
   }
 
   return { issues, set };
-}
+};

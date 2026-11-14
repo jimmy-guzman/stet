@@ -54,13 +54,13 @@ Where generating the fact is too heavy for a guard, such as the language matrix'
 - **One owner per fact.** A fact that can be enumerated from code lives on one page; every other page links to that owner instead of restating it. Re-enumerating is how copies drift, and it already happened: the language matrix carried Rust and Go but never Python until an audit caught it.
 - **Update the owner when its code changes.** A change to a `Driven by` module below must update the page that owns the fact. Nothing enforces this, so it is a review-time responsibility, named in the repo-wide docs rule in `packages/tui/AGENTS.md`.
 
-| Fact                                                               | Owner page                                                       | Driven by                                                                                    |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Language support: syntax, folding, icons                           | `docs/content/docs/reference/languages.mdx`                      | `packages/tui/src/file-support/builtins.ts`, `packages/tui/src/diff/regions.ts`              |
-| Config keys, environment variables, editor / theme settings        | `docs/content/docs/reference/configuration.mdx`                  | `packages/tui/src/config/schema.ts`, `packages/tui/src/editor/reference.ts`                  |
-| Keybindings                                                        | `docs/content/docs/reference/keybindings.mdx` (`GENERATED-KEYS`) | `packages/tui/src/help/keys.ts`, `packages/tui/src/keys/actions.ts`, then `bun run gen:keys` |
-| Install, usage, flags, requirements                                | `docs/content/docs/index.mdx`                                    | `packages/tui/src/cli.ts`                                                                    |
-| Pane focus, resize, docking, zoom, and their minimums and defaults | `docs/content/docs/guides/panes-and-layout.mdx`                  | `packages/tui/src/layout/regions.ts`, the pane actions in `packages/tui/src/state.ts`        |
+| Fact | Owner page | Driven by |
+| --- | --- | --- |
+| Language support: syntax, folding, icons | `docs/content/docs/reference/languages.mdx` | `packages/tui/src/file-support/builtins.ts`, `packages/tui/src/diff/regions.ts` |
+| Config keys, environment variables, editor / theme settings | `docs/content/docs/reference/configuration.mdx` | `packages/tui/src/config/schema.ts`, `packages/tui/src/editor/reference.ts` |
+| Keybindings | `docs/content/docs/reference/keybindings.mdx` (`GENERATED-KEYS`) | `packages/tui/src/help/keys.ts`, `packages/tui/src/keys/actions.ts`, then `bun run gen:keys` |
+| Install, usage, flags, requirements | `docs/content/docs/index.mdx` | `packages/tui/src/cli.ts` |
+| Pane focus, resize, docking, zoom, and their minimums and defaults | `docs/content/docs/guides/panes-and-layout.mdx` | `packages/tui/src/layout/regions.ts`, the pane actions in `packages/tui/src/state.ts` |
 
 ### Coverage
 

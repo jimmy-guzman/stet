@@ -7,7 +7,13 @@ import type { SearchMatch } from "@/git/search";
  * it is surrounding context.
  */
 export type SearchItem =
-  | { kind: "header"; id: string; path: string; count: number; collapsed: boolean }
+  | {
+      kind: "header";
+      id: string;
+      path: string;
+      count: number;
+      collapsed: boolean;
+    }
   | {
       kind: "line";
       id: string;
@@ -24,9 +30,8 @@ export type SearchItem =
  * collapses), but not context lines or gaps. The state memo, keymap, and pane highlight share this
  * so selection stays consistent.
  */
-export function isNavigableSearchItem(item: SearchItem) {
-  return item.kind === "header" || (item.kind === "line" && item.match !== undefined);
-}
+export const isNavigableSearchItem = (item: SearchItem) =>
+  item.kind === "header" || (item.kind === "line" && item.match !== undefined);
 
 interface BuildSearchItemsInput {
   /** Capped matches in grep order (contiguous by path); `match.index` refers into this list. */
@@ -44,37 +49,39 @@ interface BuildSearchItemsInput {
  * context lines never duplicate), excerpts clamp at file edges, and a `gap` row separates
  * non-contiguous excerpts of the same file. Collapsed paths contribute only their header.
  */
-export function buildSearchItems(input: BuildSearchItemsInput): SearchItem[] {
+export const buildSearchItems = (
+  input: BuildSearchItemsInput
+): SearchItem[] => {
   const indexed = input.matches.map((match, index) => ({ index, match }));
-  return [...Map.groupBy(indexed, (entry) => entry.match.path).entries()].flatMap(
-    ([path, entries]) => {
-      const header: SearchItem = {
-        collapsed: input.collapsed.has(path),
-        count: entries.length,
-        id: `search-header-${path}`,
-        kind: "header",
-        path,
-      };
-      if (input.collapsed.has(path)) {
-        return [header];
-      }
-      const rows = fileLineItems(path, entries, input);
-      rows.unshift(header);
-      return rows;
-    },
-  );
-}
+  return [
+    ...Map.groupBy(indexed, (entry) => entry.match.path).entries(),
+  ].flatMap(([path, entries]) => {
+    const header: SearchItem = {
+      collapsed: input.collapsed.has(path),
+      count: entries.length,
+      id: `search-header-${path}`,
+      kind: "header",
+      path,
+    };
+    if (input.collapsed.has(path)) {
+      return [header];
+    }
+    const rows = fileLineItems(path, entries, input);
+    rows.unshift(header);
+    return rows;
+  });
+};
 
 interface IndexedMatch {
   index: number;
   match: SearchMatch;
 }
 
-function fileLineItems(
+const fileLineItems = (
   path: string,
   entries: IndexedMatch[],
-  input: BuildSearchItemsInput,
-): SearchItem[] {
+  input: BuildSearchItemsInput
+): SearchItem[] => {
   const lines = input.linesByPath.get(path);
   const byLine = new Map(entries.map((entry) => [entry.match.line, entry]));
   const excerpts = mergeExcerpts(
@@ -88,9 +95,12 @@ function fileLineItems(
             start: Math.max(1, entry.match.line - input.context),
           }
         : { end: entry.match.line, start: entry.match.line };
-    }),
+    })
   );
-  const lineWidth = Math.max(1, ...excerpts.map((excerpt) => String(excerpt.end).length));
+  const lineWidth = Math.max(
+    1,
+    ...excerpts.map((excerpt) => String(excerpt.end).length)
+  );
   return excerpts.flatMap((excerpt, excerptIndex) => {
     const rows = rangeOf(excerpt).map((lineNumber): SearchItem => {
       const entry = byLine.get(lineNumber);
@@ -104,14 +114,20 @@ function fileLineItems(
       };
       return entry === undefined
         ? shared
-        : Object.assign(shared, { match: { column: entry.match.column, index: entry.index } });
+        : Object.assign(shared, {
+            match: { column: entry.match.column, index: entry.index },
+          });
     });
     if (excerptIndex > 0) {
-      rows.unshift({ id: `search-gap-${path}-${excerptIndex}`, kind: "gap", path });
+      rows.unshift({
+        id: `search-gap-${path}-${excerptIndex}`,
+        kind: "gap",
+        path,
+      });
     }
     return rows;
   });
-}
+};
 
 interface Excerpt {
   start: number;
@@ -120,18 +136,21 @@ interface Excerpt {
 
 // Ranges arrive in ascending match order; touching ranges merge too, so two
 // Excerpts are never adjacent without a real unshown line between them.
-function mergeExcerpts(ranges: Excerpt[]): Excerpt[] {
-  return ranges.reduce<Excerpt[]>((merged, range) => {
+const mergeExcerpts = (ranges: Excerpt[]): Excerpt[] => {
+  const merged: Excerpt[] = [];
+  for (const range of ranges) {
     const last = merged.at(-1);
     if (last !== undefined && range.start <= last.end + 1) {
       last.end = Math.max(last.end, range.end);
-      return merged;
+      continue;
     }
     merged.push({ end: range.end, start: range.start });
-    return merged;
-  }, []);
-}
+  }
+  return merged;
+};
 
-function rangeOf(excerpt: Excerpt) {
-  return Array.from({ length: excerpt.end - excerpt.start + 1 }, (_, i) => excerpt.start + i);
-}
+const rangeOf = (excerpt: Excerpt) =>
+  Array.from(
+    { length: excerpt.end - excerpt.start + 1 },
+    (_, i) => excerpt.start + i
+  );

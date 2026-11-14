@@ -18,25 +18,27 @@
  */
 import { existsSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import path from "node:path";
 
 /**
  * Where the images are written: the docs site serves this dir at /screenshots, and the README links
  * into it, so it is the single committed home. Always this repo, so a PR here picks them up.
  */
-const OUT = resolve(import.meta.dir, "../../../docs/public/screenshots");
+const OUT = path.resolve(import.meta.dir, "../../../docs/public/screenshots");
 /**
  * Which checkout stet runs against (the repo root; the tapes cd into its packages/tui); override
  * with a post-restructure checkout to capture a clean tree elsewhere.
  */
-const REPO = process.env.STET_SCREENSHOT_REPO
-  ? resolve(process.env.STET_SCREENSHOT_REPO)
-  : resolve(import.meta.dir, "../../..");
+const REPO_OVERRIDE = process.env.STET_SCREENSHOT_REPO ?? "";
+const REPO =
+  REPO_OVERRIDE === ""
+    ? path.resolve(import.meta.dir, "../../..")
+    : path.resolve(REPO_OVERRIDE);
 const BUN = process.execPath;
 const VHS = "vhs";
 /** Optional lossless PNG optimizer; when absent the raw (larger) VHS output ships unchanged. */
 const OXIPNG = Bun.which("oxipng");
-const TAPES = resolve(tmpdir(), "stet-screenshots");
+const TAPES = path.resolve(tmpdir(), "stet-screenshots");
 /**
  * Pinned to the monorepo restructure commit: everything after it is clean feature work, so the diff
  * shows real code changes rather than the ~200 files the `src`→`packages/tui/src` move renamed. A
@@ -68,10 +70,15 @@ const WORKTREE_BRANCH = "feat/tidy-layout";
  * the user's real config or the other tapes. It is rewritten before every such shot, because
  * `ctrl-s` makes one of them a writer.
  */
-const SCREENSHOT_CONFIG_DIR = resolve(tmpdir(), "stet-screenshots-config");
-const SCREENSHOT_CONFIG_FILE = resolve(SCREENSHOT_CONFIG_DIR, "stet", "config.jsonc");
+const SCREENSHOT_CONFIG_DIR = path.resolve(tmpdir(), "stet-screenshots-config");
+const SCREENSHOT_CONFIG_FILE = path.resolve(
+  SCREENSHOT_CONFIG_DIR,
+  "stet",
+  "config.jsonc"
+);
 /** Where git and stet alike look for their per-user config when `XDG_CONFIG_HOME` is unset. */
-const REAL_CONFIG_HOME = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+const REAL_CONFIG_HOME =
+  process.env.XDG_CONFIG_HOME ?? path.join(homedir(), ".config");
 const SCREENSHOT_CONFIG = JSON.stringify(
   {
     /**
@@ -87,14 +94,30 @@ const SCREENSHOT_CONFIG = JSON.stringify(
     // Registration (and so list) order after the built-ins, sorted: catppuccin, gruvbox,
     // Rose-pine, tokyo-night, the last of the nine rows the switcher then lists.
     themes: {
-      "catppuccin": { accent: { primary: "#cba6f7" }, base: "dark", syntax: "catppuccin-mocha" },
-      "gruvbox": { accent: { primary: "#fabd2f" }, base: "dark", syntax: "gruvbox-dark-medium" },
-      "rose-pine": { accent: { primary: "#ebbcba" }, base: "dark", syntax: "rose-pine" },
-      "tokyo-night": { accent: { primary: "#7aa2f7" }, base: "dark", syntax: "tokyo-night" },
+      catppuccin: {
+        accent: { primary: "#cba6f7" },
+        base: "dark",
+        syntax: "catppuccin-mocha",
+      },
+      gruvbox: {
+        accent: { primary: "#fabd2f" },
+        base: "dark",
+        syntax: "gruvbox-dark-medium",
+      },
+      "rose-pine": {
+        accent: { primary: "#ebbcba" },
+        base: "dark",
+        syntax: "rose-pine",
+      },
+      "tokyo-night": {
+        accent: { primary: "#7aa2f7" },
+        base: "dark",
+        syntax: "tokyo-night",
+      },
     },
   },
   null,
-  2,
+  2
 );
 /**
  * The recency shot's edits, applied in order while stet is already running. Recency cannot be
@@ -113,15 +136,15 @@ const SCREENSHOT_CONFIG = JSON.stringify(
  * every edit must land before it presses `.`, and the oldest must still be inside the 30s window.
  */
 const RECENT_EDITS = [
-  { afterMs: 5000, path: `${REPO}/packages/tui/src/App.tsx` },
+  { afterMs: 5000, path: `${REPO}/packages/tui/src/app.tsx` },
   { afterMs: 6000, path: `${REPO}/packages/tui/src/keymap.ts` },
   { afterMs: 6000, path: `${REPO}/packages/tui/src/state.ts` },
 ];
 
 // Canvas height, shared by every capture.
 const CANVAS_HEIGHT = 1520;
-function header() {
-  return [
+const header = () =>
+  [
     "Set Shell zsh",
     'Set FontFamily "FiraCode Nerd Font Mono"',
     "Set FontSize 28",
@@ -131,14 +154,13 @@ function header() {
     "Set Margin 0",
     "Set TypingSpeed 0",
   ].join("\n");
-}
 
 // VHS runs with cwd = the tmp tape dir, so cd into the capture target before launching stet.
 // `env` lets one screen prefix the launch (e.g. XDG_CONFIG_HOME for the theme shot); every other
 // Tape passes nothing, so its command is unchanged. `root` is the checkout stet reads its git
 // Identity from, which the `worktree: true` screens point at the demo worktree.
-function launchCmd(env = "", root = REPO) {
-  return [
+const launchCmd = (env = "", root = REPO) =>
+  [
     "Hide",
     `Type "cd ${root}/packages/tui && ${env}${BUN} run src/main.tsx ${BASE_REF}"`,
     "Enter",
@@ -146,7 +168,6 @@ function launchCmd(env = "", root = REPO) {
     "Show",
     "Sleep 500ms",
   ].join("\n");
-}
 
 /**
  * Open a substantial real source-file diff (the palette focuses the viewer on select), so the hero
@@ -154,13 +175,21 @@ function launchCmd(env = "", root = REPO) {
  * `components/diff/DiffView` carries one of the largest source diffs in the `BASE_REF..HEAD` window
  * (+254/-201) and interleaves additions and removals, so it reads as real review work.
  */
-const openHeroDiff = ["Ctrl+P", 'Type "diff/DiffView"', "Sleep 400ms", "Enter", "Sleep 800ms"].join(
-  "\n",
-);
+const openHeroDiff = [
+  "Ctrl+P",
+  'Type "diff/DiffView"',
+  "Sleep 400ms",
+  "Enter",
+  "Sleep 800ms",
+].join("\n");
 
 /** One entry per README screenshot. `steps` run after the app is up; the end state is captured. */
 const screens = [
-  { name: "stet", steps: [openHeroDiff, "Sleep 1500ms"].join("\n"), worktree: true },
+  {
+    name: "stet",
+    steps: [openHeroDiff, "Sleep 1500ms"].join("\n"),
+    worktree: true,
+  },
   {
     /**
      * Pin two files into tabs (`ctrl-t`), then land on a third as the active preview, so the strip
@@ -210,7 +239,13 @@ const screens = [
     config: true,
     launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
     name: "theme-switcher",
-    steps: [openHeroDiff, 'Type "t"', "Sleep 700ms", "Down@200ms 8", "Sleep 1200ms"].join("\n"),
+    steps: [
+      openHeroDiff,
+      'Type "t"',
+      "Sleep 700ms",
+      "Down@200ms 8",
+      "Sleep 1200ms",
+    ].join("\n"),
   },
   {
     /**
@@ -223,7 +258,13 @@ const screens = [
     config: true,
     launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
     name: "save-settings",
-    steps: [openHeroDiff, 'Type "x"', "Sleep 800ms", "Ctrl+S", "Sleep 700ms"].join("\n"),
+    steps: [
+      openHeroDiff,
+      'Type "x"',
+      "Sleep 800ms",
+      "Ctrl+S",
+      "Sleep 700ms",
+    ].join("\n"),
   },
   {
     /**
@@ -245,7 +286,10 @@ const screens = [
       "Sleep 1200ms",
     ].join("\n"),
   },
-  { name: "go-to-file", steps: ["Ctrl+P", 'Type "diff"', "Sleep 600ms"].join("\n") },
+  {
+    name: "go-to-file",
+    steps: ["Ctrl+P", 'Type "diff"', "Sleep 600ms"].join("\n"),
+  },
   {
     /**
      * Open the diff and let it focus/settle, then open the find bar and type a term present in the
@@ -275,12 +319,24 @@ const screens = [
      * the selection tint on a match row alongside the grouped, syntax-highlighted context.
      */
     name: "search",
-    steps: ["Ctrl+F", 'Type "Effect"', "Sleep 2s", "Down@250ms 4", "Sleep 1200ms"].join("\n"),
+    steps: [
+      "Ctrl+F",
+      'Type "Effect"',
+      "Sleep 2s",
+      "Down@250ms 4",
+      "Sleep 1200ms",
+    ].join("\n"),
   },
   {
     // Open an unchanged file: plain syntax-highlighted source, no diff gutters.
     name: "read-only",
-    steps: ["Ctrl+P", 'Type "process"', "Sleep 400ms", "Enter", "Sleep 800ms"].join("\n"),
+    steps: [
+      "Ctrl+P",
+      'Type "process"',
+      "Sleep 400ms",
+      "Enter",
+      "Sleep 800ms",
+    ].join("\n"),
     worktree: true,
   },
   {
@@ -291,7 +347,13 @@ const screens = [
      */
     imageFixture: true,
     name: "binary-preview",
-    steps: ["Ctrl+P", 'Type "demo-image"', "Sleep 500ms", "Enter", "Sleep 1200ms"].join("\n"),
+    steps: [
+      "Ctrl+P",
+      'Type "demo-image"',
+      "Sleep 500ms",
+      "Enter",
+      "Sleep 1200ms",
+    ].join("\n"),
   },
   {
     /**
@@ -327,7 +389,13 @@ const screens = [
      * clockwise, so two presses carry it left -> top -> right.
      */
     name: "pane-docking",
-    steps: [openHeroDiff, 'Type "d"', "Sleep 300ms", 'Type "d"', "Sleep 1200ms"].join("\n"),
+    steps: [
+      openHeroDiff,
+      'Type "d"',
+      "Sleep 300ms",
+      'Type "d"',
+      "Sleep 1200ms",
+    ].join("\n"),
   },
   {
     /**
@@ -342,19 +410,18 @@ const screens = [
   },
 ];
 
-function tapeFor(screen: (typeof screens)[number]) {
-  return [
+const tapeFor = (screen: (typeof screens)[number]) =>
+  [
     `# ${screen.name}.png — generated by script/screenshots.ts`,
     header(),
-    launchCmd(screen.launchEnv, screen.worktree ? WORKTREE_DIR : REPO),
+    launchCmd(screen.launchEnv, screen.worktree === true ? WORKTREE_DIR : REPO),
     screen.steps,
     // Written next to the tape in the tmp dir (VHS's cwd), then moved into OUT.
     `Screenshot ${screen.name}.png`,
     "",
   ].join("\n\n");
-}
 
-async function run(cmd: string, cmdArgs: string[], cwd = TAPES) {
+const run = async (cmd: string, cmdArgs: string[], cwd = TAPES) => {
   const proc = Bun.spawn([cmd, ...cmdArgs], {
     cwd,
     stdio: ["inherit", "inherit", "inherit"],
@@ -363,10 +430,10 @@ async function run(cmd: string, cmdArgs: string[], cwd = TAPES) {
   if (code !== 0) {
     throw new Error(`${cmd} exited ${code}`);
   }
-}
+};
 
-async function shoot(screen: (typeof screens)[number]) {
-  if (screen.config) {
+const shoot = async (screen: (typeof screens)[number]) => {
+  if (screen.config === true) {
     await writeScreenshotConfig();
   }
   await Bun.write(`${TAPES}/${screen.name}.tape`, tapeFor(screen));
@@ -374,16 +441,18 @@ async function shoot(screen: (typeof screens)[number]) {
   await run(VHS, [`${TAPES}/${screen.name}.tape`]);
   const png = `${OUT}/${screen.name}.png`;
   await Bun.write(png, Bun.file(`${TAPES}/${screen.name}.png`));
-  if (OXIPNG) {
+  if (OXIPNG !== null) {
     await run(OXIPNG, ["-o", "max", "--strip", "safe", png]);
   }
-}
+};
 
 // Refuse to clobber a path this script did not create, and tear down only what it created.
 let plantedImageFixture = false;
-async function writeImageFixture() {
+const writeImageFixture = async () => {
   if (existsSync(IMAGE_FIXTURE)) {
-    throw new Error(`refusing to overwrite existing ${IMAGE_FIXTURE} (not created by this script)`);
+    throw new Error(
+      `refusing to overwrite existing ${IMAGE_FIXTURE} (not created by this script)`
+    );
   }
   // A real PNG (ffmpeg's test pattern) so the card reports honest dimensions and a plausible size,
   // Rather than a hand-built header. ffmpeg already ships with VHS, so it adds no new dependency.
@@ -408,56 +477,64 @@ async function writeImageFixture() {
     throw error;
   }
   plantedImageFixture = true;
-}
+};
 
-function removeImageFixture() {
+const removeImageFixture = () => {
   if (!plantedImageFixture) {
     return;
   }
   rmSync(IMAGE_FIXTURE, { force: true });
   plantedImageFixture = false;
-}
+};
 
 // Same ownership rule as the image fixture: refuse a path we did not create, tear down our own.
 let plantedWorktree = false;
-async function addWorktree() {
+const addWorktree = async () => {
   if (existsSync(WORKTREE_DIR)) {
-    throw new Error(`refusing to reuse existing ${WORKTREE_DIR} (not created by this script)`);
+    throw new Error(
+      `refusing to reuse existing ${WORKTREE_DIR} (not created by this script)`
+    );
   }
   plantedWorktree = true;
-  await run("git", ["worktree", "add", "-b", WORKTREE_BRANCH, WORKTREE_DIR, "HEAD"], REPO);
-}
+  await run(
+    "git",
+    ["worktree", "add", "-b", WORKTREE_BRANCH, WORKTREE_DIR, "HEAD"],
+    REPO
+  );
+};
 
 // Sync like the other removers, so the signal handler can tear the worktree down before exit.
 // `--force` for the worktree, `-D` for the branch it never merged.
-function removeWorktree() {
+const removeWorktree = () => {
   if (!plantedWorktree) {
     return;
   }
-  Bun.spawnSync(["git", "worktree", "remove", "--force", WORKTREE_DIR], { cwd: REPO });
+  Bun.spawnSync(["git", "worktree", "remove", "--force", WORKTREE_DIR], {
+    cwd: REPO,
+  });
   Bun.spawnSync(["git", "branch", "-D", WORKTREE_BRANCH], { cwd: REPO });
   plantedWorktree = false;
-}
+};
 
 // Rewritten before every `config: true` shot rather than once per run, because the save-settings
 // Tape presses `ctrl-s` and leaves the keys it wrote behind; a later shot must not inherit them.
-async function writeScreenshotConfig() {
+const writeScreenshotConfig = async () => {
   await Bun.write(SCREENSHOT_CONFIG_FILE, SCREENSHOT_CONFIG);
   // `XDG_CONFIG_HOME` is not stet's alone: git resolves its own global config there too, and with it
   // `core.excludesFile`. A bare override drops the user's global ignores, so files they ignore
   // (`.claude/settings.local.json`) count as changed and this shot's tree and count disagree with
   // Every other one. Link the real git config back in so only stet's config moves.
-  const realGitConfig = join(REAL_CONFIG_HOME, "git");
-  const linked = join(SCREENSHOT_CONFIG_DIR, "git");
+  const realGitConfig = path.join(REAL_CONFIG_HOME, "git");
+  const linked = path.join(SCREENSHOT_CONFIG_DIR, "git");
   if (existsSync(realGitConfig) && !existsSync(linked)) {
     symlinkSync(realGitConfig, linked, "dir");
   }
-}
+};
 
 // Recursive, but `rmSync` unlinks the linked-in git config rather than descending into it.
-function removeScreenshotConfig() {
+const removeScreenshotConfig = () => {
   rmSync(SCREENSHOT_CONFIG_DIR, { force: true, recursive: true });
-}
+};
 
 /**
  * Appends a marker line to each `RECENT_EDITS` file on its own delay, so stet's watcher observes a
@@ -465,7 +542,7 @@ function removeScreenshotConfig() {
  * process; the caller awaits it before restoring, so no write can land after the restore.
  */
 const plantedRecentEdits: { original: string; path: string }[] = [];
-async function applyRecentEdits() {
+const applyRecentEdits = async () => {
   for (const edit of RECENT_EDITS) {
     // oxlint-disable-next-line no-await-in-loop -- the delays are cumulative by design
     await Bun.sleep(edit.afterMs);
@@ -473,46 +550,58 @@ async function applyRecentEdits() {
     const original = await Bun.file(edit.path).text();
     plantedRecentEdits.push({ original, path: edit.path });
     // oxlint-disable-next-line no-await-in-loop -- sequential so each edit is a separate watcher tick
-    await Bun.write(edit.path, `${original}\n// agent edit (screenshot fixture)\n`);
+    await Bun.write(
+      edit.path,
+      `${original}\n// agent edit (screenshot fixture)\n`
+    );
   }
-}
+};
 
 // Sync like the other removers so the signal handler can reach it, and byte-exact so an interrupted
 // Run leaves the checkout as it found it. Draining the list keeps a second call a no-op.
-function restoreRecentEdits() {
-  for (const { original, path } of plantedRecentEdits.splice(0)) {
-    writeFileSync(path, original);
+const restoreRecentEdits = () => {
+  for (const edit of plantedRecentEdits.splice(0)) {
+    writeFileSync(edit.path, edit.original);
   }
-}
+};
 
 const only = new Set(Bun.argv.slice(2));
-const unknown = [...only].filter((name) => !screens.some((screen) => screen.name === name));
+const unknown = [...only].filter(
+  (name) => !screens.some((screen) => screen.name === name)
+);
 if (unknown.length > 0) {
   console.warn(
-    `ignoring unknown screen name(s): ${unknown.join(", ")} — known: ${screens.map((screen) => screen.name).join(", ")}`,
+    `ignoring unknown screen name(s): ${unknown.join(", ")} — known: ${screens.map((screen) => screen.name).join(", ")}`
   );
 }
 
-if (!OXIPNG) {
-  console.warn("oxipng not found — skipping lossless compression (brew install oxipng)");
+if (OXIPNG === null) {
+  console.warn(
+    "oxipng not found — skipping lossless compression (brew install oxipng)"
+  );
 }
 
-const wanted = screens.filter((screen) => only.size === 0 || only.has(screen.name));
-const standalone = wanted.filter(
-  (screen) => !screen.worktree && !screen.imageFixture && !screen.recentEdits,
+const wanted = screens.filter(
+  (screen) => only.size === 0 || only.has(screen.name)
 );
-const worktreed = wanted.filter((screen) => screen.worktree);
-const imageFixtured = wanted.filter((screen) => screen.imageFixture);
-const recentEdited = wanted.filter((screen) => screen.recentEdits);
+const standalone = wanted.filter(
+  (screen) =>
+    screen.worktree !== true &&
+    screen.imageFixture !== true &&
+    screen.recentEdits !== true
+);
+const worktreed = wanted.filter((screen) => screen.worktree === true);
+const imageFixtured = wanted.filter((screen) => screen.imageFixture === true);
+const recentEdited = wanted.filter((screen) => screen.recentEdits === true);
 
 // One cleanup list drives both the finally and the signal handlers, so a Ctrl-C mid-shoot leaves
 // Behind neither the temp config, the demo image, nor a source file the recency shot edited.
 const cleanups: (() => void)[] = [];
-function cleanup() {
+const cleanup = () => {
   for (const remove of cleanups.splice(0)) {
     remove();
   }
-}
+};
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     cleanup();
@@ -523,7 +612,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 try {
   // The config shots read a temp config via XDG_CONFIG_HOME, rewritten per shot inside `shoot`;
   // It creates no repo file, so it never pollutes another shot's tree. Only the teardown is global.
-  if (wanted.some((screen) => screen.config)) {
+  if (wanted.some((screen) => screen.config === true)) {
     cleanups.push(removeScreenshotConfig);
   }
 

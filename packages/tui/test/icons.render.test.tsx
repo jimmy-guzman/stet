@@ -1,17 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { symlinkSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  runGit,
+  seedState,
+} from "./helpers";
 
-const FOLDER = "\u{f0256}";
-const FOLDER_OPEN = "\u{f0dcf}";
-const SYMLINK = "\u{f481}";
+const FOLDER = "\u{F0256}";
+const FOLDER_OPEN = "\u{F0DCF}";
+const SYMLINK = "\u{F481}";
 const CHEVRONS = /[▸▾]/u;
 
 describe("file-type icons", () => {
@@ -21,13 +27,18 @@ describe("file-type icons", () => {
     });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 32,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 32,
+        width: 110,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-    const frame = await settleUntil("tree", (current) => current.includes("src/"));
+    const frame = await settleUntil("tree", (current) =>
+      current.includes("src/")
+    );
 
     expect(frame.includes(FOLDER) || frame.includes(FOLDER_OPEN)).toBe(true);
     expect(CHEVRONS.test(frame)).toBe(false);
@@ -42,13 +53,18 @@ describe("file-type icons", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setIconsEnabled(false);
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 32,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 32,
+        width: 110,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-    const frame = await settleUntil("tree", (current) => current.includes("src/"));
+    const frame = await settleUntil("tree", (current) =>
+      current.includes("src/")
+    );
 
     expect(CHEVRONS.test(frame)).toBe(true);
     expect(frame.includes(FOLDER) || frame.includes(FOLDER_OPEN)).toBe(false);
@@ -57,21 +73,29 @@ describe("file-type icons", () => {
   });
 
   test("renders the symlink glyph for a tracked symlink, not its target's type icon", async () => {
-    const repo = createFixtureRepo("icon-symlink-", { "target.ts": "export const a = 1;\n" });
-    symlinkSync("target.ts", join(repo, "shortcut.ts"));
+    const repo = createFixtureRepo("icon-symlink-", {
+      "target.ts": "export const a = 1;\n",
+    });
+    symlinkSync("target.ts", path.join(repo, "shortcut.ts"));
     runGit(repo, ["add", "shortcut.ts"]);
     runGit(repo, ["commit", "-m", "add link"]);
     const model = await loadModel(repo, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 16,
-      width: 60,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 16,
+        width: 60,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      const frame = await settleUntil("tree", (current) => current.includes("shortcut.ts"));
-      const linkLine = frame.split("\n").find((line) => line.includes("shortcut.ts")) ?? "";
+      const frame = await settleUntil("tree", (current) =>
+        current.includes("shortcut.ts")
+      );
+      const linkLine =
+        frame.split("\n").find((line) => line.includes("shortcut.ts")) ?? "";
 
       expect(linkLine).toContain(SYMLINK);
     } finally {
@@ -92,13 +116,18 @@ describe("file-type icons", () => {
     });
     const model = await loadModel(repo, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 16,
-      width: 44,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 16,
+        width: 44,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-    const frame = await settleUntil("tree", (current) => current.includes("aaa.ts"));
+    const frame = await settleUntil("tree", (current) =>
+      current.includes("aaa.ts")
+    );
     const lines = frame.split("\n");
     const shortIndex = lines.findIndex((line) => line.includes("aaa.ts"));
     const longIndex = lines.findIndex((line) => line.includes("this-is"));
@@ -109,7 +138,9 @@ describe("file-type icons", () => {
     // The long name is cut, not rendered in full.
     expect(lines[longIndex]).not.toContain("truncates.ts");
     // Both names begin at the same column: the icon column is a stable width.
-    expect(lines[shortIndex].indexOf("aaa.ts")).toBe(lines[longIndex].indexOf("this-is"));
+    expect(lines[shortIndex].indexOf("aaa.ts")).toBe(
+      lines[longIndex].indexOf("this-is")
+    );
 
     renderer.destroy();
   });

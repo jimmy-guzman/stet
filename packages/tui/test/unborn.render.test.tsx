@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { emptyTreeForFormat } from "@/git/repo";
 import { state } from "@/state";
 import { stripGitEnv } from "@/utils/env";
@@ -20,30 +20,35 @@ import { loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
 const emptyTree = emptyTreeForFormat("sha1");
 const unbornScope = { kind: "all", ref: emptyTree } as const;
 
-function createUnbornRepo(prefix: string) {
-  const repo = mkdtempSync(join(tmpdir(), prefix));
+const createUnbornRepo = (prefix: string) => {
+  const repo = mkdtempSync(path.join(tmpdir(), prefix));
   runGit(repo, ["init"]);
   return repo;
-}
+};
 
 test("a repository with no commits opens with its files read as added", async () => {
   const repo = createUnbornRepo("unborn-render-");
   try {
-    writeFileSync(join(repo, "staged.txt"), "one\n");
-    writeFileSync(join(repo, "loose.txt"), "two\n");
+    writeFileSync(path.join(repo, "staged.txt"), "one\n");
+    writeFileSync(path.join(repo, "loose.txt"), "two\n");
     runGit(repo, ["add", "staged.txt"]);
 
     seedState(await loadModel(repo, unbornScope), unbornScope);
     state.setCliBaseRef("HEAD");
     state.setHeadUnborn(true);
 
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 24,
+        width: 100,
+      }
+    );
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-      const frame = await settleUntil("tree", (current) => current.includes("staged.txt"));
+      const frame = await settleUntil("tree", (current) =>
+        current.includes("staged.txt")
+      );
 
       expect(frame).toContain("loose.txt");
       expect(frame).toContain("2 changed");
@@ -60,26 +65,33 @@ test("a repository with no commits opens with its files read as added", async ()
 test("the first commit re-points the base off the empty tree", async () => {
   const repo = createUnbornRepo("unborn-commit-");
   try {
-    writeFileSync(join(repo, "staged.txt"), "one\n");
+    writeFileSync(path.join(repo, "staged.txt"), "one\n");
     runGit(repo, ["add", "staged.txt"]);
 
     seedState(await loadModel(repo, unbornScope), unbornScope);
     state.setCliBaseRef("HEAD");
     state.setHeadUnborn(true);
 
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 24,
+        width: 100,
+      }
+    );
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-      await settleUntil("added file", (current) => current.includes("1 changed"));
+      await settleUntil("added file", (current) =>
+        current.includes("1 changed")
+      );
 
       // Let the fs.watch subscription arm; the safety poll backstops within the window.
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await Bun.sleep(200);
       runGit(repo, ["commit", "-m", "first"]);
 
-      const frame = await settleUntil("committed tree", (current) => current.includes("0 changed"));
+      const frame = await settleUntil("committed tree", (current) =>
+        current.includes("0 changed")
+      );
 
       expect(frame).toContain("staged.txt");
       expect(state.scope().ref).toBe("HEAD");
@@ -97,28 +109,33 @@ test("the first commit re-points the base off the empty tree", async () => {
 test("a mid-session orphan checkout re-points the base onto the empty tree", async () => {
   const repo = createUnbornRepo("unborn-orphan-");
   try {
-    writeFileSync(join(repo, "a.txt"), "one\n");
+    writeFileSync(path.join(repo, "a.txt"), "one\n");
     runGit(repo, ["add", "a.txt"]);
     runGit(repo, ["commit", "-m", "first"]);
-    writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+    writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
 
     const allScope = { kind: "all", ref: "HEAD" } as const;
     seedState(await loadModel(repo, allScope), allScope);
 
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 24,
+        width: 100,
+      }
+    );
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-      await settleUntil("edited file", (current) => current.includes("1 changed"));
+      await settleUntil("edited file", (current) =>
+        current.includes("1 changed")
+      );
 
       // Let the fs.watch subscription arm; the safety poll backstops within the window.
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await Bun.sleep(200);
       runGit(repo, ["checkout", "--orphan", "fresh"]);
 
       const frame = await settleUntil("orphan base", (current) =>
-        current.includes("no commits yet"),
+        current.includes("no commits yet")
       );
 
       expect(frame).toContain("a.txt");
@@ -137,32 +154,41 @@ test("a mid-session orphan checkout re-points the base onto the empty tree", asy
 test("a mid-session orphan checkout drops the last-commit scope to all", async () => {
   const repo = createUnbornRepo("unborn-orphan-last-");
   try {
-    writeFileSync(join(repo, "a.txt"), "one\n");
+    writeFileSync(path.join(repo, "a.txt"), "one\n");
     runGit(repo, ["add", "a.txt"]);
     runGit(repo, ["commit", "-m", "first"]);
-    writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+    writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
     runGit(repo, ["commit", "-am", "second"]);
 
     const parent = execFileSync("git", ["rev-parse", "HEAD~1"], {
       cwd: repo,
-      encoding: "utf8",
+      encoding: "utf-8",
       env: stripGitEnv(process.env),
     }).trim();
-    const lastCommitScope = { headRef: "HEAD", kind: "last-commit", ref: parent } as const;
+    const lastCommitScope = {
+      headRef: "HEAD",
+      kind: "last-commit",
+      ref: parent,
+    } as const;
     seedState(await loadModel(repo, lastCommitScope), lastCommitScope);
     // A range scope's ref is a parent SHA, not the CLI ref `seedState` mirrors off it.
     state.setCliBaseRef("HEAD");
 
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 24,
+        width: 100,
+      }
+    );
     try {
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-      await settleUntil("last commit", (current) => current.includes("last commit"));
+      await settleUntil("last commit", (current) =>
+        current.includes("last commit")
+      );
 
       // Let the fs.watch subscription arm; the safety poll backstops within the window.
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await Bun.sleep(200);
       runGit(repo, ["checkout", "--orphan", "fresh"]);
 
       await settleUntil("dropped to all", () => state.scope().kind === "all");

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import type { GitModel } from "@/git/model";
 import { state } from "@/state";
 
@@ -29,16 +29,21 @@ test("renders the shell before any model is seeded", async () => {
   // Is destroyed. Seeding the next test must clear it before App reacts.
   state.setCurrentWorktreeDeleted(true);
   seedState(emptyModel, allScope);
-  const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-    height: 24,
-    width: 100,
-  });
+  const { renderer, renderOnce, captureCharFrame } = await testRender(
+    () => <App />,
+    {
+      height: 24,
+      width: 100,
+    }
+  );
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     // The status bar's quit hint is part of the always-present chrome, so it proves
     // The shell painted even with no files to show.
-    const frame = await settleUntil("shell", (current) => current.includes("q quit"));
+    const frame = await settleUntil("shell", (current) =>
+      current.includes("q quit")
+    );
     expect(frame).toContain("q quit");
   } finally {
     renderer.destroy();

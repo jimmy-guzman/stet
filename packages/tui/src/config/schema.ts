@@ -20,15 +20,15 @@ const PaneExtent = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0));
 // Config is shaped by feature: each section owns its settings, including its
 // Off switch, so a feature's whole surface lives under one key.
 export const UserConfigSchema = Schema.Struct({
-  editor: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
+  editor: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/u))),
   files: Schema.optionalKey(RawRegistry),
   icons: Schema.optionalKey(
     Schema.Struct({
       enabled: Schema.optionalKey(Schema.Boolean),
       glyphs: Schema.optionalKey(RawRegistry),
-    }),
+    })
   ),
-  ide: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
+  ide: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/u))),
   // Values are a combo, a list of combos, or false; `resolveKeybindings`
   // Validates them against the action registry.
   keybindings: Schema.optionalKey(RawRegistry),
@@ -37,7 +37,7 @@ export const UserConfigSchema = Schema.Struct({
       caseSensitive: Schema.optionalKey(Schema.Boolean),
       regex: Schema.optionalKey(Schema.Boolean),
       scope: Schema.optionalKey(Schema.Literals(["changed", "repo"])),
-    }),
+    })
   ),
   sidebar: Schema.optionalKey(
     Schema.Struct({
@@ -46,12 +46,16 @@ export const UserConfigSchema = Schema.Struct({
       open: Schema.optionalKey(Schema.Boolean),
       position: Schema.optionalKey(DockPosition),
       width: Schema.optionalKey(PaneExtent),
-    }),
+    })
   ),
   theme: Schema.optionalKey(ThemeSelection),
   themes: Schema.optionalKey(RawRegistry),
-  update: Schema.optionalKey(Schema.Struct({ check: Schema.optionalKey(Schema.Boolean) })),
-  viewer: Schema.optionalKey(Schema.Struct({ wrap: Schema.optionalKey(Schema.Boolean) })),
+  update: Schema.optionalKey(
+    Schema.Struct({ check: Schema.optionalKey(Schema.Boolean) })
+  ),
+  viewer: Schema.optionalKey(
+    Schema.Struct({ wrap: Schema.optionalKey(Schema.Boolean) })
+  ),
 });
 
 export type UserConfig = Schema.Schema.Type<typeof UserConfigSchema>;

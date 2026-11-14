@@ -9,11 +9,17 @@ import {
 
 describe("openExternalCommand", () => {
   test("uses open on macOS", () => {
-    expect(openExternalCommand("/repo/logo.png", "darwin")).toEqual(["open", "/repo/logo.png"]);
+    expect(openExternalCommand("/repo/logo.png", "darwin")).toEqual([
+      "open",
+      "/repo/logo.png",
+    ]);
   });
 
   test("uses xdg-open on Linux", () => {
-    expect(openExternalCommand("/repo/logo.png", "linux")).toEqual(["xdg-open", "/repo/logo.png"]);
+    expect(openExternalCommand("/repo/logo.png", "linux")).toEqual([
+      "xdg-open",
+      "/repo/logo.png",
+    ]);
   });
 
   test("has no command on an unsupported platform", () => {
@@ -23,29 +29,36 @@ describe("openExternalCommand", () => {
 
 describe("buildEditorCommand", () => {
   test("substitutes {file} and {line} in a vim-style template", () => {
-    expect(buildEditorCommand("vim +{line} {file}", "/repo/src/foo.ts", 42, "/repo")).toEqual([
-      "vim",
-      "+42",
-      "/repo/src/foo.ts",
-    ]);
+    expect(
+      buildEditorCommand("vim +{line} {file}", "/repo/src/foo.ts", 42, "/repo")
+    ).toEqual(["vim", "+42", "/repo/src/foo.ts"]);
   });
 
   test("substitutes {file}:{line} in a colon-separated template", () => {
-    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", 10, "/repo")).toEqual([
-      "hx",
-      "/repo/src/foo.ts:10",
-    ]);
+    expect(
+      buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", 10, "/repo")
+    ).toEqual(["hx", "/repo/src/foo.ts:10"]);
   });
 
   test("substitutes VSCode --goto style", () => {
-    expect(buildEditorCommand("code --goto {file}:{line}", "/repo/src/foo.ts", 5, "/repo")).toEqual(
-      ["code", "--goto", "/repo/src/foo.ts:5"],
-    );
+    expect(
+      buildEditorCommand(
+        "code --goto {file}:{line}",
+        "/repo/src/foo.ts",
+        5,
+        "/repo"
+      )
+    ).toEqual(["code", "--goto", "/repo/src/foo.ts:5"]);
   });
 
   test("substitutes {repo} with the repo root for a workspace open", () => {
     expect(
-      buildEditorCommand("code {repo} --goto {file}:{line}", "/repo/src/foo.ts", 42, "/repo"),
+      buildEditorCommand(
+        "code {repo} --goto {file}:{line}",
+        "/repo/src/foo.ts",
+        42,
+        "/repo"
+      )
     ).toEqual(["code", "/repo", "--goto", "/repo/src/foo.ts:42"]);
   });
 
@@ -55,14 +68,19 @@ describe("buildEditorCommand", () => {
         "code {repo} --goto {file}:{line}",
         "/repo/src/foo.ts",
         undefined,
-        "/repo",
-      ),
+        "/repo"
+      )
     ).toEqual(["code", "/repo", "--goto", "/repo/src/foo.ts"]);
   });
 
   test("substitutes a JetBrains --line template", () => {
     expect(
-      buildEditorCommand("idea {repo} --line {line} {file}", "/repo/src/foo.ts", 42, "/repo"),
+      buildEditorCommand(
+        "idea {repo} --line {line} {file}",
+        "/repo/src/foo.ts",
+        42,
+        "/repo"
+      )
     ).toEqual(["idea", "/repo", "--line", "42", "/repo/src/foo.ts"]);
   });
 
@@ -72,55 +90,68 @@ describe("buildEditorCommand", () => {
         "idea {repo} --line {line} {file}",
         "/repo/src/foo.ts",
         undefined,
-        "/repo",
-      ),
+        "/repo"
+      )
     ).toEqual(["idea", "/repo", "/repo/src/foo.ts"]);
   });
 
   test("keeps a combined {repo}:{line} token when no line is provided", () => {
     expect(
-      buildEditorCommand("myide {repo}:{line}", "/repo/src/foo.ts", undefined, "/repo"),
+      buildEditorCommand(
+        "myide {repo}:{line}",
+        "/repo/src/foo.ts",
+        undefined,
+        "/repo"
+      )
     ).toEqual(["myide", "/repo"]);
   });
 
   test("does not re-substitute a placeholder that appears inside a value", () => {
-    expect(buildEditorCommand("code {file}", "/repo/a{line}b.ts", 5, "/repo")).toEqual([
-      "code",
-      "/repo/a{line}b.ts",
-    ]);
+    expect(
+      buildEditorCommand("code {file}", "/repo/a{line}b.ts", 5, "/repo")
+    ).toEqual(["code", "/repo/a{line}b.ts"]);
   });
 
   test("drops args that contain {line} when no line is provided", () => {
     expect(
-      buildEditorCommand("vim +{line} {file}", "/repo/src/foo.ts", undefined, "/repo"),
+      buildEditorCommand(
+        "vim +{line} {file}",
+        "/repo/src/foo.ts",
+        undefined,
+        "/repo"
+      )
     ).toEqual(["vim", "/repo/src/foo.ts"]);
   });
 
   test("keeps {file} in combined {file}:{line} token when no line is provided", () => {
-    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", undefined, "/repo")).toEqual([
-      "hx",
-      "/repo/src/foo.ts",
-    ]);
+    expect(
+      buildEditorCommand(
+        "hx {file}:{line}",
+        "/repo/src/foo.ts",
+        undefined,
+        "/repo"
+      )
+    ).toEqual(["hx", "/repo/src/foo.ts"]);
   });
 
   test("handles a template with no {line} placeholder when line is undefined", () => {
-    expect(buildEditorCommand("cat {file}", "/repo/src/foo.ts", undefined, "/repo")).toEqual([
-      "cat",
-      "/repo/src/foo.ts",
-    ]);
+    expect(
+      buildEditorCommand("cat {file}", "/repo/src/foo.ts", undefined, "/repo")
+    ).toEqual(["cat", "/repo/src/foo.ts"]);
   });
 
   test("handles a template with no {line} placeholder when line is provided", () => {
-    expect(buildEditorCommand("cat {file}", "/repo/src/foo.ts", 99, "/repo")).toEqual([
-      "cat",
-      "/repo/src/foo.ts",
-    ]);
+    expect(
+      buildEditorCommand("cat {file}", "/repo/src/foo.ts", 99, "/repo")
+    ).toEqual(["cat", "/repo/src/foo.ts"]);
   });
 });
 
 describe("resolveEditorTemplate", () => {
   test("returns the explicit value when provided", () => {
-    expect(resolveEditorTemplate("nvim +{line} {file}")).toBe("nvim +{line} {file}");
+    expect(resolveEditorTemplate("nvim +{line} {file}")).toBe(
+      "nvim +{line} {file}"
+    );
   });
 
   test("returns a template containing {file} when nothing is configured", () => {
@@ -129,7 +160,9 @@ describe("resolveEditorTemplate", () => {
 
   test("expands a bare known editor name to its full template", () => {
     expect(resolveEditorTemplate("nvim")).toBe("nvim +{line} {file}");
-    expect(resolveEditorTemplate("code")).toBe("code {repo} --goto {file}:{line}");
+    expect(resolveEditorTemplate("code")).toBe(
+      "code {repo} --goto {file}:{line}"
+    );
     expect(resolveEditorTemplate("hx")).toBe("hx {file}:{line}");
   });
 
@@ -138,19 +171,23 @@ describe("resolveEditorTemplate", () => {
   });
 
   test("passes through a value that already contains {file}", () => {
-    expect(resolveEditorTemplate("nvim +{line} {file}")).toBe("nvim +{line} {file}");
+    expect(resolveEditorTemplate("nvim +{line} {file}")).toBe(
+      "nvim +{line} {file}"
+    );
   });
 
   test("explicit value (CLI flag or config) beats STET_EDITOR", () => {
     const saved = process.env.STET_EDITOR;
     process.env.STET_EDITOR = "nano +{line} {file}";
     try {
-      expect(resolveEditorTemplate("nvim +{line} {file}")).toBe("nvim +{line} {file}");
+      expect(resolveEditorTemplate("nvim +{line} {file}")).toBe(
+        "nvim +{line} {file}"
+      );
     } finally {
-      if (saved !== undefined) {
-        process.env.STET_EDITOR = saved;
-      } else {
+      if (saved === undefined) {
         delete process.env.STET_EDITOR;
+      } else {
+        process.env.STET_EDITOR = saved;
       }
     }
   });
@@ -159,12 +196,14 @@ describe("resolveEditorTemplate", () => {
     const saved = process.env.STET_EDITOR;
     process.env.STET_EDITOR = "emacsclient -nw +{line} {file}";
     try {
-      expect(resolveEditorTemplate(undefined)).toBe("emacsclient -nw +{line} {file}");
+      expect(resolveEditorTemplate(undefined)).toBe(
+        "emacsclient -nw +{line} {file}"
+      );
     } finally {
-      if (saved !== undefined) {
-        process.env.STET_EDITOR = saved;
-      } else {
+      if (saved === undefined) {
         delete process.env.STET_EDITOR;
+      } else {
+        process.env.STET_EDITOR = saved;
       }
     }
   });
@@ -177,15 +216,15 @@ describe("resolveEditorTemplate", () => {
     try {
       expect(resolveEditorTemplate(undefined)).toBe("hx {file}:{line}");
     } finally {
-      if (savedEditor !== undefined) {
-        process.env.EDITOR = savedEditor;
-      } else {
+      if (savedEditor === undefined) {
         delete process.env.EDITOR;
-      }
-      if (savedVisual !== undefined) {
-        process.env.VISUAL = savedVisual;
       } else {
+        process.env.EDITOR = savedEditor;
+      }
+      if (savedVisual === undefined) {
         delete process.env.VISUAL;
+      } else {
+        process.env.VISUAL = savedVisual;
       }
     }
   });
@@ -198,15 +237,15 @@ describe("resolveEditorTemplate", () => {
     try {
       expect(resolveEditorTemplate(undefined)).toBe("hx {file}:{line}");
     } finally {
-      if (savedStet !== undefined) {
-        process.env.STET_EDITOR = savedStet;
-      } else {
+      if (savedStet === undefined) {
         delete process.env.STET_EDITOR;
-      }
-      if (savedEditor !== undefined) {
-        process.env.EDITOR = savedEditor;
       } else {
+        process.env.STET_EDITOR = savedStet;
+      }
+      if (savedEditor === undefined) {
         delete process.env.EDITOR;
+      } else {
+        process.env.EDITOR = savedEditor;
       }
     }
   });
@@ -214,12 +253,16 @@ describe("resolveEditorTemplate", () => {
 
 describe("resolveIdeTemplate", () => {
   test("returns the explicit value when provided", () => {
-    expect(resolveIdeTemplate("code --goto {file}:{line}")).toBe("code --goto {file}:{line}");
+    expect(resolveIdeTemplate("code --goto {file}:{line}")).toBe(
+      "code --goto {file}:{line}"
+    );
   });
 
   test("expands a bare known IDE name to its full template", () => {
     expect(resolveIdeTemplate("code")).toBe("code {repo} --goto {file}:{line}");
-    expect(resolveIdeTemplate("cursor")).toBe("cursor {repo} --goto {file}:{line}");
+    expect(resolveIdeTemplate("cursor")).toBe(
+      "cursor {repo} --goto {file}:{line}"
+    );
     expect(resolveIdeTemplate("zed")).toBe("zed {repo} {file}:{line}");
     expect(resolveIdeTemplate("idea")).toBe("idea {repo} --line {line} {file}");
     expect(resolveIdeTemplate("subl")).toBe("subl {file}:{line}");
@@ -259,10 +302,10 @@ describe("resolveIdeTemplate", () => {
     try {
       expect(resolveIdeTemplate(undefined)).toBe("zed {file}:{line}");
     } finally {
-      if (saved !== undefined) {
-        process.env.STET_IDE = saved;
-      } else {
+      if (saved === undefined) {
         delete process.env.STET_IDE;
+      } else {
+        process.env.STET_IDE = saved;
       }
     }
   });
@@ -271,12 +314,14 @@ describe("resolveIdeTemplate", () => {
     const saved = process.env.STET_IDE;
     process.env.STET_IDE = "zed {file}:{line}";
     try {
-      expect(resolveIdeTemplate("subl {file}:{line}")).toBe("subl {file}:{line}");
+      expect(resolveIdeTemplate("subl {file}:{line}")).toBe(
+        "subl {file}:{line}"
+      );
     } finally {
-      if (saved !== undefined) {
-        process.env.STET_IDE = saved;
-      } else {
+      if (saved === undefined) {
         delete process.env.STET_IDE;
+      } else {
+        process.env.STET_IDE = saved;
       }
     }
   });

@@ -41,18 +41,21 @@ export interface StatusAlert {
 export type StatusAlerts = readonly StatusAlert[];
 
 /** Replaces any alert from the same source and moves it to the newest position. */
-export function raiseAlert(alerts: StatusAlerts, alert: StatusAlert): StatusAlerts {
-  return [...alerts.filter((current) => current.source !== alert.source), alert];
-}
+export const raiseAlert = (
+  alerts: StatusAlerts,
+  alert: StatusAlert
+): StatusAlerts => [
+  ...alerts.filter((current) => current.source !== alert.source),
+  alert,
+];
 
 /** Retires one source's alert, leaving every other source's untouched. */
-export function clearAlertSource(alerts: StatusAlerts, source: StatusAlertSource): StatusAlerts {
-  return alerts.filter((alert) => alert.source !== source);
-}
+export const clearAlertSource = (
+  alerts: StatusAlerts,
+  source: StatusAlertSource
+): StatusAlerts => alerts.filter((alert) => alert.source !== source);
 
-export function latestAlert(alerts: StatusAlerts) {
-  return alerts.at(-1);
-}
+export const latestAlert = (alerts: StatusAlerts) => alerts.at(-1);
 
 interface StatusBarMessage {
   category: "notification" | "foreground-progress" | "persistent-alert";
@@ -73,7 +76,10 @@ interface StatusBarGuidance {
   text: string;
 }
 
-export type StatusBarModel = StatusBarMessage | StatusBarAmbient | StatusBarGuidance;
+export type StatusBarModel =
+  | StatusBarMessage
+  | StatusBarAmbient
+  | StatusBarGuidance;
 
 export interface StatusBarModelInput {
   activity: StatusBarActivity | undefined;
@@ -97,47 +103,74 @@ export interface StatusBarModelInput {
  * @param input The live signals, already resolved to plain values by `state.statusBarModel`
  * @returns The single item to render, fitted to `width` in terminal cells
  */
-export function buildStatusBarModel(input: StatusBarModelInput): StatusBarModel {
+export const buildStatusBarModel = (
+  input: StatusBarModelInput
+): StatusBarModel => {
   const width = Math.max(0, input.width - STATUS_BAR_PADDING * 2);
 
   if (input.foregroundProgress !== undefined) {
-    return fitMessage("foreground-progress", "info", input.foregroundProgress, width);
+    return fitMessage(
+      "foreground-progress",
+      "info",
+      input.foregroundProgress,
+      width
+    );
   }
   if (input.notification !== undefined) {
-    return fitMessage("notification", input.notification.level, input.notification.text, width);
+    return fitMessage(
+      "notification",
+      input.notification.level,
+      input.notification.text,
+      width
+    );
   }
   if (input.alert !== undefined) {
-    return fitMessage("persistent-alert", input.alert.level, input.alert.text, width);
+    return fitMessage(
+      "persistent-alert",
+      input.alert.level,
+      input.alert.text,
+      width
+    );
   }
   const activity = fitActivity(input.activity, width);
   if (activity !== undefined) {
     return { activity, category: "ambient", kind: "ambient" };
   }
-  return { category: "guidance", kind: "guidance", text: truncate(input.guidance, width) };
-}
+  return {
+    category: "guidance",
+    kind: "guidance",
+    text: truncate(input.guidance, width),
+  };
+};
 
-function fitMessage(
+const fitMessage = (
   category: StatusBarMessage["category"],
   level: LogLevel,
   text: string,
-  width: number,
-): StatusBarMessage {
-  return {
-    category,
-    kind: "message",
-    level,
-    message: truncate(text, Math.max(0, width - Bun.stringWidth(`${levelGlyph(level)} `))),
-  };
-}
+  width: number
+): StatusBarMessage => ({
+  category,
+  kind: "message",
+  level,
+  message: truncate(
+    text,
+    Math.max(0, width - Bun.stringWidth(`${levelGlyph(level)} `))
+  ),
+});
 
 /**
  * The path truncates from the left so the filename, the part that differs, survives; a path reduced
  * to the ellipsis alone says nothing a blank row does not, so it yields the row to guidance.
  */
-function fitActivity(activity: StatusBarActivity | undefined, width: number) {
-  if (activity === undefined) {
-    return undefined;
-  }
-  const path = truncateLeft(activity.path, Math.max(0, width - ACTIVITY_LEAD_CELLS));
-  return path === "" || path === "…" ? undefined : { ...activity, path };
-}
+const fitActivity = (
+  activity: StatusBarActivity | undefined,
+  width: number
+) => {
+  const path =
+    activity === undefined
+      ? ""
+      : truncateLeft(activity.path, Math.max(0, width - ACTIVITY_LEAD_CELLS));
+  return activity === undefined || path === "" || path === "…"
+    ? undefined
+    : { ...activity, path };
+};

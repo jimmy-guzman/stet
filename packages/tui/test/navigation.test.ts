@@ -21,24 +21,25 @@ import {
 } from "@/viewer/navigation";
 import type { Location } from "@/viewer/navigation";
 
-function loc(
+const loc = (
   path: string,
   kind: "browse" | "jump" = "jump",
-  over: Partial<Location> = {},
-): Location {
-  return {
-    cursorLine: undefined,
-    fileView: false,
-    fullContent: false,
-    kind,
-    path,
-    viewport: { scrollTop: 0, scrollX: 0 },
-    ...over,
-  };
-}
+  over: Partial<Location> = {}
+): Location => ({
+  cursorLine: undefined,
+  fileView: false,
+  fullContent: false,
+  kind,
+  path,
+  viewport: { scrollTop: 0, scrollX: 0 },
+  ...over,
+});
 
-const open = (nav: ReturnType<typeof initialNav>, path: string, kind: "browse" | "jump" = "jump") =>
-  navigate(nav, loc(path, kind));
+const open = (
+  nav: ReturnType<typeof initialNav>,
+  path: string,
+  kind: "browse" | "jump" = "jump"
+) => navigate(nav, loc(path, kind));
 
 describe("history stack", () => {
   test("a fresh open pushes a new current entry", () => {
@@ -83,7 +84,10 @@ describe("jump dedup", () => {
     const start = initialNav(loc("a", "jump", { cursorLine: 5 }));
     const again = navigate(
       start,
-      loc("a", "jump", { cursorLine: 5, viewport: { scrollTop: 8, scrollX: 0 } }),
+      loc("a", "jump", {
+        cursorLine: 5,
+        viewport: { scrollTop: 8, scrollX: 0 },
+      })
     );
     expect(again.tabs[0].entries).toHaveLength(1);
     expect(canBack(again)).toBe(false);
@@ -92,10 +96,14 @@ describe("jump dedup", () => {
   });
 
   test("re-navigating to the current entry keeps forward history", () => {
-    const nav = open(open(initialNav(loc("a")), "b"), "c"); // Entries a, b, c at index 2
+    // Entries a, b, c at index 2
+    const nav = open(open(initialNav(loc("a")), "b"), "c");
     // Go back to "b", then navigate to the same visible "b": a no-op move must not
     // Truncate the forward "c".
-    const restay = navigate(back(nav), loc("b", "jump", { cursorLine: undefined }));
+    const restay = navigate(
+      back(nav),
+      loc("b", "jump", { cursorLine: undefined })
+    );
     expect(canForward(restay)).toBe(true);
     expect(currentLocation(forward(restay))?.path).toBe("c");
   });
@@ -103,7 +111,7 @@ describe("jump dedup", () => {
   test("jumps to distinct lines in one file stay distinct", () => {
     const nav = navigate(
       navigate(initialNav(loc("x")), loc("a", "jump", { cursorLine: 50 })),
-      loc("a", "jump", { cursorLine: 80 }),
+      loc("a", "jump", { cursorLine: 80 })
     );
     expect(currentLocation(nav)?.cursorLine).toBe(80);
     expect(currentLocation(back(nav))?.cursorLine).toBe(50);
@@ -113,7 +121,11 @@ describe("jump dedup", () => {
 
 describe("browse coalescing", () => {
   test("consecutive browse entries collapse into one", () => {
-    const nav = open(open(open(initialNav(loc("a")), "b", "browse"), "c", "browse"), "d", "browse");
+    const nav = open(
+      open(open(initialNav(loc("a")), "b", "browse"), "c", "browse"),
+      "d",
+      "browse"
+    );
     expect(currentLocation(nav)?.path).toBe("d");
     // One step back from the coalesced browse head lands on the original "a".
     expect(currentLocation(back(nav))?.path).toBe("a");
@@ -139,12 +151,18 @@ describe("recordCurrent", () => {
     const nav = open(initialNav(loc("a")), "b");
     const recorded = recordCurrent(
       nav,
-      loc("b", "jump", { cursorLine: 42, viewport: { scrollTop: 9, scrollX: 3 } }),
+      loc("b", "jump", {
+        cursorLine: 42,
+        viewport: { scrollTop: 9, scrollX: 3 },
+      })
     );
     const backOne = back(recorded);
     // The "b" entry we left now carries the recorded cursor/scroll.
     expect(currentLocation(forward(backOne))?.cursorLine).toBe(42);
-    expect(currentLocation(forward(backOne))?.viewport).toEqual({ scrollTop: 9, scrollX: 3 });
+    expect(currentLocation(forward(backOne))?.viewport).toEqual({
+      scrollTop: 9,
+      scrollX: 3,
+    });
   });
 
   test("is a no-op on an empty tab", () => {
@@ -160,7 +178,10 @@ describe("MRU viewports", () => {
       cursorLine: 7,
       viewport: { scrollTop: 5, scrollX: 1 },
     });
-    expect(recall(nav, "a")).toEqual({ cursorLine: 7, viewport: { scrollTop: 5, scrollX: 1 } });
+    expect(recall(nav, "a")).toEqual({
+      cursorLine: 7,
+      viewport: { scrollTop: 5, scrollX: 1 },
+    });
     expect(recall(nav, "b")).toBeUndefined();
   });
 
@@ -169,7 +190,7 @@ describe("MRU viewports", () => {
     // 20. Going back must restore the entry's 9, not the MRU's 20.
     const left = recordCurrent(
       initialNav(loc("a")),
-      loc("a", "jump", { viewport: { scrollTop: 9, scrollX: 0 } }),
+      loc("a", "jump", { viewport: { scrollTop: 9, scrollX: 0 } })
     );
     const nav = remember(open(left, "b"), "a", {
       cursorLine: undefined,
@@ -229,8 +250,10 @@ describe("tabs", () => {
   });
 
   test("each tab keeps its own independent history", () => {
-    let nav = navigate(initialNav(loc("a")), loc("c", "jump")); // Tab 0: a -> c
-    nav = openTab(nav, loc("b"), "1", false); // Tab 1: b
+    // Tab 0: a -> c
+    let nav = navigate(initialNav(loc("a")), loc("c", "jump"));
+    // Tab 1: b
+    nav = openTab(nav, loc("b"), "1", false);
     nav = selectTab(nav, "0");
     expect(currentLocation(nav)?.path).toBe("c");
     nav = back(nav);
@@ -242,7 +265,12 @@ describe("tabs", () => {
   });
 
   test("closeTab of the active rightmost tab activates the left neighbor", () => {
-    let nav = openTab(openTab(initialNav(loc("a")), loc("b"), "1", false), loc("c"), "2", false);
+    let nav = openTab(
+      openTab(initialNav(loc("a")), loc("b"), "1", false),
+      loc("c"),
+      "2",
+      false
+    );
     nav = closeTab(nav, "2");
     expect(nav.tabs).toHaveLength(2);
     expect(nav.activeTabId).toBe("1");
@@ -250,7 +278,12 @@ describe("tabs", () => {
   });
 
   test("closeTab of an active middle tab activates the right neighbor", () => {
-    let nav = openTab(openTab(initialNav(loc("a")), loc("b"), "1", false), loc("c"), "2", false);
+    let nav = openTab(
+      openTab(initialNav(loc("a")), loc("b"), "1", false),
+      loc("c"),
+      "2",
+      false
+    );
     nav = selectTab(nav, "1");
     nav = closeTab(nav, "1");
     expect(nav.activeTabId).toBe("2");
@@ -264,7 +297,8 @@ describe("tabs", () => {
   });
 
   test("nextTab and prevTab cycle with wrap-around", () => {
-    const two = openTab(initialNav(loc("a")), loc("b"), "1", false); // Active "1"
+    // Active "1"
+    const two = openTab(initialNav(loc("a")), loc("b"), "1", false);
     expect(nextTab(two).activeTabId).toBe("0");
     expect(prevTab(two).activeTabId).toBe("0");
     const onZero = selectTab(two, "0");

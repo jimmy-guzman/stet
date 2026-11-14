@@ -5,6 +5,7 @@ import type { Dock } from "@/layout/regions";
 
 import { isEmptyJsonc, loadConfigText } from "./load";
 import { configDefaults } from "./schema";
+import type { UserConfig } from "./schema";
 
 /**
  * The session values `ctrl-s` can persist: exactly the signals whose keys the config schema owns,
@@ -45,42 +46,54 @@ interface SettingEdit {
 
 const formattingOptions = { insertSpaces: true, tabSize: 2 };
 
-function themeEquals(a: SettingsSnapshot["theme"], b: SettingsSnapshot["theme"]) {
-  if (typeof a === "string" || typeof b === "string" || a === undefined || b === undefined) {
+const themeEquals = (
+  a: SettingsSnapshot["theme"],
+  b: SettingsSnapshot["theme"]
+) => {
+  if (
+    typeof a === "string" ||
+    typeof b === "string" ||
+    a === undefined ||
+    b === undefined
+  ) {
     return a === b;
   }
   return a.dark === b.dark && a.light === b.light;
-}
+};
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 // The theme edit carries #113's pair rule: a picked name lands on the current
 // Appearance's half when the file holds a `{ dark, light }` pair (the other half
 // Survives), and the `auto` selection removes the key entirely.
-function themeEdit(snapshot: SettingsSnapshot, fileTheme: SettingsSnapshot["theme"]): SettingEdit {
+const themeEdit = (
+  snapshot: SettingsSnapshot,
+  fileTheme: SettingsSnapshot["theme"]
+): SettingEdit => {
   if (typeof snapshot.theme === "string" && isRecord(fileTheme)) {
-    return { label: "theme", path: ["theme", snapshot.appearance], value: snapshot.theme };
+    return {
+      label: "theme",
+      path: ["theme", snapshot.appearance],
+      value: snapshot.theme,
+    };
   }
   return {
     label: "theme",
     path: ["theme"],
     value: typeof snapshot.theme === "string" ? snapshot.theme : undefined,
   };
-}
+};
 
-function diff(
+const diff = (
   label: string,
   path: (string | number)[],
   session: string | number | boolean | undefined,
-  file: string | number | boolean | undefined,
-): SettingEdit[] {
-  return session === file ? [] : [{ label, path, value: session }];
-}
+  file: string | number | boolean | undefined
+): SettingEdit[] => (session === file ? [] : [{ label, path, value: session }]);
 
 // A targeted edit on an unreadable document risks the file, so both fail.
-function parseIssue(text: string) {
+const parseIssue = (text: string) => {
   try {
     return isRecord(Bun.JSONC.parse(text))
       ? undefined
@@ -88,21 +101,21 @@ function parseIssue(text: string) {
   } catch {
     return "config is not valid JSONC; nothing saved";
   }
-}
+};
 
-function parses(text: string) {
+const parses = (text: string) => {
   try {
     Bun.JSONC.parse(text);
     return true;
   } catch {
     return false;
   }
-}
+};
 
 // Token-based (never a regex over raw text, which could reach a comma inside a
 // String or comment): a comma whose previous non-trivia token opens an object or
 // Array is the structural dangling separator the removal left behind.
-function stripDanglingCommas(text: string) {
+const stripDanglingCommas = (text: string) => {
   const trivia = new Set([
     SyntaxKind.Trivia,
     SyntaxKind.LineBreakTrivia,
@@ -112,23 +125,118 @@ function stripDanglingCommas(text: string) {
   const scanner = createScanner(text, false);
   const dangling: { length: number; offset: number }[] = [];
   let previous: SyntaxKind | undefined;
-  for (let kind = scanner.scan(); kind !== SyntaxKind.EOF; kind = scanner.scan()) {
+  for (
+    let kind = scanner.scan();
+    kind !== SyntaxKind.EOF;
+    kind = scanner.scan()
+  ) {
     if (trivia.has(kind)) {
       continue;
     }
     if (
       kind === SyntaxKind.CommaToken &&
-      (previous === SyntaxKind.OpenBraceToken || previous === SyntaxKind.OpenBracketToken)
+      (previous === SyntaxKind.OpenBraceToken ||
+        previous === SyntaxKind.OpenBracketToken)
     ) {
-      dangling.push({ length: scanner.getTokenLength(), offset: scanner.getTokenOffset() });
+      dangling.push({
+        length: scanner.getTokenLength(),
+        offset: scanner.getTokenOffset(),
+      });
     }
     previous = kind;
   }
   return dangling.reduceRight(
-    (current, comma) => current.slice(0, comma.offset) + current.slice(comma.offset + comma.length),
-    text,
+    (current, comma) =>
+      current.slice(0, comma.offset) +
+      current.slice(comma.offset + comma.length),
+    text
   );
-}
+};
+
+const identityEdits = (
+  snapshot: SettingsSnapshot,
+  config: UserConfig
+): SettingEdit[] => [
+  ...(themeEquals(snapshot.theme, config.theme)
+    ? []
+    : [themeEdit(snapshot, config.theme)]),
+  // Unlike the toggles, an absent flag means "nothing to say", never "remove".
+  ...(snapshot.editor !== undefined && snapshot.editor !== config.editor
+    ? [{ label: "editor", path: ["editor"], value: snapshot.editor }]
+    : []),
+  ...(snapshot.ide !== undefined && snapshot.ide !== config.ide
+    ? [{ label: "ide", path: ["ide"], value: snapshot.ide }]
+    : []),
+];
+
+const viewEdits = (snapshot: SettingsSnapshot, config: UserConfig) => [
+  ...diff(
+    "icons",
+    ["icons", "enabled"],
+    snapshot.iconsEnabled,
+    config.icons?.enabled ?? configDefaults.icons.enabled
+  ),
+  ...diff(
+    "wrap",
+    ["viewer", "wrap"],
+    snapshot.wrap,
+    config.viewer?.wrap ?? configDefaults.viewer.wrap
+  ),
+];
+
+const sidebarEdits = (snapshot: SettingsSnapshot, config: UserConfig) => [
+  ...diff(
+    "sidebar",
+    ["sidebar", "open"],
+    snapshot.sidebarOpen,
+    config.sidebar?.open ?? configDefaults.sidebar.open
+  ),
+  ...diff(
+    "sidebar",
+    ["sidebar", "width"],
+    snapshot.sidebarWidth,
+    config.sidebar?.width
+  ),
+  ...diff(
+    "sidebar",
+    ["sidebar", "height"],
+    snapshot.sidebarHeight,
+    config.sidebar?.height
+  ),
+  ...diff(
+    "sidebar",
+    ["sidebar", "position"],
+    snapshot.sidebarPosition,
+    config.sidebar?.position ?? configDefaults.sidebar.position
+  ),
+  ...diff(
+    "changes only",
+    ["sidebar", "changesOnly"],
+    snapshot.changesOnly,
+    config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly
+  ),
+];
+
+const searchEdits = (snapshot: SettingsSnapshot, config: UserConfig) => [
+  ...diff(
+    "search",
+    ["search", "regex"],
+    snapshot.searchRegex,
+    config.search?.regex ?? configDefaults.search.regex
+  ),
+  ...diff(
+    "search",
+    ["search", "caseSensitive"],
+    snapshot.searchCaseSensitive,
+    config.search?.caseSensitive ?? configDefaults.search.caseSensitive
+  ),
+  ...diff(
+    "search",
+    ["search", "scope"],
+    snapshot.searchScope,
+    config.search?.scope ?? configDefaults.search.scope
+  ),
+];
 
 /**
  * Rewrites `text` so the config's settings match the snapshot, as minimal jsonc-parser edits that
@@ -140,86 +248,34 @@ function stripDanglingCommas(text: string) {
  * @returns The updated text plus the deduped feature labels that changed; an empty `saved` means
  *   the file already matches and needs no write.
  */
-export function updateSettingsText(
+export const updateSettingsText = (
   text: string,
-  snapshot: SettingsSnapshot,
-): Result.Result<{ text: string; saved: string[] }, string> {
+  snapshot: SettingsSnapshot
+): Result.Result<{ text: string; saved: string[] }, string> => {
   const issue = isEmptyJsonc(text) ? undefined : parseIssue(text);
   if (issue !== undefined) {
     return Result.fail(issue);
   }
   const { config } = loadConfigText(text);
 
-  const edits: SettingEdit[] = [
-    ...(themeEquals(snapshot.theme, config.theme) ? [] : [themeEdit(snapshot, config.theme)]),
-    // Unlike the toggles, an absent flag means "nothing to say", never "remove".
-    ...(snapshot.editor !== undefined && snapshot.editor !== config.editor
-      ? [{ label: "editor", path: ["editor"], value: snapshot.editor }]
-      : []),
-    ...(snapshot.ide !== undefined && snapshot.ide !== config.ide
-      ? [{ label: "ide", path: ["ide"], value: snapshot.ide }]
-      : []),
-    ...diff(
-      "icons",
-      ["icons", "enabled"],
-      snapshot.iconsEnabled,
-      config.icons?.enabled ?? configDefaults.icons.enabled,
-    ),
-    ...diff(
-      "wrap",
-      ["viewer", "wrap"],
-      snapshot.wrap,
-      config.viewer?.wrap ?? configDefaults.viewer.wrap,
-    ),
-    ...diff(
-      "sidebar",
-      ["sidebar", "open"],
-      snapshot.sidebarOpen,
-      config.sidebar?.open ?? configDefaults.sidebar.open,
-    ),
-    ...diff("sidebar", ["sidebar", "width"], snapshot.sidebarWidth, config.sidebar?.width),
-    ...diff("sidebar", ["sidebar", "height"], snapshot.sidebarHeight, config.sidebar?.height),
-    ...diff(
-      "sidebar",
-      ["sidebar", "position"],
-      snapshot.sidebarPosition,
-      config.sidebar?.position ?? configDefaults.sidebar.position,
-    ),
-    ...diff(
-      "changes only",
-      ["sidebar", "changesOnly"],
-      snapshot.changesOnly,
-      config.sidebar?.changesOnly ?? configDefaults.sidebar.changesOnly,
-    ),
-    ...diff(
-      "search",
-      ["search", "regex"],
-      snapshot.searchRegex,
-      config.search?.regex ?? configDefaults.search.regex,
-    ),
-    ...diff(
-      "search",
-      ["search", "caseSensitive"],
-      snapshot.searchCaseSensitive,
-      config.search?.caseSensitive ?? configDefaults.search.caseSensitive,
-    ),
-    ...diff(
-      "search",
-      ["search", "scope"],
-      snapshot.searchScope,
-      config.search?.scope ?? configDefaults.search.scope,
-    ),
+  const edits = [
+    ...identityEdits(snapshot, config),
+    ...viewEdits(snapshot, config),
+    ...sidebarEdits(snapshot, config),
+    ...searchEdits(snapshot, config),
   ];
 
   if (edits.length === 0) {
     return Result.succeed({ saved: [], text });
   }
 
-  const updated = edits.reduce(
-    (current, edit) =>
-      applyEdits(current, modify(current, edit.path, edit.value, { formattingOptions })),
-    text,
-  );
+  let updated = text;
+  for (const edit of edits) {
+    updated = applyEdits(
+      updated,
+      modify(updated, edit.path, edit.value, { formattingOptions })
+    );
+  }
   // Removing the only property leaves jsonc-parser's edit dangling the property's
   // JSONC trailing comma (`{ , }`, measured against jsonc-parser 3.3.1), so a
   // Result that no longer parses gets that one comma stripped and is checked
@@ -232,4 +288,4 @@ export function updateSettingsText(
     saved: [...new Set(edits.map((edit) => edit.label))],
     text: repaired,
   });
-}
+};

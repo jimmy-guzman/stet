@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { Effect, Layer } from "effect";
 
@@ -22,9 +22,9 @@ describe("searchArgs", () => {
   });
 
   test("the case toggle forces sensitivity even for a lowercase query", () => {
-    expect(searchArgs("needle", undefined, { caseSensitive: true, regex: false })).not.toContain(
-      "-i",
-    );
+    expect(
+      searchArgs("needle", undefined, { caseSensitive: true, regex: false })
+    ).not.toContain("-i");
   });
 
   test("a literal search is fixed-string", () => {
@@ -34,7 +34,10 @@ describe("searchArgs", () => {
   });
 
   test("the regex toggle swaps fixed-string for extended regex", () => {
-    const args = searchArgs("need.e+", undefined, { caseSensitive: false, regex: true });
+    const args = searchArgs("need.e+", undefined, {
+      caseSensitive: false,
+      regex: true,
+    });
     expect(args).toContain("-E");
     expect(args).not.toContain("-F");
   });
@@ -49,7 +52,11 @@ describe("searchArgs", () => {
 
   test("changed-scope search limits to the given paths", () => {
     const args = searchArgs("needle", ["src/a.ts", "src/b.ts"], literal);
-    expect(args.slice(args.indexOf("--"))).toEqual(["--", "src/a.ts", "src/b.ts"]);
+    expect(args.slice(args.indexOf("--"))).toEqual([
+      "--",
+      "src/a.ts",
+      "src/b.ts",
+    ]);
   });
 });
 
@@ -85,12 +92,12 @@ describe("filterPathspecs", () => {
   });
 });
 
-describe("parseSearchOutput", () => {
-  const bytes = (output: string) => new TextEncoder().encode(output);
+const bytes = (output: string) => new TextEncoder().encode(output);
 
+describe("parseSearchOutput", () => {
   test(String.raw`parses NUL-framed path\0line\0column\0text records`, () => {
     const output =
-      "src/a.ts\x002\x009\x00  const needle = 1\nsrc/b.ts\x0010\x008\x00return needle\n";
+      "src/a.ts\u00002\u00009\u0000  const needle = 1\nsrc/b.ts\u000010\u00008\u0000return needle\n";
     expect(parseSearchOutput(bytes(output))).toEqual([
       { column: 9, line: 2, path: "src/a.ts", text: "  const needle = 1" },
       { column: 8, line: 10, path: "src/b.ts", text: "return needle" },
@@ -98,7 +105,11 @@ describe("parseSearchOutput", () => {
   });
 
   test("keeps colons and other delimiters inside the matched text", () => {
-    expect(parseSearchOutput(bytes("a.ts\x005\x0013\x00const url = `http://x`\n"))).toEqual([
+    expect(
+      parseSearchOutput(
+        bytes("a.ts\u00005\u000013\u0000const url = `http://x`\n")
+      )
+    ).toEqual([
       { column: 13, line: 5, path: "a.ts", text: "const url = `http://x`" },
     ]);
   });
@@ -107,20 +118,20 @@ describe("parseSearchOutput", () => {
     // "héllo — needle": git reports the byte offset of "needle"; é is 2 bytes
     // And the em dash 3 in UTF-8, but each is 1 UTF-16 unit.
     const text = "héllo — needle";
-    const byteColumn = Buffer.from("héllo — ", "utf8").length + 1;
-    expect(parseSearchOutput(bytes(`a.ts\x001\x00${byteColumn}\x00${text}\n`))).toEqual([
-      { column: 9, line: 1, path: "a.ts", text },
-    ]);
+    const byteColumn = Buffer.from("héllo — ", "utf-8").length + 1;
+    expect(
+      parseSearchOutput(bytes(`a.ts\u00001\u0000${byteColumn}\u0000${text}\n`))
+    ).toEqual([{ column: 9, line: 1, path: "a.ts", text }]);
   });
 
   test("stays byte-accurate when the line holds invalid UTF-8 before the match", () => {
     // "caf\xE9 needle" in Latin-1: 0xE9 is 1 byte to git grep but decodes to a
     // Replacement char (3 bytes if re-encoded), which must not skew the column.
     const record = Buffer.concat([
-      Buffer.from("a.ts\x001\x006\x00", "utf8"),
-      Buffer.from("caf", "utf8"),
+      Buffer.from("a.ts\u00001\u00006\u0000", "utf-8"),
+      Buffer.from("caf", "utf-8"),
       Buffer.from([233]),
-      Buffer.from(" needle\n", "utf8"),
+      Buffer.from(" needle\n", "utf-8"),
     ]);
     expect(parseSearchOutput(record)).toEqual([
       { column: 6, line: 1, path: "a.ts", text: "caf� needle" },
@@ -128,7 +139,9 @@ describe("parseSearchOutput", () => {
   });
 
   test("drops malformed records", () => {
-    expect(parseSearchOutput(bytes("a.ts\x005\x00no column here\n"))).toEqual([]);
+    expect(
+      parseSearchOutput(bytes("a.ts\u00005\u0000no column here\n"))
+    ).toEqual([]);
     expect(parseSearchOutput(bytes("garbage\n"))).toEqual([]);
   });
 
@@ -137,27 +150,32 @@ describe("parseSearchOutput", () => {
   });
 });
 
-const runSearch = (
+const runSearch = async (
   repo: string,
   query: string,
   paths: readonly string[] | undefined,
-  options = literal,
+  options = literal
 ) =>
-  Effect.runPromise(
+  await Effect.runPromise(
     Git.pipe(
       Effect.flatMap((git) => git.search(repo, query, paths, options)),
-      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive))),
-    ),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
   );
 
 test("Git.search finds tracked and untracked content repo-wide", async () => {
-  const repo = createFixtureRepo("git-search-repo-", { "src/a.ts": "const needle = 1\n" });
+  const repo = createFixtureRepo("git-search-repo-", {
+    "src/a.ts": "const needle = 1\n",
+  });
   try {
-    writeFileSync(join(repo, "src", "b.ts"), "return needle\n");
+    writeFileSync(path.join(repo, "src", "b.ts"), "return needle\n");
 
     const matches = await runSearch(repo, "needle", undefined);
 
-    expect(matches.map((match) => match.path).toSorted()).toEqual(["src/a.ts", "src/b.ts"]);
+    expect(matches.map((match) => match.path).toSorted()).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+    ]);
     expect(matches.every((match) => match.column > 0)).toBe(true);
   } finally {
     rmSync(repo, { force: true, recursive: true });
@@ -186,10 +204,15 @@ test("Git.search subtracts exclude pathspecs, including an exclude-only list", a
     "src/a.ts": "const needle = 2\n",
   });
   try {
-    const mixed = await runSearch(repo, "needle", ["src/", ":(exclude)*.test.ts"]);
+    const mixed = await runSearch(repo, "needle", [
+      "src/",
+      ":(exclude)*.test.ts",
+    ]);
     expect(mixed.map((match) => match.path)).toEqual(["src/a.ts"]);
 
-    const excludeOnly = await runSearch(repo, "needle", [":(exclude)*.test.ts"]);
+    const excludeOnly = await runSearch(repo, "needle", [
+      ":(exclude)*.test.ts",
+    ]);
     expect(excludeOnly.map((match) => match.path)).toEqual(["src/a.ts"]);
   } finally {
     rmSync(repo, { force: true, recursive: true });

@@ -3,12 +3,32 @@ no_tty: true
 assert_lefthook_installed: true
 
 pre-commit:
-  commands:
-    format:
-      run: bunx oxfmt {staged_files} --no-error-on-unmatched-pattern
-      stage_fixed: true
-    lint:
-      run: bunx oxlint --fix --no-error-on-unmatched-pattern {staged_files}
+  jobs:
+    - run: bun --bun x ultracite fix {staged_files}
+      glob:
+        - "*.js"
+        - "*.jsx"
+        - "*.mjs"
+        - "*.cjs"
+        - "*.ts"
+        - "*.tsx"
+        - "*.mts"
+        - "*.cts"
+        - "*.json"
+        - "*.jsonc"
+        - "*.css"
+        - "*.scss"
+        - "*.less"
+        - "*.vue"
+        - "*.svelte"
+        - "*.astro"
+        - "*.html"
+        - "*.md"
+        - "*.mdx"
+        - "*.yaml"
+        - "*.yml"
+        - "*.graphql"
+        - "*.gql"
       stage_fixed: true
 
 pre-push:

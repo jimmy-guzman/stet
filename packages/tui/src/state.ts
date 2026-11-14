@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import nodePath from "node:path";
 
 import { Effect, Queue, Stream } from "effect";
 import {
@@ -17,7 +17,10 @@ import type { DiffScope, ScopeKind } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { Clipboard } from "./clipboard/service";
 import { buildCommandMenuItems } from "./components/command-menu/items";
-import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
+import type {
+  CommandAction,
+  CommandMenuInput,
+} from "./components/command-menu/items";
 import { Config } from "./config/service";
 import { DiffEngine, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
@@ -67,13 +70,32 @@ import {
   worktreePathTails,
 } from "./git/worktree";
 import type { Worktree, WorktreeSummary } from "./git/worktree";
-import { computeLayout, horizontalDock, PANE_MIN_HEIGHT, PANE_MIN_WIDTH } from "./layout/regions";
+import {
+  computeLayout,
+  horizontalDock,
+  PANE_MIN_HEIGHT,
+  PANE_MIN_WIDTH,
+} from "./layout/regions";
 import type { Dock } from "./layout/regions";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
-import { buildStatusBarModel, clearAlertSource, latestAlert, raiseAlert } from "./status/model";
-import type { StatusAlert, StatusAlerts, StatusAlertSource } from "./status/model";
-import { activeThemeName, appearance, selection, setSelection } from "./theme/active";
+import {
+  buildStatusBarModel,
+  clearAlertSource,
+  latestAlert,
+  raiseAlert,
+} from "./status/model";
+import type {
+  StatusAlert,
+  StatusAlerts,
+  StatusAlertSource,
+} from "./status/model";
+import {
+  activeThemeName,
+  appearance,
+  selection,
+  setSelection,
+} from "./theme/active";
 import { themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
 import { worktreeLabel } from "./ui-helpers";
@@ -204,14 +226,14 @@ interface LoadedDiff {
   highlight: RenderInput;
 }
 
-function loadDiffView(src: {
+const loadDiffView = (src: {
   path: string;
   scope: DiffScope;
   showFile: boolean;
   full: boolean;
   file: ChangedFile | undefined;
   model: GitModel;
-}): Effect.Effect<LoadedDiff, never, File | Git> {
+}): Effect.Effect<LoadedDiff, never, File | Git> => {
   // Phase 1: after the git/file I/O, build the plain row structure synchronously
   // And commit it. The patch + render options travel out as `highlight` so the
   // Caller can run the async highlight pass and swap in colored rows.
@@ -234,33 +256,39 @@ function loadDiffView(src: {
             showFileContent: result.showFileContent,
           },
         };
-      }),
+      })
     );
 
   if (src.showFile) {
-    const gitSpec =
-      src.file?.kind === "deleted"
-        ? src.scope.kind === "unstaged"
-          ? `:${src.path}`
-          : `${src.scope.ref}:${src.path}`
-        : undefined;
+    const deletedSpec =
+      src.scope.kind === "unstaged"
+        ? `:${src.path}`
+        : `${src.scope.ref}:${src.path}`;
+    const gitSpec = src.file?.kind === "deleted" ? deletedSpec : undefined;
     return toView(
       File.use((file) =>
-        file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec }),
+        file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec })
       ).pipe(
         Effect.map((content): DiffBase => ({
-          diff: content.kind === "text" ? contentToContextPatch(src.path, content.content) : "",
+          diff:
+            content.kind === "text"
+              ? contentToContextPatch(src.path, content.content)
+              : "",
           fileContent: content,
           showFileContent: true,
-        })),
-      ),
+        }))
+      )
     );
   }
 
-  const file = src.file;
+  const { file } = src;
   if (file === undefined) {
     return toView(
-      Effect.succeed<DiffBase>({ diff: "", fileContent: undefined, showFileContent: false }),
+      Effect.succeed<DiffBase>({
+        diff: "",
+        fileContent: undefined,
+        showFileContent: false,
+      })
     );
   }
 
@@ -268,7 +296,9 @@ function loadDiffView(src: {
   // Sides' size/dimensions for the placeholder; `fileDiff` would only return "" here.
   if (file.binary) {
     return toView(
-      Git.use((git) => git.binaryMeta(src.model.repoRoot, src.scope, file)).pipe(
+      Git.use((git) =>
+        git.binaryMeta(src.model.repoRoot, src.scope, file)
+      ).pipe(
         Effect.map((binary): DiffBase => ({
           binary,
           diff: "",
@@ -284,25 +314,33 @@ function loadDiffView(src: {
             diff: "",
             fileContent: undefined,
             showFileContent: false,
-          }),
-        ),
-      ),
+          })
+        )
+      )
     );
   }
 
   return toView(
     Git.use((git) => git.fileDiff(src.model.repoRoot, src.scope, file)).pipe(
-      Effect.map((diff): DiffBase => ({ diff, fileContent: undefined, showFileContent: false })),
+      Effect.map((diff): DiffBase => ({
+        diff,
+        fileContent: undefined,
+        showFileContent: false,
+      })),
       Effect.catch(() =>
-        Effect.succeed<DiffBase>({ diff: "", fileContent: undefined, showFileContent: false }),
-      ),
-    ),
+        Effect.succeed<DiffBase>({
+          diff: "",
+          fileContent: undefined,
+          showFileContent: false,
+        })
+      )
+    )
   );
-}
+};
 
 // Case-insensitive subsequence test (cmdk-style): every query char appears in
 // Order in the target. An empty query matches everything.
-function isSubsequence(query: string, target: string) {
+const isSubsequence = (query: string, target: string) => {
   let i = 0;
   for (const char of target) {
     if (char === query[i]) {
@@ -310,14 +348,124 @@ function isSubsequence(query: string, target: string) {
     }
   }
   return i === query.length;
-}
+};
+
+// A windowed uniform-row list (the sidebar) renders only
+// The rows inside [scrollTop, +viewport), so its renderable count is bounded
+// By the viewport, not the content. This registers the shared glue: a follow
+// Effect keeping the cursor framed (editor-style scrolloff) that tracks only
+// The cursor, viewport, and gate, while rows and the current offset are read
+// Untracked so a background refresh tick never snaps a wheel-scrolled window
+// Back to the cursor; and a clamp effect bounding the window when the row
+// List shrinks under it. The search pane deliberately does not use this: its
+// Follow is action-driven (setSearchSelection), so a results update never
+// Re-frames a wheel-scrolled window.
+const followListWindow = (options: {
+  cursor: () => number;
+  viewport: () => number;
+  rowCount: () => number;
+  scrollTop: () => number;
+  setScrollTop: (next: number) => void;
+}) => {
+  createEffect(() => {
+    const top = options.cursor();
+    const viewport = options.viewport();
+    const current = untrack(options.scrollTop);
+    const next = followScrollTop({
+      current,
+      height: 1,
+      margin: 2,
+      maxScroll: Math.max(0, untrack(options.rowCount) - viewport),
+      top,
+      viewport,
+    });
+    if (next !== current) {
+      options.setScrollTop(next);
+    }
+  });
+  createEffect(() => {
+    const maxScroll = Math.max(0, options.rowCount() - options.viewport());
+    if (untrack(options.scrollTop) > maxScroll) {
+      options.setScrollTop(maxScroll);
+    }
+  });
+};
+
+// A thunk, not a memo: `themeNames()` reads the registry, which user themes are
+// Registered into at startup *after* this root is created, so it must be read
+// Lazily (when the picker opens), never captured once. `auto` maps to the
+// Undefined selection (follow the terminal).
+const themeComboboxItems = (): {
+  name: string;
+  selection: ThemeSelection;
+}[] => [
+  { name: "auto", selection: undefined },
+  ...themeNames().map((name) => ({ name, selection: name })),
+];
+
+// TextContent already stripped the single trailing newline, so a plain split
+// Is line-exact: no phantom empty last line, and a genuine final blank line
+// (a file ending in two newlines) is kept, since git grep can match on it.
+const contentLines = (content: FileContent) =>
+  content.kind === "text" ? content.content.split(/\r?\n/u) : undefined;
+
+// Read each matched file once (bounded, never `full`) so results can show
+// Context lines and feed the highlighter; a binary or oversized file yields no
+// Lines and its matches degrade to grep-text-only rows.
+const readSearchLines = async (
+  root: string,
+  matches: readonly SearchMatch[],
+  signal: AbortSignal
+) => {
+  const paths = [...new Set(matches.map((match) => match.path))];
+  return await runtime.runPromise(
+    File.use((file) =>
+      Effect.all(
+        paths.map((path) =>
+          file
+            .content(root, path, { full: false })
+            .pipe(
+              Effect.map((content) => [path, contentLines(content)] as const)
+            )
+        ),
+        // Bounded: a capped result set can still touch hundreds of files, and
+        // Unbounded async reads would open that many descriptors at once.
+        { concurrency: 16 }
+      )
+    ).pipe(
+      Effect.map(
+        (entries) =>
+          new Map(
+            entries.flatMap(([path, lines]) =>
+              lines === undefined ? [] : [[path, lines] as const]
+            )
+          )
+      )
+    ),
+    { signal }
+  );
+};
+
+const isGapMarker = (row: DiffRow) =>
+  row.kind === "marker" && row.regionKind === "gap";
+
+// Record the location being left into its tab and into the MRU, the shared
+// Capture-on-leave step before any tab switch / navigation.
+const recordLeaving = (nav: NavState, leaving: Location | undefined) =>
+  leaving === undefined
+    ? nav
+    : remember(recordCurrent(nav, leaving), leaving.path, {
+        cursorColumn: leaving.cursorColumn,
+        cursorLine: leaving.cursorLine,
+        viewport: leaving.viewport,
+      });
 
 /**
  * Creates the reactive state and actions for the git diff viewer.
  *
  * @returns The application state accessors, derived values, and actions
  */
-function createState() {
+const createState = () => {
   // Every signal below is created through `tracked`, which records how to restore that signal's
   // Initial value. `resetState` replays the lot, so the reset can never drift from the signals it
   // Resets. A hand-maintained reset list is what once let one test leak a toggle into every file
@@ -329,7 +477,9 @@ function createState() {
   // Resolve into the next test. Register at the declaration, never as one list here: a central list
   // Is exactly the drift this seam exists to remove.
   const resets: (() => void)[] = [];
-  const onReset = (teardown: () => void) => resets.push(teardown);
+  const onReset = (teardown: () => void) => {
+    resets.push(teardown);
+  };
   // A promise already in flight when a reset lands must not write its result into the next test. Most
   // Flows hold a controller the reset aborts, or a Solid owner that disposes them; the two that have
   // Neither (`checkForUpdate`, `refreshWorktreeSummaries`) capture this epoch before their await and
@@ -342,7 +492,9 @@ function createState() {
   });
   const tracked = <T>(initial: T) => {
     const [read, write] = createSignal(initial);
-    onReset(() => write(() => initial));
+    onReset(() => {
+      write(() => initial);
+    });
     return [read, write] as const;
   };
   const resetState = () => {
@@ -375,14 +527,18 @@ function createState() {
   const [scopeMenuIndex, setScopeMenuIndex] = tracked(0);
   // The scope picker is two levels: the kinds list, and a drill-down into recent
   // Commits (each viewable as its own diff). `scopeMenuIndex` is reused per level.
-  const [scopeMenuView, setScopeMenuView] = tracked<"kinds" | "commits">("kinds");
-  const [commits, setCommits] = tracked<Commit[]>([]);
-  const [commitsStatus, setCommitsStatus] = tracked<"loading" | "ready" | "empty" | "error">(
-    "loading",
+  const [scopeMenuView, setScopeMenuView] = tracked<"kinds" | "commits">(
+    "kinds"
   );
+  const [commits, setCommits] = tracked<Commit[]>([]);
+  const [commitsStatus, setCommitsStatus] = tracked<
+    "loading" | "ready" | "empty" | "error"
+  >("loading");
   // The commit pinned by the active `commit` scope (its subject drives the header
   // Label, so it survives even after the commit ages out of the reloaded list).
-  const [selectedCommit, setSelectedCommit] = tracked<Commit | undefined>(undefined);
+  const [selectedCommit, setSelectedCommit] = tracked<Commit | undefined>(
+    undefined
+  );
   // Wall-clock captured when the commits drill-down opens, for the rows' relative
   // Dates. Not `now` (the recency clock), which freezes while the repo is idle.
   const [commitsNow, setCommitsNow] = tracked(0);
@@ -392,16 +548,24 @@ function createState() {
   // The caret, so it stays undefined there.
   const [commandMenuOpen, setCommandMenuOpen] = tracked(false);
   const [commandMenuIndex, setCommandMenuIndex] = tracked(0);
-  const [commandMenuContext, setCommandMenuContext] = tracked<"tree" | "viewer">("tree");
-  const [commandMenuAnchor, setCommandMenuAnchor] = tracked<{ x: number; y: number } | undefined>(
-    undefined,
-  );
-  const [commandMenuGuard, setCommandMenuGuard] = tracked<CommandMenuGuard | undefined>(undefined);
+  const [commandMenuContext, setCommandMenuContext] = tracked<
+    "tree" | "viewer"
+  >("tree");
+  const [commandMenuAnchor, setCommandMenuAnchor] = tracked<
+    { x: number; y: number } | undefined
+  >(undefined);
+  const [commandMenuGuard, setCommandMenuGuard] = tracked<
+    CommandMenuGuard | undefined
+  >(undefined);
   const [iconsEnabled, setIconsEnabled] = tracked(true);
   const [overflow, setOverflow] = tracked<"scroll" | "wrap">("scroll");
   const [changesOnly, setChangesOnly] = tracked(false);
-  const [selectedPath, setSelectedPath] = tracked<string | undefined>(undefined);
-  const [expandedDirectories, setExpandedDirectories] = tracked(new Set<string>());
+  const [selectedPath, setSelectedPath] = tracked<string | undefined>(
+    undefined
+  );
+  const [expandedDirectories, setExpandedDirectories] = tracked(
+    new Set<string>()
+  );
   const [fileView, setFileView] = tracked(false);
   const [fullContentPaths, setFullContentPaths] = tracked(new Set<string>());
   // Viewer folds/gaps for the current file (reset on file switch): a `Set` of folded
@@ -417,13 +581,19 @@ function createState() {
     | undefined
   >(undefined);
   const [focusedNodeId, setFocusedNodeId] = tracked("");
-  const [focusedPane, setFocusedPane] = tracked<"tree" | "diff" | "search">("tree");
+  const [focusedPane, setFocusedPane] = tracked<"tree" | "diff" | "search">(
+    "tree"
+  );
   const [sidebarOpen, setSidebarOpen] = tracked(true);
   const [sidebarPosition, setSidebarPosition] = tracked<Dock>("left");
   // A pane keeps a size per axis: 50 columns is not 50 rows, so a move never converts,
   // And a size set on one edge is still there when the pane comes back to it.
-  const [sidebarWidthOverride, setSidebarWidthOverride] = tracked<number | null>(null);
-  const [sidebarHeightOverride, setSidebarHeightOverride] = tracked<number | null>(null);
+  const [sidebarWidthOverride, setSidebarWidthOverride] = tracked<
+    number | null
+  >(null);
+  const [sidebarHeightOverride, setSidebarHeightOverride] = tracked<
+    number | null
+  >(null);
   const [sidebarScrollTop, setSidebarScrollTop] = tracked(0);
   // Zoom follows focus rather than pinning a pane, so one boolean is the whole state:
   // `tab` moves which pane fills the screen with no rule of its own, and focus and
@@ -440,14 +610,20 @@ function createState() {
   const [searchRegex, setSearchRegex] = tracked(false);
   const [searchCaseSensitive, setSearchCaseSensitive] = tracked(false);
   const [searchScope, setSearchScope] = tracked<"changed" | "repo">("changed");
-  const [searchFocus, setSearchFocus] = tracked<"query" | "glob" | "results">("query");
+  const [searchFocus, setSearchFocus] = tracked<"query" | "glob" | "results">(
+    "query"
+  );
   const [searchIndex, setSearchIndex] = tracked(0);
   const [searchScrollTop, setSearchScrollTop] = tracked(0);
   const [searchCollapsed, setSearchCollapsed] = tracked(new Set<string>());
   const [searchResults, setSearchResults] = tracked<SearchMatch[]>([]);
-  const [searchFileLines, setSearchFileLines] = tracked(new Map<string, string[]>());
+  const [searchFileLines, setSearchFileLines] = tracked(
+    new Map<string, string[]>()
+  );
   const [searchTruncated, setSearchTruncated] = tracked(false);
-  const [searchStatus, setSearchStatus] = tracked<"idle" | "searching" | "ready" | "error">("idle");
+  const [searchStatus, setSearchStatus] = tracked<
+    "idle" | "searching" | "ready" | "error"
+  >("idle");
   const [findOpen, setFindOpen] = tracked(false);
   const [findActive, setFindActive] = tracked(false);
   const [findQuery, setFindQuery] = tracked("");
@@ -459,9 +635,9 @@ function createState() {
   // How much work sits in each worktree and when it last moved, keyed by worktree
   // Path. Repository-wide (not scoped to the active worktree), so a worktree switch
   // Leaves it valid. Written only by `refreshWorktreeSummaries`.
-  const [worktreeSummaries, setWorktreeSummaries] = tracked<Map<string, WorktreeSummary>>(
-    new Map(),
-  );
+  const [worktreeSummaries, setWorktreeSummaries] = tracked<
+    Map<string, WorktreeSummary>
+  >(new Map());
   const [helpDialogOpen, setHelpDialogOpen] = tracked(false);
   const [helpView, setHelpView] = tracked<"keys" | "marks">("keys");
   const [quitConfirmOpen, setQuitConfirmOpen] = tracked(false);
@@ -469,7 +645,8 @@ function createState() {
   const [themeComboboxIndex, setThemeComboboxIndex] = tracked(0);
   const [themeComboboxQuery, setThemeComboboxQuery] = tracked("");
   // The selection active when the picker opened, restored if the user cancels.
-  const [themeComboboxOrigin, setThemeComboboxOrigin] = tracked<ThemeSelection>(undefined);
+  const [themeComboboxOrigin, setThemeComboboxOrigin] =
+    tracked<ThemeSelection>(undefined);
   const [gitModel, setGitModel] = tracked<GitModel>(emptyModel);
   const [repoRoot, setRepoRoot] = tracked("");
   // The repository's main worktree, resolved once at startup (repository-wide
@@ -500,7 +677,9 @@ function createState() {
   // Whole-line. Transient like `caretLineLevel`: any plain caret move or navigation
   // Clears it (see `setCursorRow`/`goToLocation`), and it is never captured into
   // Navigation history. `C` copies the spanned lines' source text.
-  const [selectionAnchor, setSelectionAnchor] = tracked<number | undefined>(undefined);
+  const [selectionAnchor, setSelectionAnchor] = tracked<number | undefined>(
+    undefined
+  );
   // The viewer's scroll offsets, lifted out of DiffView so a navigation can
   // Capture and restore them; the renderer mirrors `viewerScrollTop` onto the
   // Scrollbox every frame (it stays the single source of truth for the window).
@@ -511,14 +690,18 @@ function createState() {
   // Source of truth the viewer renders; navState records them on leave and
   // Restores them on back/forward or a revisit (capture-on-leave, like a browser).
   const [navState, setNavState] = tracked<NavState>(initialNav(undefined));
-  const [pendingRestore, setPendingRestore] = tracked<PendingRestore | undefined>(undefined);
+  const [pendingRestore, setPendingRestore] = tracked<
+    PendingRestore | undefined
+  >(undefined);
   // Monotonic tab id source (the seed tab is "0"); never reset, so ids stay unique
   // Across a seedNav that re-collapses to one tab.
   let nextTabId = 1;
   onReset(() => {
     nextTabId = 1;
   });
-  const [jumpTarget, setJumpTarget] = tracked<JumpTarget | undefined>(undefined);
+  const [jumpTarget, setJumpTarget] = tracked<JumpTarget | undefined>(
+    undefined
+  );
   // Unresolved problems, tagged by the source that owns each one's lifecycle. A single untyped
   // Status channel was why a failed worktree list and a failed switch overwrote each other, and
   // Why either one's retry wiped the other's alert.
@@ -527,8 +710,14 @@ function createState() {
    * A live in-flight indicator for a worktree switch, which reloads the whole model: set on the
    * keystroke and cleared when the switch settles, distinct from the auto-clearing `notice`.
    */
-  const [switchProgress, setSwitchProgress] = tracked<string | undefined>(undefined);
-  const raise = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
+  const [switchProgress, setSwitchProgress] = tracked<string | undefined>(
+    undefined
+  );
+  const raise = (
+    source: StatusAlertSource,
+    level: StatusAlert["level"],
+    text: string
+  ) => {
     setAlerts((current) => raiseAlert(current, { level, source, text }));
   };
   const clearAlert = (source: StatusAlertSource) => {
@@ -536,7 +725,9 @@ function createState() {
   };
   // An ephemeral acknowledgment of a user action (copied, scope changed, …),
   // Held for a fixed dwell so it outlives the keystroke that triggered it.
-  const [notice, setNotice] = tracked<{ text: string; level: LogLevel } | undefined>(undefined);
+  const [notice, setNotice] = tracked<
+    { text: string; level: LogLevel } | undefined
+  >(undefined);
   // Set by the background release check; read once on quit to print the post-exit notice.
   const [availableUpdate, setAvailableUpdate] = tracked<
     { current: string; latest: string } | undefined
@@ -545,7 +736,8 @@ function createState() {
   const [now, setNow] = tracked(Date.now());
   const [terminalWidth, setTerminalWidth] = tracked(80);
   const [terminalHeight, setTerminalHeight] = tracked(24);
-  const [editorTemplate, setEditorTemplate] = tracked<string>("vim +{line} {file}");
+  const [editorTemplate, setEditorTemplate] =
+    tracked<string>("vim +{line} {file}");
   const [ideTemplate, setIdeTemplate] = tracked<string | undefined>(undefined);
   // The raw --editor/--ide flags from this run's command line, kept apart from the
   // Resolved templates above: ctrl-s persists only a literal flag, never the
@@ -560,7 +752,9 @@ function createState() {
     return path === undefined ? undefined : gitModel().changedByPath.get(path);
   });
   const showFileContent = createMemo(
-    () => selectedPath() !== undefined && (selectedFile() === undefined || fileView()),
+    () =>
+      selectedPath() !== undefined &&
+      (selectedFile() === undefined || fileView())
   );
   // Split the tree build so the repo-size-proportional structure pass is skipped
   // On a content-only edit. `repoFiles` is reference-stable across changed-set
@@ -569,12 +763,19 @@ function createState() {
   // On a real structural shift; `tree` overlays the live changed set (counts,
   // Badges, aggregates) cheaply over that cached structure on every model update.
   const repoFiles = createMemo(() => gitModel().repoFiles);
-  const changedPaths = createMemo(() => new Set(gitModel().changedByPath.keys()), undefined, {
-    equals: (previous, next) => previous.size === next.size && previous.isSubsetOf(next),
-  });
+  const changedPaths = createMemo(
+    () => new Set(gitModel().changedByPath.keys()),
+    undefined,
+    {
+      equals: (previous, next) =>
+        previous.size === next.size && previous.isSubsetOf(next),
+    }
+  );
   // Paths absent from repoFiles but present in changedPaths: staged deletions only. Narrower
   // Than changedPaths so the O(repoFiles) structure walk is skipped on content-only edits.
-  const repoFilePaths = createMemo(() => new Set(repoFiles().map((f) => f.path)));
+  const repoFilePaths = createMemo(
+    () => new Set(repoFiles().map((f) => f.path))
+  );
   const stagedDeletionPaths = createMemo(
     () => {
       // Until repoFiles loads (deferred poll, empty key) every changed path looks
@@ -588,65 +789,39 @@ function createState() {
       return new Set([...changedPaths()].filter((p) => !filePaths.has(p)));
     },
     undefined,
-    { equals: (previous, next) => previous.size === next.size && previous.isSubsetOf(next) },
+    {
+      equals: (previous, next) =>
+        previous.size === next.size && previous.isSubsetOf(next),
+    }
   );
   const treeStructure = createMemo(() =>
-    buildTreeStructure(repoFiles(), changesOnly() ? changedPaths() : stagedDeletionPaths(), {
-      changesOnly: changesOnly(),
-    }),
+    buildTreeStructure(
+      repoFiles(),
+      changesOnly() ? changedPaths() : stagedDeletionPaths(),
+      {
+        changesOnly: changesOnly(),
+      }
+    )
   );
-  const tree = createMemo(() => decorateTree(treeStructure(), gitModel().changedByPath));
+  const tree = createMemo(() =>
+    decorateTree(treeStructure(), gitModel().changedByPath)
+  );
   const treeRows = createMemo(() => flattenTree(tree(), expandedDirectories()));
   // Index the flat row list by node id so cursor moves are O(1) rather than O(rows).
-  const treeRowsById = createMemo(() => new Map(treeRows().map((row) => [row.node.id, row.index])));
-  const focusedRowIndex = createMemo(() => treeRowsById().get(focusedNodeId()) ?? 0);
-
-  // A windowed uniform-row list (the sidebar) renders only
-  // The rows inside [scrollTop, +viewport), so its renderable count is bounded
-  // By the viewport, not the content. This registers the shared glue: a follow
-  // Effect keeping the cursor framed (editor-style scrolloff) that tracks only
-  // The cursor, viewport, and gate, while rows and the current offset are read
-  // Untracked so a background refresh tick never snaps a wheel-scrolled window
-  // Back to the cursor; and a clamp effect bounding the window when the row
-  // List shrinks under it. The search pane deliberately does not use this: its
-  // Follow is action-driven (setSearchSelection), so a results update never
-  // Re-frames a wheel-scrolled window.
-  function followListWindow(options: {
-    cursor: () => number;
-    viewport: () => number;
-    rowCount: () => number;
-    scrollTop: () => number;
-    setScrollTop: (next: number) => void;
-  }) {
-    createEffect(() => {
-      const top = options.cursor();
-      const viewport = options.viewport();
-      const current = untrack(options.scrollTop);
-      const next = followScrollTop({
-        current,
-        height: 1,
-        margin: 2,
-        maxScroll: Math.max(0, untrack(options.rowCount) - viewport),
-        top,
-        viewport,
-      });
-      if (next !== current) {
-        options.setScrollTop(next);
-      }
-    });
-    createEffect(() => {
-      const maxScroll = Math.max(0, options.rowCount() - options.viewport());
-      if (untrack(options.scrollTop) > maxScroll) {
-        options.setScrollTop(maxScroll);
-      }
-    });
-  }
+  const treeRowsById = createMemo(
+    () => new Map(treeRows().map((row) => [row.node.id, row.index]))
+  );
+  const focusedRowIndex = createMemo(
+    () => treeRowsById().get(focusedNodeId()) ?? 0
+  );
 
   followListWindow({
     cursor: focusedRowIndex,
     rowCount: () => treeRows().length,
     scrollTop: sidebarScrollTop,
-    setScrollTop: setSidebarScrollTop,
+    setScrollTop: (next) => {
+      setSidebarScrollTop(next);
+    },
     // A thunk, not the memo itself: `layout` is declared later in this root,
     // And the effects only run after the whole root body has executed.
     viewport: () => layout().sidebar.content.height,
@@ -661,7 +836,9 @@ function createState() {
   const recencyByPath = createMemo(() => lastChangedAt(activityLog()));
   // Per-directory aggregates, one pass each, so collapsed directory rows do O(1)
   // Lookups instead of scanning every entry per row per render.
-  const directoryRecencyByPath = createMemo(() => directoryRecency(recencyByPath()));
+  const directoryRecencyByPath = createMemo(() =>
+    directoryRecency(recencyByPath())
+  );
 
   // The go-to-file universe: repoFiles plus changed-only paths (staged
   // Deletions), the same universe the tree renders. Every dependency is
@@ -684,7 +861,7 @@ function createState() {
     changed: new Set<string>(),
     lastChangedAt: new Map<string, number>(),
   });
-  function openFileCombobox() {
+  const openFileCombobox = () => {
     batch(() => {
       setFileComboboxRankContext({
         changed: untrack(changedPaths),
@@ -694,7 +871,7 @@ function createState() {
       setFileComboboxIndex(0);
       setFileComboboxOpen(true);
     });
-  }
+  };
   const fileComboboxResults = createMemo(() => {
     if (!fileComboboxOpen()) {
       return [];
@@ -704,21 +881,15 @@ function createState() {
       limit: 50,
     });
   });
-  // A thunk, not a memo: `themeNames()` reads the registry, which user themes are
-  // Registered into at startup *after* this root is created, so it must be read
-  // Lazily (when the picker opens), never captured once. `auto` maps to the
-  // Undefined selection (follow the terminal).
-  const themeComboboxItems = (): { name: string; selection: ThemeSelection }[] => [
-    { name: "auto", selection: undefined },
-    ...themeNames().map((name) => ({ name, selection: name })),
-  ];
   // A thunk, not a memo: a memo computes eagerly at root-creation time (module
   // Import), before startup registers user themes, and would never recompute
   // Since the registry is not reactive. Reading per call keeps it current while
   // Still tracking `themeComboboxQuery` for the reactive scopes that read it.
   const themeComboboxResults = () => {
     const query = themeComboboxQuery().toLowerCase();
-    return themeComboboxItems().filter((item) => isSubsequence(query, item.name.toLowerCase()));
+    return themeComboboxItems().filter((item) =>
+      isSubsequence(query, item.name.toLowerCase())
+    );
   };
   // `undefined` while the worktree list is still loading (so the picker keeps its
   // Loading state); otherwise the subsequence-filtered list, matching the branch
@@ -728,7 +899,7 @@ function createState() {
   const worktreeComboboxResults = createMemo(() => {
     const list = worktrees();
     if (list === undefined) {
-      return undefined;
+      return list;
     }
     const query = worktreeComboboxQuery().toLowerCase();
     if (query === "") {
@@ -738,8 +909,8 @@ function createState() {
     return list.filter((worktree) =>
       isSubsequence(
         query,
-        `${worktreeLabel(worktree)} ${tails.get(worktree.path) ?? ""}`.toLowerCase(),
-      ),
+        `${worktreeLabel(worktree)} ${tails.get(worktree.path) ?? ""}`.toLowerCase()
+      )
     );
   });
 
@@ -747,7 +918,7 @@ function createState() {
   const diffSource = createMemo(() => {
     const path = selectedPath();
     if (path === undefined) {
-      return undefined;
+      return path;
     }
     return {
       file: selectedFile(),
@@ -770,9 +941,12 @@ function createState() {
     }
     const controller = new AbortController();
     const { signal } = controller;
-    runtime
-      .runPromise(loadDiffView(src), { signal })
-      .then(({ highlight, view }) => {
+    const load = async () => {
+      try {
+        const { highlight, view } = await runtime.runPromise(
+          loadDiffView(src),
+          { signal }
+        );
         // The controller can abort after the load resolved but before this
         // Microtask drains; committing then would paint a stale snapshot over the
         // Fresh one. Mirror the phase-2 guard so only the live selection lands.
@@ -785,66 +959,31 @@ function createState() {
         // Showing. Reference identity (not path equality) is required so a stale
         // Highlight never lands on a newer same-path snapshot (scope/full toggle,
         // Live edit); the abort guard drops it when the selection changed.
-        runtime
-          .runPromise(
-            DiffEngine.use((engine) => engine.render(highlight)),
-            { signal },
-          )
-          .then((render) => {
-            if (signal.aborted) {
-              return;
-            }
-            setDiffView((current) =>
-              current === view
-                ? {
-                    ...current,
-                    highlighted: true,
-                    render: { ...current.render, rows: render.rows },
-                  }
-                : current,
-            );
-          })
-          .catch(() => {});
-      })
-      .catch(() => {});
-    onCleanup(() => controller.abort());
+        const render = await runtime.runPromise(
+          DiffEngine.use((engine) => engine.render(highlight)),
+          { signal }
+        );
+        if (signal.aborted) {
+          return;
+        }
+        setDiffView((current) =>
+          current === view
+            ? {
+                ...current,
+                highlighted: true,
+                render: { ...current.render, rows: render.rows },
+              }
+            : current
+        );
+      } catch {
+        // An aborted or failed load keeps the previous snapshot showing.
+      }
+    };
+    void load();
+    onCleanup(() => {
+      controller.abort();
+    });
   });
-
-  // Read each matched file once (bounded, never `full`) so results can show
-  // Context lines and feed the highlighter; a binary or oversized file yields no
-  // Lines and its matches degrade to grep-text-only rows.
-  function readSearchLines(root: string, matches: readonly SearchMatch[], signal: AbortSignal) {
-    // TextContent already stripped the single trailing newline, so a plain split
-    // Is line-exact: no phantom empty last line, and a genuine final blank line
-    // (a file ending in two newlines) is kept, since git grep can match on it.
-    const contentLines = (content: FileContent) =>
-      content.kind === "text" ? content.content.split(/\r?\n/) : undefined;
-    const paths = [...new Set(matches.map((match) => match.path))];
-    return runtime.runPromise(
-      File.use((file) =>
-        Effect.all(
-          paths.map((path) =>
-            file
-              .content(root, path, { full: false })
-              .pipe(Effect.map((content) => [path, contentLines(content)] as const)),
-          ),
-          // Bounded: a capped result set can still touch hundreds of files, and
-          // Unbounded async reads would open that many descriptors at once.
-          { concurrency: 16 },
-        ),
-      ).pipe(
-        Effect.map(
-          (entries) =>
-            new Map(
-              entries.flatMap(([path, lines]) =>
-                lines === undefined ? [] : [[path, lines] as const],
-              ),
-            ),
-        ),
-      ),
-      { signal },
-    );
-  }
 
   // Project content search: debounced git grep over the changed set (honoring the
   // Active scope, since `changed` already reflects it), the whole repo, or the
@@ -860,7 +999,10 @@ function createState() {
     }
     const query = searchQuery();
     const root = repoRoot();
-    const options = { caseSensitive: searchCaseSensitive(), regex: searchRegex() };
+    const options = {
+      caseSensitive: searchCaseSensitive(),
+      regex: searchRegex(),
+    };
     const globTokens = filterPathspecs(searchGlob());
     // Track the git model itself (not the set-equal `changedPaths` memo, and in
     // Every scope): a content-only edit to an already-changed file keeps the
@@ -870,7 +1012,9 @@ function createState() {
     // Scenario.
     const model = gitModel();
     const changedScopePaths =
-      searchScope() === "changed" ? model.changed.map((file) => file.path) : undefined;
+      searchScope() === "changed"
+        ? model.changed.map((file) => file.path)
+        : undefined;
     if (query === "" || root === "") {
       batch(() => {
         setSearchResults([]);
@@ -902,39 +1046,44 @@ function createState() {
         : undefined;
     setSearchStatus("searching");
     const controller = new AbortController();
-    const timer = setTimeout(() => {
-      runtime
-        .runPromise(
+    const runSearch = async () => {
+      try {
+        const all = await runtime.runPromise(
           Git.use((git) => git.search(root, query, paths, options)),
-          {
-            signal: controller.signal,
-          },
-        )
-        .then(async (all) => {
-          const inScope =
-            changedSet === undefined ? all : all.filter((match) => changedSet.has(match.path));
-          const matches = inScope.slice(0, SEARCH_RESULT_CAP);
-          const linesByPath = await readSearchLines(root, matches, controller.signal);
-          // Drop a superseded query's results: a search can resolve just as a newer
-          // Keystroke aborts its controller, so guard the write the same way.
-          if (controller.signal.aborted) {
-            return;
-          }
-          batch(() => {
-            setSearchResults(matches);
-            setSearchFileLines(linesByPath);
-            setSearchTruncated(inScope.length > SEARCH_RESULT_CAP);
-            setSearchStatus("ready");
-          });
-        })
+          { signal: controller.signal }
+        );
+        const inScope =
+          changedSet === undefined
+            ? all
+            : all.filter((match) => changedSet.has(match.path));
+        const matches = inScope.slice(0, SEARCH_RESULT_CAP);
+        const linesByPath = await readSearchLines(
+          root,
+          matches,
+          controller.signal
+        );
+        // Drop a superseded query's results: a search can resolve just as a newer
+        // Keystroke aborts its controller, so guard the write the same way.
+        if (controller.signal.aborted) {
+          return;
+        }
+        batch(() => {
+          setSearchResults(matches);
+          setSearchFileLines(linesByPath);
+          setSearchTruncated(inScope.length > SEARCH_RESULT_CAP);
+          setSearchStatus("ready");
+        });
+      } catch {
         // A genuine grep failure (a half-typed regex) keeps the prior results in
         // Place under an error status, so an unfinished pattern never blanks the
         // Pane; our own cancellation (the aborted controller) changes nothing.
-        .catch(() => {
-          if (!controller.signal.aborted) {
-            setSearchStatus("error");
-          }
-        });
+        if (!controller.signal.aborted) {
+          setSearchStatus("error");
+        }
+      }
+    };
+    const timer = setTimeout(() => {
+      void runSearch();
     }, SEARCH_DEBOUNCE_MS);
     onCleanup(() => {
       clearTimeout(timer);
@@ -948,12 +1097,12 @@ function createState() {
       context: SEARCH_CONTEXT_LINES,
       linesByPath: searchFileLines(),
       matches: searchResults(),
-    }),
+    })
   );
 
   // Move the selection and keep it in the results viewport, mirroring the diff
   // Cursor's follow-scroll (margin rows of context, never glued to the edge).
-  function setSearchSelection(index: number) {
+  const setSearchSelection = (index: number) => {
     batch(() => {
       setSearchIndex(index);
       setSearchScrollTop(
@@ -964,47 +1113,57 @@ function createState() {
           maxScroll: Math.max(0, searchItems().length - searchListHeight()),
           top: index,
           viewport: searchListHeight(),
-        }),
+        })
       );
     });
-  }
+  };
 
   // Hop the selection to the next/previous navigable row (matches and file
   // Headers), skipping context lines and gaps.
-  function moveSearchSelection(direction: number) {
+  const moveSearchSelection = (direction: number) => {
     const items = searchItems();
     const current = searchIndex();
     const next =
       direction > 0
-        ? items.findIndex((item, index) => index > current && isNavigableSearchItem(item))
-        : items.findLastIndex((item, index) => index < current && isNavigableSearchItem(item));
+        ? items.findIndex(
+            (item, index) => index > current && isNavigableSearchItem(item)
+          )
+        : items.findLastIndex(
+            (item, index) => index < current && isNavigableSearchItem(item)
+          );
     if (next !== -1) {
       setSearchSelection(next);
     }
-  }
+  };
 
   // Half-page the selection by *visual* rows (the viewport unit ctrl-d/ctrl-u
   // Promise), then snap to the nearest navigable row in the travel direction;
   // Counting navigable hops instead would overshoot by each match's context
   // Rows and headers.
-  function pageSearchSelection(direction: number) {
+  const pageSearchSelection = (direction: number) => {
     const items = searchItems();
     const step = Math.max(1, Math.floor(searchListHeight() / 2)) * direction;
-    const target = Math.max(0, Math.min(searchIndex() + step, items.length - 1));
+    const target = Math.max(
+      0,
+      Math.min(searchIndex() + step, items.length - 1)
+    );
     const snapped =
       direction > 0
-        ? items.findIndex((item, index) => index >= target && isNavigableSearchItem(item))
-        : items.findLastIndex((item, index) => index <= target && isNavigableSearchItem(item));
-    const landed =
-      snapped !== -1
-        ? snapped
-        : direction > 0
-          ? items.findLastIndex(isNavigableSearchItem)
-          : items.findIndex(isNavigableSearchItem);
+        ? items.findIndex(
+            (item, index) => index >= target && isNavigableSearchItem(item)
+          )
+        : items.findLastIndex(
+            (item, index) => index <= target && isNavigableSearchItem(item)
+          );
+    const fallback =
+      direction > 0
+        ? items.findLastIndex(isNavigableSearchItem)
+        : items.findIndex(isNavigableSearchItem);
+    const landed = snapped === -1 ? fallback : snapped;
     if (landed !== -1) {
       setSearchSelection(landed);
     }
-  }
+  };
 
   // Keep the selection on a navigable row as the item list changes underneath it
   // (new results, a collapse, a filter), and the scroll inside shrunken content.
@@ -1016,10 +1175,12 @@ function createState() {
       const bounded = Math.min(index, items.length - 1);
       const previous = items.findLastIndex(
         (candidate, candidateIndex) =>
-          candidateIndex <= bounded && isNavigableSearchItem(candidate),
+          candidateIndex <= bounded && isNavigableSearchItem(candidate)
       );
       setSearchIndex(
-        previous === -1 ? Math.max(0, items.findIndex(isNavigableSearchItem)) : previous,
+        previous === -1
+          ? Math.max(0, items.findIndex(isNavigableSearchItem))
+          : previous
       );
     }
     const maxScroll = Math.max(0, items.length - searchListHeight());
@@ -1028,63 +1189,67 @@ function createState() {
     }
   });
 
-  function openSearch() {
+  const openSearch = () => {
     batch(() => {
       setMainView("search");
       setFocusedPane("search");
       setSearchFocus("query");
     });
-  }
+  };
 
   // Closing the view keeps every search signal (query, snapshot, selection,
   // Collapsed groups): persistence across jumps is the point of the pane.
-  function closeSearch() {
+  const closeSearch = () => {
     batch(() => {
       setMainView("file");
       if (focusedPane() === "search") {
         setFocusedPane("diff");
       }
     });
-  }
+  };
 
   // Open a result row (Enter or a click): a match line lands the caret on its
   // Exact column; a context line lands line-level. Both route through the shared
   // JumpTarget path, whose goToLocation step closes the search view like any other
   // Navigation.
-  function jumpToSearchItem(index: number) {
+  const jumpToSearchItem = (index: number) => {
     const item = searchItems()[index];
     if (item === undefined || item.kind !== "line") {
       return;
     }
     batch(() => {
       setSearchIndex(index);
-      selectFile(item.path, { column: item.match?.column, escalate: true, line: item.line });
+      selectFile(item.path, {
+        column: item.match?.column,
+        escalate: true,
+        line: item.line,
+      });
     });
-  }
+  };
 
-  function resetSearchSelection() {
+  const resetSearchSelection = () => {
     batch(() => {
       setSearchIndex(0);
       setSearchScrollTop(0);
     });
-  }
+  };
 
-  function toggleSearchRegex() {
+  const toggleSearchRegex = () => {
     setSearchRegex((enabled) => !enabled);
     resetSearchSelection();
-  }
+  };
 
-  function toggleSearchCase() {
+  const toggleSearchCase = () => {
     setSearchCaseSensitive((enabled) => !enabled);
     resetSearchSelection();
-  }
+  };
 
-  function toggleSearchScope() {
+  const toggleSearchScope = () => {
     setSearchScope((current) => (current === "changed" ? "repo" : "changed"));
     resetSearchSelection();
-  }
+  };
 
-  function toggleSearchGroup(path: string) {
+  const toggleSearchGroup = (path: string) => {
     batch(() => {
       setSearchCollapsed((current) => {
         const next = new Set(current);
@@ -1094,13 +1259,13 @@ function createState() {
         return next;
       });
       const header = searchItems().findIndex(
-        (item) => item.kind === "header" && item.path === path,
+        (item) => item.kind === "header" && item.path === path
       );
       if (header !== -1) {
         setSearchSelection(header);
       }
     });
-  }
+  };
 
   // Search results are repo-specific paths: a worktree switch (or the deleted-
   // Worktree recovery) invalidates them. Clear the snapshot but keep the query.
@@ -1117,8 +1282,8 @@ function createState() {
           resetSearchSelection();
         });
       },
-      { defer: true },
-    ),
+      { defer: true }
+    )
   );
 
   const loadedGapSource = (): GapSource | undefined => {
@@ -1130,7 +1295,9 @@ function createState() {
   // Agrees with the rendered language.
   const foldMode = () => {
     const language = languageForPath(diffView()?.path ?? "");
-    return language === "markdown" || language === "mdx" ? "markdown" : "indent";
+    return language === "markdown" || language === "mdx"
+      ? "markdown"
+      : "indent";
   };
   // The single "collapsed regions" transform: the raw render folded/gapped for the
   // Current state. `navigableLines` and the viewer's rows both read it, so the caret
@@ -1154,7 +1321,10 @@ function createState() {
   const viewerRows = () => collapsedRender().rows;
   // The navigable list for a hypothetical fold/gap state, so a toggle can remap the
   // Caret against the next lines within one synchronous batch (no memo-timing race).
-  const collapsedNavigableFor = (folded: ReadonlySet<string>, gaps: ReadonlySet<string>) => {
+  const collapsedNavigableFor = (
+    folded: ReadonlySet<string>,
+    gaps: ReadonlySet<string>
+  ) => {
     const view = diffView();
     if (view === undefined) {
       return [] as NavigableLine[];
@@ -1171,7 +1341,8 @@ function createState() {
   const truncated = createMemo(() => {
     const content = diffView()?.fileContent;
     return (
-      (diffView()?.render.hiddenLines ?? 0) > 0 || (content?.kind === "text" && content.truncated)
+      (diffView()?.render.hiddenLines ?? 0) > 0 ||
+      (content?.kind === "text" && content.truncated)
     );
   });
   // Line rows the cap hid, for the "N more lines" footer. In file-content mode the
@@ -1197,21 +1368,25 @@ function createState() {
     findOpen() || findActive()
       ? findMatchIndices(
           navigableLines().map((line) => line.content),
-          findQuery(),
+          findQuery()
         )
-      : [],
+      : []
   );
 
   // The one reset for find lifecycle (close, clear, file switch all share it).
-  function resetFind() {
+  const resetFind = () => {
     setFindOpen(false);
     setFindActive(false);
     setFindQuery("");
     setFindMatchPos(0);
-  }
+  };
 
   // A file switch ends any active find so highlights never bleed across files.
-  createEffect(on(selectedPath, () => batch(resetFind)));
+  createEffect(
+    on(selectedPath, () => {
+      batch(resetFind);
+    })
+  );
 
   // Folds/gaps are per file (the #181 v1 decision): a file switch clears them and
   // Drops any loaded gap source, so a returned-to file opens fully expanded. A scope
@@ -1223,8 +1398,16 @@ function createState() {
     setExpandedGaps(new Set<string>());
     setGapSource(undefined);
   };
-  createEffect(on(selectedPath, () => batch(resetFolds)));
-  createEffect(on(scope, () => batch(resetFolds)));
+  createEffect(
+    on(selectedPath, () => {
+      batch(resetFolds);
+    })
+  );
+  createEffect(
+    on(scope, () => {
+      batch(resetFolds);
+    })
+  );
 
   // Live theme preview: while the picker is open, the highlighted row is the
   // Active selection, so moving (keys, hover, wheel) or filtering re-themes the
@@ -1243,6 +1426,7 @@ function createState() {
   // Renderers read a rect off this record; none re-derives its own budget from the
   // Terminal size, which is why there is no `sidebarWidth`/`paneHeight` accessor to
   // Subtract from. Zoom is still a model input with no signal behind it.
+  const zoomTarget = () => (focusedPane() === "tree" ? "tree" : "viewer");
   const layout = createMemo(() =>
     computeLayout({
       sidebar: {
@@ -1258,19 +1442,21 @@ function createState() {
       // Mounted, or routes through `focusNextPane`/`collapseSidebar`, which each land only on
       // Something open. The map is still a map, not an identity: the search view is a second
       // Focus value for the one viewer slot.
-      zoom: !zoomed() ? undefined : focusedPane() === "tree" ? "tree" : "viewer",
-    }),
+      zoom: zoomed() ? zoomTarget() : undefined,
+    })
   );
   // A truncated file reserves one row for the "N more lines" footer, so the diff
   // Content shrinks by it; DiffView derives its whole windowing from this height,
   // So the single subtraction keeps the slice and scroll math correct. Chrome the
   // Viewer owns inside its own border stays here rather than in the pure model.
   const viewerHeight = createMemo(() =>
-    Math.max(1, layout().viewer.content.height - 1 - (truncated() ? 1 : 0)),
+    Math.max(1, layout().viewer.content.height - 1 - (truncated() ? 1 : 0))
   );
   // The search view's results band: the pane interior minus its four fixed chrome
   // Rows (query, filter, summary, footer). Fixed chrome, so no state ever shifts it.
-  const searchListHeight = createMemo(() => Math.max(1, layout().viewer.content.height - 4));
+  const searchListHeight = createMemo(() =>
+    Math.max(1, layout().viewer.content.height - 4)
+  );
   // The viewer is one pane holding two views, so "focus the viewer" is whichever the main
   // Area shows. Every path that lands focus there without already knowing the view reads it
   // From here; the two that still name "diff" outright (`closeSearch`, and the keymap opening
@@ -1302,7 +1488,9 @@ function createState() {
   // Back. Open, not painted, is the test, because zoom hides the tree without closing it and `tab`
   // Carries the zoom along rather than being trapped in whatever it lit up.
   const focusNextPane = () =>
-    setFocusedPane(focusedPane() !== "tree" && sidebarOpen() ? "tree" : viewerFocus());
+    setFocusedPane(
+      focusedPane() !== "tree" && sidebarOpen() ? "tree" : viewerFocus()
+    );
   // The sizable pane's accessors as one shape. Nothing new is stored: every field is a signal
   // Declared above.
   const sidebarPane = {
@@ -1365,8 +1553,12 @@ function createState() {
   // Clears: resizing a pane that already fills the screen means nothing, and the others
   // Are hidden without being closed, so a write there would land invisibly.
   const toggleZoom = () => setZoomed((zoom) => !zoom);
-  const growPane = () => nudgePane(sidebarPane, 1);
-  const shrinkPane = () => nudgePane(sidebarPane, -1);
+  const growPane = () => {
+    nudgePane(sidebarPane, 1);
+  };
+  const shrinkPane = () => {
+    nudgePane(sidebarPane, -1);
+  };
   // Only the docked axis resets, so a left-docked tree's `\` never wipes a height set
   // While it was on top, which is what makes a four-press round trip idempotent. A closed
   // Pane ignores it, like `nudgePane`: otherwise `\` reached past a collapsed tree (the
@@ -1385,9 +1577,11 @@ function createState() {
     }
     setSidebarPosition(NEXT_DOCK[sidebarPosition()]);
   };
-  const overlayWidth = createMemo(() => Math.max(30, Math.min(70, terminalWidth() - 8)));
+  const overlayWidth = createMemo(() =>
+    Math.max(30, Math.min(70, terminalWidth() - 8))
+  );
   const overlayLeft = createMemo(() =>
-    Math.max(0, Math.floor((terminalWidth() - overlayWidth()) / 2)),
+    Math.max(0, Math.floor((terminalWidth() - overlayWidth()) / 2))
   );
 
   // --- status / cursor view-model ---
@@ -1400,19 +1594,21 @@ function createState() {
   // The word the caret sits on, for the highlight. Undefined in line-level mode or on a
   // Gap/word-less position.
   const caretWord = createMemo(() =>
-    caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn()),
+    caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn())
   );
   // The exact 1-based column the caret points at, for `:col` in copy/stats. Driven
   // By line-level alone (not `caretWord`), so a search jump that lands in a gap
   // Still reports its precise column instead of falling back to line-only.
-  const caretColumn = createMemo(() => (caretLineLevel() ? undefined : cursorColumn() + 1));
+  const caretColumn = createMemo(() =>
+    caretLineLevel() ? undefined : cursorColumn() + 1
+  );
   // The inclusive [start, end] navIndex span of the active line selection, ordered
   // Regardless of drag direction; undefined when only a caret is present. Drives the
   // Selection band in the viewer and the range `C` copies.
   const selectionRange = createMemo(() => {
     const anchor = selectionAnchor();
     if (anchor === undefined) {
-      return undefined;
+      return anchor;
     }
     const focus = cursorIndex();
     return [Math.min(anchor, focus), Math.max(anchor, focus)] as const;
@@ -1451,7 +1647,10 @@ function createState() {
       caretLine: undefined,
       context: "tree",
       selectedPath: selectedPath(),
-      treeNode: node === undefined ? undefined : { id: node.id, kind: node.type, path: node.path },
+      treeNode:
+        node === undefined
+          ? undefined
+          : { id: node.id, kind: node.type, path: node.path },
       truncated: false,
     };
   };
@@ -1459,21 +1658,25 @@ function createState() {
   // So the highlighted index always maps to the same action. Gated on the menu being
   // Open so it does not rebuild on every caret move or tree refresh while closed.
   const commandMenuItems = createMemo(() =>
-    commandMenuOpen() ? buildCommandMenuItems(commandMenuInput(commandMenuContext())) : [],
+    commandMenuOpen()
+      ? buildCommandMenuItems(commandMenuInput(commandMenuContext()))
+      : []
   );
   // The bar's lowest tier: context-aware only for the temporary find modes, which have controls a
   // User cannot guess, and otherwise the one hint that reaches everything else. The panes get no
   // Standing tutorial line, since any live content outranks this and would bury it anyway.
-  const guidance = createMemo(() =>
-    findOpen()
-      ? "enter find · esc cancel"
-      : findActive()
-        ? "n/N next/prev · esc clear"
-        : "? help · q quit",
-  );
+  const guidance = createMemo(() => {
+    if (findOpen()) {
+      return "enter find · esc cancel";
+    }
+    return findActive() ? "n/N next/prev · esc clear" : "? help · q quit";
+  });
   const statusBarModel = createMemo(() => {
     const latest = latestActivity(activityLog());
-    const recent = latest !== undefined && now() - latest.at < RECENT_MS ? latest : undefined;
+    const recent =
+      latest !== undefined && now() - latest.at < RECENT_MS
+        ? latest
+        : undefined;
     return buildStatusBarModel({
       activity:
         recent === undefined
@@ -1512,7 +1715,7 @@ function createState() {
   // Have not been applied for it yet (they still hold the previous file's values
   // While its diff loads); capture the intended restore instead of those stale
   // Live signals, so rapid navigation never records a neighbor's position.
-  function captureCurrent(): Location | undefined {
+  const captureCurrent = (): Location | undefined => {
     const path = selectedPath();
     if (path === undefined) {
       return undefined;
@@ -1522,7 +1725,9 @@ function createState() {
     const line = navigableLines()[cursorIndex()];
     return {
       cursorColumn: settled ? cursorColumn() : pending.cursorColumn,
-      cursorLine: settled ? (line?.newLine ?? line?.oldLine) : pending.cursorLine,
+      cursorLine: settled
+        ? (line?.newLine ?? line?.oldLine)
+        : pending.cursorLine,
       fileView: fileView(),
       fullContent: fullContentPaths().has(path),
       kind: currentLocation(navState())?.kind ?? "jump",
@@ -1531,7 +1736,7 @@ function createState() {
         ? { scrollTop: viewerScrollTop(), scrollX: viewerScrollX() }
         : pending.viewport,
     };
-  }
+  };
 
   // The Location to arrive at when opening `path` fresh. A jump seeds the entry
   // With its real target line so back/forward restore it (and the dedup in
@@ -1539,10 +1744,15 @@ function createState() {
   // Async `jumpTarget` effect snaps the caret to the exact word on landing. Absent
   // A target, a revisit restores its remembered cursor/scroll from the MRU, a first
   // Visit defaults (first change, top). `fileView` always resets to the diff.
-  function arrivingLocation(path: string, kind: "browse" | "jump", targetLine?: number): Location {
+  const arrivingLocation = (
+    path: string,
+    kind: "browse" | "jump",
+    targetLine?: number
+  ): Location => {
     const remembered = recall(navState(), path);
     return {
-      cursorColumn: targetLine === undefined ? remembered?.cursorColumn : undefined,
+      cursorColumn:
+        targetLine === undefined ? remembered?.cursorColumn : undefined,
       cursorLine: targetLine ?? remembered?.cursorLine,
       fileView: false,
       fullContent: fullContentPaths().has(path),
@@ -1550,21 +1760,23 @@ function createState() {
       path,
       viewport: remembered?.viewport ?? { scrollTop: 0, scrollX: 0 },
     };
-  }
+  };
 
   // Drive the live signals to a Location and enqueue its restore. The fullContent
   // Set is additive (a path stays un-truncated globally); back never re-truncates.
   // Any navigation reveals the file view. Keyed here rather than on a
   // SelectedPath *change*, so a jump landing on the already-selected file still
   // Closes the search view instead of being consumed invisibly behind it.
-  function goToLocation(location: Location) {
+  const goToLocation = (location: Location) => {
     closeSearch();
     setSelectionAnchor(undefined);
     setSelectedPath(location.path);
     setFileView(location.fileView);
     if (location.fullContent) {
       setFullContentPaths((current) =>
-        current.has(location.path) ? current : new Set(current).add(location.path),
+        current.has(location.path)
+          ? current
+          : new Set(current).add(location.path)
       );
     }
     setPendingRestore({
@@ -1573,19 +1785,7 @@ function createState() {
       path: location.path,
       viewport: location.viewport,
     });
-  }
-
-  // Record the location being left into its tab and into the MRU, the shared
-  // Capture-on-leave step before any tab switch / navigation.
-  function recordLeaving(nav: NavState, leaving: Location | undefined) {
-    return leaving === undefined
-      ? nav
-      : remember(recordCurrent(nav, leaving), leaving.path, {
-          cursorColumn: leaving.cursorColumn,
-          cursorLine: leaving.cursorLine,
-          viewport: leaving.viewport,
-        });
-  }
+  };
 
   // All file navigation routes to the single preview tab (Zed's model): otherwise
   // The preview tab is navigated in place (browse coalesces, jump pushes), or a
@@ -1594,9 +1794,15 @@ function createState() {
   // Re-focus (no line) just re-activates it, restoring where you were (no dup),
   // While a line jump navigates within it so the target line seeds that tab's
   // History and back/forward restore it, like any other jump.
-  function navigateTo(path: string, kind: "browse" | "jump", targetLine?: number) {
+  const navigateTo = (
+    path: string,
+    kind: "browse" | "jump",
+    targetLine?: number
+  ) => {
     const nav = navState();
-    const pinned = nav.tabs.find((tab) => !tab.preview && tab.entries[tab.index]?.path === path);
+    const pinned = nav.tabs.find(
+      (tab) => !tab.preview && tab.entries[tab.index]?.path === path
+    );
     if (pinned !== undefined && targetLine === undefined) {
       activateTab(pinned.id);
       return;
@@ -1618,9 +1824,9 @@ function createState() {
       });
       goToLocation(arriving);
     });
-  }
+  };
 
-  function goBack() {
+  const goBack = () => {
     const nav = navState();
     if (!canBack(nav)) {
       return;
@@ -1634,9 +1840,9 @@ function createState() {
         goToLocation(target);
       }
     });
-  }
+  };
 
-  function goForward() {
+  const goForward = () => {
     const nav = navState();
     if (!canForward(nav)) {
       return;
@@ -1650,12 +1856,12 @@ function createState() {
         goToLocation(target);
       }
     });
-  }
+  };
 
   // Tab switches reuse back/forward's capture-on-leave / apply-on-arrive: record
   // Where we left the active tab, transform the tab set, then restore the new
   // Active tab's current location.
-  function switchActiveTab(transform: (nav: NavState) => NavState) {
+  const switchActiveTab = (transform: (nav: NavState) => NavState) => {
     const nav = navState();
     const leaving = captureCurrent();
     const recorded = leaving === undefined ? nav : recordCurrent(nav, leaving);
@@ -1675,39 +1881,41 @@ function createState() {
         goToLocation(target);
       }
     });
-  }
+  };
 
   // Toggle the active tab's pin: a preview pins (persists; the next navigation
   // Opens a fresh preview), a pinned tab unpins (reverts to the dim preview). The
   // Viewed file is unchanged either way, so only navState moves.
-  function togglePinActiveTab() {
+  const togglePinActiveTab = () => {
     setNavState((nav) => {
       const active = nav.tabs.find((tab) => tab.id === nav.activeTabId);
       if (active === undefined) {
         return nav;
       }
-      return active.preview ? pinTab(nav, nav.activeTabId) : unpinTab(nav, nav.activeTabId);
+      return active.preview
+        ? pinTab(nav, nav.activeTabId)
+        : unpinTab(nav, nav.activeTabId);
     });
-  }
+  };
 
   // Pin-only (idempotent): the double-click gesture promotes the active tab and
   // Never unpins, unlike `ctrl-t`'s toggle. Unpinning stays a keyboard action.
-  function pinActiveTab() {
+  const pinActiveTab = () => {
     setNavState((nav) => pinTab(nav, nav.activeTabId));
-  }
+  };
 
-  function cycleTab(direction: number) {
+  const cycleTab = (direction: number) => {
     switchActiveTab((nav) => (direction > 0 ? nextTab(nav) : prevTab(nav)));
-  }
+  };
 
-  function activateTab(id: string) {
+  const activateTab = (id: string) => {
     switchActiveTab((nav) => selectTab(nav, id));
-  }
+  };
 
   // Close the active tab. Removing it activates a neighbor (restore its location);
   // Closing the sole tab instead reverts it to the preview (same file, strip gone),
   // So no location change and nothing to restore.
-  function closeActiveTab() {
+  const closeActiveTab = () => {
     const nav = navState();
     const leaving = captureCurrent();
     const moved = closeTab(recordLeaving(nav, leaving), nav.activeTabId);
@@ -1722,12 +1930,12 @@ function createState() {
         goToLocation(target);
       }
     });
-  }
+  };
 
   // Reset history to a fresh single tab seeded with `path` (startup and worktree
   // Switch). Caller already runs inside a batch; this stays unbatched so it folds
   // Into that one update.
-  function seedNav(path: string | undefined) {
+  const seedNav = (path: string | undefined) => {
     if (path === undefined) {
       setNavState(initialNav(undefined));
       setSelectedPath(undefined);
@@ -1745,12 +1953,15 @@ function createState() {
     };
     setNavState(initialNav(location));
     goToLocation(location);
-  }
+  };
 
   // --- actions ---
-  function moveFocus(direction: number) {
+  const moveFocus = (direction: number) => {
     const rows = treeRows();
-    const node = rows[Math.max(0, Math.min(focusedRowIndex() + direction, rows.length - 1))]?.node;
+    const node =
+      rows[
+        Math.max(0, Math.min(focusedRowIndex() + direction, rows.length - 1))
+      ]?.node;
     if (node === undefined) {
       return;
     }
@@ -1758,19 +1969,21 @@ function createState() {
     if (node.type === "file") {
       navigateTo(node.path, "browse");
     }
-  }
+  };
 
   // Open a file as a jump (palette, search, a problem).
   // A `target` line is the single source of truth for where the jump lands: it
   // Seeds the history Location (so back/forward restore it) and the transient
   // `jumpTarget` (which snaps the caret to the column and escalates to file view).
-  function selectFile(
+  const selectFile = (
     path: string,
-    target?: { line: number; column?: number; escalate?: boolean },
-  ) {
+    target?: { line: number; column?: number; escalate?: boolean }
+  ) => {
     batch(() => {
       setFocusedNodeId(`file:${path}`);
-      setExpandedDirectories((current) => expandAncestorsForPath(current, path));
+      setExpandedDirectories((current) =>
+        expandAncestorsForPath(current, path)
+      );
       navigateTo(path, "jump", target?.line);
       if (target !== undefined) {
         setJumpTarget({
@@ -1781,26 +1994,26 @@ function createState() {
         });
       }
     });
-  }
+  };
 
   // Move the line cursor and land the caret on the new line's first word, so every
   // Vertical move (j/k, page, top/bottom, find cycle, the row click) leaves the
   // Caret on a word. A jump or restore sets the
   // Caret itself, so those use `setCursorIndex` directly and bypass this.
-  function setCursorRow(index: number) {
+  const setCursorRow = (index: number) => {
     batch(() => {
       setCaretLineLevel(false);
       setSelectionAnchor(undefined);
       setCursorIndex(index);
       setCursorColumn(firstWord(navigableLines()[index]?.content ?? ""));
     });
-  }
+  };
 
   // Extend (or begin) a line selection to `index`, keeping the caret on a symbol
   // There. Mirrors `setCursorRow` but seeds the anchor from the current row on the
   // First extend and, unlike it, preserves the anchor. Reached by Shift+arrow and a
   // Shift-click / drag in the viewer.
-  function extendSelectionTo(index: number) {
+  const extendSelectionTo = (index: number) => {
     batch(() => {
       if (selectionAnchor() === undefined) {
         setSelectionAnchor(cursorIndex());
@@ -1809,12 +2022,12 @@ function createState() {
       setCursorIndex(index);
       setCursorColumn(firstWord(navigableLines()[index]?.content ?? ""));
     });
-  }
+  };
 
   // Hop the caret to the next word; past the line's last word it wraps to the next
   // Navigable line's first word, so h/l tab through every symbol in the file. From
   // Line-level (a gutter click), the first hop just selects the current first word.
-  function caretNextWord() {
+  const caretNextWord = () => {
     setSelectionAnchor(undefined);
     if (caretLineLevel()) {
       setCaretLineLevel(false);
@@ -1835,10 +2048,10 @@ function createState() {
         setCursorColumn(firstWord(lines[index + 1]?.content ?? ""));
       });
     }
-  }
+  };
   // Hop the caret to the previous word; past the line's first word it wraps to the
   // Previous navigable line's last word. From line-level, select the line's last word.
-  function caretPrevWord() {
+  const caretPrevWord = () => {
     setSelectionAnchor(undefined);
     if (caretLineLevel()) {
       batch(() => {
@@ -1862,12 +2075,12 @@ function createState() {
         setCursorColumn(lastWord(lines[index - 1]?.content ?? ""));
       });
     }
-  }
+  };
 
   // Toggle one fold, keeping the caret on its file line (or the fold header once the
   // Line it was on is hidden). The next navigable list is computed purely so the remap
   // Lands in the same batch as the set write, with no reliance on memo recomputation.
-  function toggleFold(key: string) {
+  const toggleFold = (key: string) => {
     const previous = navigableLines();
     const next = new Set(foldedRegions());
     if (next.has(key)) {
@@ -1881,17 +2094,19 @@ function createState() {
     // Clears the anchor, so restore the remapped value after it).
     const anchor = selectionAnchor();
     const remappedAnchor =
-      anchor === undefined ? undefined : remapCursorAfterToggle(previous, anchor, nextLines);
+      anchor === undefined
+        ? undefined
+        : remapCursorAfterToggle(previous, anchor, nextLines);
     batch(() => {
       setFoldedRegions(next);
       setCursorRow(remapCursorAfterToggle(previous, cursorIndex(), nextLines));
       setSelectionAnchor(remappedAnchor);
     });
-  }
+  };
 
   // Toggle one git-elided gap; expanding one lazily loads the file's source so the
   // Revealed lines can be filled (until it resolves the gap stays a collapsed marker).
-  function toggleGap(key: string) {
+  const toggleGap = (key: string) => {
     const previous = navigableLines();
     const next = new Set(expandedGaps());
     const expanding = !next.has(key);
@@ -1903,7 +2118,9 @@ function createState() {
     const nextLines = collapsedNavigableFor(foldedRegions(), next);
     const anchor = selectionAnchor();
     const remappedAnchor =
-      anchor === undefined ? undefined : remapCursorAfterToggle(previous, anchor, nextLines);
+      anchor === undefined
+        ? undefined
+        : remapCursorAfterToggle(previous, anchor, nextLines);
     batch(() => {
       setExpandedGaps(next);
       setCursorRow(remapCursorAfterToggle(previous, cursorIndex(), nextLines));
@@ -1912,9 +2129,9 @@ function createState() {
     if (expanding) {
       ensureGapSource();
     }
-  }
+  };
 
-  function ensureGapSource() {
+  const ensureGapSource = () => {
     const path = selectedPath();
     const file = selectedFile();
     if (path === undefined || file === undefined) {
@@ -1926,9 +2143,11 @@ function createState() {
     }
     setGapSource({ path, status: "loading" });
     const model = gitModel();
-    runtime
-      .runPromise(Git.use((git) => git.fileSource(model.repoRoot, scope(), file)))
-      .then((content) => {
+    const load = async () => {
+      try {
+        const content = await runtime.runPromise(
+          Git.use((git) => git.fileSource(model.repoRoot, scope(), file))
+        );
         if (selectedPath() !== path) {
           return;
         }
@@ -1944,7 +2163,7 @@ function createState() {
           const anchor = cursorIndex();
           const selAnchor = selectionAnchor();
           setGapSource({
-            lines: content.text.replace(/\r?\n$/, "").split(/\r?\n/),
+            lines: content.text.replace(/\r?\n$/u, "").split(/\r?\n/u),
             path,
             status: "loaded",
           });
@@ -1953,21 +2172,24 @@ function createState() {
           // Restore the anchor remapped (setCursorRow above cleared it) so a live
           // Selection survives the async reveal as the synchronous toggleGap kept it.
           if (selAnchor !== undefined) {
-            setSelectionAnchor(remapCursorAfterToggle(previous, selAnchor, next));
+            setSelectionAnchor(
+              remapCursorAfterToggle(previous, selAnchor, next)
+            );
           }
         });
-      })
-      .catch(() => {
+      } catch {
         if (selectedPath() === path) {
           setGapSource({ path, status: "error" });
         }
-      });
-  }
+      }
+    };
+    void load();
+  };
 
   // The `z` action: fold/unfold the region at the caret. Unfold when the caret sits on
   // A folded header; otherwise fold the region it heads or is nested in; failing that,
   // Toggle the git-elided gap nearest the caret (hunk's "nearest to the selection").
-  function toggleRegionAtCaret() {
+  const toggleRegionAtCaret = () => {
     const lines = navigableLines();
     const index = cursorIndex();
     const caret = lines[index];
@@ -1982,7 +2204,8 @@ function createState() {
     const region =
       regions.find((candidate) => candidate.headerNavIndex === index) ??
       regions.find(
-        (candidate) => candidate.headerNavIndex < index && index <= candidate.endNavIndex,
+        (candidate) =>
+          candidate.headerNavIndex < index && index <= candidate.endNavIndex
       );
     if (region !== undefined) {
       toggleFold(region.key);
@@ -1992,36 +2215,31 @@ function createState() {
     if (gap !== undefined) {
       toggleGap(gap);
     }
-  }
+  };
 
-  function nearestGapKey(cursorRow: number) {
+  const nearestGapKey = (cursorRow: number) => {
     const rows = viewerRows();
-    const caretPos = rows.findIndex((row) => row.kind === "line" && row.navIndex === cursorRow);
+    const caretPos = rows.findIndex(
+      (row) => row.kind === "line" && row.navIndex === cursorRow
+    );
     const from = caretPos === -1 ? rows.length - 1 : caretPos;
-    for (let index = from; index >= 0; index -= 1) {
-      const row = rows[index];
-      if (row?.kind === "marker" && row.regionKind === "gap") {
-        return row.key;
-      }
-    }
-    for (let index = from + 1; index < rows.length; index += 1) {
-      const row = rows[index];
-      if (row?.kind === "marker" && row.regionKind === "gap") {
-        return row.key;
-      }
-    }
-    return undefined;
-  }
+    const gap =
+      rows.slice(0, from + 1).findLast(isGapMarker) ??
+      rows.slice(from + 1).find(isGapMarker);
+    return gap?.kind === "marker" ? gap.key : undefined;
+  };
 
   // A jump (search, find) may target a line a fold is hiding.
   // Clear the fold(s) covering it so the jump can land; the Viewer's jump effect
   // Re-runs on the resulting navigable change and finds the now-visible line.
-  function revealLineForJump(line: number) {
+  const revealLineForJump = (line: number) => {
     const view = diffView();
     if (view === undefined) {
       return false;
     }
-    const rawIndex = view.render.navigable.findIndex((navigable) => navigable.newLine === line);
+    const rawIndex = view.render.navigable.findIndex(
+      (navigable) => navigable.newLine === line
+    );
     if (rawIndex === -1) {
       return false;
     }
@@ -2029,7 +2247,7 @@ function createState() {
       (region) =>
         region.headerNavIndex < rawIndex &&
         rawIndex <= region.endNavIndex &&
-        foldedRegions().has(region.key),
+        foldedRegions().has(region.key)
     );
     if (covering.length === 0) {
       return false;
@@ -2040,22 +2258,26 @@ function createState() {
     }
     setFoldedRegions(next);
     return true;
-  }
+  };
 
   // Hold a user-action acknowledgment for a fixed dwell (~1.5s) so an ambient
   // Status event or the next keystroke can't overwrite it before it's read.
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
   // Left pending, it clears a notice 1.5s later, inside whichever test is running by then.
-  onReset(() => clearTimeout(noticeTimer));
-  function notify(text: string, level: LogLevel = "info") {
+  onReset(() => {
+    clearTimeout(noticeTimer);
+  });
+  const notify = (text: string, level: LogLevel = "info") => {
     setNotice({ level, text });
     clearTimeout(noticeTimer);
-    noticeTimer = setTimeout(() => setNotice(undefined), 1500);
-  }
+    noticeTimer = setTimeout(() => {
+      setNotice(undefined);
+    }, 1500);
+  };
 
   // Background, non-blocking: a newer release surfaces in the post-exit quit notice. Bounded by a
   // Timeout and error-swallowing in fetchLatestVersion, so it never blocks or breaks startup.
-  async function checkForUpdate(current: string) {
+  const checkForUpdate = async (current: string) => {
     const epoch = resetEpoch;
     const latest = await fetchLatestVersion();
     if (epoch !== resetEpoch) {
@@ -2064,13 +2286,14 @@ function createState() {
     if (latest !== undefined && isNewer(latest, current)) {
       setAvailableUpdate({ current, latest });
     }
-  }
+  };
 
   // The active scope's identity, so a scope switch that leaves the path unchanged
   // Still drifts the anchor off the now-different diff. Includes headRef (the pinned
   // Sha for a commit scope), or two sibling commits sharing a first-parent would read
   // As the same scope and never drift the command menu (mirrors scopeKey).
-  const scopeIdentity = () => `${scope().kind}:${scope().ref}:${scope().headRef ?? ""}`;
+  const scopeIdentity = () =>
+    `${scope().kind}:${scope().ref}:${scope().headRef ?? ""}`;
 
   // Drop the line selection when the viewed content's identity changes (file,
   // Scope, or worktree): a navIndex anchor is meaningless against a different line
@@ -2079,24 +2302,38 @@ function createState() {
   // Caret/`goToLocation` clears. It deliberately does not track the git model, so a
   // Background refresh of the same file keeps the selection instead of dropping it.
   createEffect(
-    on([selectedPath, scopeIdentity, repoRoot], () => setSelectionAnchor(undefined), {
-      defer: true,
-    }),
+    on(
+      [selectedPath, scopeIdentity, repoRoot],
+      () => {
+        setSelectionAnchor(undefined);
+      },
+      {
+        defer: true,
+      }
+    )
   );
 
-  function copy(text: string, message = `copied ${text.split("\n")[0]}`) {
-    runtime
-      .runPromise(Clipboard.use((clipboard) => clipboard.copy(text)))
-      .then(() => notify(message, "success"))
-      .catch((error: unknown) =>
-        notify(`couldn't copy: ${error instanceof Error ? error.message : String(error)}`, "error"),
-      );
-  }
+  const copy = (text: string, message = `copied ${text.split("\n")[0]}`) => {
+    const run = async () => {
+      try {
+        await runtime.runPromise(
+          Clipboard.use((clipboard) => clipboard.copy(text))
+        );
+        notify(message, "success");
+      } catch (error) {
+        notify(
+          `couldn't copy: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        );
+      }
+    };
+    void run();
+  };
 
   // Reads the file fresh with `full: true` rather than reusing the loaded
   // `diffView`: in diff view only the diff is in memory, and the file-view
   // Snapshot can be truncated. Mirrors `loadDiffView`'s deleted-file gitSpec.
-  function copyFileContents() {
+  const copyFileContents = () => {
     const path = selectedPath();
     if (path === undefined) {
       return;
@@ -2104,33 +2341,38 @@ function createState() {
     const model = gitModel();
     const file = selectedFile();
     const currentScope = scope();
-    const gitSpec =
-      file?.kind === "deleted"
-        ? currentScope.kind === "unstaged"
-          ? `:${path}`
-          : `${currentScope.ref}:${path}`
-        : undefined;
-    runtime
-      .runPromise(
-        File.use((service) => service.content(model.repoRoot, path, { full: true, gitSpec })),
-      )
-      .then((content) => {
+    const deletedSpec =
+      currentScope.kind === "unstaged"
+        ? `:${path}`
+        : `${currentScope.ref}:${path}`;
+    const gitSpec = file?.kind === "deleted" ? deletedSpec : undefined;
+    const run = async () => {
+      try {
+        const content = await runtime.runPromise(
+          File.use((service) =>
+            service.content(model.repoRoot, path, { full: true, gitSpec })
+          )
+        );
         if (content.kind === "text") {
           copy(content.content, `copied ${path}`);
           return;
         }
         notify(`can't copy ${content.kind} file`, "warning");
-      })
-      .catch((error: unknown) =>
-        notify(`couldn't copy: ${error instanceof Error ? error.message : String(error)}`, "error"),
-      );
-  }
+      } catch (error) {
+        notify(
+          `couldn't copy: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        );
+      }
+    };
+    void run();
+  };
 
   // Copy the selected lines' source text (no sign, no gutter), or the caret line
   // When there is no selection. Reads the on-screen `navigableLines`, so a folded or
   // Git-elided region is naturally excluded (it never enters that list). Reuses the
   // Shared `copy` sink for the pbcopy/wl-copy path and the success/error notice.
-  function copySelection() {
+  const copySelection = () => {
     const range = selectionRange();
     if (range === undefined) {
       if (cursorLine() === undefined) {
@@ -2141,39 +2383,45 @@ function createState() {
     }
     const count = range[1] - range[0] + 1;
     copy(selectionText(), `copied ${count} line${count === 1 ? "" : "s"}`);
-  }
+  };
 
   // Opt the current path out of the truncation cap for a full re-read. Reached by
   // The `f` key and the truncation footer's click; the footer clearing and the
   // Content growing are the acknowledgment, so it stays silent.
-  function loadFullContent() {
+  const loadFullContent = () => {
     const path = selectedPath();
     if (path === undefined) {
       return;
     }
     setFullContentPaths(new Set(fullContentPaths()).add(path));
-  }
+  };
 
   // Open the context menu on a pane. A right-click passes its exact cell as `anchor`;
   // The keyboard trigger omits it, so the tree menu falls back to the focused row and
   // The viewer menu derives its anchor from the caret (stored as none). A no-op when
   // The context has no items (defensive: every real context has one).
-  function openCommandMenu(context: "tree" | "viewer", anchor?: { x: number; y: number }) {
+  const openCommandMenu = (
+    context: "tree" | "viewer",
+    anchor?: { x: number; y: number }
+  ) => {
     const items = buildCommandMenuItems(commandMenuInput(context));
     if (items.length === 0) {
       return;
     }
     batch(() => {
       setCommandMenuContext(context);
+      // The tree menu falls back to the focused row's first text cell: the tree's interior, plus
+      // The one column of padding a `TreeRow` adds inside it.
       setCommandMenuAnchor(
         context === "viewer"
           ? undefined
-          : // The focused row's first text cell: the tree's interior, plus the one
-            // Column of padding a `TreeRow` adds inside it.
-            (anchor ?? {
+          : (anchor ?? {
               x: layout().sidebar.content.x + 1,
-              y: layout().sidebar.content.y + focusedRowIndex() - sidebarScrollTop(),
-            }),
+              y:
+                layout().sidebar.content.y +
+                focusedRowIndex() -
+                sidebarScrollTop(),
+            })
       );
       setCommandMenuIndex(0);
       // Snapshot the context so the clear effect can dismiss the menu the moment a
@@ -2194,14 +2442,14 @@ function createState() {
       });
       setCommandMenuOpen(true);
     });
-  }
+  };
 
-  function closeCommandMenu() {
+  const closeCommandMenu = () => {
     batch(() => {
       setCommandMenuOpen(false);
       setCommandMenuGuard(undefined);
     });
-  }
+  };
 
   // Dismiss the menu the instant its opening context drifts (a click elsewhere moves
   // The caret or focus, a scope/worktree change reloads the diff), so its open state
@@ -2217,7 +2465,8 @@ function createState() {
       scopeIdentity() !== guard.scope ||
       repoRoot() !== guard.repoRoot ||
       (guard.context === "tree"
-        ? focusedNodeId() !== guard.focusedNodeId || sidebarScrollTop() !== guard.sidebarScrollTop
+        ? focusedNodeId() !== guard.focusedNodeId ||
+          sidebarScrollTop() !== guard.sidebarScrollTop
         : cursorIndex() !== guard.cursorIndex ||
           cursorColumn() !== guard.cursorColumn ||
           caretLineLevel() !== guard.caretLineLevel ||
@@ -2231,72 +2480,98 @@ function createState() {
   // Open a file in the OS default application. A GUI handler that stet neither owns nor waits on
   // (fork-and-forget, no renderer suspend), so it lives in `state` and is reached directly by the
   // Keymap and the command menu, unlike the terminal editor which needs the renderer.
-  function openExternally(path: string) {
-    const argv = openExternalCommand(join(gitModel().repoRoot, path));
+  const openExternally = (path: string) => {
+    const argv = openExternalCommand(nodePath.join(gitModel().repoRoot, path));
     if (argv === undefined) {
       notify("open externally isn't supported on this platform", "warning");
       return;
     }
     runtime.runFork(
-      Editor.use((editor) => editor.openExternal(argv, gitModel().repoRoot)).pipe(
+      Editor.use((editor) =>
+        editor.openExternal(argv, gitModel().repoRoot)
+      ).pipe(
         Effect.tap((code) =>
-          code === 0 ? Effect.void : Effect.sync(() => notify("couldn't open the file", "warning")),
+          code === 0
+            ? Effect.void
+            : Effect.sync(() => {
+                notify("couldn't open the file", "warning");
+              })
         ),
-        Effect.catchTag("EditorError", (error) =>
-          Effect.sync(() => notify(`couldn't open externally: ${error.message}`, "error")),
-        ),
-      ),
+        Effect.catchTag("EditorError", (failure) =>
+          Effect.sync(() => {
+            notify(`couldn't open externally: ${failure.message}`, "error");
+          })
+        )
+      )
     );
-  }
+  };
 
   // Run a menu item's action by dispatching to the existing state action. `openEditor`
   // Is excluded: it needs the renderer, so the keymap (host) and the row click
   // (useRenderer) run it themselves; every other action is pure state.
-  function dispatchCommandAction(action: Exclude<CommandAction, { kind: "openEditor" }>) {
+  const dispatchCommandAction = (
+    action: Exclude<CommandAction, { kind: "openEditor" }>
+  ) => {
     switch (action.kind) {
       case "copyReference": {
-        copy(formatCopyReference({ column: action.column, line: action.line, path: action.path }));
-        return;
+        copy(
+          formatCopyReference({
+            column: action.column,
+            line: action.line,
+            path: action.path,
+          })
+        );
+        break;
       }
       case "copyFileContents": {
         copyFileContents();
-        return;
+        break;
       }
       case "loadFullContent": {
         loadFullContent();
-        return;
+        break;
       }
       case "pinTab": {
         // Open the right-clicked file, then pin it (the double-click gesture): the
         // Menu is anchored on that node, not on whatever the viewer currently shows.
         selectFile(action.path);
         pinActiveTab();
-        return;
+        break;
       }
       case "openExternal": {
         openExternally(action.path);
-        return;
+        break;
+      }
+      default: {
+        action satisfies never;
       }
     }
-  }
+  };
 
   // The only writer of `worktreeSummaries`. Reached from two places: the picker's
   // Open (so a single-worktree repo, which the background poll skips, still fills
   // Its row) and the peer poll below.
-  function refreshWorktreeSummaries(list: readonly Worktree[], root: string) {
+  const refreshWorktreeSummaries = async (
+    list: readonly Worktree[],
+    root: string
+  ) => {
     const epoch = resetEpoch;
-    return runtime
-      .runPromise(Git.use((git) => git.worktreeSummaries(list, root)))
-      .then((summaries) => {
-        if (epoch !== resetEpoch) {
-          return;
-        }
-        setWorktreeSummaries((previous) => mergeWorktreeSummaries(previous, summaries));
-      })
-      .catch(() => {});
-  }
+    try {
+      const summaries = await runtime.runPromise(
+        Git.use((git) => git.worktreeSummaries(list, root))
+      );
+      if (epoch !== resetEpoch) {
+        return;
+      }
+      setWorktreeSummaries((previous) =>
+        mergeWorktreeSummaries(previous, summaries)
+      );
+    } catch {
+      // A failed summary pass keeps the previous ages; the next poll retries.
+    }
+  };
 
-  function openWorktreePicker() {
+  const openWorktreePicker = () => {
     batch(() => {
       setWorktreeComboboxOpen(true);
       setWorktreeComboboxIndex(0);
@@ -2304,18 +2579,20 @@ function createState() {
       setWorktrees(undefined);
     });
     loadWorktrees(gitModel().repoRoot);
-  }
+  };
 
-  function loadWorktrees(root: string) {
+  const loadWorktrees = (root: string) => {
     const epoch = resetEpoch;
     // Opening the picker is the retry for a prior list failure, so retire that alert before the
     // Attempt: on success nothing re-raises and the stale error is gone, on failure the catch
     // Below raises it afresh. Only the list source: browsing the picker must not clear an
     // Unretried switch error, which is a separate lifecycle.
     clearAlert("worktree-list");
-    runtime
-      .runPromise(Git.use((git) => git.worktrees(root)))
-      .then((list) => {
+    const run = async () => {
+      try {
+        const list = await runtime.runPromise(
+          Git.use((git) => git.worktrees(root))
+        );
         // The picker's rows, its highlight, and the summaries refresh it kicks all happen after this
         // Await, so a reset that lands mid-list has to stop the lot: without this the refresh would
         // Merely start late, capture the *new* epoch, and be waved through by its own guard.
@@ -2336,14 +2613,13 @@ function createState() {
             worktreeComboboxQuery() === ""
               ? Math.max(
                   0,
-                  ordered.findIndex((worktree) => worktree.path === root),
+                  ordered.findIndex((worktree) => worktree.path === root)
                 )
-              : 0,
+              : 0
           );
         });
         void refreshWorktreeSummaries(ordered, root);
-      })
-      .catch((error: unknown) => {
+      } catch (error) {
         if (epoch !== resetEpoch) {
           return;
         }
@@ -2352,23 +2628,25 @@ function createState() {
           raise(
             "worktree-list",
             "error",
-            `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+            `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`
           );
         });
-      });
-  }
+      }
+    };
+    void run();
+  };
 
   // Open the theme picker on the active selection (so it reads as "where am I
   // Now"), capturing it as the revert target. A `{dark,light}` pair (config-only,
   // The picker never writes one) matches no single row, so it parks on `auto`.
-  function openThemePicker() {
+  const openThemePicker = () => {
     const current = selection();
     const index =
       current === undefined
         ? 0
         : Math.max(
             0,
-            themeComboboxItems().findIndex((item) => item.selection === current),
+            themeComboboxItems().findIndex((item) => item.selection === current)
           );
     batch(() => {
       setThemeComboboxOrigin(current);
@@ -2376,13 +2654,13 @@ function createState() {
       setThemeComboboxIndex(index);
       setThemeComboboxOpen(true);
     });
-  }
+  };
 
   // Commit applies the highlighted row's selection, cancel restores the one
   // Captured on open. Done explicitly (not left to the preview effect) so a click
   // Or enter finalizes deterministically even without a prior hover, then closing
   // Stops the effect from writing further.
-  function closeThemePicker(commit: boolean) {
+  const closeThemePicker = (commit: boolean) => {
     if (commit) {
       const item = themeComboboxResults()[themeComboboxIndex()];
       setSelection(item === undefined ? themeComboboxOrigin() : item.selection);
@@ -2390,7 +2668,7 @@ function createState() {
       setSelection(themeComboboxOrigin());
     }
     setThemeComboboxOpen(false);
-  }
+  };
 
   /**
    * `ctrl-s`: write the current session settings back to the user config, as comment-preserving
@@ -2399,7 +2677,7 @@ function createState() {
    * previewed selection is what saves; the keymap commits the picker first, so the session and the
    * file land on the same value.
    */
-  async function persistSettings() {
+  const persistSettings = async () => {
     const snapshot = {
       appearance: appearance(),
       changesOnly: changesOnly(),
@@ -2418,19 +2696,21 @@ function createState() {
     };
     try {
       const saved = await runtime.runPromise(
-        Config.use((config) => config.persistSettings(snapshot)),
+        Config.use((config) => config.persistSettings(snapshot))
       );
       notify(
-        saved.length > 0 ? `saved ${saved.join(", ")} to config` : "settings already saved",
-        saved.length > 0 ? "success" : "info",
+        saved.length > 0
+          ? `saved ${saved.join(", ")} to config`
+          : "settings already saved",
+        saved.length > 0 ? "success" : "info"
       );
     } catch (error) {
       notify(
         `couldn't save config: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
-        "error",
+        "error"
       );
     }
-  }
+  };
 
   // A monotonic token guards the async last-commit resolution: a newer pick (of
   // Any kind) bumps it, so a late parentRef result can't overwrite the newer scope.
@@ -2446,8 +2726,9 @@ function createState() {
   // Parent ref resolved (async), so it sets the scope once that lands, guarded
   // Against a newer pick and against an unborn HEAD (no commits yet, where a
   // `git diff <parent> HEAD` has no right side to diff). The others are synchronous.
-  function selectScope(kind: ScopeKind) {
-    const token = (scopeSelection += 1);
+  const selectScope = (kind: ScopeKind) => {
+    scopeSelection += 1;
+    const token = scopeSelection;
 
     if (kind === "session") {
       setScope({ kind, ref: sessionBase() });
@@ -2456,9 +2737,13 @@ function createState() {
 
     if (kind === "last-commit") {
       const root = repoRoot();
-      runtime
-        .runPromise(Git.use((git) => Effect.all([git.headRef(root), git.parentRef(root)])))
-        .then(([head, parent]) => {
+      const resolve = async () => {
+        try {
+          const [head, parent] = await runtime.runPromise(
+            Git.use((git) =>
+              Effect.all([git.headRef(root), git.parentRef(root)])
+            )
+          );
           if (token !== scopeSelection) {
             return;
           }
@@ -2467,13 +2752,16 @@ function createState() {
             return;
           }
           setScope({ headRef: "HEAD", kind, ref: parent ?? emptyTree() });
-        })
-        .catch(() => {});
+        } catch {
+          // An unreadable parent leaves the current scope in place.
+        }
+      };
+      void resolve();
       return;
     }
 
     setScope({ kind, ref: baseRef() });
-  }
+  };
 
   const LOG_LIMIT = 30;
 
@@ -2483,28 +2771,32 @@ function createState() {
   onReset(() => {
     commitsLoad += 1;
   });
-  function loadCommits(root: string) {
-    const token = (commitsLoad += 1);
+  const loadCommits = (root: string) => {
+    commitsLoad += 1;
+    const token = commitsLoad;
     // Clear the prior snapshot so nothing can select a stale row while the reload
     // Is in flight (the "loading" view hides the list, so this never flashes).
     setCommits([]);
     setCommitsStatus("loading");
     setCommitsNow(Math.floor(Date.now() / 1000));
-    runtime
-      .runPromise(Git.use((git) => git.recentCommits(root, LOG_LIMIT)))
-      .then((loaded) => {
+    const load = async () => {
+      try {
+        const loaded = await runtime.runPromise(
+          Git.use((git) => git.recentCommits(root, LOG_LIMIT))
+        );
         if (token === commitsLoad) {
           setCommits(loaded);
           setCommitsStatus(loaded.length === 0 ? "empty" : "ready");
         }
-      })
-      .catch(() => {
+      } catch {
         if (token === commitsLoad) {
           setCommits([]);
           setCommitsStatus("error");
         }
-      });
-  }
+      }
+    };
+    void load();
+  };
 
   // Pin the viewer to one commit shown as its own diff (its first parent..the
   // Commit), reusing the range-scope pipeline. Synchronous: the parent came with
@@ -2512,16 +2804,20 @@ function createState() {
   // (false for an out-of-range index, e.g. an empty/loading list), so the caller
   // Only closes the picker on a real selection. Bumps the async-scope token so a
   // Pending last-commit resolution can't clobber the commit just pinned.
-  function selectCommit(index: number) {
+  const selectCommit = (index: number) => {
     const commit = commits()[index];
     if (commit === undefined) {
       return false;
     }
     scopeSelection += 1;
     setSelectedCommit(commit);
-    setScope({ headRef: commit.sha, kind: "commit", ref: commit.parent ?? emptyTree() });
+    setScope({
+      headRef: commit.sha,
+      kind: "commit",
+      ref: commit.parent ?? emptyTree(),
+    });
     return true;
-  }
+  };
 
   // The header names the active commit by its subject alone (the sha lives in the
   // Picker); the "commit ·" scope marker at the diff already says it is a commit.
@@ -2543,7 +2839,7 @@ function createState() {
   // The model load succeeds and only for the latest request (a failed or superseded
   // Switch must not leave future session picks pointed at the wrong HEAD).
   // CLI-ref kinds (all/staged/unstaged) are valid in any worktree, so they carry over.
-  async function rebaselineScope(root: string) {
+  const rebaselineScope = async (root: string) => {
     const head = await runtime.runPromise(Git.use((git) => git.headRef(root)));
     // Bornness belongs to the worktree, not the session: an orphan worktree has no HEAD to diff
     // Against even when the one being left did. Only the literal `HEAD` is substituted, since a ref
@@ -2573,7 +2869,9 @@ function createState() {
       };
     }
     if (active.kind === "last-commit") {
-      const parent = await runtime.runPromise(Git.use((git) => git.parentRef(root)));
+      const parent = await runtime.runPromise(
+        Git.use((git) => git.parentRef(root))
+      );
       return {
         headUnborn: unborn,
         scope: {
@@ -2590,7 +2888,7 @@ function createState() {
       scope: active.kind === "unstaged" ? active : { ...active, ref: base },
       sessionBase: headBase,
     };
-  }
+  };
 
   // Repoint the whole app (tree, diffs, polling) at another worktree
   // Without a restart. Lives in state, not App, so the keymap, the picker's
@@ -2605,17 +2903,21 @@ function createState() {
   onReset(() => {
     switchRequest += 1;
   });
-  async function switchWorktree(
+  const switchWorktree = async (
     worktree: Worktree,
-    options?: { label?: string; successNotice?: { level: LogLevel; text: string } },
-  ) {
+    options?: {
+      label?: string;
+      successNotice?: { level: LogLevel; text: string };
+    }
+  ) => {
     setWorktreeComboboxOpen(false);
     // Stamp and clear at the very top, before the validations, so every call supersedes: a load is
     // Async, and a second switch started before the first resolves could otherwise land out of
     // Order and overwrite the newer worktree. The stamp and the progress clear must lead the
     // Same-path and missing-path early returns too, or an invalid selection would leave an older
     // In-flight request as the latest one, and its stale completion could still commit or report.
-    const request = ++switchRequest;
+    switchRequest += 1;
+    const request = switchRequest;
     setSwitchProgress(undefined);
     if (worktree.path === gitModel().repoRoot) {
       return;
@@ -2643,7 +2945,7 @@ function createState() {
       // Blocking on `git ls-files --stage` over the whole worktree. The repoFilesPoll
       // In the refresh effect re-keys on the new repoRoot and fills the full tree.
       const changed = await runtime.runPromise(
-        Git.use((git) => git.changedFiles(worktree.path, nextScope)),
+        Git.use((git) => git.changedFiles(worktree.path, nextScope))
       );
       if (request !== switchRequest) {
         return;
@@ -2655,7 +2957,9 @@ function createState() {
         repoFilesKey: "",
       };
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path;
-      const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path));
+      const expanded = defaultExpandedDirectories(
+        fresh.changed.map((file) => file.path)
+      );
       batch(() => {
         setHeadUnborn(nextHeadUnborn);
         setSessionBase(nextSessionBase);
@@ -2666,7 +2970,9 @@ function createState() {
         setGitModel(fresh);
         setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
         setExpandedDirectories(
-          selected === undefined ? expanded : expandAncestorsForPath(expanded, selected),
+          selected === undefined
+            ? expanded
+            : expandAncestorsForPath(expanded, selected)
         );
         setFullContentPaths(new Set<string>());
         setJumpTarget(undefined);
@@ -2695,11 +3001,11 @@ function createState() {
         raise(
           "worktree-switch",
           "error",
-          `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
+          `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`
         );
       });
     }
-  }
+  };
 
   // --- background fibers (re-key/restart reactively, interrupt the prior fiber
   // On cleanup so an in-flight git is killed) ---
@@ -2720,185 +3026,225 @@ function createState() {
     const controller = new AbortController();
     // A fresh worktree re-proves the watcher from scratch (its fs.watch is new).
     setLastWatcherTick(0);
-    runtime
-      .runPromise(
-        Effect.gen(function* refreshLoop() {
-          // Two conflating queues (sliding, capacity 1): every trigger collapses
-          // To at most one pending run, so a burst of fs events on a large repo
-          // Can never queue a backlog of expensive `git status` / `ls-files`
-          // Reads. Each drain is serial, so two reads of the same kind never
-          // Overlap and write each other's stale result.
-          const changedTriggers = yield* Queue.sliding<void>(1);
-          const repoFilesTriggers = yield* Queue.sliding<void>(1);
+    const run = async () => {
+      try {
+        await runtime.runPromise(
+          Effect.gen(function* refreshLoop() {
+            // Two conflating queues (sliding, capacity 1): every trigger collapses
+            // To at most one pending run, so a burst of fs events on a large repo
+            // Can never queue a backlog of expensive `git status` / `ls-files`
+            // Reads. Each drain is serial, so two reads of the same kind never
+            // Overlap and write each other's stale result.
+            const changedTriggers = yield* Queue.sliding<undefined>(1);
+            const repoFilesTriggers = yield* Queue.sliding<undefined>(1);
 
-          // Whether `HEAD` is still a diff endpoint, repaired in **both** directions off the drain:
-          // A repository's first commit gives `HEAD` a meaning and returns the base to it, while a
-          // `git checkout --orphan` takes it away again. Neither is observable from the other side,
-          // And a one-directional repair left the second case failing silently on every tick with
-          // The tree frozen and no alert. Only the literal `HEAD` is ever substituted, so a ref the
-          // User named keeps its own meaning on an orphan branch.
-          const repairBase = Git.use((git) => git.headRef(root)).pipe(
-            Effect.tap((head) =>
-              Effect.sync(() => {
-                const unborn = cliBaseRef() === "HEAD" && head === undefined;
-                if (repoRoot() !== root || unborn === headUnborn()) {
-                  return;
-                }
-                batch(() => {
-                  setHeadUnborn(unborn);
-                  const current = scope();
-                  const base = unborn ? emptyTree() : cliBaseRef();
-                  // `last-commit`'s right side is the literal HEAD, so an unborn one leaves it with
-                  // No side to diff; it falls back to the default lens exactly as a worktree switch
-                  // Into an orphan checkout does. `session` and `commit` hold resolved SHAs, which
-                  // Survive the checkout, so they are left alone.
-                  if (unborn && current.kind === "last-commit") {
-                    setScope({ kind: "all", ref: base });
+            // Whether `HEAD` is still a diff endpoint, repaired in **both** directions off the drain:
+            // A repository's first commit gives `HEAD` a meaning and returns the base to it, while a
+            // `git checkout --orphan` takes it away again. Neither is observable from the other side,
+            // And a one-directional repair left the second case failing silently on every tick with
+            // The tree frozen and no alert. Only the literal `HEAD` is ever substituted, so a ref the
+            // User named keeps its own meaning on an orphan branch.
+            const repairBase = Git.use((git) => git.headRef(root)).pipe(
+              Effect.tap((head) =>
+                Effect.sync(() => {
+                  const unborn = cliBaseRef() === "HEAD" && head === undefined;
+                  if (repoRoot() !== root || unborn === headUnborn()) {
                     return;
                   }
+                  batch(() => {
+                    setHeadUnborn(unborn);
+                    const current = scope();
+                    const base = unborn ? emptyTree() : cliBaseRef();
+                    // `last-commit`'s right side is the literal HEAD, so an unborn one leaves it with
+                    // No side to diff; it falls back to the default lens exactly as a worktree switch
+                    // Into an orphan checkout does. `session` and `commit` hold resolved SHAs, which
+                    // Survive the checkout, so they are left alone.
+                    if (unborn && current.kind === "last-commit") {
+                      setScope({ kind: "all", ref: base });
+                      return;
+                    }
+                    if (
+                      (current.kind === "all" || current.kind === "staged") &&
+                      current.ref !== base
+                    ) {
+                      setScope({ ...current, ref: base });
+                    }
+                  });
+                })
+              ),
+              Effect.ignore
+            );
+
+            const refreshChanged = Git.use((git) =>
+              git.changedFiles(root, scopeNow)
+            ).pipe(
+              // Functional update so the merge is always against the latest committed
+              // Model: the repoFiles drain runs concurrently, so reasoning about which
+              // Write lands first is unnecessary when each merges from the current state.
+              Effect.tap((next) =>
+                Effect.sync(() =>
+                  setGitModel((prev) => {
+                    if (prev.repoRoot !== root) {
+                      return prev;
+                    }
+                    // Only re-list the whole repo when the file set actually shifted;
+                    // A content-only edit leaves the tree structure untouched.
+                    if (changedPathsDiffer(prev.changed, next.changed)) {
+                      Queue.offerUnsafe(repoFilesTriggers, undefined);
+                    }
+                    return mergeChanged(prev, next);
+                  })
+                )
+              ),
+              // Last-commit's right side is the literal HEAD (it always follows the
+              // Newest commit), but its parent must re-resolve as HEAD moves so a new
+              // Commit advances the window and re-keys checks. Guarded so we only re-key
+              // When the parent actually changed; session/all/staged need no resolution.
+              Effect.tap(() =>
+                scopeNow.kind === "last-commit"
+                  ? Git.use((git) => git.parentRef(root)).pipe(
+                      Effect.tap((parent) =>
+                        Effect.sync(() => {
+                          const current = scope();
+                          // Compare against the substituted ref, not the raw parent: on a root commit
+                          // The parent is `undefined` while the scope holds the empty tree, so testing
+                          // The raw value would differ on every tick and re-set the scope forever,
+                          // Resetting the viewer's cursor and scroll each time.
+                          const ref = parent ?? emptyTree();
+                          if (
+                            current.kind === "last-commit" &&
+                            current.ref !== ref
+                          ) {
+                            setScope({
+                              headRef: "HEAD",
+                              kind: "last-commit",
+                              ref,
+                            });
+                          }
+                        })
+                      ),
+                      Effect.ignore
+                    )
+                  : Effect.void
+              ),
+              // A successful read only ever proves HEAD is still what it was, so the born direction is
+              // Checked while the base is substituted and a repository with commits pays nothing.
+              Effect.tap(() => (headUnborn() ? repairBase : Effect.void)),
+              // The heartbeat is the always-on detector: a failure means this worktree
+              // Was deleted when its root is gone, or when the main worktree is gone (a
+              // Linked worktree's git breaks once main's .git is deleted, even if its own
+              // Dir lingers). Flag it (App recovers); any other failure is transient.
+              Effect.catch(() =>
+                Effect.sync(() => {
+                  const main = mainWorktreePath();
                   if (
-                    (current.kind === "all" || current.kind === "staged") &&
-                    current.ref !== base
+                    repoRoot() === root &&
+                    (!existsSync(root) || (main !== "" && !existsSync(main)))
                   ) {
-                    setScope({ ...current, ref: base });
+                    setCurrentWorktreeDeleted(true);
                   }
-                });
-              }),
-            ),
-            Effect.ignore,
-          );
-
-          const refreshChanged = Git.use((git) => git.changedFiles(root, scopeNow)).pipe(
-            // Functional update so the merge is always against the latest committed
-            // Model: the repoFiles drain runs concurrently, so reasoning about which
-            // Write lands first is unnecessary when each merges from the current state.
-            Effect.tap((next) =>
-              Effect.sync(() =>
-                setGitModel((prev) => {
-                  if (prev.repoRoot !== root) {
-                    return prev;
-                  }
-                  // Only re-list the whole repo when the file set actually shifted;
-                  // A content-only edit leaves the tree structure untouched.
-                  if (changedPathsDiffer(prev.changed, next.changed)) {
-                    Queue.offerUnsafe(repoFilesTriggers, undefined);
-                  }
-                  return mergeChanged(prev, next);
-                }),
-              ),
-            ),
-            // Last-commit's right side is the literal HEAD (it always follows the
-            // Newest commit), but its parent must re-resolve as HEAD moves so a new
-            // Commit advances the window and re-keys checks. Guarded so we only re-key
-            // When the parent actually changed; session/all/staged need no resolution.
-            Effect.tap(() =>
-              scopeNow.kind === "last-commit"
-                ? Git.use((git) => git.parentRef(root)).pipe(
-                    Effect.tap((parent) =>
-                      Effect.sync(() => {
-                        const current = scope();
-                        // Compare against the substituted ref, not the raw parent: on a root commit
-                        // The parent is `undefined` while the scope holds the empty tree, so testing
-                        // The raw value would differ on every tick and re-set the scope forever,
-                        // Resetting the viewer's cursor and scroll each time.
-                        const ref = parent ?? emptyTree();
-                        if (current.kind === "last-commit" && current.ref !== ref) {
-                          setScope({ headRef: "HEAD", kind: "last-commit", ref });
+                }).pipe(
+                  // A read that fails on a live worktree is the other direction: `git diff HEAD`
+                  // Stops working the moment HEAD becomes unborn, and no success path can see it.
+                  Effect.flatMap(() => repairBase)
+                )
+              )
+            );
+            const refreshRepoFiles = Git.use((git) => git.repoFiles(root)).pipe(
+              Effect.tap((next) =>
+                Effect.sync(() =>
+                  setGitModel((prev) =>
+                    prev.repoRoot === root &&
+                    prev.repoFilesKey !== next.repoFilesKey
+                      ? {
+                          ...prev,
+                          repoFiles: next.repoFiles,
+                          repoFilesKey: next.repoFilesKey,
                         }
-                      }),
-                    ),
-                    Effect.ignore,
+                      : prev
                   )
-                : Effect.void,
-            ),
-            // A successful read only ever proves HEAD is still what it was, so the born direction is
-            // Checked while the base is substituted and a repository with commits pays nothing.
-            Effect.tap(() => (headUnborn() ? repairBase : Effect.void)),
-            // The heartbeat is the always-on detector: a failure means this worktree
-            // Was deleted when its root is gone, or when the main worktree is gone (a
-            // Linked worktree's git breaks once main's .git is deleted, even if its own
-            // Dir lingers). Flag it (App recovers); any other failure is transient.
-            Effect.catch(() =>
-              Effect.sync(() => {
-                const main = mainWorktreePath();
-                if (
-                  repoRoot() === root &&
-                  (!existsSync(root) || (main !== "" && !existsSync(main)))
-                ) {
-                  setCurrentWorktreeDeleted(true);
-                }
-              }).pipe(
-                // A read that fails on a live worktree is the other direction: `git diff HEAD`
-                // Stops working the moment HEAD becomes unborn, and no success path can see it.
-                Effect.flatMap(() => repairBase),
+                )
               ),
-            ),
-          );
-          const refreshRepoFiles = Git.use((git) => git.repoFiles(root)).pipe(
-            Effect.tap((next) =>
-              Effect.sync(() =>
-                setGitModel((prev) =>
-                  prev.repoRoot === root && prev.repoFilesKey !== next.repoFilesKey
-                    ? { ...prev, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey }
-                    : prev,
-                ),
-              ),
-            ),
-            Effect.ignore,
-          );
+              Effect.ignore
+            );
 
-          // Changed-set triggers: an immediate tick on (re)key, a debounced
-          // Fs-watch tick per change (which also records watcher health), and a
-          // Safety poll whose cadence adapts to that health — fast where the
-          // Watcher is unproven or has missed a change, slow once it has earned
-          // Trust. See `refreshDelay`.
-          const watchTicks = Stream.unwrap(
-            Effect.gen(function* watchStream() {
-              const watcher = yield* Watcher;
-              return watcher.changes(root);
-            }),
-          ).pipe(Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))));
-          const safetyTicks = Stream.fromEffect(
-            Effect.suspend(() =>
-              Effect.sleep(
-                refreshDelay({
-                  lastChangeAt: lastChange(),
-                  lastWatcherTickAt: lastWatcherTick(),
-                  now: Date.now(),
-                }),
-              ),
-            ),
-          ).pipe(Stream.forever);
-          // RepoFiles triggers: an immediate load on (re)key plus a slow floor.
-          // The changed refresh wakes it on any real structural shift, so this
-          // Floor only covers a change the changed set never reflected.
-          const repoFilesFloor = Stream.fromEffect(Effect.sleep("30 seconds")).pipe(Stream.forever);
+            // Changed-set triggers: an immediate tick on (re)key, a debounced
+            // Fs-watch tick per change (which also records watcher health), and a
+            // Safety poll whose cadence adapts to that health — fast where the
+            // Watcher is unproven or has missed a change, slow once it has earned
+            // Trust. See `refreshDelay`.
+            const watchTicks = Stream.unwrap(
+              Effect.gen(function* watchStream() {
+                const watcher = yield* Watcher;
+                return watcher.changes(root);
+              })
+            ).pipe(
+              Stream.tap(() =>
+                Effect.sync(() => setLastWatcherTick(Date.now()))
+              )
+            );
+            const safetyTicks = Stream.fromEffect(
+              Effect.suspend(() =>
+                Effect.sleep(
+                  refreshDelay({
+                    lastChangeAt: lastChange(),
+                    lastWatcherTickAt: lastWatcherTick(),
+                    now: Date.now(),
+                  })
+                )
+              )
+            ).pipe(Stream.forever);
+            // RepoFiles triggers: an immediate load on (re)key plus a slow floor.
+            // The changed refresh wakes it on any real structural shift, so this
+            // Floor only covers a change the changed set never reflected.
+            const repoFilesFloor = Stream.fromEffect(
+              Effect.sleep("30 seconds")
+            ).pipe(Stream.forever);
 
-          const feedChanged = Stream.mergeAll([Stream.make(undefined), watchTicks, safetyTicks], {
-            concurrency: "unbounded",
-          }).pipe(Stream.runForEach(() => Queue.offer(changedTriggers, undefined)));
-          const feedRepoFiles = Stream.mergeAll([Stream.make(undefined), repoFilesFloor], {
-            concurrency: "unbounded",
-          }).pipe(Stream.runForEach(() => Queue.offer(repoFilesTriggers, undefined)));
-          const drainChanged = Stream.fromQueue(changedTriggers).pipe(
-            Stream.mapEffect(() => refreshChanged),
-            Stream.runDrain,
-          );
-          const drainRepoFiles = Stream.fromQueue(repoFilesTriggers).pipe(
-            Stream.mapEffect(() => refreshRepoFiles),
-            Stream.runDrain,
-          );
+            const feedChanged = Stream.mergeAll(
+              [Stream.make(undefined), watchTicks, safetyTicks],
+              {
+                concurrency: "unbounded",
+              }
+            ).pipe(
+              Stream.runForEach(() => Queue.offer(changedTriggers, undefined))
+            );
+            const feedRepoFiles = Stream.mergeAll(
+              [Stream.make(undefined), repoFilesFloor],
+              {
+                concurrency: "unbounded",
+              }
+            ).pipe(
+              Stream.runForEach(() => Queue.offer(repoFilesTriggers, undefined))
+            );
+            const drainChanged = Stream.fromQueue(changedTriggers).pipe(
+              Stream.mapEffect(() => refreshChanged),
+              Stream.runDrain
+            );
+            const drainRepoFiles = Stream.fromQueue(repoFilesTriggers).pipe(
+              Stream.mapEffect(() => refreshRepoFiles),
+              Stream.runDrain
+            );
 
-          // All four run until the controller aborts (worktree/scope re-key),
-          // Which interrupts the fiber and closes the watcher's fs handles.
-          yield* Effect.all([feedChanged, feedRepoFiles, drainChanged, drainRepoFiles], {
-            concurrency: "unbounded",
-          });
-        }),
-        { signal: controller.signal },
-      )
-      .catch(() => {});
-    onCleanup(() => controller.abort());
+            // All four run until the controller aborts (worktree/scope re-key),
+            // Which interrupts the fiber and closes the watcher's fs handles.
+            yield* Effect.all(
+              [feedChanged, feedRepoFiles, drainChanged, drainRepoFiles],
+              {
+                concurrency: "unbounded",
+              }
+            );
+          }),
+          { signal: controller.signal }
+        );
+      } catch {
+        // Aborting the controller on a re-key interrupts the loop; nothing to report.
+      }
+    };
+    void run();
+    onCleanup(() => {
+      controller.abort();
+    });
   });
 
   // Keep every worktree's summary warm, so the header can say that an agent is working
@@ -2917,23 +3263,34 @@ function createState() {
       return;
     }
     const controller = new AbortController();
-    runtime
-      .runPromise(
-        Effect.gen(function* peerSummaryLoop() {
-          const git = yield* Git;
-          while (true) {
-            const list = yield* git.worktrees(root).pipe(Effect.orElseSucceed(() => []));
-            const selectable = list.filter((worktree) => !worktree.bare);
-            if (selectable.length > 1) {
-              yield* Effect.promise(() => refreshWorktreeSummaries(selectable, root));
+    const run = async () => {
+      try {
+        await runtime.runPromise(
+          Effect.gen(function* peerSummaryLoop() {
+            const git = yield* Git;
+            while (true) {
+              const list = yield* git
+                .worktrees(root)
+                .pipe(Effect.orElseSucceed(() => []));
+              const selectable = list.filter((worktree) => !worktree.bare);
+              if (selectable.length > 1) {
+                yield* Effect.promise(async () => {
+                  await refreshWorktreeSummaries(selectable, root);
+                });
+              }
+              yield* Effect.sleep(PEER_SUMMARY_MS);
             }
-            yield* Effect.sleep(PEER_SUMMARY_MS);
-          }
-        }),
-        { signal: controller.signal },
-      )
-      .catch(() => {});
-    onCleanup(() => controller.abort());
+          }),
+          { signal: controller.signal }
+        );
+      } catch {
+        // Aborting the controller on a re-key interrupts the poll; nothing to report.
+      }
+    };
+    void run();
+    onCleanup(() => {
+      controller.abort();
+    });
   });
 
   // Tick the recency clock once a second while anything is still fading, then stop. Drives the
@@ -2950,10 +3307,13 @@ function createState() {
     const fileAt = latestActivity(activityLog())?.at ?? 0;
     const worktreeAt = Math.max(
       0,
-      ...[...worktreeSummaries().values()].map((summary) => summary.lastActivityAt ?? 0),
+      ...[...worktreeSummaries().values()].map(
+        (summary) => summary.lastActivityAt ?? 0
+      )
     );
     const fading = () =>
-      Date.now() - fileAt < RECENT_MS || Date.now() - worktreeAt < WORKTREE_ACTIVE_MS;
+      Date.now() - fileAt < RECENT_MS ||
+      Date.now() - worktreeAt < WORKTREE_ACTIVE_MS;
     if ((fileAt === 0 && worktreeAt === 0) || !fading()) {
       setNow(Date.now());
       return;
@@ -2964,7 +3324,9 @@ function createState() {
         clearInterval(timer);
       }
     }, 1000);
-    onCleanup(() => clearInterval(timer));
+    onCleanup(() => {
+      clearInterval(timer);
+    });
   });
 
   // Detect agent edits from each new model and record them as activity. A scope or
@@ -2980,7 +3342,9 @@ function createState() {
   });
   createEffect(() => {
     const model = gitModel();
-    const previousByPath = new Map(previousChanged.map((file) => [file.path, file]));
+    const previousByPath = new Map(
+      previousChanged.map((file) => [file.path, file])
+    );
     const prevScopeKey = previousScopeKey;
     const prevRepoRoot = previousRepoRoot;
     previousChanged = model.changed;
@@ -3000,7 +3364,10 @@ function createState() {
       const before = previousByPath.get(file.path);
       if (before === undefined) {
         entries.push({ kind: "appeared", path: file.path });
-      } else if (before.additions !== file.additions || before.deletions !== file.deletions) {
+      } else if (
+        before.additions !== file.additions ||
+        before.deletions !== file.deletions
+      ) {
         entries.push({ kind: "changed", path: file.path });
       }
       previousByPath.delete(file.path);
@@ -3012,7 +3379,9 @@ function createState() {
     if (entries.length > 0) {
       batch(() => {
         setLastChange(Date.now());
-        setActivityLog((current) => recordActivity(current, entries, Date.now()));
+        setActivityLog((current) =>
+          recordActivity(current, entries, Date.now())
+        );
       });
     }
   });
@@ -3256,7 +3625,7 @@ function createState() {
     worktrees,
     zoomed,
   };
-}
+};
 
 // One global reactive root owns every signal/memo/effect for the app's lifetime
 // (the process exits rather than disposing it), so module consumers can import

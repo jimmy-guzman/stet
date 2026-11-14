@@ -5,11 +5,11 @@ import type { Worktree } from "./git/worktree";
 // The right-side stats for the active file: line count in full-file view, the
 // Add/remove counts (plus any warnings) in diff view. The diff/file mode is left
 // Implicit, since `N lines` vs `+A -D` already says which it is.
-export function viewerStats(
+export const viewerStats = (
   selectedFile: ChangedFile | undefined,
   showFileContent: boolean,
-  fileContent: FileContent | undefined,
-) {
+  fileContent: FileContent | undefined
+) => {
   if (showFileContent) {
     return fileContent?.kind === "text"
       ? `${fileContent.lineCount} lines${fileContent.truncated ? " (truncated)" : ""}`
@@ -18,18 +18,20 @@ export function viewerStats(
   if (selectedFile === undefined) {
     return "";
   }
-  const warnings = selectedFile.warnings.length === 0 ? "" : ` !${selectedFile.warnings.join(",")}`;
+  const warnings =
+    selectedFile.warnings.length === 0
+      ? ""
+      : ` !${selectedFile.warnings.join(",")}`;
   if (selectedFile.binary) {
     return `binary${warnings}`;
   }
   return `+${selectedFile.additions} -${selectedFile.deletions}${warnings}`;
-}
+};
 
-export function worktreeLabel(worktree: Worktree) {
-  return worktree.branch ?? `${worktree.head.slice(0, 7)} (detached)`;
-}
+export const worktreeLabel = (worktree: Worktree) =>
+  worktree.branch ?? `${worktree.head.slice(0, 7)} (detached)`;
 
-export function placeholderText(content: FileContent | undefined) {
+export const placeholderText = (content: FileContent | undefined) => {
   if (content === undefined) {
     return "";
   }
@@ -43,7 +45,7 @@ export function placeholderText(content: FileContent | undefined) {
   }
 
   return "file not found";
-}
+};
 
 const KIND_LETTER: Record<ChangedFile["kind"], string> = {
   added: "A",
@@ -53,20 +55,18 @@ const KIND_LETTER: Record<ChangedFile["kind"], string> = {
   untracked: "U",
 };
 
-export function kindLetter(kind: ChangedFile["kind"]) {
-  return KIND_LETTER[kind];
-}
+export const kindLetter = (kind: ChangedFile["kind"]) => KIND_LETTER[kind];
 
-export function nearestNavigableIndex(
+export const nearestNavigableIndex = (
   lines: { newLine?: number; oldLine?: number }[],
-  target: number,
-) {
+  target: number
+) => {
   let best = -1;
   let bestDistance = Number.POSITIVE_INFINITY;
-  lines.forEach((line, index) => {
+  for (const [index, line] of lines.entries()) {
     const reference = line.newLine ?? line.oldLine;
     if (reference === undefined) {
-      return;
+      continue;
     }
 
     const distance = Math.abs(reference - target);
@@ -74,7 +74,7 @@ export function nearestNavigableIndex(
       bestDistance = distance;
       best = index;
     }
-  });
+  }
 
   return best;
-}
+};

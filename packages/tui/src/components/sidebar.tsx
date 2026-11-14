@@ -1,0 +1,105 @@
+import { createMemo, Index, Show } from "solid-js";
+
+import { state } from "@/state";
+import { theme } from "@/theme/context";
+import { createDoubleClickGuard } from "@/utils/double-click";
+
+import { ListScrollbar } from "./list-scrollbar";
+import { PaneFrame } from "./pane-frame";
+import { TreeRow } from "./tree-row";
+import { windowWheelHandler } from "./wheel";
+
+const focused = () => state.focusedPane() === "tree";
+const viewport = () => state.layout().sidebar.content.height;
+
+export const Sidebar = () => {
+  // One guard for the whole tree: double-clicking a file row pins it, mirroring
+  // The tab strip. Owned here (not per row) so it outlives a row remount.
+  const isDoubleFileClick = createDoubleClickGuard();
+
+  // Window the tree to its viewport, the SearchPane pattern: only ~viewport
+  // TreeRow renderables ever exist, so a 100k-file repo mounts and scrolls at
+  // The same cost as a small one. The cursor-follow and clamp live in state.
+  const visibleRows = createMemo(() => {
+    const start = state.sidebarScrollTop();
+    return state.treeRows().slice(start, start + viewport());
+  });
+
+  const onWheel = windowWheelHandler({
+    rowCount: () => state.treeRows().length,
+    scrollTop: state.sidebarScrollTop,
+    setScrollTop: (next) => {
+      state.setSidebarScrollTop(next);
+    },
+    viewport,
+  });
+
+  return (
+    <PaneFrame
+      focused={focused()}
+      width="100%"
+      height="100%"
+      backgroundColor={theme.colors.surface.base}
+      onMouseDown={() => {
+        state.setFocusedPane("tree");
+      }}
+    >
+      <box
+        width="100%"
+        height={viewport()}
+        flexDirection="row"
+        onMouseScroll={onWheel}
+      >
+        <box
+          ref={(el) => {
+            // A click activates a row; it must never start a text selection.
+            el.selectable = false;
+          }}
+          flexGrow={1}
+          flexDirection="column"
+        >
+          <Show
+            when={state.treeRows().length > 0}
+            fallback={
+              // No rows yet. During the deferred repoFiles load, render nothing: the
+              // Window is already a fixed viewport, so the pane stays blank and
+              // Reserved on its own. Only a genuinely loaded, file-less repo gets
+              // The real empty state.
+              <Show when={!state.repoFilesLoading()}>
+                <box
+                  id="tree-empty"
+                  width="100%"
+                  height={viewport()}
+                  flexDirection="column"
+                  justifyContent="center"
+                  alignItems="center"
+                  backgroundColor={theme.colors.surface.base}
+                >
+                  <text fg={theme.colors.text.muted}>
+                    {state.changesOnly() ? "no changes" : "no files"}
+                  </text>
+                  <text fg={theme.colors.text.faint}>
+                    {state.changesOnly()
+                      ? "press c to show all"
+                      : "this repository has no files yet"}
+                  </text>
+                </box>
+              </Show>
+            }
+          >
+            <Index each={visibleRows()}>
+              {(row) => (
+                <TreeRow row={row()} isDoubleClick={isDoubleFileClick} />
+              )}
+            </Index>
+          </Show>
+        </box>
+        <ListScrollbar
+          rowCount={() => state.treeRows().length}
+          viewport={viewport}
+          scrollTop={state.sidebarScrollTop}
+        />
+      </box>
+    </PaneFrame>
+  );
+};

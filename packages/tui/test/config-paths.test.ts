@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { configPaths } from "@/config/paths";
 
@@ -14,8 +14,8 @@ describe("configPaths", () => {
 
   test("falls back to ~/.config when XDG is unset", () => {
     expect(configPaths({})).toEqual([
-      join(homedir(), ".config", "stet", "config.jsonc"),
-      join(homedir(), ".config", "stet", "config.json"),
+      path.join(homedir(), ".config", "stet", "config.jsonc"),
+      path.join(homedir(), ".config", "stet", "config.json"),
     ]);
   });
 });

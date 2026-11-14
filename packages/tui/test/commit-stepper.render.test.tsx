@@ -1,48 +1,65 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  runGit,
+  seedState,
+} from "./helpers";
 
 // Long, gitmoji-bearing subjects that overflow the overlay at this width: they must
 // Clip to one line, never wrap a row two cells tall (the emoji variation-selector trap).
-function commitFixture(prefix: string) {
+const commitFixture = (prefix: string) => {
   const repoRoot = createFixtureRepo(prefix, {
     "package.json": `${JSON.stringify({ name: "commits-fixture" })}\n`,
     "src/a.ts": "const a = 1\n",
   });
-  writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
+  writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
   runGit(repoRoot, [
     "commit",
     "-am",
     "ZEBRA ✨ a deliberately long subject that overflows the row",
   ]);
-  writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 3\n");
-  runGit(repoRoot, ["commit", "-am", "YACHT 🐛 another long subject wider than the overlay box"]);
-  writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 4\n");
-  runGit(repoRoot, ["commit", "-am", "XENON 🔄 the newest commit with a long trailing subject"]);
+  writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 3\n");
+  runGit(repoRoot, [
+    "commit",
+    "-am",
+    "YACHT 🐛 another long subject wider than the overlay box",
+  ]);
+  writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 4\n");
+  runGit(repoRoot, [
+    "commit",
+    "-am",
+    "XENON 🔄 the newest commit with a long trailing subject",
+  ]);
   return repoRoot;
-}
+};
 
 describe("commit drill-down", () => {
   test("lists recent commits, each on its own line, and picking one relabels the header", async () => {
     const repoRoot = commitFixture("stet-commits-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 90,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 90,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       // From `uncommitted` (index 0) step down to the commits drill-down row (index 5), then enter.
       mockInput.pressKey("s");
-      await settleUntil("scope picker opens", (frame) => frame.includes("switch scope"));
+      await settleUntil("scope picker opens", (frame) =>
+        frame.includes("switch scope")
+      );
       mockInput.pressKey("j");
       mockInput.pressKey("j");
       mockInput.pressKey("j");
@@ -53,7 +70,10 @@ describe("commit drill-down", () => {
 
       const list = await settleUntil(
         "the commit list shows newest-first",
-        (frame) => frame.includes("commits") && frame.includes("XENON") && frame.includes("ZEBRA"),
+        (frame) =>
+          frame.includes("commits") &&
+          frame.includes("XENON") &&
+          frame.includes("ZEBRA")
       );
 
       // No-wrap: the three commit rows land on consecutive lines. A wrapped subject
@@ -73,7 +93,7 @@ describe("commit drill-down", () => {
       mockInput.pressEnter();
       const after = await settleUntil(
         "header names the commit by subject",
-        (frame) => !frame.includes("switch scope") && frame.includes("YACHT"),
+        (frame) => !frame.includes("switch scope") && frame.includes("YACHT")
       );
       expect(after).toContain("YACHT");
     } finally {

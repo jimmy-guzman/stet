@@ -17,11 +17,11 @@ const QUIET = "2 seconds";
 // Validated on Linux, rather than maximising the idle-cost win.
 const TRUSTED = "5 seconds";
 
-export function refreshDelay(input: {
+export const refreshDelay = (input: {
   now: number;
   lastChangeAt: number;
   lastWatcherTickAt: number;
-}) {
+}) => {
   const active = input.now - input.lastChangeAt < ACTIVE_MS;
   const proven = input.lastWatcherTickAt > 0;
 
@@ -41,4 +41,4 @@ export function refreshDelay(input: {
   }
 
   return TRUSTED;
-}
+};

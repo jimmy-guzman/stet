@@ -1,49 +1,60 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { createTextAttributes } from "@opentui/core";
 import { createMockMouse } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
+
+const bTab = () => state.tabItems().find((tab) => tab.path === "src/b.ts");
 
 describe("tabs strip", () => {
   test("appears with a second tab, swaps content, and collapses on close", async () => {
-    const body = Array.from({ length: 20 }, (_, index) => `const line${index + 1} = ${index + 1}`);
+    const body = Array.from(
+      { length: 20 },
+      (_, index) => `const line${index + 1} = ${index + 1}`
+    );
     const repoRoot = createFixtureRepo("stet-tabs-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${body.join("\n")}\n`,
       "src/b.ts": `${body.join("\n")}\n`,
     });
     writeFileSync(
-      join(repoRoot, "src", "a.ts"),
-      `${["const line1 = 1", "const aChanged = true", ...body.slice(2)].join("\n")}\n`,
+      path.join(repoRoot, "src", "a.ts"),
+      `${["const line1 = 1", "const aChanged = true", ...body.slice(2)].join("\n")}\n`
     );
     writeFileSync(
-      join(repoRoot, "src", "b.ts"),
-      `${["const line1 = 1", "const bChanged = true", ...body.slice(2)].join("\n")}\n`,
+      path.join(repoRoot, "src", "b.ts"),
+      `${["const line1 = 1", "const bChanged = true", ...body.slice(2)].join("\n")}\n`
     );
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/.test(frame), 5);
+      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
 
       // One preview tab: no strip, just the path on the left.
       state.selectFile("src/a.ts");
       await settleUntil(
         "a.ts preview",
-        (frame) => frame.includes("src/a.ts") && frame.includes("aChanged"),
+        (frame) => frame.includes("src/a.ts") && frame.includes("aChanged")
       );
       expect(state.tabItems().length).toBe(1);
       expect(state.tabItems()[0].preview).toBe(true);
@@ -52,18 +63,25 @@ describe("tabs strip", () => {
       // Strip appears with the pinned a.ts (basename) and the active preview b.ts.
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
-      const twoTabs = await settleUntil("b.ts active", (frame) => frame.includes("bChanged"));
+      const twoTabs = await settleUntil("b.ts active", (frame) =>
+        frame.includes("bChanged")
+      );
       expect(state.tabItems().length).toBe(2);
-      expect(twoTabs).toContain("src/b.ts"); // Active tab shows its path
-      expect(twoTabs).toContain("a.ts"); // Pinned tab shows its basename
-      expect(twoTabs).not.toContain("src/a.ts"); // ...not its full path
+      // Active tab shows its path
+      expect(twoTabs).toContain("src/b.ts");
+      // Pinned tab shows its basename
+      expect(twoTabs).toContain("a.ts");
+      // ...not its full path
+      expect(twoTabs).not.toContain("src/a.ts");
       // Stats stay on the right, and the diff/file word is gone.
-      expect(twoTabs).toMatch(/\+\d+ -\d+ · ln \d+/);
+      expect(twoTabs).toMatch(/\+\d+ -\d+ · ln \d+/u);
       expect(twoTabs).not.toContain("· diff");
 
       // Cycle to the pinned tab: the viewer swaps to a.ts.
       state.cycleTab(-1);
-      const back = await settleUntil("a.ts active again", (frame) => frame.includes("aChanged"));
+      const back = await settleUntil("a.ts active again", (frame) =>
+        frame.includes("aChanged")
+      );
       expect(back).toContain("src/a.ts");
       expect(back).not.toContain("src/b.ts");
 
@@ -71,10 +89,10 @@ describe("tabs strip", () => {
       mockInput.pressKey("w", { ctrl: true });
       const collapsed = await settleUntil(
         "back to one tab",
-        (frame) => frame.includes("src/b.ts") && frame.includes("bChanged"),
+        (frame) => frame.includes("src/b.ts") && frame.includes("bChanged")
       );
       expect(state.tabItems().length).toBe(1);
-      expect(collapsed).toMatch(/\+\d+ -\d+ · ln \d+/);
+      expect(collapsed).toMatch(/\+\d+ -\d+ · ln \d+/u);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
@@ -82,37 +100,43 @@ describe("tabs strip", () => {
   }, 20_000);
 
   test("clicking a tab switches it; double-clicking starts no text selection", async () => {
-    const body = Array.from({ length: 20 }, (_, index) => `const line${index + 1} = ${index + 1}`);
+    const body = Array.from(
+      { length: 20 },
+      (_, index) => `const line${index + 1} = ${index + 1}`
+    );
     const repoRoot = createFixtureRepo("stet-tabcursor-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${body.join("\n")}\n`,
       "src/b.ts": `${body.join("\n")}\n`,
     });
     writeFileSync(
-      join(repoRoot, "src", "a.ts"),
-      `const aChanged = true\n${body.slice(1).join("\n")}\n`,
+      path.join(repoRoot, "src", "a.ts"),
+      `const aChanged = true\n${body.slice(1).join("\n")}\n`
     );
     writeFileSync(
-      join(repoRoot, "src", "b.ts"),
-      `const bChanged = true\n${body.slice(1).join("\n")}\n`,
+      path.join(repoRoot, "src", "b.ts"),
+      `const bChanged = true\n${body.slice(1).join("\n")}\n`
     );
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 30,
-      width: 120,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 30,
+        width: 120,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const mouse = createMockMouse(renderer);
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/.test(frame), 5);
+      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
       // Pin a.ts, then preview b.ts -> strip shows [a.ts][src/b.ts].
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
-      const frame = await settleUntil("two tabs", (f) => f.includes("src/b.ts"));
+      const frame = await settleUntil("two tabs", (f) =>
+        f.includes("src/b.ts")
+      );
 
       // Locate the pinned "a.ts" tab in the strip (right of the sidebar columns).
       const lines = frame.split("\n");
@@ -148,38 +172,40 @@ describe("tabs strip", () => {
   }, 20_000);
 
   test("double-clicking a preview tab pins it", async () => {
-    const body = Array.from({ length: 20 }, (_, index) => `const line${index + 1} = ${index + 1}`);
+    const body = Array.from(
+      { length: 20 },
+      (_, index) => `const line${index + 1} = ${index + 1}`
+    );
     const repoRoot = createFixtureRepo("stet-tabpin-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/a.ts": `${body.join("\n")}\n`,
       "src/b.ts": `${body.join("\n")}\n`,
     });
     writeFileSync(
-      join(repoRoot, "src", "a.ts"),
-      `const aChanged = true\n${body.slice(1).join("\n")}\n`,
+      path.join(repoRoot, "src", "a.ts"),
+      `const aChanged = true\n${body.slice(1).join("\n")}\n`
     );
     writeFileSync(
-      join(repoRoot, "src", "b.ts"),
-      `const bChanged = true\n${body.slice(1).join("\n")}\n`,
+      path.join(repoRoot, "src", "b.ts"),
+      `const bChanged = true\n${body.slice(1).join("\n")}\n`
     );
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } = await testRender(
-      () => <App />,
-      { height: 30, width: 120 },
-    );
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
+      await testRender(() => <App />, { height: 30, width: 120 });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/.test(frame), 5);
+      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
       // Pin a.ts, then preview b.ts so the strip shows [a.ts][src/b.ts].
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
-      const frame = await settleUntil("two tabs", (f) => f.includes("src/b.ts"));
+      const frame = await settleUntil("two tabs", (f) =>
+        f.includes("src/b.ts")
+      );
 
-      const bTab = () => state.tabItems().find((tab) => tab.path === "src/b.ts");
       expect(bTab()?.preview).toBe(true);
 
       // Double-click the active preview tab's label to pin it.
@@ -202,14 +228,15 @@ describe("tabs strip", () => {
       "src/a.ts": "const a = 1\n",
       "src/b.ts": "const b = 1\n",
     });
-    writeFileSync(join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
+    writeFileSync(path.join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockMouse } =
+      await testRender(() => <App />, {
+        height: 24,
+        width: 100,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
@@ -241,38 +268,47 @@ describe("tabs strip", () => {
       "src/a.ts": "const a = 1\n",
       "src/b.ts": "const b = 1\n",
     });
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const aChanged = 1\n");
-    writeFileSync(join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const aChanged = 1\n");
+    writeFileSync(path.join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      height: 24,
-      width: 100,
-    });
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, {
+        height: 24,
+        width: 100,
+      });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/.test(frame), 5);
+      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
       // Pin a.ts, preview b.ts -> strip shows the pinned a.ts and the preview b.ts.
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
       state.selectFile("src/b.ts");
-      const frame = await settleUntil("two tabs", (f) => f.includes("src/b.ts"));
+      const frame = await settleUntil("two tabs", (f) =>
+        f.includes("src/b.ts")
+      );
       await renderOnce();
 
       // Read the actual rendered cell attributes (what the terminal paints).
       const italic = createTextAttributes({ italic: true });
       const buffer = renderer.currentRenderBuffer;
-      const attributeAt = (x: number, y: number) => buffer.buffers.attributes[y * buffer.width + x];
+      // `italic` is a single bit, so the cell carries it when that bit of its mask is set.
+      const isItalicAt = (x: number, y: number) =>
+        Math.floor(
+          (buffer.buffers.attributes[y * buffer.width + x] ?? 0) / italic
+        ) %
+          2 ===
+        1;
 
       const lines = frame.split("\n");
       const row = lines.findIndex((line) => line.includes("src/b.ts"));
       const previewCol = lines[row].indexOf("b.ts");
       const pinnedCol = lines[row].indexOf("a.ts");
 
-      expect(attributeAt(previewCol, row) & italic).toBe(italic);
-      expect(attributeAt(pinnedCol, row) & italic).toBe(0);
+      expect(isItalicAt(previewCol, row)).toBe(true);
+      expect(isItalicAt(pinnedCol, row)).toBe(false);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

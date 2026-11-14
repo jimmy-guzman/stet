@@ -13,7 +13,9 @@ describe("runUpgrade short-circuit", () => {
 
   beforeEach(() => {
     logs.length = 0;
-    console.log = (...args: unknown[]) => void logs.push(args.join(" "));
+    console.log = (...args: unknown[]) => {
+      logs.push(args.join(" "));
+    };
   });
 
   afterEach(() => {
@@ -24,21 +26,25 @@ describe("runUpgrade short-circuit", () => {
     const code = await runUpgrade({
       currentVersion: "0.3.3",
       execPath: "/home/alice/.local/bin/stet",
-      fetchLatest: async () => "0.3.3",
+      fetchLatest: async () => await Promise.resolve("0.3.3"),
     });
 
     expect(code).toBe(0);
-    expect(logs.some((line) => line.includes("stet 0.3.3 is already up to date"))).toBe(true);
+    expect(
+      logs.some((line) => line.includes("stet 0.3.3 is already up to date"))
+    ).toBe(true);
   });
 
   test("does nothing when the current version is ahead of the latest release", async () => {
     const code = await runUpgrade({
       currentVersion: "0.3.3",
       execPath: "/home/alice/.local/bin/stet",
-      fetchLatest: async () => "0.3.0",
+      fetchLatest: async () => await Promise.resolve("0.3.0"),
     });
 
     expect(code).toBe(0);
-    expect(logs.some((line) => line.includes("stet 0.3.3 is already up to date"))).toBe(true);
+    expect(
+      logs.some((line) => line.includes("stet 0.3.3 is already up to date"))
+    ).toBe(true);
   });
 });

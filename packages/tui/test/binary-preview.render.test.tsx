@@ -1,17 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { state } from "@/state";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, runGit, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  runGit,
+  seedState,
+} from "./helpers";
 
-function png(width: number, height: number, pad = 0): Uint8Array {
-  const u32be = (n: number) => [(n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-  return Uint8Array.from([
+const u32be = (n: number) => {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, n);
+  return [...bytes];
+};
+
+const png = (width: number, height: number, pad = 0): Uint8Array =>
+  Uint8Array.from([
     0x89,
     0x50,
     0x4e,
@@ -32,29 +43,33 @@ function png(width: number, height: number, pad = 0): Uint8Array {
     ...u32be(height),
     ...Array.from({ length: pad }, () => 0),
   ]);
-}
 
 describe("binary preview", () => {
   test("a changed image renders its metadata instead of a blank diff pane", async () => {
-    const repoRoot = createFixtureRepo("binary-preview-", { "keep.ts": "keep\n" });
-    writeFileSync(join(repoRoot, "logo.png"), png(128, 64));
+    const repoRoot = createFixtureRepo("binary-preview-", {
+      "keep.ts": "keep\n",
+    });
+    writeFileSync(path.join(repoRoot, "logo.png"), png(128, 64));
     runGit(repoRoot, ["add", "logo.png"]);
     runGit(repoRoot, ["commit", "-m", "add logo"]);
-    writeFileSync(join(repoRoot, "logo.png"), png(256, 128, 200));
+    writeFileSync(path.join(repoRoot, "logo.png"), png(256, 128, 200));
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.selectFile("logo.png");
 
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 32,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 32,
+        width: 110,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       const frame = await settleUntil("binary preview", (current) =>
-        current.includes("open externally"),
+        current.includes("open externally")
       );
 
       expect(frame).toContain("PNG image");
@@ -67,8 +82,10 @@ describe("binary preview", () => {
   });
 
   test("browsing an unchanged image shows its type, dimensions, and size", async () => {
-    const repoRoot = createFixtureRepo("binary-browse-", { "keep.ts": "keep\n" });
-    writeFileSync(join(repoRoot, "logo.png"), png(64, 32));
+    const repoRoot = createFixtureRepo("binary-browse-", {
+      "keep.ts": "keep\n",
+    });
+    writeFileSync(path.join(repoRoot, "logo.png"), png(64, 32));
     runGit(repoRoot, ["add", "logo.png"]);
     runGit(repoRoot, ["commit", "-m", "add logo"]);
 
@@ -77,15 +94,18 @@ describe("binary preview", () => {
     // Unchanged, so it opens in full-content mode: the single side drives the card.
     state.selectFile("logo.png");
 
-    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
-      height: 32,
-      width: 110,
-    });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      {
+        height: 32,
+        width: 110,
+      }
+    );
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
       const frame = await settleUntil("binary browse", (current) =>
-        current.includes("open externally"),
+        current.includes("open externally")
       );
 
       expect(frame).toContain("PNG image");

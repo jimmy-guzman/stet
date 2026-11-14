@@ -8,14 +8,12 @@ import type { KeybindingSet } from "./resolve";
 // And by the help renderers. Defaults apply until (and unless) main registers.
 let active: KeybindingSet = defaultKeybindings();
 
-export function registerKeybindings(set: KeybindingSet) {
+export const registerKeybindings = (set: KeybindingSet) => {
   active = set;
-}
+};
 
-export function combosFor(id: KeyActionId): Combo[] {
-  return active.combos.get(id) ?? [];
-}
+export const combosFor = (id: KeyActionId): Combo[] =>
+  active.combos.get(id) ?? [];
 
-export function comboTextsFor(id: KeyActionId): string[] {
-  return active.texts.get(id) ?? [];
-}
+export const comboTextsFor = (id: KeyActionId): string[] =>
+  active.texts.get(id) ?? [];

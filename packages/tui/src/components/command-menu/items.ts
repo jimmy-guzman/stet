@@ -10,11 +10,21 @@
  * injected host effect).
  */
 export type CommandAction =
-  | { kind: "copyReference"; path: string; line: number | undefined; column: number | undefined }
+  | {
+      kind: "copyReference";
+      path: string;
+      line: number | undefined;
+      column: number | undefined;
+    }
   | { kind: "copyFileContents" }
   | { kind: "loadFullContent" }
   | { kind: "pinTab"; path: string }
-  | { kind: "openEditor"; mode: "terminal" | "ide"; path: string; line: number | undefined }
+  | {
+      kind: "openEditor";
+      mode: "terminal" | "ide";
+      path: string;
+      line: number | undefined;
+    }
   | { kind: "openExternal"; path: string };
 
 export interface CommandMenuItem {
@@ -31,16 +41,19 @@ export interface CommandMenuInput {
   /** The caret's 1-based column, or undefined at line level (`caretColumn`). */
   caretColumn: number | undefined;
   /** The focused tree node; the tree menu is empty without one. */
-  treeNode: { kind: "file" | "directory"; id: string; path: string } | undefined;
+  treeNode:
+    | { kind: "file" | "directory"; id: string; path: string }
+    | undefined;
   /** Whether the viewer capped the file, gating the "Show full content" action. */
   truncated: boolean;
 }
 
-export function buildCommandMenuItems(input: CommandMenuInput): CommandMenuItem[] {
-  return input.context === "viewer" ? viewerItems(input) : treeItems(input);
-}
+export const buildCommandMenuItems = (
+  input: CommandMenuInput
+): CommandMenuItem[] =>
+  input.context === "viewer" ? viewerItems(input) : treeItems(input);
 
-function viewerItems(input: CommandMenuInput): CommandMenuItem[] {
+const viewerItems = (input: CommandMenuInput): CommandMenuItem[] => {
   const path = input.selectedPath;
   if (path === undefined) {
     return [];
@@ -54,7 +67,12 @@ function viewerItems(input: CommandMenuInput): CommandMenuItem[] {
     },
     { action: { kind: "copyFileContents" }, label: "Copy file contents" },
     {
-      action: { kind: "openEditor", line: input.caretLine, mode: "terminal", path },
+      action: {
+        kind: "openEditor",
+        line: input.caretLine,
+        mode: "terminal",
+        path,
+      },
       label: "Open in editor",
     },
     {
@@ -64,18 +82,28 @@ function viewerItems(input: CommandMenuInput): CommandMenuItem[] {
     { action: { kind: "openExternal", path }, label: "Open externally" },
     // Only when the viewer actually capped the file; otherwise it would be a no-op.
     ...(input.truncated
-      ? [{ action: { kind: "loadFullContent" }, label: "Show full content" } as const]
+      ? [
+          {
+            action: { kind: "loadFullContent" },
+            label: "Show full content",
+          } as const,
+        ]
       : []),
   ];
-}
+};
 
-function treeItems(input: CommandMenuInput): CommandMenuItem[] {
+const treeItems = (input: CommandMenuInput): CommandMenuItem[] => {
   const node = input.treeNode;
   if (node === undefined) {
     return [];
   }
   const copyPath: CommandMenuItem = {
-    action: { column: undefined, kind: "copyReference", line: undefined, path: node.path },
+    action: {
+      column: undefined,
+      kind: "copyReference",
+      line: undefined,
+      path: node.path,
+    },
     label: "Copy path",
   };
   // A directory has no open-in-a-viewer or pin-as-tab action (expand/collapse is the
@@ -87,13 +115,26 @@ function treeItems(input: CommandMenuInput): CommandMenuItem[] {
     { action: { kind: "pinTab", path: node.path }, label: "Pin as tab" },
     copyPath,
     {
-      action: { kind: "openEditor", line: undefined, mode: "terminal", path: node.path },
+      action: {
+        kind: "openEditor",
+        line: undefined,
+        mode: "terminal",
+        path: node.path,
+      },
       label: "Open in editor",
     },
     {
-      action: { kind: "openEditor", line: undefined, mode: "ide", path: node.path },
+      action: {
+        kind: "openEditor",
+        line: undefined,
+        mode: "ide",
+        path: node.path,
+      },
       label: "Open in IDE",
     },
-    { action: { kind: "openExternal", path: node.path }, label: "Open externally" },
+    {
+      action: { kind: "openExternal", path: node.path },
+      label: "Open externally",
+    },
   ];
-}
+};

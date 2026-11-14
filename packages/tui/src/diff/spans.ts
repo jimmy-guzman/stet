@@ -5,16 +5,24 @@ export interface HighlightSpan extends RenderSpan {
   highlight?: boolean;
 }
 
-function highlightSpan(fg: string | undefined, text: string, highlight: boolean): HighlightSpan {
+const highlightSpan = (
+  fg: string | undefined,
+  text: string,
+  highlight: boolean
+): HighlightSpan => {
   const base = fg === undefined ? { text } : { fg, text };
   return highlight ? { ...base, highlight: true } : base;
-}
+};
 
 // Tag the display-column range [from, to) of these spans as highlighted, splitting
 // Spans at the boundaries so the caret word can carry a background. Columns are
 // Display columns from the start of `spans` (wide glyphs count as two), so the
 // Caller passes a window-relative range. A no-op range returns the spans unchanged.
-export function markRange(spans: RenderSpan[], from: number, to: number): HighlightSpan[] {
+export const markRange = (
+  spans: RenderSpan[],
+  from: number,
+  to: number
+): HighlightSpan[] => {
   if (to <= from) {
     return spans;
   }
@@ -38,12 +46,12 @@ export function markRange(spans: RenderSpan[], from: number, to: number): Highli
     }
   }
   return out;
-}
+};
 
 // The UTF-16 string index at display column `col` (wide glyphs count as two), for
 // Mapping a mouse click back onto a position in the line. A column past the end
 // Returns the line length; a column inside a wide glyph returns that glyph's start.
-export function columnToIndex(line: string, col: number): number {
+export const columnToIndex = (line: string, col: number): number => {
   if (col <= 0) {
     return 0;
   }
@@ -58,13 +66,17 @@ export function columnToIndex(line: string, col: number): number {
     index += char.length;
   }
   return index;
-}
+};
 
 // Slice spans to a horizontal window [start, start+width) in display columns,
 // Left-aligned, so the diff can scroll long lines horizontally (shared offset
 // Across all lines) while clipping the rest. Wide (CJK) glyphs count as two
 // Columns; a glyph straddling either edge is dropped rather than split.
-export function sliceSpansWindow(spans: RenderSpan[], start: number, width: number): RenderSpan[] {
+export const sliceSpansWindow = (
+  spans: RenderSpan[],
+  start: number,
+  width: number
+): RenderSpan[] => {
   if (width <= 0) {
     return [];
   }
@@ -92,4 +104,4 @@ export function sliceSpansWindow(spans: RenderSpan[], start: number, width: numb
     }
   }
   return out;
-}
+};

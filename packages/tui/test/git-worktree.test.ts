@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { rmSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import {
   mergeWorktreeSummaries,
@@ -13,23 +13,27 @@ import {
 } from "@/git/worktree";
 import type { Worktree, WorktreeSummary } from "@/git/worktree";
 
-import { createFixtureRepo, loadWorktrees, loadWorktreeSummaries, runGit } from "./helpers";
+import {
+  createFixtureRepo,
+  loadWorktrees,
+  loadWorktreeSummaries,
+  runGit,
+} from "./helpers";
 
-function worktree(path: string, branch: string): Worktree {
-  return {
-    bare: false,
-    branch,
-    detached: false,
-    head: "1111111111111111111111111111111111111111",
-    locked: false,
-    path,
-    prunable: false,
-  };
-}
+const worktree = (worktreePath: string, branch: string): Worktree => ({
+  bare: false,
+  branch,
+  detached: false,
+  head: "1111111111111111111111111111111111111111",
+  locked: false,
+  path: worktreePath,
+  prunable: false,
+});
 
-function summary(path: string, lastActivityAt: number | undefined): WorktreeSummary {
-  return { lastActivityAt, path };
-}
+const summary = (
+  worktreePath: string,
+  lastActivityAt: number | undefined
+): WorktreeSummary => ({ lastActivityAt, path: worktreePath });
 
 describe("parseWorktreeList", () => {
   test("parses the main worktree and a linked worktree with branches", () => {
@@ -74,8 +78,14 @@ describe("parseWorktreeList", () => {
     const [bare, locked, lockedReason, prunable] = parseWorktreeList(output);
     expect(bare).toMatchObject({ bare: true, path: "/repo.git" });
     expect(bare?.branch).toBeUndefined();
-    expect(locked).toMatchObject({ locked: true, path: "/repo/locked-bare-reason" });
-    expect(lockedReason).toMatchObject({ locked: true, path: "/repo/locked-with-reason" });
+    expect(locked).toMatchObject({
+      locked: true,
+      path: "/repo/locked-bare-reason",
+    });
+    expect(lockedReason).toMatchObject({
+      locked: true,
+      path: "/repo/locked-with-reason",
+    });
     expect(prunable).toMatchObject({ path: "/repo/gone", prunable: true });
   });
 
@@ -105,7 +115,10 @@ describe("parseWorktreeStatusPaths", () => {
 
   test("counts a rename once, consuming the original path that trails it", () => {
     const output = "R  new-name.ts\0old-name.ts\0M  other.ts\0";
-    expect(parseWorktreeStatusPaths(output)).toEqual(["new-name.ts", "other.ts"]);
+    expect(parseWorktreeStatusPaths(output)).toEqual([
+      "new-name.ts",
+      "other.ts",
+    ]);
   });
 
   test("counts a copy once, consuming the source path that trails it", () => {
@@ -136,22 +149,28 @@ describe("parseCommitTimes", () => {
 
 describe("summarizeWorktree", () => {
   test("takes the newest mtime among the uncommitted files", () => {
-    const repoRoot = createFixtureRepo("stet-worktree-summary-", { "a.ts": "const a = 1\n" });
+    const repoRoot = createFixtureRepo("stet-worktree-summary-", {
+      "a.ts": "const a = 1\n",
+    });
     try {
-      writeFileSync(join(repoRoot, "old.ts"), "const old = 1\n");
-      writeFileSync(join(repoRoot, "new.ts"), "const fresh = 1\n");
+      writeFileSync(path.join(repoRoot, "old.ts"), "const old = 1\n");
+      writeFileSync(path.join(repoRoot, "new.ts"), "const fresh = 1\n");
       utimesSync(
-        join(repoRoot, "old.ts"),
+        path.join(repoRoot, "old.ts"),
         new Date(2_000_000_000_000),
-        new Date(2_000_000_000_000),
+        new Date(2_000_000_000_000)
       );
       utimesSync(
-        join(repoRoot, "new.ts"),
+        path.join(repoRoot, "new.ts"),
         new Date(2_100_000_000_000),
-        new Date(2_100_000_000_000),
+        new Date(2_100_000_000_000)
       );
 
-      const result = summarizeWorktree(repoRoot, "?? old.ts\0?? new.ts\0", undefined);
+      const result = summarizeWorktree(
+        repoRoot,
+        "?? old.ts\0?? new.ts\0",
+        undefined
+      );
 
       expect(result.lastActivityAt).toBe(2_100_000_000_000);
     } finally {
@@ -167,29 +186,35 @@ describe("summarizeWorktree", () => {
   });
 
   test("prefers whichever is newer, the uncommitted edit or the commit", () => {
-    const repoRoot = createFixtureRepo("stet-worktree-newer-", { "a.ts": "const a = 1\n" });
+    const repoRoot = createFixtureRepo("stet-worktree-newer-", {
+      "a.ts": "const a = 1\n",
+    });
     try {
-      writeFileSync(join(repoRoot, "edit.ts"), "const edited = 1\n");
+      writeFileSync(path.join(repoRoot, "edit.ts"), "const edited = 1\n");
       utimesSync(
-        join(repoRoot, "edit.ts"),
+        path.join(repoRoot, "edit.ts"),
         new Date(2_000_000_000_000),
-        new Date(2_000_000_000_000),
+        new Date(2_000_000_000_000)
       );
 
       // A commit newer than the edit wins, and an older one loses to it.
-      expect(summarizeWorktree(repoRoot, "?? edit.ts\0", 2_100_000_000_000).lastActivityAt).toBe(
-        2_100_000_000_000,
-      );
-      expect(summarizeWorktree(repoRoot, "?? edit.ts\0", 1_000_000_000_000).lastActivityAt).toBe(
-        2_000_000_000_000,
-      );
+      expect(
+        summarizeWorktree(repoRoot, "?? edit.ts\0", 2_100_000_000_000)
+          .lastActivityAt
+      ).toBe(2_100_000_000_000);
+      expect(
+        summarizeWorktree(repoRoot, "?? edit.ts\0", 1_000_000_000_000)
+          .lastActivityAt
+      ).toBe(2_000_000_000_000);
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   });
 
   test("reads the reflog, so a checkout or rebase counts even with nothing uncommitted", () => {
-    const repoRoot = createFixtureRepo("stet-worktree-reflog-", { "a.ts": "const a = 1\n" });
+    const repoRoot = createFixtureRepo("stet-worktree-reflog-", {
+      "a.ts": "const a = 1\n",
+    });
     try {
       // The fixture's own commit wrote logs/HEAD moments ago; no commit time is passed, so the
       // Reflog is the only signal left and it must still register the worktree as freshly touched.
@@ -211,7 +236,9 @@ describe("summarizeWorktree", () => {
 describe("mergeWorktreeSummaries", () => {
   test("keeps the previous map when nothing moved, so an idle poll wakes nothing", () => {
     const previous = new Map([["/repo", summary("/repo", 1000)]]);
-    expect(mergeWorktreeSummaries(previous, [summary("/repo", 1000)])).toBe(previous);
+    expect(mergeWorktreeSummaries(previous, [summary("/repo", 1000)])).toBe(
+      previous
+    );
   });
 
   test("replaces the map when a worktree's activity advances", () => {
@@ -246,28 +273,39 @@ describe("orderWorktrees", () => {
       ["/repo", summary("/repo", 3000)],
     ]);
 
-    expect(orderWorktrees(list, summaries).map((entry) => entry.branch)).toEqual([
-      "hot",
-      "warm",
-      "main",
-      "quiet",
-    ]);
+    expect(
+      orderWorktrees(list, summaries).map((entry) => entry.branch)
+    ).toEqual(["hot", "warm", "main", "quiet"]);
   });
 
   test("sorts worktrees with no activity by path, so the quiet tail is stable", () => {
     const list = [worktree("/repo/b", "b"), worktree("/repo/a", "a")];
-    expect(orderWorktrees(list, new Map()).map((entry) => entry.branch)).toEqual(["a", "b"]);
+    expect(
+      orderWorktrees(list, new Map()).map((entry) => entry.branch)
+    ).toEqual(["a", "b"]);
   });
 });
 
 describe("worktrees in a fixture repo", () => {
   test("lists the main and a linked worktree with their branches", async () => {
-    const repoRoot = createFixtureRepo("stet-git-worktree-", { "a.ts": "const a = 1\n" });
+    const repoRoot = createFixtureRepo("stet-git-worktree-", {
+      "a.ts": "const a = 1\n",
+    });
     try {
-      runGit(repoRoot, ["worktree", "add", "-b", "side", join(repoRoot, ".wt")]);
+      runGit(repoRoot, [
+        "worktree",
+        "add",
+        "-b",
+        "side",
+        path.join(repoRoot, ".wt"),
+      ]);
       const worktrees = await loadWorktrees(repoRoot);
       expect(worktrees).toHaveLength(2);
-      expect(worktrees[1]).toMatchObject({ bare: false, branch: "side", detached: false });
+      expect(worktrees[1]).toMatchObject({
+        bare: false,
+        branch: "side",
+        detached: false,
+      });
       expect(worktrees[1]?.path.endsWith(".wt")).toBe(true);
       expect(worktrees[0]?.branch).toBeDefined();
     } finally {
@@ -276,16 +314,18 @@ describe("worktrees in a fixture repo", () => {
   });
 
   test("summarizes every worktree, and skips one whose directory is gone", async () => {
-    const repoRoot = createFixtureRepo("stet-worktree-summaries-", { "a.ts": "const a = 1\n" });
+    const repoRoot = createFixtureRepo("stet-worktree-summaries-", {
+      "a.ts": "const a = 1\n",
+    });
     const linkedRoot = `${repoRoot}-linked`;
     try {
       runGit(repoRoot, ["worktree", "add", "-b", "side", linkedRoot]);
-      writeFileSync(join(linkedRoot, "one.ts"), "const one = 1\n");
+      writeFileSync(path.join(linkedRoot, "one.ts"), "const one = 1\n");
 
       const worktrees = await loadWorktrees(repoRoot);
       const summaries = await loadWorktreeSummaries(
         [...worktrees, worktree(`${repoRoot}-does-not-exist`, "gone")],
-        repoRoot,
+        repoRoot
       );
 
       // The dead worktree is dropped rather than failing the batch; the live ones both report a real
@@ -303,7 +343,9 @@ describe("worktrees in a fixture repo", () => {
   // The regression, end to end through the real service: an agent that commits its work leaves a
   // Clean worktree, and the old model read that as dead. It must outrank a dirty but stale one.
   test("ranks a just-committed clean worktree above a worktree with stale uncommitted edits", async () => {
-    const repoRoot = createFixtureRepo("stet-worktree-rank-", { "a.ts": "const a = 1\n" });
+    const repoRoot = createFixtureRepo("stet-worktree-rank-", {
+      "a.ts": "const a = 1\n",
+    });
     const staleRoot = `${repoRoot}-stale`;
     const committedRoot = `${repoRoot}-committed`;
     try {
@@ -311,15 +353,15 @@ describe("worktrees in a fixture repo", () => {
       runGit(repoRoot, ["worktree", "add", "-b", "committed", committedRoot]);
 
       // A worktree left dirty a long time ago: edits, but nothing recent.
-      writeFileSync(join(staleRoot, "wip.ts"), "const wip = 1\n");
+      writeFileSync(path.join(staleRoot, "wip.ts"), "const wip = 1\n");
       utimesSync(
-        join(staleRoot, "wip.ts"),
+        path.join(staleRoot, "wip.ts"),
         new Date(1_600_000_000_000),
-        new Date(1_600_000_000_000),
+        new Date(1_600_000_000_000)
       );
 
       // A worktree an agent just finished in: committed, so it holds nothing uncommitted at all.
-      writeFileSync(join(committedRoot, "done.ts"), "const done = 1\n");
+      writeFileSync(path.join(committedRoot, "done.ts"), "const done = 1\n");
       runGit(committedRoot, ["add", "."]);
       runGit(committedRoot, ["commit", "-m", "agent finished"]);
 
@@ -330,7 +372,7 @@ describe("worktrees in a fixture repo", () => {
 
       expect(ordered[0]?.path).toBe(committedRoot);
       expect(byPath.get(staleRoot)?.lastActivityAt).toBeLessThan(
-        byPath.get(committedRoot)?.lastActivityAt ?? 0,
+        byPath.get(committedRoot)?.lastActivityAt ?? 0
       );
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
@@ -349,7 +391,9 @@ describe("worktreePathTails", () => {
 
     // The main worktree *is* the shared prefix, so it has no distinguishing path text at all.
     expect(tails.get("/repo")).toBe("");
-    expect(tails.get("/repo/.claude/worktrees/fix-header")).toBe(".claude/worktrees/fix-header");
+    expect(tails.get("/repo/.claude/worktrees/fix-header")).toBe(
+      ".claude/worktrees/fix-header"
+    );
   });
 
   test("splits siblings on segments, so a shared parent never slices a leaf mid-name", () => {
@@ -364,14 +408,19 @@ describe("worktreePathTails", () => {
   });
 
   test("keeps the whole path when the worktrees share no directory", () => {
-    const tails = worktreePathTails([worktree("/a/one", "main"), worktree("/b/two", "side")]);
+    const tails = worktreePathTails([
+      worktree("/a/one", "main"),
+      worktree("/b/two", "side"),
+    ]);
 
     expect(tails.get("/a/one")).toBe("a/one");
     expect(tails.get("/b/two")).toBe("b/two");
   });
 
   test("leaves a lone worktree nothing to narrow by", () => {
-    expect(worktreePathTails([worktree("/repo", "main")]).get("/repo")).toBe("");
+    expect(worktreePathTails([worktree("/repo", "main")]).get("/repo")).toBe(
+      ""
+    );
   });
 
   test("returns nothing for no worktrees", () => {

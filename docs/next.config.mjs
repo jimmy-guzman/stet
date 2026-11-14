@@ -10,11 +10,12 @@ const config = {
   turbopack: {
     root: path.join(import.meta.dirname, ".."),
   },
-  async redirects() {
+  redirects() {
     return [
       {
         source: "/install",
-        destination: "https://raw.githubusercontent.com/jimmy-guzman/stet/main/install.sh",
+        destination:
+          "https://raw.githubusercontent.com/jimmy-guzman/stet/main/install.sh",
         permanent: false,
       },
     ];

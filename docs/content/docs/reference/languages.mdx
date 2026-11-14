@@ -3,10 +3,7 @@ title: Languages
 description: The highlighting, folding, and icons stet gives every language.
 ---
 
-Language support is layered. Named file associations select syntax and icons
-independently. Every recognized file gets syntax highlighting, a file-type icon,
-and structural folding. You can change any layer
-through [your config](/docs/reference/configuration#file-support).
+Language support is layered. Named file associations select syntax and icons independently. Every recognized file gets syntax highlighting, a file-type icon, and structural folding. You can change any layer through [your config](/docs/reference/configuration#file-support).
 
 | Language                | Highlighting | Folding    |
 | ----------------------- | ------------ | ---------- |
@@ -24,32 +21,16 @@ through [your config](/docs/reference/configuration#file-support).
 
 ## Syntax highlighting
 
-[Shiki](https://shiki.style/) bundles grammars for more than 200 languages. stet
-picks the grammar from the file's name, including exact names such as
-`Dockerfile`, and loads it on demand. The diff, full-file view, and search
-results share the same highlighter and theme. An
-unrecognized file type falls back to plain text.
+[Shiki](https://shiki.style/) bundles grammars for more than 200 languages. stet picks the grammar from the file's name, including exact names such as `Dockerfile`, and loads it on demand. The diff, full-file view, and search results share the same highlighter and theme. An unrecognized file type falls back to plain text.
 
-Config dotfiles carry no extension to pick a grammar from, so they resolve by
-name: `.npmrc` highlights as INI and `.prettierrc` as JSONC, so a comment in it
-reads as a comment. Their extension variants, such as `.prettierrc.json` and
-`.prettierrc.yaml`, already resolve on the extension.
+Config dotfiles carry no extension to pick a grammar from, so they resolve by name: `.npmrc` highlights as INI and `.prettierrc` as JSONC, so a comment in it reads as a comment. Their extension variants, such as `.prettierrc.json` and `.prettierrc.yaml`, already resolve on the extension.
 
 ## Folding
 
-Press `z` to fold the block at the caret: code folds by indentation in every
-language, markdown folds by heading section. See
-[reading files and diffs](/docs/guides/reading-files-and-diffs#fold-code).
+Press `z` to fold the block at the caret: code folds by indentation in every language, markdown folds by heading section. See [reading files and diffs](/docs/guides/reading-files-and-diffs#fold-code).
 
 ## File icons
 
-Recognized file types use restrained colored Nerd Font icons; structural and
-generic icons remain muted. Recognizable brands keep their identity, while
-unbranded formats reuse stet's palette. The same named icon and theme color
-appears in every file-list surface. Matching follows exact filename, glob,
-extension, and dotfile specificity; `--no-icons` keeps every layout stable while
-hiding the glyphs if your terminal font lacks them.
+Recognized file types use restrained colored Nerd Font icons; structural and generic icons remain muted. Recognizable brands keep their identity, while unbranded formats reuse stet's palette. The same named icon and theme color appears in every file-list surface. Matching follows exact filename, glob, extension, and dotfile specificity; `--no-icons` keeps every layout stable while hiding the glyphs if your terminal font lacks them.
 
-To add a file type, map it to a syntax and an icon with a `files` association. See
-[configuration](/docs/reference/configuration#file-support) for matching rules
-and overriding or disabling built-ins.
+To add a file type, map it to a syntax and an icon with a `files` association. See [configuration](/docs/reference/configuration#file-support) for matching rules and overriding or disabling built-ins.

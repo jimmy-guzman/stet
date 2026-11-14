@@ -3,12 +3,17 @@ import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
-import { App } from "@/App";
+import { App } from "@/app";
 import { helpText } from "@/cli";
 import { registerKeybindings } from "@/keys/registry";
 import { defaultKeybindings, resolveKeybindings } from "@/keys/resolve";
 
-import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
+import {
+  createFixtureRepo,
+  loadModel,
+  makeSettleUntil,
+  seedState,
+} from "./helpers";
 
 // End to end over the registry: a config rebind must move the live binding
 // (the new combo fires, the default goes inert) and follow into the rendered
@@ -27,14 +32,14 @@ describe("configured keybindings", () => {
     try {
       const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
       seedState(model, { kind: "all", ref: "HEAD" });
-      const { issues, set } = resolveKeybindings({ "toggle-sidebar": "ctrl+e" });
+      const { issues, set } = resolveKeybindings({
+        "toggle-sidebar": "ctrl+e",
+      });
       expect(issues).toEqual([]);
       registerKeybindings(set);
 
-      const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(
-        () => <App />,
-        { height: 30, width: 90 },
-      );
+      const { renderer, renderOnce, captureCharFrame, mockInput } =
+        await testRender(() => <App />, { height: 30, width: 90 });
       const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
       try {
@@ -45,16 +50,21 @@ describe("configured keybindings", () => {
         const afterDefault = await settleUntil(
           "sidebar intact",
           (frame) => frame.includes("zz.md"),
-          3,
+          3
         );
         expect(afterDefault).toContain("zz.md");
 
         // The configured combo does.
         mockInput.pressKey("e", { ctrl: true });
-        await settleUntil("sidebar closed", (frame) => !frame.includes("zz.md"));
+        await settleUntil(
+          "sidebar closed",
+          (frame) => !frame.includes("zz.md")
+        );
 
         mockInput.pressKey("e", { ctrl: true });
-        await settleUntil("sidebar reopened", (frame) => frame.includes("zz.md"));
+        await settleUntil("sidebar reopened", (frame) =>
+          frame.includes("zz.md")
+        );
 
         // The rendered help reflects the rebind.
         expect(helpText()).toContain("ctrl+e");

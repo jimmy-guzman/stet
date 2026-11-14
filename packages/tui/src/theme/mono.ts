@@ -8,12 +8,12 @@ import type { Theme } from "./tokens";
  * `"0"`/`"false"` mean off, the supports-color convention); otherwise `NO_COLOR` wins whenever it
  * is set to anything but the empty string.
  */
-export function prefersMonochrome(env: Record<string, string | undefined>) {
+export const prefersMonochrome = (env: Record<string, string | undefined>) => {
   if (env.FORCE_COLOR !== undefined) {
     return env.FORCE_COLOR === "0" || env.FORCE_COLOR === "false";
   }
   return env.NO_COLOR !== undefined && env.NO_COLOR !== "";
-}
+};
 
 // The NO_COLOR pair: every token is a pure grey (r = g = b), so no hue ever
 // Carries meaning; ordering signals (recency, severity, stage) keep
@@ -56,7 +56,12 @@ export const monoDarkTheme: Theme = {
     untracked: "#7e7e7e",
   },
   success: "#d6d6d6",
-  surface: { base: "#191919", cursor: "#2c2c2c", panel: "#101010", scrim: "#000000" },
+  surface: {
+    base: "#191919",
+    cursor: "#2c2c2c",
+    panel: "#101010",
+    scrim: "#000000",
+  },
   syntax: {
     comment: "#707070",
     function: "#e0e0e0",
@@ -115,7 +120,12 @@ export const monoLightTheme: Theme = {
     untracked: "#7a7a7a",
   },
   success: "#3a3a3a",
-  surface: { base: "#f7f7f7", cursor: "#d5d5d5", panel: "#e6e6e6", scrim: "#1a1a1a" },
+  surface: {
+    base: "#f7f7f7",
+    cursor: "#d5d5d5",
+    panel: "#e6e6e6",
+    scrim: "#1a1a1a",
+  },
   syntax: {
     comment: "#7e7e7e",
     function: "#303030",

@@ -23,12 +23,12 @@ const key = (name: string) =>
     source: "raw",
   });
 
-function wide() {
+const wide = () => {
   batch(() => {
     state.setTerminalWidth(80);
     state.setTerminalHeight(40);
   });
-}
+};
 
 test("zoom gives the focused pane the whole band and hides the rest", () => {
   wide();
@@ -47,10 +47,12 @@ test("zoom gives the focused pane the whole band and hides the rest", () => {
 
 test("zoom never closes a pane, so unzooming restores the arrangement", () => {
   wide();
-  state.growPane(); // 34 -> 36, a size that must survive the round trip
+  // 34 -> 36, a size that must survive the round trip
+  state.growPane();
 
   state.toggleZoom();
-  expect(state.sidebarOpen()).toBe(true); // Hidden, not closed
+  // Hidden, not closed
+  expect(state.sidebarOpen()).toBe(true);
 
   state.toggleZoom();
   expect(state.layout().sidebar.width).toBe(36);
@@ -78,14 +80,18 @@ test("toggling a pane's visibility exits zoom, so the toggle is never invisible"
 
   expect(state.zoomed()).toBe(false);
   expect(state.sidebarOpen()).toBe(false);
-  expect(state.layout().viewer.width).toBe(80); // Full width, now because the tree is closed
+  // Full width, now because the tree is closed
+  expect(state.layout().viewer.width).toBe(80);
 });
 
 test("zoom never resurrects a pane that is closed", () => {
   wide();
   state.toggleSidebar();
   expect(state.sidebarOpen()).toBe(false);
-  const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
+  const handle = createKeyHandler({
+    openInEditor: async () => {},
+    quit: () => {},
+  });
   // Zoom takes its target from focus with no open-flag check of its own, so what keeps it from
   // Painting a closed pane back is that `tab` cannot focus one in the first place.
   handle(key("tab"));
@@ -104,7 +110,10 @@ test("zoom follows focus around the whole cycle, and every stop is a pane that i
   wide();
   state.setFocusedPane("diff");
   state.toggleZoom();
-  const handle = createKeyHandler({ openInEditor: async () => {}, quit: () => {} });
+  const handle = createKeyHandler({
+    openInEditor: async () => {},
+    quit: () => {},
+  });
 
   // Walk the ring while zoomed: each stop must fill the band, which is only true if the pane
   // Focus named was open to begin with.

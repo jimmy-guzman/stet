@@ -1,12 +1,9 @@
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 import { Process } from "@/process";
 
+import { ClipboardError } from "./error";
 import { clipboardCommand } from "./reference";
-
-export class ClipboardError extends Data.TaggedError("ClipboardError")<{
-  readonly message: string;
-}> {}
 
 export class Clipboard extends Context.Service<
   Clipboard,
@@ -26,16 +23,19 @@ export const ClipboardLive = Layer.effect(
         if (command === undefined) {
           return Effect.fail(
             new ClipboardError({
-              message: "no clipboard tool found; install wl-copy, xclip, or xsel",
-            }),
+              message:
+                "no clipboard tool found; install wl-copy, xclip, or xsel",
+            })
           );
         }
 
         return subprocess.run(command, process.cwd(), { stdin: text }).pipe(
           Effect.asVoid,
-          Effect.mapError((error) => new ClipboardError({ message: error.message })),
+          Effect.mapError(
+            (failure) => new ClipboardError({ message: failure.message })
+          )
         );
       },
     };
-  }),
+  })
 );

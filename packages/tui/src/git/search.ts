@@ -14,14 +14,16 @@ export interface SearchOptions {
 // A `!` prefix excludes (ripgrep's -g convention, mapped to git's `:(exclude)`),
 // And anything else passes verbatim so raw pathspec magic still works. Includes
 // Union and excludes subtract; a list of only excludes matches everything else.
-export function filterPathspecs(field: string): string[] | undefined {
+export const filterPathspecs = (field: string): string[] | undefined => {
   const tokens = field
     .trim()
-    .split(/\s+/)
+    .split(/\s+/u)
     .filter((token) => token !== "" && token !== "!")
-    .map((token) => (token.startsWith("!") ? `:(exclude)${token.slice(1)}` : token));
+    .map((token) =>
+      token.startsWith("!") ? `:(exclude)${token.slice(1)}` : token
+    );
   return tokens.length === 0 ? undefined : tokens;
-}
+};
 
 // `git grep` over working-tree content. `-F` keeps the query literal unless the
 // Regex toggle is on (`-E`, the extended dialect IDEs speak); smart-case mirrors
@@ -29,12 +31,13 @@ export function filterPathspecs(field: string): string[] | undefined {
 // Widens the search to untracked-but-not-ignored files so it covers the same
 // Universe as the tree. A `paths` list scopes the search (changed set or user
 // Pathspecs); `undefined` is whole-repo.
-export function searchArgs(
+export const searchArgs = (
   query: string,
   paths: readonly string[] | undefined,
-  options: SearchOptions,
-) {
-  const smartCase = !options.caseSensitive && query === query.toLowerCase() ? ["-i"] : [];
+  options: SearchOptions
+) => {
+  const smartCase =
+    !options.caseSensitive && query === query.toLowerCase() ? ["-i"] : [];
   return [
     "git",
     "grep",
@@ -50,7 +53,7 @@ export function searchArgs(
     query,
     ...(paths === undefined ? [] : ["--", ...paths]),
   ];
-}
+};
 
 // With `-n --column -z` each record is `path\0line\0column\0text`, one per line.
 // The text is a single source line, so splitting on the first three NULs keeps
@@ -60,7 +63,7 @@ export function searchArgs(
 // Boundary), then decode. Decoding first would let invalid UTF-8 skew the
 // Column, since a lone Latin-1 byte is 1 byte to git but a 3-byte replacement
 // Char after a string round-trip.
-export function parseSearchOutput(stdout: Uint8Array): SearchMatch[] {
+export const parseSearchOutput = (stdout: Uint8Array): SearchMatch[] => {
   const decoder = new TextDecoder();
   return splitRecords(stdout).flatMap((record) => {
     const firstNul = record.indexOf(0);
@@ -69,29 +72,30 @@ export function parseSearchOutput(stdout: Uint8Array): SearchMatch[] {
     if (thirdNul === -1) {
       return [];
     }
-    const line = Number.parseInt(decoder.decode(record.subarray(firstNul + 1, secondNul)), 10);
-    const byteColumn = Number.parseInt(
-      decoder.decode(record.subarray(secondNul + 1, thirdNul)),
-      10,
-    );
+    const lineText = decoder.decode(record.subarray(firstNul + 1, secondNul));
+    const columnText = decoder.decode(record.subarray(secondNul + 1, thirdNul));
+    const line = lineText === "" ? Number.NaN : Number(lineText);
+    const byteColumn = columnText === "" ? Number.NaN : Number(columnText);
     if (Number.isNaN(line) || Number.isNaN(byteColumn)) {
       return [];
     }
     const textBytes = record.subarray(thirdNul + 1);
     return [
       {
-        column: decoder.decode(textBytes.subarray(0, byteColumn - 1)).length + 1,
+        column:
+          decoder.decode(textBytes.subarray(0, byteColumn - 1)).length + 1,
         line,
         path: decoder.decode(record.subarray(0, firstNul)),
         text: decoder.decode(textBytes),
       },
     ];
   });
-}
+};
 
-const NEWLINE = "\n".charCodeAt(0);
+/** The `\n` byte. */
+const NEWLINE = 0x0a;
 
-function splitRecords(stdout: Uint8Array) {
+const splitRecords = (stdout: Uint8Array) => {
   const records: Uint8Array[] = [];
   let cursor = 0;
   while (cursor < stdout.length) {
@@ -103,4 +107,4 @@ function splitRecords(stdout: Uint8Array) {
     cursor = end + 1;
   }
   return records;
-}
+};

@@ -24,6 +24,7 @@ const PADDING = 1;
 // Floors so a squeezed line degrades to a readable stub rather than a lone ellipsis, and so a branch
 // With almost no room is dropped outright instead of shown as `…`.
 const MIN_SCOPE = 8;
+const MIN_PRIMARY = 8;
 const MIN_BRANCH = 4;
 
 // A commit scope pins a historical commit, so the identity (and especially the branch, which is
@@ -60,20 +61,36 @@ const commitSubject = () => {
   const budget = available() - Bun.stringWidth(tail()) - SEP.length;
   return truncate(state.commitScopeLabel(), Math.max(MIN_SCOPE, budget));
 };
+// The changed count is never cut. The scope label shrinks (down to its floor) only once the primary
+// Name is squeezed to its own floor, so on a narrow line both stay readable.
+const scopeText = () => {
+  const leftFloor =
+    glyphCells() + Math.min(Bun.stringWidth(primary()), MIN_PRIMARY);
+  const budget = available() - Bun.stringWidth(tail()) - SEP.length - leftFloor;
+  return truncate(
+    scopeLabel(state.scope(), state.emptyTree()),
+    Math.max(MIN_SCOPE, budget)
+  );
+};
+const rightText = () => `${scopeText()}${SEP}${tail()}`;
+// The primary name takes whatever the right side leaves, so a long repo or worktree folder name
+// Truncates with an ellipsis instead of pushing the line past the terminal edge.
+const primaryText = () =>
+  truncate(
+    primary(),
+    available() - Bun.stringWidth(rightText()) - glyphCells()
+  );
 // Truncate the branch to whatever the line has left after the primary name and the right side;
 // Below the floor the whole branch group is dropped rather than shown as a stub.
+const fitBranch = (branch: string) => {
+  const leftFixed =
+    glyphCells() + Bun.stringWidth(primaryText()) + SEP.length + glyphCells();
+  const budget = available() - Bun.stringWidth(rightText()) - leftFixed;
+  return budget < MIN_BRANCH ? undefined : truncate(branch, budget);
+};
 const branchText = () => {
   const branch = rawBranch();
   return branch === undefined ? undefined : fitBranch(branch);
-};
-const fitBranch = (branch: string) => {
-  const rightWidth = Bun.stringWidth(
-    `${scopeLabel(state.scope(), state.emptyTree())}${SEP}${tail()}`
-  );
-  const leftFixed =
-    glyphCells() + Bun.stringWidth(primary()) + SEP.length + glyphCells();
-  const budget = available() - rightWidth - leftFixed;
-  return budget < MIN_BRANCH ? undefined : truncate(branch, budget);
 };
 
 export const HeaderBar = () => (
@@ -96,7 +113,7 @@ export const HeaderBar = () => (
               </text>
             </box>
           </Show>
-          <text fg={theme.colors.text.strong}>{primary()}</text>
+          <text fg={theme.colors.text.strong}>{primaryText()}</text>
           <Show when={branchText()}>
             {(branch) => (
               <box flexDirection="row">
@@ -116,9 +133,7 @@ export const HeaderBar = () => (
       <text fg={theme.colors.text.secondary}>{commitSubject()}</text>
     </Show>
     <text fg={theme.colors.text.secondary}>
-      {isCommit()
-        ? tail()
-        : `${scopeLabel(state.scope(), state.emptyTree())}${SEP}${tail()}`}
+      {isCommit() ? tail() : rightText()}
     </text>
   </box>
 );

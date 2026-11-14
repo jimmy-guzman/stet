@@ -1,25 +1,24 @@
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 
 import { stetDark, stetLight } from "./lib/code-theme";
-import { markdownImage } from "./lib/llm-image";
+import { remarkAbsoluteImages } from "./lib/llm-image";
 
 export const docs = defineDocs({
   dir: "content/docs",
   docs: {
     postprocess: {
-      includeProcessedMarkdown: {
-        stringify: markdownImage,
-      },
+      includeProcessedMarkdown: true,
     },
   },
 });
 
 export default defineConfig({
   mdxOptions: {
+    remarkPlugins: [remarkAbsoluteImages],
     remarkImageOptions: {
-      // remarkImage rewrites every image to a bundler import, which the markdown output can only
-      // stringify as its variable name (`src="__img0"`). Keeping the literal path is what lets
-      // `markdownImage` emit a real image an agent can fetch.
+      // remarkImage rewrites every image to a bundler import, deleting the node's `url`. It runs
+      // before `remarkPlugins`, so keeping the literal path is what lets `remarkAbsoluteImages`
+      // find the image and emit a URL an agent can fetch.
       useImport: false,
     },
     rehypeCodeOptions: {

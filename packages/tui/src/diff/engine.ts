@@ -1,15 +1,14 @@
 import {
   areLanguagesAttached,
   areThemesAttached,
-  attachResolvedThemes,
   getSharedHighlighter,
   parsePatchFiles,
+  registerCustomTheme,
   renderDiffWithHighlighter,
   setLanguageOverride,
 } from "@pierre/diffs";
 import type { DiffsHighlighter, RenderDiffOptions } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
-import { normalizeTheme } from "shiki/core";
 
 import { fileSupportForPath } from "@/file-support/registry";
 import { activeThemeName, appearance } from "@/theme/active";
@@ -46,35 +45,40 @@ const diffThemeName = () => {
   return syntaxThemeForName(name) ?? `${STET_SHIKI_THEME_NAME}:${name}`;
 };
 
-// Attach the active render theme to the shared highlighter, returning its name.
-// A token theme is built and normalized here, then attached synchronously (the
-// same normalization a registered loader would run, minus the promise); bundled
-// SyntaxThemes are known to Shiki and load through the highlighter. An attach
-// Failure leaves the render to fall back to plain text. Called before every
-// Render so a theme switch attaches on demand.
+/**
+ * Names already handed to `registerCustomTheme`, which logs an error on a second registration (that
+ * would paint over the TUI), so each token theme registers once.
+ */
+const registeredThemes = new Set<string>();
+
+/**
+ * Attach the active render theme to the shared highlighter, returning its name. Stet's token themes
+ * register as TextMate loaders, so `@pierre/diffs` builds its own theme shape from them exactly as
+ * it does for a bundled Shiki theme, and both kinds attach through the same highlighter call. An
+ * attach failure leaves the render to fall back to plain text. Called before every render so a
+ * theme switch attaches on demand.
+ */
 const ensureDiffTheme = async () => {
   const name = activeThemeName();
   const themeName = diffThemeName();
-  const instance = await highlighter();
+
+  await highlighter();
 
   if (areThemesAttached(themeName)) {
     return themeName;
   }
 
-  if (syntaxThemeForName(name) === undefined) {
-    try {
-      attachResolvedThemes(
-        normalizeTheme({
-          ...shikiTheme(themeForName(name), appearance()),
-          name: themeName,
-        }),
-        instance
-      );
-    } catch {
-      // Attach failed; the render falls back to plain text.
-    }
+  if (
+    syntaxThemeForName(name) === undefined &&
+    !registeredThemes.has(themeName)
+  ) {
+    const theme = Promise.resolve({
+      ...shikiTheme(themeForName(name), appearance()),
+      name: themeName,
+    });
 
-    return themeName;
+    registeredThemes.add(themeName);
+    registerCustomTheme(themeName, async () => await theme);
   }
 
   await getSharedHighlighter({

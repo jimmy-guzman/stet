@@ -1,13 +1,41 @@
-import type { LLMsOptions } from "fumadocs-core/mdx-plugins/remark-llms";
+import { replaceSource } from "fumadocs-core/mdx-plugins/stringifier";
 
 import { siteUrl } from "./site";
+
+type VFile = Parameters<typeof replaceSource>[0];
+
+type MdastNode = Parameters<typeof replaceSource>[1];
+
+/** Escaped the way fumadocs' own remark-image writes an image, so any alt, URL, or title round-trips. */
+const imageMarkdown = (alt: string, url: string, title: string) =>
+  `![${alt.replaceAll(/[\\[\]]/gu, String.raw`\$&`)}](<${url}>${
+    title === "" ? "" : ` "${title.replaceAll(/["\\]/gu, String.raw`\$&`)}"`
+  })`;
+
+const absolutize = (node: MdastNode, file: VFile): void => {
+  if (node.type === "image" && node.url.startsWith("/")) {
+    replaceSource(
+      file,
+      node,
+      imageMarkdown(node.alt ?? "", `${siteUrl}${node.url}`, node.title ?? ""),
+      "markdown"
+    );
+
+    return;
+  }
+
+  if ("children" in node) {
+    for (const child of node.children) {
+      absolutize(child, file);
+    }
+  }
+};
 
 /**
  * Absolute image URLs in the LLM output. A screenshot is the one reference an agent dereferences
  * outside a browser, so the site-relative `/screenshots/...` path it is authored with is useless
  * once the markdown is read from `llms-full.txt` or a `.md` route.
  */
-export const markdownImage: NonNullable<LLMsOptions["stringify"]> = (node) =>
-  node.type === "image" && node.url.startsWith("/")
-    ? `![${node.alt ?? ""}](${siteUrl}${node.url})`
-    : undefined;
+export const remarkAbsoluteImages = () => (tree: MdastNode, file: VFile) => {
+  absolutize(tree, file);
+};

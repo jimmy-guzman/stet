@@ -14,10 +14,28 @@ const withFileSupport = async (
 ) => {
   const resolved = resolveFileSupportConfig(raw);
   registerFileSupport(resolved.registry);
-  await Promise.resolve(run(resolved.issues)).finally(() => {
+  try {
+    await run(resolved.issues);
+  } finally {
     registerFileSupport(defaultFileSupportRegistry());
-  });
+  }
 };
+
+test("the default registry comes back when a callback throws synchronously", async () => {
+  const before = fileSupportForPath("a.probe").syntax;
+  expect(before).not.toBe("json");
+
+  const failure = await withFileSupport(
+    { files: { probe: { extensions: ["probe"], syntax: "json" } } },
+    () => {
+      throw new Error("assertion failed inside the callback");
+    }
+  ).catch((error: unknown) => error);
+
+  expect(failure).toEqual(new Error("assertion failed inside the callback"));
+
+  expect(fileSupportForPath("a.probe").syntax).toBe(before);
+});
 
 test("file matching resolves exact name, glob, extension, and dotfile specificity", async () => {
   await withFileSupport(

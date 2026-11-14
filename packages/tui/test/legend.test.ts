@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { provenanceGlyph } from "@/components/provenance";
 import { legendGroups } from "@/help/legend";
 import { kindLetter } from "@/ui-helpers";
 
@@ -20,13 +19,6 @@ describe("legendGroups", () => {
     expect(
       group("stage (colors the change letter)")?.entries.map((entry) => entry.meaning),
     ).toEqual(["staged", "unstaged", "staged and unstaged", "untracked"]);
-  });
-
-  test("draws every provenance tier with the rail's own glyph", () => {
-    const rail = glyphs("provenance rail (a)");
-    for (const band of ["uncommitted", "session", "branch", "changed", "initial"] as const) {
-      expect(rail).toContain(provenanceGlyph(band));
-    }
   });
 
   test("every row has a glyph and a meaning", () => {

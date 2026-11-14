@@ -19,7 +19,6 @@ function snapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
     editor: undefined,
     iconsEnabled: true,
     ide: undefined,
-    provenanceEnabled: false,
     searchCaseSensitive: false,
     searchRegex: false,
     searchScope: "changed",

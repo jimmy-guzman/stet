@@ -28,7 +28,6 @@ import { caretCell } from "@/viewer/anchor";
 
 import { CommandMenu } from "../CommandMenu";
 import { isRightClick } from "../mouse";
-import { provenanceGlyph } from "../provenance";
 import { createLineMeasurer } from "./line-measure";
 
 // The caret word's display-column range on the cursor line, [from, to). Undefined
@@ -160,10 +159,8 @@ export function DiffView() {
     return String(max).length;
   });
   // The gutter is a change bar then the number: fixed cells left of the code, so a context
-  // Line reserves the bar column and never shifts (bar + number + space). The provenance
-  // Rail adds one fixed cell on the far left when on, so turning it on grows the gutter by
-  // Exactly one column and never oscillates per line.
-  const gutterWidth = () => numberWidth() + 2 + (state.blameEnabled() ? 1 : 0);
+  // Line reserves the bar column and never shifts (bar + number + space).
+  const gutterWidth = () => numberWidth() + 2;
 
   const contentWidth = () => Math.max(1, state.layout().viewer.content.width - gutterWidth());
 
@@ -504,20 +501,6 @@ export function DiffView() {
         ? theme.colors.diff.removedSign
         : theme.colors.text.faint;
 
-  // The provenance rail: a width-1 band cell (blank on a row git can't attribute, so the
-  // Gutter never shifts), the band's glyph weight colored by its provenance token. Only
-  // Rendered when the rail is on; the gutter reserves its cell in `gutterWidth`. Returns glyph
-  // And color together so the one `provenanceForRow` lookup serves both (memoized per row below).
-  const railCell = (row: DiffLineRow) => {
-    const provenance = state.provenanceForRow(row);
-    return provenance === undefined
-      ? { color: theme.colors.diff.lineNumberFg, glyph: " " }
-      : {
-          color: theme.colors.provenance[provenance.band],
-          glyph: provenanceGlyph(provenance.band),
-        };
-  };
-
   // Each line's background: a find match wins, else a faint add/remove tint (the change
   // Bar and colored number carry the diff state; this is just a subtle block cue). The
   // Cursor lift brightens whatever state the line has rather than replacing it, so a
@@ -629,68 +612,55 @@ export function DiffView() {
                 >
                   <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.faint}>
                     {`${markerGlyph(row())
-                      .padStart(numberWidth() + 1 + (state.blameEnabled() ? 1 : 0))
+                      .padStart(numberWidth() + 1)
                       .padEnd(gutterWidth())}${markerLabel(row())}`}
                   </text>
                 </box>
               }
             >
-              {(line) => {
-                // One provenance lookup per row, shared by the rail's glyph and color.
-                const rail = createMemo(() => railCell(line()));
-                return (
-                  <box
-                    // Own the line selection here, so disable OpenTUI's native text
-                    // Selection on the row (it would otherwise start its own drag
-                    // Highlight and copy button, fighting our band).
+              {(line) => (
+                <box
+                  // Own the line selection here, so disable OpenTUI's native text
+                  // Selection on the row (it would otherwise start its own drag
+                  // Highlight and copy button, fighting our band).
+                  ref={(el) => (el.selectable = false)}
+                  width="100%"
+                  flexDirection="row"
+                  // Explicit per-row height in both modes, from the same `heights()`
+                  // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
+                  // Transition does not relayout the text leaf, so a `z` toggle into
+                  // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
+                  height={heights()[window().start + rowIndex] ?? 1}
+                >
+                  <text
                     ref={(el) => (el.selectable = false)}
-                    width="100%"
-                    flexDirection="row"
-                    // Explicit per-row height in both modes, from the same `heights()`
-                    // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
-                    // Transition does not relayout the text leaf, so a `z` toggle into
-                    // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
-                    height={heights()[window().start + rowIndex] ?? 1}
+                    fg={changeBarColor(line())}
+                    bg={gutterBackground(line())}
                   >
-                    <Show when={state.blameEnabled()}>
-                      <text
-                        ref={(el) => (el.selectable = false)}
-                        fg={rail().color}
-                        bg={gutterBackground(line())}
-                      >
-                        {rail().glyph}
-                      </text>
-                    </Show>
-                    <text
-                      ref={(el) => (el.selectable = false)}
-                      fg={changeBarColor(line())}
-                      bg={gutterBackground(line())}
-                    >
-                      {changeBar(line())}
-                    </text>
-                    <text
-                      ref={(el) => (el.selectable = false)}
-                      fg={gutterNumberColor(line())}
-                      bg={gutterBackground(line())}
-                    >
-                      {`${lineLabel(line())} `}
-                    </text>
-                    <box
-                      ref={(el) => (el.selectable = false)}
-                      flexGrow={1}
-                      backgroundColor={contentBackground(line())}
-                    >
-                      <StyledLine
-                        row={line()}
-                        wrap={wrap()}
-                        width={contentWidth()}
-                        scrollX={scrollX()}
-                        caret={isCursor(line()) ? caretRange() : undefined}
-                      />
-                    </box>
+                    {changeBar(line())}
+                  </text>
+                  <text
+                    ref={(el) => (el.selectable = false)}
+                    fg={gutterNumberColor(line())}
+                    bg={gutterBackground(line())}
+                  >
+                    {`${lineLabel(line())} `}
+                  </text>
+                  <box
+                    ref={(el) => (el.selectable = false)}
+                    flexGrow={1}
+                    backgroundColor={contentBackground(line())}
+                  >
+                    <StyledLine
+                      row={line()}
+                      wrap={wrap()}
+                      width={contentWidth()}
+                      scrollX={scrollX()}
+                      caret={isCursor(line()) ? caretRange() : undefined}
+                    />
                   </box>
-                );
-              }}
+                </box>
+              )}
             </Show>
           )}
         </Index>

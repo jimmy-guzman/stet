@@ -122,7 +122,6 @@ describe("loadConfigText", () => {
       "icons": { "enabled": false, "glyphs": { "typescript": "" } },
       "viewer": { "wrap": true },
       "sidebar": { "open": false, "width": 40, "changesOnly": true },
-      "provenance": { "enabled": true },
       "update": { "check": false },
       "search": { "regex": true, "caseSensitive": true, "scope": "repo" }
     }`);
@@ -131,7 +130,6 @@ describe("loadConfigText", () => {
     expect(config.icons).toEqual({ enabled: false, glyphs: { typescript: "" } });
     expect(config.viewer).toEqual({ wrap: true });
     expect(config.sidebar).toEqual({ changesOnly: true, open: false, width: 40 });
-    expect(config.provenance).toEqual({ enabled: true });
     expect(config.update).toEqual({ check: false });
     expect(config.search).toEqual({ caseSensitive: true, regex: true, scope: "repo" });
   });

@@ -9,12 +9,10 @@ const baseInput = {
   foregroundProgress: undefined,
   guidance: "? help · q quit",
   notification: undefined,
-  provenance: undefined,
   width: 80,
 } satisfies StatusBarModelInput;
 
 const activity = { at: 1000, changeKind: "modified", path: "src/state.ts" } as const;
-const provenance = { band: "session", text: "Jimmy · now · fix status" } as const;
 
 describe("status bar guidance", () => {
   test("an idle bar falls back to guidance", () => {
@@ -65,32 +63,6 @@ describe("status bar priority", () => {
         notification: { level: "success", text: "copied src/state.ts" },
       }),
     ).toMatchObject({ category: "notification", level: "success", message: "copied src/state.ts" });
-  });
-
-  // The reason the alert tier sits above provenance: a real problem must never be hidden behind
-  // The blame inspector.
-  test("a persistent alert outranks provenance", () => {
-    expect(
-      buildStatusBarModel({
-        ...baseInput,
-        alert: { level: "error", source: "worktree-switch", text: "missing worktree" },
-        provenance,
-      }),
-    ).toMatchObject({
-      category: "persistent-alert",
-      level: "error",
-      message: "missing worktree",
-    });
-  });
-
-  // The user turned the rail on deliberately; ambient activity must not evict what they asked to see.
-  test("provenance outranks recent activity", () => {
-    expect(buildStatusBarModel({ ...baseInput, activity, provenance })).toEqual({
-      band: "session",
-      category: "contextual-inspection",
-      kind: "provenance",
-      text: "Jimmy · now · fix status",
-    });
   });
 
   test("recent activity outranks guidance", () => {

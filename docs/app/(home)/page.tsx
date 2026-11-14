@@ -1,4 +1,4 @@
-import { Eye, GitBranch, History, ListTree, Search } from "lucide-react";
+import { Eye, GitBranch, ListTree, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -26,11 +26,6 @@ const features = [
     icon: GitBranch,
     title: "Scopes and worktrees",
     body: "Compare against any ref, drill into recent commits, and switch between git worktrees in place without leaving the view.",
-  },
-  {
-    icon: History,
-    title: "Line provenance",
-    body: "A gutter rail places every line on a timeline: uncommitted, committed this session, on this branch, or older, so you see how much of what you review is yours.",
   },
 ];
 

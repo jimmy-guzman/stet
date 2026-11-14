@@ -8,7 +8,6 @@ import type { StatusBarActivity, StatusBarModel } from "@/status/model";
 import { useTheme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
-import { provenanceGlyph } from "./provenance";
 import { RecencyDot } from "./RecencyDot";
 
 export function StatusBar() {
@@ -17,8 +16,6 @@ export function StatusBar() {
   // Narrowed per branch so each `Match` gets the member it renders; the model is a closed union,
   // So a new content kind is a type error here rather than a silently blank row.
   const asMessage = (current: StatusBarModel) => (current.kind === "message" ? current : undefined);
-  const asProvenance = (current: StatusBarModel) =>
-    current.kind === "provenance" ? current : undefined;
   const asAmbient = (current: StatusBarModel) => (current.kind === "ambient" ? current : undefined);
   const asGuidance = (current: StatusBarModel) =>
     current.kind === "guidance" ? current : undefined;
@@ -50,16 +47,6 @@ export function StatusBar() {
             <text fg={levelColor(theme.colors, current().level)}>
               {`${levelGlyph(current().level)} ${current().message}`}
             </text>
-          )}
-        </Match>
-        <Match when={asProvenance(model())}>
-          {(current) => (
-            <box flexDirection="row">
-              <text fg={theme.colors.provenance[current().band]} marginRight={1}>
-                {provenanceGlyph(current().band)}
-              </text>
-              <text fg={theme.colors.text.secondary}>{current().text}</text>
-            </box>
           )}
         </Match>
         <Match when={asAmbient(model())}>

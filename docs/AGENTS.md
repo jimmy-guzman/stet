@@ -47,7 +47,7 @@ The mechanics:
 
 ### Keeping docs in sync with code
 
-The site is hand-written, so it drifts from the TUI unless it is kept honest. Prefer an enforced guard over a rule wherever a fact is enumerable from code: an enforced fact cannot drift, a rule relies on the next contributor remembering it. Two facts are enforced today, and both held where a hand-maintained copy did not. `bun run gen:keys` regenerates the keybindings region from the TUI's `src/help/keys.ts`, and `docs:check` runs `gen:keys --check`, which fails when the region no longer matches. The `?` marks legend reads each glyph from the function that draws it, and enum-keyed `Record`s in `packages/tui/src/help/legend.ts` make a new change kind, stage, or provenance tier a compile error until it earns a row.
+The site is hand-written, so it drifts from the TUI unless it is kept honest. Prefer an enforced guard over a rule wherever a fact is enumerable from code: an enforced fact cannot drift, a rule relies on the next contributor remembering it. Two facts are enforced today, and both held where a hand-maintained copy did not. `bun run gen:keys` regenerates the keybindings region from the TUI's `src/help/keys.ts`, and `docs:check` runs `gen:keys --check`, which fails when the region no longer matches. The `?` marks legend reads each glyph from the function that draws it, and enum-keyed `Record`s in `packages/tui/src/help/legend.ts` make a new change kind or stage a compile error until it earns a row.
 
 Where generating the fact is too heavy for a guard, such as the language matrix's prose cells, it stays hand-written under two rules:
 
@@ -69,7 +69,7 @@ Not every gap is a page. Per the self-explaining-interface standard above, a gap
 - [x] Getting started (`index.mdx`)
 - [x] Guides: panes & layout, reading files & diffs, search & navigation, scopes & worktrees, themes
 - [x] Reference: keybindings, configuration, languages
-- [x] The tree marks (change kinds `M`/`A`/`D`/`R`/`U`, stage colors, recency, the provenance rail): explained in-app by the `?` legend, not a page (#331)
+- [x] The tree marks (change kinds `M`/`A`/`D`/`R`/`U`, stage colors, recency): explained in-app by the `?` legend, not a page (#331)
 - [x] The panes themselves (focus, resize, docking, zoom): `guides/panes-and-layout.mdx`
 - [ ] The rest of the interface: the status bar tiers and the header (a short guide, or more in-app cues)
 - [ ] Guide: working alongside an agent (the loop, live refresh and the safety poll, the non-goals contract)

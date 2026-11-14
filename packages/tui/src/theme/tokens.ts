@@ -49,17 +49,6 @@ export const ThemeSchema = Schema.Struct({
   /** User-extensible icon colors; missing names fall back to `text.muted` at render sites. */
   icon: Schema.Record(Schema.String, Hex),
   kind: Schema.Struct(kindTokens),
-  // The viewer's per-line provenance rail: a five-tier scrutiny timeline as one neutral
-  // Brightness ramp, brightest at `uncommitted` fading to the faint neutral at `initial`,
-  // So color reinforces the weight ramp (the status bar names the exact tier for the caret).
-  // Neutral, not a hue: the rail is read-only inspection, not a warning or a status.
-  provenance: Schema.Struct({
-    branch: Hex,
-    changed: Hex,
-    initial: Hex,
-    session: Hex,
-    uncommitted: Hex,
-  }),
   // Recency dot ramps fresh -> aged across an activity's lifetime, then vanishes.
   recency: Schema.Struct({ aged: Hex, fresh: Hex }),
   // Only the thumb is themed; the track stays transparent so it inherits

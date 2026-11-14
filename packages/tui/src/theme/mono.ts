@@ -16,7 +16,7 @@ export function prefersMonochrome(env: Record<string, string | undefined>) {
 }
 
 // The NO_COLOR pair: every token is a pure grey (r = g = b), so no hue ever
-// Carries meaning; ordering signals (recency, provenance, severity, stage) keep
+// Carries meaning; ordering signals (recency, severity, stage) keep
 // Their ramps as brightness. `icon` is empty so every glyph falls back to
 // `text.muted`, and `syntax` greys feed the Shiki theme, so code highlighting
 // Degrades to weight and brightness. Selected automatically when the terminal
@@ -41,13 +41,6 @@ export const monoDarkTheme: Theme = {
     modified: "#b6b6b6",
     renamed: "#a2a2a2",
     untracked: "#c8c8c8",
-  },
-  provenance: {
-    branch: "#999999",
-    changed: "#7b7b7b",
-    initial: "#5c5c5c",
-    session: "#b8b8b8",
-    uncommitted: "#d6d6d6",
   },
   recency: { aged: "#616161", fresh: "#e9e9e9" },
   scrollbar: { thumb: "#515151" },
@@ -107,13 +100,6 @@ export const monoLightTheme: Theme = {
     modified: "#4f4f4f",
     renamed: "#5e5e5e",
     untracked: "#454545",
-  },
-  provenance: {
-    branch: "#636363",
-    changed: "#787878",
-    initial: "#8d8d8d",
-    session: "#4f4f4f",
-    uncommitted: "#3a3a3a",
   },
   recency: { aged: "#8d8d8d", fresh: "#2a2a2a" },
   scrollbar: { thumb: "#a2a2a2" },

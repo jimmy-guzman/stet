@@ -70,7 +70,7 @@ The rules are stack-agnostic. Where one is specific to a graphical or web platfo
 ## 6. Performance
 
 - Performance is part of the design. A slow interface is an ugly interface.
-- Budget the critical path. The first interaction should feel immediate; the git-backed tree renders before anything heavier (highlighting, provenance) resolves.
+- Budget the critical path. The first interaction should feel immediate; the git-backed tree renders before anything heavier (highlighting) resolves.
 - Stay within the frame budget or do not animate. Drop the effect before you ship jank.
 - Reserve space for async content. No layout shift.
 - Render only what is visible plus a small overscan; window long content rather than building every row.
@@ -98,7 +98,7 @@ The rules are stack-agnostic. Where one is specific to a graphical or web platfo
 ## 9. Accessibility
 
 - Keyboard-operable end to end. Focus order follows visual order.
-- There is no DOM or ARIA in a terminal. The accessibility surface is `NO_COLOR`, `FORCE_COLOR`, and the absence of a Nerd Font; carry meaning in text and glyphs so it survives all three. `NO_COLOR` selects the built-in `mono-dark`/`mono-light` pair, where every token is a pure grey: ordering ramps (recency, provenance) survive as brightness, and a signal that was hue-only gains a glyph (the change bar renders `+`/`-` under any monochrome theme).
+- There is no DOM or ARIA in a terminal. The accessibility surface is `NO_COLOR`, `FORCE_COLOR`, and the absence of a Nerd Font; carry meaning in text and glyphs so it survives all three. `NO_COLOR` selects the built-in `mono-dark`/`mono-light` pair, where every token is a pure grey: ordering ramps (recency, stage) survive as brightness, and a signal that was hue-only gains a glyph (the change bar renders `+`/`-` under any monochrome theme).
 - Meaningful glyphs and icons carry a text fallback (stet's restrained type colors are optional and `--no-icons` drops the glyphs); decorative ones add nothing a reader must announce.
 - Trap focus only in overlays, and return it to where it came from on close.
 - Test each surface with color and icons off (`NO_COLOR=1`, `--no-icons`) at least once. If it still reads, it is accessible.

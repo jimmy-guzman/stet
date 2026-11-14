@@ -114,25 +114,22 @@ describe("help overlay", () => {
         frame.includes("switch to another git worktree"),
       );
 
-      // Settle on a meaning unique to the legend ("provenance rail" also rides the `a` keybinding
-      // Description, so it cannot tell the two views apart).
+      // Settle on a meaning unique to the legend, so it tells the two views apart.
       mockInput.pressTab();
       const marks = await settleUntil("marks legend", (frame) =>
-        frame.includes("original to the file"),
+        frame.includes("staged and unstaged"),
       );
       // The view swapped: the keybinding descriptions are gone and the marks are explained.
       expect(marks).not.toContain("switch to another git worktree");
       // The active view is bracketed (a NO_COLOR-safe cue), not just brightened.
       expect(marks).toContain("[marks]");
       expect(marks).toContain("modified");
-      expect(marks).toContain("staged and unstaged");
-      expect(marks).toContain("committed this session");
 
       mockInput.pressTab();
       const back = await settleUntil("back to the keys", (frame) =>
         frame.includes("switch to another git worktree"),
       );
-      expect(back).not.toContain("original to the file");
+      expect(back).not.toContain("staged and unstaged");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

@@ -29,7 +29,6 @@ in a hint row along their bottom edge, so those are not repeated here.
 | `v`           | toggle diff ↔ full file view for a changed file                  | `toggle-view`                    |
 | `z`           | fold / unfold the region at the caret                            | `fold`                           |
 | `x`           | toggle long-line wrap in the viewer                              | `toggle-wrap`                    |
-| `a`           | toggle the line provenance rail                                  | `provenance`                     |
 | `f`           | load full content when truncated                                 | `load-full`                      |
 | `ctrl-d / u`  | half-page cursor movement in the viewer                          | `half-page-down`, `half-page-up` |
 | `g / G`       | jump to first / last line                                        | `first-line`, `last-line`        |
@@ -90,7 +89,7 @@ to a combo, a list of combos, or `false` to unbind it.
   "keybindings": {
     "toggle-sidebar": "ctrl+e", // one combo
     "cursor-down": ["j", "↓"], // several
-    "provenance": false, // unbind
+    "toggle-wrap": false, // unbind
   },
 }
 ```

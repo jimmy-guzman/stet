@@ -67,8 +67,8 @@ function formatIssue(error: unknown) {
 }
 
 // The decode strips unknown keys inside a typed section, so diffing the raw
-// Keys against the kept ones reports them; a raw registry (servers, glyphs,
-// Themes...) decodes verbatim, diffs empty, and stays its resolver's job.
+// Keys against the kept ones reports them; a raw registry (glyphs, themes,
+// Files...) decodes verbatim, diffs empty, and stays its resolver's job.
 function unknownSectionKeys(section: string, rawValue: unknown, decodedValue: unknown) {
   if (!isRecord(rawValue) || !isRecord(decodedValue)) {
     return [];

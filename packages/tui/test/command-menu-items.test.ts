@@ -7,8 +7,6 @@ const viewer = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => 
   caretColumn: 5,
   caretLine: 12,
   context: "viewer",
-  hasSymbol: true,
-  intelEnabled: true,
   selectedPath: "src/foo.ts",
   treeNode: undefined,
   truncated: false,
@@ -19,8 +17,6 @@ const tree = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => ({
   caretColumn: undefined,
   caretLine: undefined,
   context: "tree",
-  hasSymbol: false,
-  intelEnabled: true,
   selectedPath: undefined,
   treeNode: { id: "file:src/foo.ts", kind: "file", path: "src/foo.ts" },
   truncated: false,
@@ -30,35 +26,8 @@ const tree = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => ({
 const labels = (input: CommandMenuInput) => buildCommandMenuItems(input).map((item) => item.label);
 
 describe("buildCommandMenuItems", () => {
-  test("viewer with a symbol lists the intel actions first", () => {
+  test("viewer lists the copy and open actions", () => {
     expect(labels(viewer())).toEqual([
-      "Go to definition",
-      "Find references",
-      "Find implementations",
-      "Call hierarchy",
-      "Quick info",
-      "Find symbols",
-      "Copy reference",
-      "Copy file contents",
-      "Open in editor",
-      "Open in IDE",
-      "Open externally",
-    ]);
-  });
-
-  test("viewer without a symbol omits the caret-intel actions but keeps find-symbols and the rest", () => {
-    expect(labels(viewer({ caretColumn: undefined, hasSymbol: false }))).toEqual([
-      "Find symbols",
-      "Copy reference",
-      "Copy file contents",
-      "Open in editor",
-      "Open in IDE",
-      "Open externally",
-    ]);
-  });
-
-  test("viewer with intel disabled omits every intel action, find-symbols included", () => {
-    expect(labels(viewer({ intelEnabled: false }))).toEqual([
       "Copy reference",
       "Copy file contents",
       "Open in editor",
@@ -84,9 +53,9 @@ describe("buildCommandMenuItems", () => {
   });
 
   test("viewer copy reference drops the column at line level", () => {
-    const item = buildCommandMenuItems(
-      viewer({ caretColumn: undefined, caretLine: 12, hasSymbol: false }),
-    ).find((entry) => entry.label === "Copy reference");
+    const item = buildCommandMenuItems(viewer({ caretColumn: undefined, caretLine: 12 })).find(
+      (entry) => entry.label === "Copy reference",
+    );
 
     expect(item?.action).toEqual({
       column: undefined,

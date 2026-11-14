@@ -23,7 +23,7 @@ The site deploys from `main` on every push while the CLI release is gated to `pa
 
 **An image earns its place by telling something the prose cannot, not by filling a section that lacks one.** That is the whole bar, and it is the one that gets skipped: a page with no image is not a gap, and an overlay that already appears on the page in another shot does not need a second near-identical one. A capture of a transient toast is rarely worth it either, because the sentence beside it already says what it says. What does earn a place: a cue with no words to describe it (the recency ramp), an arrangement a reader cannot picture (a re-docked pane), a surface whose contents the prose does not enumerate (what is actually on the context menu), and the surprising payoff of a feature (`ctrl-s` writing the config for you).
 
-Check the capture against the sentence next to it, not just against the app. A shot of the context menu on a symbol shows a full menu, so it cannot illustrate the menu omitting rows; the prose beside it has to make that claim on its own.
+Check the capture against the sentence next to it, not just against the app. A shot of the context menu in the viewer shows a full menu, so it cannot illustrate the menu omitting rows; the prose beside it has to make that claim on its own.
 
 The mechanics:
 
@@ -67,7 +67,7 @@ Where generating the fact is too heavy for a guard, such as the language matrix'
 Not every gap is a page. Per the self-explaining-interface standard above, a gap can be closed in the UI instead. What exists and is maintained, and the gaps an audit found; check a box when a gap is closed in a page or in-app, and add a row when one is filled or found.
 
 - [x] Getting started (`index.mdx`)
-- [x] Guides: panes & layout, reading files & diffs, search & navigation, code intelligence, scopes & worktrees, themes
+- [x] Guides: panes & layout, reading files & diffs, search & navigation, diagnostics, scopes & worktrees, themes
 - [x] Reference: keybindings, configuration, languages
 - [x] The tree and diagnostics marks (change kinds `M`/`A`/`D`/`R`/`U`, badges, recency, the provenance rail): explained in-app by the `?` legend, not a page (#331)
 - [x] The panes themselves (focus, resize, docking, zoom): `guides/panes-and-layout.mdx`

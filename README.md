@@ -50,8 +50,6 @@ beneath, and it stays.
 - Rearranges its own layout: the tree and the problems panel dock to any edge and
   resize along it, with `d` cycling the focused pane clockwise, `m` toggling zoom on
   the focused pane, and `ctrl-s` persisting the arrangement.
-- Navigates code through read-only language-server pulls: go to definition, find
-  references, find implementations, call hierarchy, hover, and a symbol outline.
 - Copies a reference and snippet to paste back to the agent: `path` in the tree,
   `path:line:col` in the viewer, and a whole diagnostic (or every one) from the
   problems panel.
@@ -81,7 +79,7 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 - [Getting started](https://stet.jimmy.codes/docs): install, usage, flags, and
   requirements
 - [Guides](https://stet.jimmy.codes/docs/guides/reading-files-and-diffs):
-  reading files and diffs, search and navigation, code intelligence, scopes and
+  reading files and diffs, search and navigation, diagnostics, scopes and
   worktrees, and themes
 - [Keybindings](https://stet.jimmy.codes/docs/reference/keybindings): every
   shortcut (or press `?` in the app)

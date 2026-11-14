@@ -37,7 +37,7 @@ test("Watcher.changes emits the changed worktree path when a file changes", asyn
       }).pipe(Effect.provide(WatcherTest)),
     );
 
-    // A tracked working-tree edit, so its path rides the batch (which drives intel invalidation).
+    // A tracked working-tree edit, so its path rides the batch.
     const changes = Option.getOrElse(first, () => [] as readonly WatchedChange[]);
     expect(changes.map((change) => change.path)).toContain("a.txt");
   } finally {

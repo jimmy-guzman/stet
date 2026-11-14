@@ -10,11 +10,11 @@ const DENY_FIRST_SEGMENT = new Set(["objects", "logs", "rebase-merge", "rebase-a
 const DENY_EXACT = new Set(["COMMIT_EDITMSG", "FETCH_HEAD"]);
 
 /**
- * How a raw `fs.watch` event should be treated. `"worktree"` is a tracked working-tree file edit
- * (tick the git refresh and invalidate the intel cache, which keys off working-tree content);
- * `"internal"` is a meaningful git-state change (HEAD/index/refs, or any event on a linked
- * worktree's git-dir root) that ticks the refresh but is not a content change; `"ignored"` is a
- * high-churn internal git drops on every write and produces no tick.
+ * How a raw `fs.watch` event should be treated. `"worktree"` is a working-tree file edit (tick the
+ * git refresh and hand the path to the language servers); `"internal"` is a meaningful git-state
+ * change (HEAD/index/refs, or any event on a linked worktree's git-dir root) that ticks the refresh
+ * but is not a content change; `"ignored"` is a high-churn internal git drops on every write and
+ * produces no tick.
  */
 export type WatchEventClass = "worktree" | "internal" | "ignored";
 
@@ -24,8 +24,7 @@ export type WatchEventClass = "worktree" | "internal" | "ignored";
  * a linked worktree's git dir (the whole watched root). Drops the high-churn internals git writes
  * while an agent works; keeps HEAD/index/refs and every working-tree edit. Fails toward correctness
  * when it cannot classify (a nameless event on the worktree root might be a content change, so
- * `"worktree"`; on the git-dir root it is always `"internal"`): either way it ticks, and it errs
- * toward invalidating rather than stranding stale intel.
+ * `"worktree"`; on the git-dir root it is always `"internal"`): either way it ticks.
  */
 export function classify(
   gitInternalPrefix: string,

@@ -26,12 +26,10 @@ export interface WatchedChange {
  * Filesystem-change batches for a worktree, debounced so an agent's burst of writes collapses into
  * one. Each emit means "something changed, re-derive git state"; its array is the worktree-relative
  * paths written this batch (empty for a git-internal-only or nameless batch). The consumer ticks
- * the git refresh on every emit, invalidates the content-keyed intel cache only for a path it knows
- * is tracked (so gitignored churn like `node_modules/` does not wipe the cache, and a commit, which
- * touches only `.git`, carries no path), and forwards the whole batch to the language servers, for
- * which that same gitignored churn is the entire point. Watch failures (a platform without
- * recursive support, a sandbox without inotify) are swallowed: that root simply never ticks and the
- * caller's slow poll remains the correctness floor.
+ * the git refresh on every emit and forwards the whole batch to the language servers, gitignored
+ * churn like `node_modules/` included, since that churn is the entire point for them. Watch
+ * failures (a platform without recursive support, a sandbox without inotify) are swallowed: that
+ * root simply never ticks and the caller's slow poll remains the correctness floor.
  */
 export class Watcher extends Context.Service<
   Watcher,
@@ -61,9 +59,9 @@ function watchStream(roots: ReturnType<typeof watchRoots>) {
           timer = undefined;
           const changes = [...pending].map(([path, renamed]) => ({ path, renamed }));
           // Clear the pending set only once the emit is accepted. The callback queue is bufferSize-1
-          // Dropping, so a burst could drop this offer; if it carried worktree paths (the intel
-          // Signal) keep them and retry rather than losing them. A dropped empty batch is only a
-          // Git-refresh tick, and the safety poll is its floor.
+          // Dropping, so a burst could drop this offer; if it carried worktree paths (the language
+          // Servers' signal) keep them and retry rather than losing them. A dropped empty batch is
+          // Only a git-refresh tick, and the safety poll is its floor.
           if (Queue.offerUnsafe(queue, changes)) {
             pending.clear();
           } else if (pending.size > 0) {
@@ -77,7 +75,7 @@ function watchStream(roots: ReturnType<typeof watchRoots>) {
               if (kind === "ignored") {
                 return;
               }
-              // A named worktree write is intel-relevant; a git-internal or nameless event still
+              // A named worktree write carries its path; a git-internal or nameless event still
               // Ticks the refresh but carries no path (nameless real edits ride the mtime poll floor).
               if (kind === "worktree" && typeof filename === "string") {
                 pending.set(filename, (pending.get(filename) ?? false) || event === "rename");

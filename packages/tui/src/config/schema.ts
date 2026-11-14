@@ -39,7 +39,6 @@ export const UserConfigSchema = Schema.Struct({
     }),
   ),
   ide: Schema.optionalKey(Schema.String.check(Schema.isPattern(/\S/))),
-  intel: Schema.optionalKey(Toggle),
   // Values are a combo, a list of combos, or false; `resolveKeybindings`
   // Validates them against the action registry.
   keybindings: Schema.optionalKey(RawRegistry),
@@ -97,7 +96,6 @@ export type UserConfig = Schema.Schema.Type<typeof UserConfigSchema>;
 export const configDefaults = {
   diagnostics: { download: true, enabled: true },
   icons: { enabled: true },
-  intel: { enabled: true },
   problems: { open: false, position: "bottom" },
   provenance: { enabled: false },
   search: { caseSensitive: false, regex: false, scope: "changed" },

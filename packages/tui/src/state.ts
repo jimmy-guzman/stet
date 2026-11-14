@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 
 import { Effect, Queue, Stream } from "effect";
 import {
@@ -19,7 +19,6 @@ import { Clipboard } from "./clipboard/service";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type { CommandAction, CommandMenuInput } from "./components/command-menu/items";
 import { Config } from "./config/service";
-import { REFERENCES_MAX_ROWS, SYMBOLS_MAX_ROWS } from "./constants";
 import {
   allFindings,
   countBySeverity,
@@ -38,12 +37,11 @@ import {
   problemsEmptyState,
 } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
-import { hasCapabilityServer, hasIntelServer, LanguageServers } from "./diagnostics/servers";
+import { LanguageServers } from "./diagnostics/servers";
 import { Diagnostics } from "./diagnostics/service";
-import { DiffEngine, highlightSnippet, languageForPath, structureDiff } from "./diff/engine";
+import { DiffEngine, languageForPath, structureDiff } from "./diff/engine";
 import type { DiffRender, RenderInput } from "./diff/engine";
 import { followScrollTop } from "./diff/follow";
-import type { RenderSpan } from "./diff/hast";
 import {
   applyCollapsedRegions,
   foldKey,
@@ -71,7 +69,7 @@ import type { BlameLine } from "./git/blame";
 import { fileDiffSides } from "./git/file-patch";
 import type { BinaryDiff } from "./git/file-patch";
 import type { Commit } from "./git/log";
-import { changedContentAdvanced, changedPathsDiffer, mergeChanged } from "./git/model";
+import { changedPathsDiffer, mergeChanged } from "./git/model";
 import type { ChangedFile, GitModel } from "./git/model";
 import { classifyProvenance } from "./git/provenance";
 import type { Provenance } from "./git/provenance";
@@ -93,11 +91,6 @@ import {
   worktreePathTails,
 } from "./git/worktree";
 import type { Worktree, WorktreeSummary } from "./git/worktree";
-import type { HoverSegment, NormalizedLocation, NormalizedSymbol } from "./intel/protocol";
-import { attachReferencePreviews, buildReferenceRows, byReferenceOrder } from "./intel/references";
-import type { ReferenceResult } from "./intel/references";
-import { Intel } from "./intel/service";
-import type { IntelRequestError } from "./intel/service";
 import {
   computeLayout,
   horizontalDock,
@@ -156,60 +149,6 @@ interface JumpTarget {
   // Undefined keeps the caret at the target line's first word.
   column?: number;
   escalate: boolean;
-}
-
-// A caret-anchored viewer overlay (the hover card, later peek/gutters), distinct
-// From the centered command-palette overlays. Content-agnostic on purpose so a
-// Second consumer reuses the same seam; the caret cell it renders at is derived
-// Live in DiffView, not stored here.
-// One rendered line of a decoration: a syntax-highlighted code line (colored
-// Spans) or a plain prose line. The card renders code as styled spans and prose
-// As muted text, the way an editor's hover shows a highlighted signature above
-// Plain docs.
-type DecorationLine = { kind: "code"; spans: RenderSpan[] } | { kind: "prose"; text: string };
-
-interface ViewerDecoration {
-  status: "loading" | "ready" | "empty" | "error";
-  lines: DecorationLine[];
-}
-
-// A hover segment becomes rendered lines: prose maps one line each; a code block
-// Is syntax-highlighted in its language (uncolored when the language is absent).
-async function segmentToLines(
-  segment: HoverSegment,
-  highlight: (code: string, lang: string) => Promise<RenderSpan[][]>,
-): Promise<DecorationLine[]> {
-  if (segment.kind === "prose") {
-    return segment.lines.map((text) => ({ kind: "prose", text }));
-  }
-  if (segment.lang === undefined) {
-    return segment.lines.map((line) => ({ kind: "code", spans: [{ text: line }] }));
-  }
-  const highlighted = await highlight(segment.lines.join("\n"), segment.lang);
-  return highlighted.map((spans) => ({ kind: "code", spans }));
-}
-
-// A single muted line (loading / empty / error), the simplest decoration content.
-function noticeLines(text: string): DecorationLine[] {
-  return [{ kind: "prose", text }];
-}
-
-// The caret/scroll/file the decoration opened against; any drift closes it, so the
-// Card never lingers over content it no longer describes. `repoRoot` and `scope`
-// Catch the cases the caret signals miss: a worktree or scope switch can keep the
-// Same selected path, cursor, and scroll yet show an entirely different diff.
-interface DecorationAnchor {
-  index: number;
-  column: number;
-  scrollTop: number;
-  scrollX: number;
-  path: string | undefined;
-  repoRoot: string;
-  scope: string;
-  // The active theme the card's colors were highlighted against; a theme switch
-  // Leaves caret/scroll/path/scope untouched yet restyles the diff, so a stale
-  // Card must close rather than keep the old palette.
-  theme: string;
 }
 
 // The context the command menu was opened against; a clear effect closes the menu
@@ -498,12 +437,8 @@ function createState() {
   );
   const [commandMenuGuard, setCommandMenuGuard] = tracked<CommandMenuGuard | undefined>(undefined);
   const [iconsEnabled, setIconsEnabled] = tracked(true);
-  // Feature switches, seeded from config. Diagnostics off silences the run loop
-  // (no servers spawn for checks); intel off silences the caret pulls. They are
-  // Independent switches over the same server pool: intel-only spawns servers on
-  // Demand, diagnostics-only never answers a caret.
+  /** Seeded from config. Off silences the run loop, so no language server spawns at all. */
   const [diagnosticsEnabled, setDiagnosticsEnabled] = tracked(true);
-  const [intelEnabled, setIntelEnabled] = tracked(true);
   // The per-line provenance rail (blame reframed): off by default, toggled by `a`. The three
   // Timeline anchors: `sessionCommits` = SHAs in `sessionBase..HEAD` (since launch),
   // `branchCommits` = SHAs in `branchBase..HEAD` (this branch, a superset of the session set),
@@ -598,23 +533,6 @@ function createState() {
   const [searchFileLines, setSearchFileLines] = tracked(new Map<string, string[]>());
   const [searchTruncated, setSearchTruncated] = tracked(false);
   const [searchStatus, setSearchStatus] = tracked<"idle" | "searching" | "ready" | "error">("idle");
-  const [referencesOpen, setReferencesOpen] = tracked(false);
-  const [referencesStatus, setReferencesStatus] = tracked<"loading" | "ready" | "empty" | "error">(
-    "loading",
-  );
-  const [referencesResults, setReferencesResults] = tracked<ReferenceResult[]>([]);
-  const [referencesIndex, setReferencesIndex] = tracked(0);
-  const [referencesScrollTop, setReferencesScrollTop] = tracked(0);
-  const [referencesLabel, setReferencesLabel] = tracked<
-    "references" | "definitions" | "implementations" | "incoming calls" | "outgoing calls"
-  >("references");
-  const [symbolsOpen, setSymbolsOpen] = tracked(false);
-  const [symbolsStatus, setSymbolsStatus] = tracked<
-    "loading" | "ready" | "empty" | "error" | "unsupported"
-  >("loading");
-  const [symbolsResults, setSymbolsResults] = tracked<NormalizedSymbol[]>([]);
-  const [symbolsIndex, setSymbolsIndex] = tracked(0);
-  const [symbolsScrollTop, setSymbolsScrollTop] = tracked(0);
   const [findOpen, setFindOpen] = tracked(false);
   const [findActive, setFindActive] = tracked(false);
   const [findQuery, setFindQuery] = tracked("");
@@ -673,13 +591,6 @@ function createState() {
   // Scrollbox every frame (it stays the single source of truth for the window).
   const [viewerScrollTop, setViewerScrollTop] = tracked(0);
   const [viewerScrollX, setViewerScrollX] = tracked(0);
-  // The active caret-anchored decoration and the anchor it opened against. The
-  // Content is the rendering source; the anchor is an orthogonal watcher that
-  // Closes the card on any caret/scroll/file drift (see the clear effect below).
-  const [viewerDecoration, setViewerDecorationContent] = tracked<ViewerDecoration | undefined>(
-    undefined,
-  );
-  const [decorationAnchor, setDecorationAnchor] = tracked<DecorationAnchor | undefined>(undefined);
   // The viewer's navigation history: tabs of visited Locations plus a per-path
   // MRU viewport. `selectedPath`/`fileView`/the scroll signals stay the live
   // Source of truth the viewer renders; navState records them on leave and
@@ -698,11 +609,10 @@ function createState() {
   // Status channel was why a worktree failure and a diagnostics failure overwrote each other, and
   // Why either one's retry wiped the other's alert.
   const [alerts, setAlerts] = tracked<StatusAlerts>([]);
-  // A live in-flight indicator for a code-intel pull (F12), distinct from the
-  // Auto-clearing `notice` acknowledgment: it is set on the keystroke and cleared
-  // When the pull settles, so the status bar shows the action is underway.
-  const [intelStatus, setIntelStatus] = tracked<string | undefined>(undefined);
-  // The same in-flight shape for a worktree switch, which reloads the whole model.
+  /**
+   * A live in-flight indicator for a worktree switch, which reloads the whole model: set on the
+   * keystroke and cleared when the switch settles, distinct from the auto-clearing `notice`.
+   */
   const [switchProgress, setSwitchProgress] = tracked<string | undefined>(undefined);
   const raise = (source: StatusAlertSource, level: StatusAlert["level"], text: string) => {
     setAlerts((current) => raiseAlert(current, { level, source, text }));
@@ -724,8 +634,6 @@ function createState() {
   >(undefined);
   const [activityLog, setActivityLog] = tracked<ActivityLog>(emptyActivityLog);
   const [checksRunning, setChecksRunning] = tracked(false);
-  // Held for the duration of `R`, so the intel warm-hold cannot re-pin a server mid-teardown.
-  const [restartingServers, setRestartingServers] = tracked(false);
   // Languages whose server is downloading right now, sourced live from the provisioner (not the
   // Check run), so the status bar shows it promptly and drops it the moment the download resolves.
   const [provisioningLanguages, setProvisioningLanguages] = tracked<ReadonlySet<string>>(new Set());
@@ -919,42 +827,6 @@ function createState() {
     viewport: () => layout().problems.content.height,
   });
 
-  // The references overlay windows its rows like the problems panel rather than leaning on a
-  // Native scrollbox: the visible slice is `referencesScrollTop`, followed off the cursor's row
-  // Position (headers offset it, so `referencesIndex` in results space is mapped to a row index).
-  const referencesRows = createMemo(() => buildReferenceRows(referencesResults()));
-  const referencesViewport = createMemo(() =>
-    Math.min(REFERENCES_MAX_ROWS, Math.max(1, referencesRows().length)),
-  );
-  const referencesCursorRow = createMemo(() => {
-    const target = referencesIndex();
-    const row = referencesRows().findIndex(
-      (entry) => entry.kind === "match" && entry.index === target,
-    );
-    return row === -1 ? 0 : row;
-  });
-  followListWindow({
-    active: referencesOpen,
-    cursor: referencesCursorRow,
-    rowCount: () => referencesRows().length,
-    scrollTop: referencesScrollTop,
-    setScrollTop: setReferencesScrollTop,
-    viewport: referencesViewport,
-  });
-  // The symbol outline overlay windows the same way. It has no header rows (one file's
-  // Symbols, not a per-file grouping), so `symbolsIndex` is already the row index and the
-  // Follow tracks it directly rather than mapping through a rows list.
-  const symbolsViewport = createMemo(() =>
-    Math.min(SYMBOLS_MAX_ROWS, Math.max(1, symbolsResults().length)),
-  );
-  followListWindow({
-    active: symbolsOpen,
-    cursor: symbolsIndex,
-    rowCount: () => symbolsResults().length,
-    scrollTop: symbolsScrollTop,
-    setScrollTop: setSymbolsScrollTop,
-    viewport: symbolsViewport,
-  });
   // The go-to-file universe: repoFiles plus changed-only paths (staged
   // Deletions), the same universe the tree renders. Every dependency is
   // Identity-gated (`repoFiles` is reference-stable across content edits,
@@ -1500,7 +1372,7 @@ function createState() {
 
   // Open a result row (Enter or a click): a match line lands the caret on its
   // Exact column; a context line lands line-level. Both route through the same
-  // JumpTarget path as problems/references navigation, whose goToLocation step
+  // JumpTarget path as problems navigation, whose goToLocation step
   // Closes the search view like any other navigation.
   function jumpToSearchItem(index: number) {
     const item = searchItems()[index];
@@ -1554,8 +1426,7 @@ function createState() {
   }
 
   // Search results are repo-specific paths: a worktree switch (or the deleted-
-  // Worktree recovery) invalidates them. Clear the snapshot but keep the query,
-  // The same drift rule as the references overlay.
+  // Worktree recovery) invalidates them. Clear the snapshot but keep the query.
   createEffect(
     on(
       repoRoot,
@@ -1919,8 +1790,8 @@ function createState() {
     const line = cursorLine();
     return line?.newLine ?? line?.oldLine;
   });
-  // The symbol the caret sits on, for the highlight and (later) the code-intel
-  // Requests. Undefined in line-level mode or on a gap/word-less position.
+  // The word the caret sits on, for the highlight. Undefined in line-level mode or on a
+  // Gap/word-less position.
   const caretWord = createMemo(() =>
     caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn()),
   );
@@ -1962,8 +1833,6 @@ function createState() {
         caretColumn: caretColumn(),
         caretLine: cursorLineNumber(),
         context: "viewer",
-        hasSymbol: caretWord() !== undefined,
-        intelEnabled: intelEnabled(),
         selectedPath: selectedPath(),
         treeNode: undefined,
         truncated: truncated(),
@@ -1974,8 +1843,6 @@ function createState() {
       caretColumn: undefined,
       caretLine: undefined,
       context: "tree",
-      hasSymbol: false,
-      intelEnabled: intelEnabled(),
       selectedPath: selectedPath(),
       treeNode: node === undefined ? undefined : { id: node.id, kind: node.type, path: node.path },
       truncated: false,
@@ -2060,8 +1927,7 @@ function createState() {
               level: finding.severity satisfies LogLevel,
               text: `${finding.checker}: ${finding.message}`,
             },
-      // A worktree switch repoints the whole app, so it leads an intel pull scoped to one caret.
-      foregroundProgress: switchProgress() ?? intelStatus(),
+      foregroundProgress: switchProgress(),
       guidance: guidance(),
       notification: notice(),
       provenance: caretProvenanceDetail(),
@@ -2338,7 +2204,7 @@ function createState() {
     }
   }
 
-  // Open a file as a jump (palette, search, go-to-definition, a reference/problem).
+  // Open a file as a jump (palette, search, a problem).
   // A `target` line is the single source of truth for where the jump lands: it
   // Seeds the history Location (so back/forward restore it) and the transient
   // `jumpTarget` (which snaps the caret to the column and escalates to file view).
@@ -2363,7 +2229,7 @@ function createState() {
 
   // Move the line cursor and land the caret on the new line's first word, so every
   // Vertical move (j/k, page, top/bottom, find cycle, the row click) leaves the
-  // Caret on a symbol ready for go-to-definition/hover. A jump or restore sets the
+  // Caret on a word. A jump or restore sets the
   // Caret itself, so those use `setCursorIndex` directly and bypass this.
   function setCursorRow(index: number) {
     batch(() => {
@@ -2622,8 +2488,15 @@ function createState() {
 
   let checksController: AbortController | undefined;
   onReset(() => checksController?.abort());
+  /** Settles once every run started so far has exited, which is when each has let go of the pool. */
+  let checksExited: Promise<unknown> = Promise.resolve();
+  /** Held for the duration of `R`: a second `R` drops, and so does any run asked for meanwhile. */
+  let restartingServers = false;
+  onReset(() => {
+    restartingServers = false;
+  });
   async function runChecks(model: GitModel) {
-    if (!diagnosticsEnabled()) {
+    if (!diagnosticsEnabled() || restartingServers) {
       return;
     }
     checksController?.abort();
@@ -2646,7 +2519,7 @@ function createState() {
     setChecksRunning(true);
     const failures: string[] = [];
     try {
-      await runtime.runPromise(
+      const run = runtime.runPromise(
         Diagnostics.use((diagnostics) =>
           diagnostics.run(model.repoRoot, model.changed, prior).pipe(
             Stream.runForEach((update) =>
@@ -2666,6 +2539,8 @@ function createState() {
         ),
         { signal: controller.signal },
       );
+      checksExited = Promise.allSettled([checksExited, run]);
+      await run;
       // Only a failure is worth the row. A clean run is already reported by everything it just
       // Updated (the counts badge, the file badges, the problems panel), and the completion copy
       // It used to leave behind outlived its usefulness: `checks passed` sat there indefinitely,
@@ -2711,20 +2586,21 @@ function createState() {
    * every editor ships one.
    *
    * Every holder of the pooled server has to let go before the pool can kill it, because
-   * `RcMap.invalidate` skips an entry anyone still references. There are three: the run in flight,
-   * the document keepers, and the intel warm-hold, which pins its server for the whole session.
-   * Miss the warm-hold and `R` leaves the wedged child running and merely spawns a second one
-   * beside it.
+   * `RcMap.invalidate` skips an entry anyone still references. There are two: the run in flight and
+   * the document keepers. Miss one and `R` leaves the wedged child running and merely spawns a
+   * second one beside it.
    *
-   * `restartingServers` doubles as the re-entry guard, flipped before the first await so a second
-   * `R` mid-teardown drops instead of re-running the whole sequence.
+   * So the run is awaited, not just aborted: an abort only requests the interrupt, and a run caught
+   * mid-acquire can still register a keeper. `restartingServers` is flipped before the first await,
+   * so a second `R` drops and no run starts until the pool has been evicted. A run dropped that way
+   * loses nothing, because this restart ends with a run of its own over the latest model.
    */
   async function restartLanguageServers() {
     const model = gitModel();
-    if (model.repoRoot === "" || restartingServers()) {
+    if (model.repoRoot === "" || restartingServers) {
       return;
     }
-    setRestartingServers(true);
+    restartingServers = true;
     notify("restarting language servers");
 
     // The run in flight holds handles to the children about to be killed; left alone, its requests
@@ -2733,17 +2609,10 @@ function createState() {
     // Drop the deferred re-check *before* aborting, or the abort itself resurrects it: the run's exit
     // Path fires a pending re-check, and that fresh run re-acquires the very pool entries the restart
     // Is about to evict. `RcMap.invalidate` skips a still-referenced entry, so the wedged child would
-    // Survive with a replacement beside it, which is the same hole the warm-hold teardown below
-    // Closes. Nothing is lost: this restart ends with a run of its own.
+    // Survive with a replacement beside it.
     recheckPending = false;
     checksController?.abort();
-
-    // Drop the warm-hold and wait for its scope to actually close. Aborting the controller directly
-    // Rather than relying on the effect's cleanup keeps this deterministic, independent of when Solid
-    // Flushes; the signal is what stops it re-acquiring until the pool has been evicted.
-    const closing = warmHoldClosed;
-    warmHoldController?.abort();
-    await closing;
+    await checksExited;
 
     await runtime
       .runPromise(
@@ -2753,9 +2622,8 @@ function createState() {
       )
       .catch(() => {});
 
-    // Servers are gone; let the warm-hold re-establish itself on a fresh one.
-    setRestartingServers(false);
-    void runChecks(model);
+    restartingServers = false;
+    void runChecks(gitModel());
   }
 
   // A download starting/finishing drives the live "installing…" status: add on start, drop on
@@ -2780,14 +2648,7 @@ function createState() {
               next.delete(language);
               return next;
             });
-          }).pipe(
-            // A landed install changes which server answers a file (a plugin-less tsserver is about
-            // To be rebuilt with its plugin, a second server now outranks the one that answered), so
-            // Replies cached from the old selection must not outlive it. Only non-empty replies are
-            // Ever cached, and those are exactly the ones a lesser server could have given.
-            Effect.andThen(Intel.use((intel) => intel.invalidate(gitModel().repoRoot, []))),
-            Effect.andThen(Effect.sync(() => void runChecks(gitModel()))),
-          ),
+          }).pipe(Effect.andThen(Effect.sync(() => void runChecks(gitModel())))),
         ),
         Effect.forever,
       ),
@@ -2840,817 +2701,11 @@ function createState() {
     }
   }
 
-  // One controller for both code-intel overlays (definition and references): they share the
-  // Single overlay, so a fresh request of either kind supersedes the other's in-flight pull,
-  // Rather than two uncoordinated controllers clobbering each other's results.
-  let intelController: AbortController | undefined;
-  onReset(() => intelController?.abort());
-
-  // Keep the intel-capable server for the viewed repo warm across the whole session so the first
-  // Intel action never pays a cold spawn plus project load (the stall). The seed latches to the most
-  // Recent intel-capable file in the current repo and stays put across non-code detours (a README,
-  // JSON, an image), so browsing one of those never tears the hold down and lets the 30s idle TTL
-  // Reap the server. It resets when the repo changes; a worktree switch re-keys the seed and releases
-  // The old server, quit disposes the root. `Effect.scoped` holds the acquire until the abort
-  // Interrupts the never-resolving fiber, at which point the scope closes and the pool reference drops.
-  const warmSeed = createMemo<{ root: string; path: string } | undefined>((prev) => {
-    const root = repoRoot();
-    if (root === "") {
-      return undefined;
-    }
-    // Already latched for this repo: keep the seed (and stop tracking selectedPath) so non-code
-    // Files don't churn or drop the hold.
-    if (prev?.root === root) {
-      return prev;
-    }
-    const path = selectedPath();
-    return path !== undefined && hasIntelServer(path) ? { path, root } : undefined;
-  });
-  // The warm-hold's fiber, so a restart can release the pool reference it pins and then wait for the
-  // Scope to actually close. `RcMap.invalidate` skips a still-referenced entry, so a server the user
-  // Asked to restart would otherwise never be killed.
-  let warmHoldController: AbortController | undefined;
-  let warmHoldClosed: Promise<unknown> = Promise.resolve();
-  createEffect(() => {
-    const seed = warmSeed();
-    // The hold exists only to keep intel answers warm, so a disabled intel never pins a server;
-    // Reading the signal here also releases the hold (via onCleanup) if it ever flips.
-    // `restartingServers` keeps the hold down for the whole teardown: re-acquiring before the pool is
-    // Evicted would just re-pin the server being replaced.
-    if (!intelEnabled() || seed === undefined || restartingServers()) {
-      return;
-    }
-    const controller = new AbortController();
-    warmHoldController = controller;
-    warmHoldClosed = runtime
-      .runPromise(Effect.scoped(Intel.use((intel) => intel.warmHold(seed.root, seed.path))), {
-        signal: controller.signal,
-      })
-      .catch(() => {});
-    onCleanup(() => controller.abort());
-  });
-
-  // Drop the switched-to repo's cached intel on a worktree switch: its cache may hold entries from
-  // An earlier visit that changed while the watcher for that root was inactive. Repo-wide is the
-  // Safe grain (an edit to one file can move a references or call-hierarchy result queried from
-  // Another), and this fires only on an actual repo change, not a scope re-resolve. Within one
-  // Repo, invalidation is driven per working-tree write by the filesystem watcher (see the refresh
-  // Effect): the cache keys off working-tree content, so a baseline move (commit, staging) never
-  // Touches a tracked file and leaves still-valid entries intact.
-  createEffect(
-    on(repoRoot, (root, prev) => {
-      if (prev === undefined || root === "" || root === prev) {
-        return;
-      }
-      runtime.runPromise(Intel.use((intel) => intel.invalidate(root, []))).catch(() => {});
-    }),
-  );
-
-  // Safety-poll fallback for intel invalidation. The watcher drives per-write invalidation
-  // Precisely (it catches every working-tree write, including a revert, a deletion, or a
-  // Non-advancing-mtime write), but it is best-effort: a platform whose fs.watch never delivers
-  // (no inotify, a sandbox, a network filesystem) or a dropped event would otherwise leave intel
-  // Stale with no floor, the same failure the git refresh covers with its slow poll. So whenever
-  // The poll (or the watcher) surfaces a model whose newest mtime advanced, invalidate repo-wide
-  // Too. `changedContentAdvanced` is deliberately conservative: a commit, staging, or scope
-  // Re-resolve moves no mtime, so this stays silent on a baseline move and never over-invalidates.
-  // It is redundant with the watcher on a healthy platform (a harmless second repo-wide clear) and
-  // Is the correctness floor where the watcher misses.
-  createEffect(
-    on(gitModel, (model, prev) => {
-      if (prev === undefined || model.repoRoot === "" || model === prev) {
-        return;
-      }
-      // A repo switch is handled by the repoRoot effect above; within one repo, gate on a real edit.
-      if (prev.repoRoot !== model.repoRoot || !changedContentAdvanced(prev, model)) {
-        return;
-      }
-      runtime
-        .runPromise(Intel.use((intel) => intel.invalidate(model.repoRoot, [])))
-        .catch(() => {});
-    }),
-  );
-
-  // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
-  // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
-  // The shared precondition for a caret-anchored pull: the caret must sit on a symbol in the
-  // Current file's text. A gap or line-level caret has no position to resolve, and a removed
-  // (old-only) line isn't in the file the server reads. Returns the file line (1-based) so the
-  // Caller can pass `line - 1` as the LSP position; undefined (after a notice) means don't pull.
-  function caretTarget() {
-    const path = selectedPath();
-    const line = cursorLineNumber();
-    if (path === undefined || line === undefined) {
-      return undefined;
-    }
-    if (caretWord() === undefined) {
-      notify("no symbol at caret");
-      return undefined;
-    }
-    if (cursorLine()?.newLine === undefined) {
-      notify("can't resolve a removed line");
-      return undefined;
-    }
-    return { line, path };
-  }
-
-  interface CaretIntelRequest {
-    readonly file: ReturnType<typeof selectedFile>;
-    readonly path: string;
-    readonly position: { readonly character: number; readonly line: number };
-  }
-
-  function caretIntelRequestIsCurrent(
-    controller: AbortController,
-    requestRoot: string,
-    request: CaretIntelRequest,
-  ) {
-    return (
-      intelController === controller &&
-      !controller.signal.aborted &&
-      repoRoot() === requestRoot &&
-      selectedPath() === request.path &&
-      selectedFile() === request.file &&
-      cursorLineNumber() === request.position.line + 1 &&
-      cursorColumn() === request.position.character
-    );
-  }
-
-  // The jump-or-list pull shared by go-to-definition and find-implementations: both resolve the
-  // Caret to locations, then a single in-repo target jumps while several open the references
-  // Overlay to pick from. They differ only in the LSP method, the in-flight status, the overlay
-  // Label, and the notices. The caller owns the abort/controller/caret setup (so the deliberate
-  // "supersede even when a guard no-ops" behavior stays there), and passes a `pull` thunk closing
-  // Over the resolved caret; this owns the status indicator and the result handling.
-  async function resolveAndJump(
-    controller: AbortController,
-    requestRoot: string,
-    request: CaretIntelRequest,
-    statusText: string,
-    label: "definitions" | "implementations",
-    notices: { none: string; outside: string },
-    pull: () => Effect.Effect<NormalizedLocation[], IntelRequestError, Intel>,
-  ) {
-    setIntelStatus(statusText);
-    try {
-      const locations = await runtime.runPromise(pull(), { signal: controller.signal });
-      if (!caretIntelRequestIsCurrent(controller, requestRoot, request)) {
-        return;
-      }
-      if (locations.length === 0) {
-        notify(notices.none);
-        return;
-      }
-      // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
-      // Absolute and the tree can't open it, so jump to the first in-repo result instead.
-      const inRepo = locations
-        .filter((location) => !isAbsolute(location.path))
-        .toSorted(byReferenceOrder);
-      const target = inRepo[0];
-      if (target === undefined) {
-        notify(notices.outside);
-        return;
-      }
-      // More than one result (an overloaded symbol, or an interface with several implementors) is a
-      // Pick, not a jump: read each target's source line and hand the set to the references overlay.
-      if (inRepo.length > 1) {
-        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-        if (!caretIntelRequestIsCurrent(controller, requestRoot, request)) {
-          return;
-        }
-        openReferences(label, attachReferencePreviews(inRepo, linesByPath));
-        return;
-      }
-      batch(() => {
-        selectFile(target.path, { column: target.column, escalate: true, line: target.line });
-        setFocusedPane("diff");
-      });
-    } catch {
-      if (!controller.signal.aborted) {
-        notify("language server unreachable", "error");
-      }
-    } finally {
-      // A superseding request installs its own controller and indicator, so only the latest
-      // Invocation clears the busy state; the aborted one leaves it alone.
-      if (intelController === controller) {
-        setIntelStatus(undefined);
-      }
-    }
-  }
-
-  async function goToDefinition() {
-    if (!intelEnabled()) {
-      notify("intel disabled");
-      return;
-    }
-    // A fresh invocation supersedes any in-flight lookup, even when the guard below no-ops, so a
-    // Stale result can't land a jump after the user has moved on.
-    intelController?.abort();
-    const caret = caretTarget();
-    if (caret === undefined) {
-      return;
-    }
-    const { line, path } = caret;
-    const controller = new AbortController();
-    intelController = controller;
-    const requestRoot = repoRoot();
-    const request = {
-      file: selectedFile(),
-      path,
-      position: { character: cursorColumn(), line: line - 1 },
-    };
-    await resolveAndJump(
-      controller,
-      requestRoot,
-      request,
-      "resolving definition…",
-      "definitions",
-      { none: "no definition", outside: "definition outside repo" },
-      () => Intel.use((intel) => intel.definition(requestRoot, request.path, request.position)),
-    );
-  }
-
-  async function findImplementations() {
-    if (!intelEnabled()) {
-      notify("intel disabled");
-      return;
-    }
-    intelController?.abort();
-    const caret = caretTarget();
-    if (caret === undefined) {
-      return;
-    }
-    const { line, path } = caret;
-    const controller = new AbortController();
-    intelController = controller;
-    const requestRoot = repoRoot();
-    const request = {
-      file: selectedFile(),
-      path,
-      position: { character: cursorColumn(), line: line - 1 },
-    };
-    const providers = await runtime
-      .runPromise(
-        LanguageServers.use((servers) =>
-          servers.providers(request.path, "implementation", requestRoot),
-        ),
-        {
-          signal: controller.signal,
-        },
-      )
-      .catch(() => undefined);
-    if (providers === undefined || !caretIntelRequestIsCurrent(controller, requestRoot, request)) {
-      return;
-    }
-    if (providers.length === 0) {
-      notify("no implementation support for this file type");
-      return;
-    }
-    await resolveAndJump(
-      controller,
-      requestRoot,
-      request,
-      "resolving implementations…",
-      "implementations",
-      { none: "no implementations", outside: "implementations outside repo" },
-      () => Intel.use((intel) => intel.implementation(requestRoot, request.path, request.position)),
-    );
-  }
-
-  // Read each referenced file's lines once (keyed by path) so the overlay can show a
-  // Source-line preview beside `path:line:col`. Local reads (the LSP resolves against
-  // On-disk files); a missing or binary file yields no lines, so its rows show no preview.
-  function readReferenceLines(
-    root: string,
-    locations: readonly NormalizedLocation[],
-    signal: AbortSignal,
-  ) {
-    const paths = [...new Set(locations.map((location) => location.path))];
-    return runtime.runPromise(
-      File.use((file) =>
-        Effect.all(
-          paths.map((path) =>
-            file.content(root, path, { full: true }).pipe(
-              Effect.map(
-                // Split on CRLF too, so a Windows-checkout preview doesn't keep a trailing
-                // \r that trimStart can't remove and that renders as a control glyph.
-                (content) =>
-                  [path, content.kind === "text" ? content.content.split(/\r?\n/) : []] as const,
-              ),
-            ),
-          ),
-          { concurrency: "unbounded" },
-        ),
-      ).pipe(Effect.map((entries) => new Map(entries))),
-      { signal },
-    );
-  }
-
-  function resetReferencesState() {
-    hierarchyAnchor = undefined;
-    setReferencesOpen(false);
-    setReferencesResults([]);
-    setReferencesIndex(0);
-    setReferencesScrollTop(0);
-    setReferencesStatus("loading");
-  }
-
-  // The repoRoot the open overlay's results belong to, captured on open so the drift
-  // Effect below can close it when a worktree switch moves off that repo.
-  let referencesRoot: string | undefined;
-  onReset(() => {
-    referencesRoot = undefined;
-  });
-
-  // What produced the open overlay when it is a call hierarchy: the caret it was pulled from plus
-  // The current direction, so `Tab` can re-resolve the other direction against the same symbol.
-  // References/definitions carry no direction, so they leave this undefined and `Tab` is a no-op.
-  interface HierarchyAnchor {
-    root: string;
-    path: string;
-    position: { character: number; line: number };
-    direction: "incoming" | "outgoing";
-  }
-  let hierarchyAnchor: HierarchyAnchor | undefined;
-  onReset(() => {
-    hierarchyAnchor = undefined;
-  });
-
-  function openReferences(
-    label: ReturnType<typeof referencesLabel>,
-    results: ReferenceResult[],
-    anchor?: HierarchyAnchor,
-  ) {
-    referencesRoot = repoRoot();
-    hierarchyAnchor = anchor;
-    batch(() => {
-      setReferencesLabel(label);
-      setReferencesResults(results);
-      setReferencesIndex(0);
-      setReferencesScrollTop(0);
-      setReferencesStatus("ready");
-      setReferencesOpen(true);
-    });
-  }
-
-  // Drive a location-list pull (references or a call hierarchy) into the references overlay: open it
-  // At once in a loading state, then resolve in place to the list, an empty screen, or an error.
-  // The `anchor` is the direction context for a hierarchy (undefined for references, which clears any
-  // Prior one so `Tab` is a no-op); `label` drives the header and empty text. The caller owns the
-  // Abort/controller setup, so the deliberate "supersede even when a guard no-ops" behavior stays put.
-  async function openReferencesPull(
-    controller: AbortController,
-    requestRoot: string,
-    label: ReturnType<typeof referencesLabel>,
-    anchor: HierarchyAnchor | undefined,
-    pull: () => Effect.Effect<NormalizedLocation[], IntelRequestError, Intel>,
-  ) {
-    referencesRoot = requestRoot;
-    hierarchyAnchor = anchor;
-    batch(() => {
-      // Drop any definition indicator a superseded pull left behind; progress shows in the overlay.
-      setIntelStatus(undefined);
-      setReferencesLabel(label);
-      setReferencesResults([]);
-      setReferencesIndex(0);
-      setReferencesStatus("loading");
-      setReferencesOpen(true);
-    });
-    try {
-      const locations = await runtime.runPromise(pull(), { signal: controller.signal });
-      // A superseding request or a worktree switch drops this result: the newer request
-      // Owns the overlay, and a stale root would resolve previews against the wrong repo.
-      if (intelController !== controller || repoRoot() !== requestRoot) {
-        return;
-      }
-      const inRepo = locations
-        .filter((location) => !isAbsolute(location.path))
-        .toSorted(byReferenceOrder);
-      if (inRepo.length === 0) {
-        setReferencesStatus("empty");
-        return;
-      }
-      const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-      if (intelController !== controller || repoRoot() !== requestRoot) {
-        return;
-      }
-      openReferences(label, attachReferencePreviews(inRepo, linesByPath), anchor);
-    } catch {
-      if (intelController === controller) {
-        setReferencesStatus("error");
-      }
-    }
-  }
-
-  // Find every use of the symbol under the caret via `textDocument/references`. Opens the
-  // Results overlay at once in a loading state, then resolves it in place to the list, an
-  // Empty screen, or an error; read-only, degrades to a notice, never throws.
-  async function findReferences() {
-    if (!intelEnabled()) {
-      notify("intel disabled");
-      return;
-    }
-    intelController?.abort();
-    const caret = caretTarget();
-    if (caret === undefined) {
-      return;
-    }
-    const { line, path } = caret;
-    const controller = new AbortController();
-    intelController = controller;
-    const requestRoot = repoRoot();
-    // A plain references pull has no direction, so its undefined anchor clears any a prior open left.
-    await openReferencesPull(controller, requestRoot, "references", undefined, () =>
-      Intel.use((intel) =>
-        intel.references(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
-      ),
-    );
-  }
-
-  function closeReferences() {
-    intelController?.abort();
-    intelController = undefined;
-    batch(resetReferencesState);
-  }
-
-  // Jump to a result (Enter or a click) and dismiss the overlay, mirroring the search
-  // Overlay's open-a-match path so a reference jump and a search jump behave the same.
-  function jumpToReference(index: number) {
-    const target = referencesResults()[index];
-    if (target === undefined) {
-      return;
-    }
-    intelController?.abort();
-    intelController = undefined;
-    batch(() => {
-      selectFile(target.path, { column: target.column, escalate: true, line: target.line });
-      setFocusedPane("diff");
-      resetReferencesState();
-    });
-  }
-
-  // The overlay lists repo-specific paths, so a repoRoot change (a worktree switch, or
-  // The deleted-worktree recovery) leaves it showing files from the old worktree. Close
-  // It on that drift; closeReferences aborts any in-flight request, the way the caret
-  // Decoration clears when its anchor drifts.
-  createEffect(() => {
-    if (referencesOpen() && repoRoot() !== referencesRoot) {
-      closeReferences();
-    }
-  });
-
-  const hierarchyLabel = (anchor: HierarchyAnchor) =>
-    anchor.direction === "incoming" ? "incoming calls" : "outgoing calls";
-
-  // The driver for the call hierarchy and its direction toggle: a two-step `prepare` → resolve pull
-  // Surfaced through the references overlay via `openReferencesPull`. `Tab` calls back in with the
-  // Flipped anchor, superseding the prior direction via the shared controller.
-  async function runHierarchy(anchor: HierarchyAnchor) {
-    intelController?.abort();
-    const controller = new AbortController();
-    intelController = controller;
-    await openReferencesPull(controller, anchor.root, hierarchyLabel(anchor), anchor, () =>
-      Intel.use((intel) =>
-        intel.callHierarchy(anchor.root, anchor.path, anchor.position, anchor.direction),
-      ),
-    );
-  }
-
-  // Call hierarchy (Shift+H) for the symbol under the caret, opening on incoming calls (who calls
-  // This); `Tab` flips to outgoing. Read-only two-step LSP pull, degrades to a notice, never throws.
-  function callHierarchy() {
-    if (!intelEnabled()) {
-      notify("intel disabled");
-      return;
-    }
-    intelController?.abort();
-    const caret = caretTarget();
-    if (caret === undefined) {
-      return;
-    }
-    const { line, path } = caret;
-    void runHierarchy({
-      direction: "incoming",
-      path,
-      position: { character: cursorColumn(), line: line - 1 },
-      root: repoRoot(),
-    });
-  }
-
-  // Flip the open call hierarchy's direction (incoming↔outgoing) and re-resolve the same symbol. A
-  // No-op when the overlay is references/definitions, which carry no direction.
-  function toggleReferencesDirection() {
-    const anchor = hierarchyAnchor;
-    if (anchor !== undefined) {
-      void runHierarchy({
-        ...anchor,
-        direction: anchor.direction === "incoming" ? "outgoing" : "incoming",
-      });
-    }
-  }
-
-  // The symbol outline overlay. Its own controller (not the shared `intelController`), since
-  // It owns a separate overlay from definition/references and the two must not clobber each
-  // Other's in-flight pull; captured `symbolsPath`/`symbolsRoot` scope the result to the file
-  // And repo it was requested for, so a mid-request file switch or worktree switch drops it.
-  let symbolsController: AbortController | undefined;
-  let symbolsPath: string | undefined;
-  let symbolsRoot: string | undefined;
-  onReset(() => {
-    symbolsController?.abort();
-    symbolsPath = undefined;
-    symbolsRoot = undefined;
-    symbolsFile = undefined;
-  });
-  // The open file's ChangedFile identity when the outline was requested. A same-path content
-  // Reload mints a new reference, so drifting off it closes the outline before its captured
-  // Line:col positions go stale (the outline shows no source preview to reveal the mismatch).
-  let symbolsFile: ReturnType<typeof selectedFile>;
-
-  function resetSymbolsState() {
-    setSymbolsOpen(false);
-    setSymbolsResults([]);
-    setSymbolsIndex(0);
-    setSymbolsScrollTop(0);
-    setSymbolsStatus("loading");
-  }
-
-  function closeSymbols() {
-    symbolsController?.abort();
-    symbolsController = undefined;
-    batch(resetSymbolsState);
-  }
-
-  // Fill the overlay with a ready result set, anchoring it to the file/repo/content it belongs to
-  // So the drift effect closes it when any of those move. `findSymbols` only reaches here once its
-  // Guard has confirmed the selection did not move during the pull, so these live reads match the
-  // Request; a direct caller (tests injecting results) anchors to the current selection. Mirrors
-  // `openReferences`.
-  function openSymbols(results: NormalizedSymbol[]) {
-    symbolsPath = selectedPath();
-    symbolsRoot = repoRoot();
-    symbolsFile = selectedFile();
-    batch(() => {
-      setSymbolsResults(results);
-      setSymbolsIndex(0);
-      setSymbolsScrollTop(0);
-      setSymbolsStatus("ready");
-      setSymbolsOpen(true);
-    });
-  }
-
-  // List the open file's symbols via `textDocument/documentSymbol` and open the outline overlay.
-  // Unlike definition/references this needs no caret, only a viewed file: the whole document is
-  // The query. Opens at once in a loading state, then resolves to the list, an empty screen, or
-  // An error; read-only, degrades in place, never throws.
-  async function findSymbols() {
-    if (!intelEnabled()) {
-      notify("intel disabled");
-      return;
-    }
-    symbolsController?.abort();
-    const path = selectedPath();
-    if (path === undefined) {
-      return;
-    }
-    // Capture the anchor once, up front, so every drift/staleness check keys off the file the
-    // Request belongs to rather than a later live value.
-    symbolsPath = path;
-    symbolsRoot = repoRoot();
-    symbolsFile = selectedFile();
-    // No possible server provides `documentSymbol` for this file type, whatever the repo gates decide,
-    // So open straight to the unsupported state rather than flashing `loading` through an async gate
-    // Pull that can only confirm what the sync registry already settles (mirrors `hasIntelServer`).
-    if (!hasCapabilityServer(path, "documentSymbol")) {
-      symbolsController = undefined;
-      batch(() => {
-        setSymbolsResults([]);
-        setSymbolsIndex(0);
-        setSymbolsScrollTop(0);
-        setSymbolsStatus("unsupported");
-        setSymbolsOpen(true);
-      });
-      return;
-    }
-    const requestRoot = symbolsRoot;
-    const requestFile = symbolsFile;
-    const controller = new AbortController();
-    symbolsController = controller;
-    batch(() => {
-      setSymbolsResults([]);
-      setSymbolsIndex(0);
-      setSymbolsScrollTop(0);
-      setSymbolsStatus("loading");
-      setSymbolsOpen(true);
-    });
-    // A server matches the file but its repo gate turned every documentSymbol provider off, so a pull
-    // Would return `[]` and read as "no symbols" (a false claim). Confirm the gated-off case here and
-    // Short-circuit to the unsupported state without issuing a request.
-    const providers = await runtime
-      .runPromise(
-        LanguageServers.use((servers) => servers.providers(path, "documentSymbol", requestRoot)),
-        {
-          signal: controller.signal,
-        },
-      )
-      .catch(() => undefined);
-    if (
-      providers === undefined ||
-      symbolsController !== controller ||
-      controller.signal.aborted ||
-      repoRoot() !== requestRoot ||
-      selectedPath() !== path ||
-      selectedFile() !== requestFile
-    ) {
-      return;
-    }
-    if (providers.length === 0) {
-      symbolsController = undefined;
-      setSymbolsStatus("unsupported");
-      return;
-    }
-    try {
-      const symbols = await runtime.runPromise(
-        Intel.use((intel) => intel.symbols(requestRoot, path)),
-        { signal: controller.signal },
-      );
-      // A superseding request, a worktree switch, or a same-repo file switch drops this result: the
-      // Newer request owns the overlay, a stale root would jump into the wrong repo, and a stale
-      // Path would bind this file's outline to a different open file (the guard closes the race
-      // Window before the drift effect has flushed).
-      if (
-        symbolsController !== controller ||
-        repoRoot() !== requestRoot ||
-        selectedPath() !== path ||
-        selectedFile() !== requestFile
-      ) {
-        return;
-      }
-      if (symbols.length === 0) {
-        setSymbolsStatus("empty");
-        return;
-      }
-      openSymbols(symbols);
-    } catch {
-      if (symbolsController === controller) {
-        setSymbolsStatus("error");
-      }
-    }
-  }
-
-  // Jump to a symbol (Enter or a click) and dismiss the overlay. The outline is always the
-  // Currently open file, so it jumps within `symbolsPath` (captured on open) rather than a
-  // Result-carried path; escalate flips to full-file view when the line is outside the diff.
-  function jumpToSymbol(index: number) {
-    const target = symbolsResults()[index];
-    if (target === undefined || symbolsPath === undefined) {
-      return;
-    }
-    const path = symbolsPath;
-    symbolsController?.abort();
-    symbolsController = undefined;
-    batch(() => {
-      selectFile(path, { column: target.column, escalate: true, line: target.line });
-      setFocusedPane("diff");
-      resetSymbolsState();
-    });
-  }
-
-  // The outline belongs to one file's content in one repo, so it goes stale the moment any of those
-  // Drifts (a worktree switch, navigating to another file, or the open file's own content
-  // Reloading); close it, aborting any in-flight pull.
-  createEffect(() => {
-    if (
-      symbolsOpen() &&
-      (repoRoot() !== symbolsRoot ||
-        selectedPath() !== symbolsPath ||
-        selectedFile() !== symbolsFile)
-    ) {
-      closeSymbols();
-    }
-  });
-
   // The active scope's identity, so a scope switch that leaves the path unchanged
   // Still drifts the anchor off the now-different diff. Includes headRef (the pinned
   // Sha for a commit scope), or two sibling commits sharing a first-parent would read
-  // As the same scope and never drift the hover card / command menu (mirrors scopeKey).
+  // As the same scope and never drift the command menu (mirrors scopeKey).
   const scopeIdentity = () => `${scope().kind}:${scope().ref}:${scope().headRef ?? ""}`;
-
-  // Open a caret-anchored decoration, capturing the caret/scroll/file it describes.
-  function openViewerDecoration(content: ViewerDecoration) {
-    batch(() => {
-      setDecorationAnchor({
-        column: cursorColumn(),
-        index: cursorIndex(),
-        path: selectedPath(),
-        repoRoot: repoRoot(),
-        scope: scopeIdentity(),
-        scrollTop: viewerScrollTop(),
-        scrollX: viewerScrollX(),
-        theme: activeThemeName(),
-      });
-      setViewerDecorationContent(content);
-    });
-  }
-
-  // Update an open decoration's content (loading -> ready/empty/error). A no-op
-  // Once the anchor is gone (the caret moved and the clear effect already closed
-  // It), so a late async result can't resurrect a card the user moved past.
-  function resolveViewerDecoration(content: ViewerDecoration) {
-    if (decorationAnchor() !== undefined) {
-      setViewerDecorationContent(content);
-    }
-  }
-
-  function closeViewerDecoration() {
-    batch(() => {
-      setViewerDecorationContent(undefined);
-      setDecorationAnchor(undefined);
-    });
-  }
-
-  let hoverController: AbortController | undefined;
-  onReset(() => hoverController?.abort());
-  // Show type + docs for the symbol under the caret in a caret-anchored card. Same
-  // Read-only pull and guards as `goToDefinition`, but the reply is text into the
-  // Decoration seam instead of a jump; degrades to an empty/error card, never throws.
-  async function showHover() {
-    if (!intelEnabled()) {
-      notify("intel disabled");
-      return;
-    }
-    hoverController?.abort();
-    const caret = caretTarget();
-    if (caret === undefined) {
-      return;
-    }
-    const { line, path } = caret;
-    const controller = new AbortController();
-    hoverController = controller;
-    const requestRoot = repoRoot();
-    openViewerDecoration({ lines: noticeLines("resolving…"), status: "loading" });
-    try {
-      const segments = await runtime.runPromise(
-        Intel.use((intel) =>
-          intel.hover(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
-        ),
-        { signal: controller.signal },
-      );
-      if (controller.signal.aborted || repoRoot() !== requestRoot) {
-        return;
-      }
-      if (segments.length === 0) {
-        resolveViewerDecoration({ lines: noticeLines("no hover info"), status: "empty" });
-        return;
-      }
-      const groups = await Promise.all(
-        segments.map((segment) => segmentToLines(segment, highlightSnippet)),
-      );
-      if (controller.signal.aborted) {
-        return;
-      }
-      // Flatten the groups with a blank line between segments (signature from docs),
-      // The way an editor spaces them.
-      const lines: DecorationLine[] = [];
-      for (const [index, group] of groups.entries()) {
-        if (index > 0) {
-          lines.push({ kind: "prose", text: "" });
-        }
-        for (const groupLine of group) {
-          lines.push(groupLine);
-        }
-      }
-      resolveViewerDecoration({ lines, status: "ready" });
-    } catch {
-      if (!controller.signal.aborted) {
-        resolveViewerDecoration({
-          lines: noticeLines("couldn't reach the language server"),
-          status: "error",
-        });
-      }
-    }
-  }
-
-  // Close the decoration the instant its caret, scroll, or file drifts: it
-  // Describes one exact spot, so it must not survive a move past it.
-  createEffect(() => {
-    const anchor = decorationAnchor();
-    if (anchor === undefined) {
-      return;
-    }
-    if (
-      cursorIndex() !== anchor.index ||
-      cursorColumn() !== anchor.column ||
-      viewerScrollTop() !== anchor.scrollTop ||
-      viewerScrollX() !== anchor.scrollX ||
-      selectedPath() !== anchor.path ||
-      repoRoot() !== anchor.repoRoot ||
-      scopeIdentity() !== anchor.scope ||
-      activeThemeName() !== anchor.theme
-    ) {
-      closeViewerDecoration();
-    }
-  });
 
   // Drop the line selection when the viewed content's identity changes (file,
   // Scope, or worktree): a navIndex anchor is meaningless against a different line
@@ -3812,8 +2867,7 @@ function createState() {
 
   // Dismiss the menu the instant its opening context drifts (a click elsewhere moves
   // The caret or focus, a scope/worktree change reloads the diff), so its open state
-  // Can never outlive the anchored render and trap the keyboard. Mirrors the hover
-  // Card's clear effect.
+  // Can never outlive the anchored render and trap the keyboard.
   createEffect(() => {
     const guard = commandMenuGuard();
     if (guard === undefined) {
@@ -3862,30 +2916,6 @@ function createState() {
   // (useRenderer) run it themselves; every other action is pure state.
   function dispatchCommandAction(action: Exclude<CommandAction, { kind: "openEditor" }>) {
     switch (action.kind) {
-      case "goToDefinition": {
-        void goToDefinition();
-        return;
-      }
-      case "findReferences": {
-        void findReferences();
-        return;
-      }
-      case "callHierarchy": {
-        callHierarchy();
-        return;
-      }
-      case "findImplementations": {
-        void findImplementations();
-        return;
-      }
-      case "showHover": {
-        void showHover();
-        return;
-      }
-      case "findSymbols": {
-        void findSymbols();
-        return;
-      }
       case "copyReference": {
         copy(formatCopyReference({ column: action.column, line: action.line, path: action.path }));
         return;
@@ -4491,9 +3521,8 @@ function createState() {
           );
 
           // Changed-set triggers: an immediate tick on (re)key, a debounced
-          // Fs-watch tick per change (which also records watcher health and, on a
-          // Tracked working-tree write, invalidates the content-keyed intel cache),
-          // And a safety poll whose cadence adapts to that health — fast where the
+          // Fs-watch tick per change (which also records watcher health), and a
+          // Safety poll whose cadence adapts to that health — fast where the
           // Watcher is unproven or has missed a change, slow once it has earned
           // Trust. See `refreshDelay`.
           const watchTicks = Stream.unwrap(
@@ -4503,21 +3532,8 @@ function createState() {
             }),
           ).pipe(
             Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))),
-            // A write to a file git tracks (or already counts as changed) alters what the language
-            // Server reads, so drop the repo's cached intel. Gate on tracked-ness: the watcher also
-            // Sees gitignored churn (`node_modules/`, `dist/`) an agent generates, which must not
-            // Wipe the warm cache, and a git-internal or nameless batch carries no path at all.
-            Stream.tap((changes) =>
-              changes.some(
-                (change) =>
-                  repoFilePaths().has(change.path) || gitModel().changedByPath.has(change.path),
-              )
-                ? Intel.use((intel) => intel.invalidate(root, [])).pipe(Effect.ignore)
-                : Effect.void,
-            ),
-            // Tell the language servers about the same batch, the *whole* batch: this is the one
-            // Place the gitignored paths above are deliberately excluded from are exactly what is
-            // Wanted. A package landing in `.venv/` or `node_modules/` is invisible to git and so to
+            // Tell the language servers about the *whole* batch, gitignored paths included. A
+            // Package landing in `.venv/` or `node_modules/` is invisible to git and so to
             // Every other consumer here, but it is precisely what invalidates a server's resolution
             // Cache, and basedpyright has no filesystem watcher of its own to notice it. No cap and
             // No ignore list: any cap drops a signal some server needed (pyright's `**` source
@@ -4735,7 +3751,6 @@ function createState() {
     allProblemItems,
     availableUpdate,
     blameEnabled,
-    callHierarchy,
     canGoBack,
     canGoForward,
     caretColumn,
@@ -4749,11 +3764,8 @@ function createState() {
     checksRunning,
     closeActiveTab,
     closeCommandMenu,
-    closeReferences,
     closeSearch,
-    closeSymbols,
     closeThemePicker,
-    closeViewerDecoration,
     collapseProblems,
     collapseSidebar,
     commandMenuAnchor,
@@ -4793,13 +3805,10 @@ function createState() {
     fileComboboxResults,
     fileView,
     findActive,
-    findImplementations,
     findMatchPos,
     findMatches,
     findOpen,
     findQuery,
-    findReferences,
-    findSymbols,
     focusNextPane,
     focusedNodeId,
     focusedPane,
@@ -4808,17 +3817,13 @@ function createState() {
     gitModel,
     goBack,
     goForward,
-    goToDefinition,
     growPane,
     helpDialogOpen,
     helpView,
     iconsEnabled,
     ideTemplate,
-    intelEnabled,
     jumpTarget,
-    jumpToReference,
     jumpToSearchItem,
-    jumpToSymbol,
     layout,
     lineMap,
     loadCommits,
@@ -4835,11 +3840,8 @@ function createState() {
     openCommandMenu,
     openExternally,
     openFileCombobox,
-    openReferences,
     openSearch,
-    openSymbols,
     openThemePicker,
-    openViewerDecoration,
     openWorktreePicker,
     overflow,
     overlayLeft,
@@ -4857,20 +3859,11 @@ function createState() {
     provenanceForRow,
     quitConfirmOpen,
     recencyByPath,
-    referencesIndex,
-    referencesLabel,
-    referencesOpen,
-    referencesResults,
-    referencesRows,
-    referencesScrollTop,
-    referencesStatus,
-    referencesViewport,
     repoFilesLoading,
     repoRoot,
     resetFind,
     resetPane,
     resetState,
-    resolveViewerDecoration,
     restartLanguageServers,
     revealLineForJump,
     runChecks,
@@ -4935,7 +3928,6 @@ function createState() {
     setIconsEnabled,
     setIdeFlag,
     setIdeTemplate,
-    setIntelEnabled,
     setJumpTarget,
     setLastChange,
     setMainWorktreePath,
@@ -4951,8 +3943,6 @@ function createState() {
     setProblemsWidthOverride,
     setProvisioningLanguages,
     setQuitConfirmOpen,
-    setReferencesIndex,
-    setReferencesScrollTop,
     setRepoRoot,
     setScope,
     setScopeMenuIndex,
@@ -4974,8 +3964,6 @@ function createState() {
     setSidebarPosition,
     setSidebarScrollTop,
     setSidebarWidthOverride,
-    setSymbolsIndex,
-    setSymbolsScrollTop,
     setTerminalHeight,
     setTerminalWidth,
     setThemeComboboxIndex,
@@ -4988,19 +3976,12 @@ function createState() {
     setWorktreeSummaries,
     setWorktrees,
     showFileContent,
-    showHover,
     shrinkPane,
     sidebarOpen,
     sidebarPosition,
     sidebarScrollTop,
     statusBarModel,
     switchWorktree,
-    symbolsIndex,
-    symbolsOpen,
-    symbolsResults,
-    symbolsScrollTop,
-    symbolsStatus,
-    symbolsViewport,
     tabItems,
     terminalHeight,
     terminalWidth,
@@ -5013,7 +3994,6 @@ function createState() {
     toggleGap,
     togglePinActiveTab,
     toggleProblems,
-    toggleReferencesDirection,
     toggleRegionAtCaret,
     toggleSearchCase,
     toggleSearchGroup,
@@ -5024,7 +4004,6 @@ function createState() {
     treeRows,
     truncated,
     truncatedHidden,
-    viewerDecoration,
     viewerFocus,
     viewerHeight,
     viewerRows,

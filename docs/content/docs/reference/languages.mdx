@@ -1,36 +1,36 @@
 ---
 title: Languages
-description: What stet gives every language, and which get diagnostics and code intelligence.
+description: What stet gives every language, and which get diagnostics.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
 Language support is layered. Named file associations select syntax, icons, and
 LSP profiles independently. Every recognized file gets syntax highlighting, a
-file-type icon, and structural folding; language servers add diagnostics and
-code intelligence for the profiles the table marks. You can change any layer
+file-type icon, and structural folding; language servers add diagnostics for
+the profiles the table marks. You can change any layer
 through [your config](/docs/reference/configuration#file-support).
 
-| Language                | Highlighting | Folding    | Diagnostics             | Code intelligence          |
-| ----------------------- | ------------ | ---------- | ----------------------- | -------------------------- |
-| TypeScript & JavaScript | yes          | indent     | types + lint            | yes                        |
-| Vue                     | yes          | indent     | types + lint + template | yes                        |
-| Rust                    | yes          | indent     | types + cargo           | yes                        |
-| Python                  | yes          | indent     | types + lint            | yes                        |
-| Go                      | yes          | indent     | types + vet             | yes                        |
-| JSON & JSONC            | yes          | indent     | schema + lint           | hover, outline             |
-| YAML                    | yes          | indent     | schema                  | hover, outline, definition |
-| CSS                     | yes          | indent     | lint                    |                            |
-| GraphQL                 | yes          | indent     | lint                    |                            |
-| Markdown                | yes          | by heading |                         |                            |
-| 200+ others             | yes          | indent     | via config              |                            |
+| Language                | Highlighting | Folding    | Diagnostics             |
+| ----------------------- | ------------ | ---------- | ----------------------- |
+| TypeScript & JavaScript | yes          | indent     | types + lint            |
+| Vue                     | yes          | indent     | types + lint + template |
+| Rust                    | yes          | indent     | types + cargo           |
+| Python                  | yes          | indent     | types + lint            |
+| Go                      | yes          | indent     | types + vet             |
+| JSON & JSONC            | yes          | indent     | schema + lint           |
+| YAML                    | yes          | indent     | schema                  |
+| CSS                     | yes          | indent     | lint                    |
+| GraphQL                 | yes          | indent     | lint                    |
+| Markdown                | yes          | by heading |                         |
+| 200+ others             | yes          | indent     | via config              |
 
 ## Syntax highlighting
 
 [Shiki](https://shiki.style/) bundles grammars for more than 200 languages. stet
 picks the grammar from the file's name, including exact names such as
-`Dockerfile`, and loads it on demand. The diff, full-file view, search results,
-hover cards, and reference previews share the same highlighter and theme. An
+`Dockerfile`, and loads it on demand. The diff, full-file view, and search
+results share the same highlighter and theme. An
 unrecognized file type falls back to plain text.
 
 Config dotfiles carry no extension to pick a grammar from, so they resolve by
@@ -80,7 +80,7 @@ template expressions from `typescript-language-server` (label `tsc`), oxlint's
 lint of the script block (label `oxc`), and Biome where configured. tsserver
 cannot read a `.vue` file on its own: stet loads the Vue TypeScript plugin
 (`@vue/typescript-plugin`) into it, which is also what makes a `.vue` import
-resolve from a `.ts` file and what answers code intelligence inside a component.
+resolve from a `.ts` file.
 
 The plugin loads in a Vue repo: one with `vue` among its `package.json`
 dependencies or devDependencies, or installed under `node_modules` (pnpm's hoist
@@ -138,11 +138,6 @@ gate; use the object form when you want to force a checker regardless of reposit
 }
 ```
 
-ty answers hover, go to definition, references, call hierarchy, and the symbol
-outline. It has no go-to-implementation yet, so in a ty repo `Shift+I` says
-implementations are unsupported for the file type rather than claiming there
-are none.
-
 Servers download automatically the first time a Python file needs them,
 basedpyright from npm, ty and ruff as sha256-verified GitHub release binaries.
 
@@ -164,33 +159,20 @@ Without it, Go files show as unavailable rather than falsely clean.
 `package.json`, `tsconfig.json`, `tsconfig.*.json`, and `jsconfig.json` out of
 the box, plus any file you associate through the
 [`schemas`](/docs/reference/configuration#schemas) config. Biome adds its lint
-where configured, and the same server answers hover and the symbol outline. The
-built-in associations point at [SchemaStore](https://www.schemastore.org/) URLs
+where configured. The built-in associations point at [SchemaStore](https://www.schemastore.org/) URLs
 fetched over the network, so an offline repo falls back to syntax checking.
 
 ### YAML
 
 `yaml-language-server` validates `.yaml` and `.yml` against schemas it
 discovers through [SchemaStore](https://www.schemastore.org/) (GitHub
-workflows, and so on), and answers go to definition, hover, and the symbol
-outline. It fetches those schemas over the network, so an offline repo falls
+workflows, and so on). It fetches those schemas over the network, so an offline repo falls
 back to syntax checking.
 
 ### CSS & GraphQL
 
 Biome covers both, only in repos with a biome config. Without one these files
 show as unavailable rather than falsely clean.
-
-## Code intelligence
-
-Go to definition, find references, implementations, call hierarchy, hover,
-and the symbol outline work for the TypeScript & JavaScript family (Vue
-components included), for Rust, for Python, and for Go, through the same
-servers that produce their diagnostics
-(a ty repo has everything but go to implementation, which ty does not yet
-answer). JSON and YAML get hover and the symbol outline (YAML also go to
-definition); ruff adds hover on Python. See
-[code intelligence](/docs/guides/code-intelligence) for the keys and flows.
 
 ## How servers are found
 

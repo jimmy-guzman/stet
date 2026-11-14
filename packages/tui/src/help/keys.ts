@@ -59,24 +59,6 @@ const KEY_HELP_GROUPS: {
         description: "half-page cursor movement in the viewer",
       },
       { actions: ["first-line", "last-line"], description: "jump to first / last line" },
-      {
-        actions: ["go-to-definition"],
-        description: "go to definition of the symbol under the caret",
-      },
-      {
-        actions: ["find-references"],
-        description: "find references to the symbol under the caret",
-      },
-      {
-        actions: ["implementations"],
-        description: "find implementations of the symbol under the caret",
-      },
-      {
-        actions: ["call-hierarchy"],
-        description: "call hierarchy of the symbol (Tab flips direction)",
-      },
-      { actions: ["hover"], description: "hover: type and docs for the symbol under the caret" },
-      { actions: ["symbols"], description: "find symbols: outline of the open file" },
       { actions: ["back", "forward"], description: "back / forward through viewer history" },
       {
         actions: ["copy-reference"],
@@ -150,7 +132,7 @@ const KEY_HELP_GROUPS: {
       },
       {
         actions: ["context-menu"],
-        description: "context menu for the focused row or symbol (or right-click)",
+        description: "context menu for the focused row or caret (or right-click)",
       },
       { actions: ["help"], description: "show all keybindings and the marks legend" },
       { actions: ["quit"], description: "quit (confirm with y)" },

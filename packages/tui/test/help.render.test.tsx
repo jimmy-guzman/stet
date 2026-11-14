@@ -43,8 +43,6 @@ describe("help overlay", () => {
       // The version left the header bar for this overlay's title row; it must still be reachable.
       expect(help).toContain(`stet@${packageJson.version}`);
       expect(help).toContain("go to file: fuzzy-search the whole repo");
-      // The hover shortcut must be listed, or the height bump alone would pass with it gone.
-      expect(help).toContain("hover: type and docs for the symbol under the caret");
       expect(help).toContain("copy the file (viewer) or every entry (problems)");
       // Folding took over `z`; wrap moved to `x`. Both must be listed under their keys.
       expect(help).toContain("fold / unfold the region at the caret");

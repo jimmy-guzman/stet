@@ -7,13 +7,8 @@ import { pathToFileURL } from "node:url";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 
 import type { CheckerFileState } from "@/diagnostics/checker";
-import {
-  LanguageServers,
-  ServerInstalling,
-  serversProviding,
-  ServerUnavailable,
-} from "@/diagnostics/servers";
-import type { Capability, ServerHandle } from "@/diagnostics/servers";
+import { LanguageServers, ServerInstalling, ServerUnavailable } from "@/diagnostics/servers";
+import type { ServerHandle } from "@/diagnostics/servers";
 import { Diagnostics, DiagnosticsLive } from "@/diagnostics/service";
 import { LspRequestError } from "@/diagnostics/transport";
 import type { LspConnection } from "@/diagnostics/transport";
@@ -61,9 +56,9 @@ function pushingHandle(items: unknown[]): ServerHandle {
     whenProjectLoaded: Effect.void,
   };
   return {
-    capabilities: new Set(),
     connection,
     plugins: new Set<string>(),
+    pullDiagnostics: false,
     stale: connection.closed,
   };
 }
@@ -90,9 +85,9 @@ function deadHandle(): ServerHandle {
     whenProjectLoaded: Effect.void,
   };
   return {
-    capabilities: new Set(),
     connection,
     plugins: new Set<string>(),
+    pullDiagnostics: false,
     stale: connection.closed,
   };
 }
@@ -134,7 +129,6 @@ function fakeServers(byLanguage: Record<string, ServerHandle>) {
         : Effect.succeed(handle);
     },
     notifyWatchedFiles: () => Effect.void,
-    providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
     provisionPlugins: () => Effect.void,
     restart: () => Effect.void,
   });
@@ -204,9 +198,9 @@ test("an interrupted run leaves the document open and the next run reconciles it
       whenProjectLoaded: Effect.void,
     };
     const handle: ServerHandle = {
-      capabilities: new Set(),
       connection,
       plugins: new Set<string>(),
+      pullDiagnostics: false,
       stale: connection.closed,
     };
 
@@ -308,7 +302,6 @@ test("holds a file's prior badge while a slower server is still running", async 
           : Effect.succeed(handle);
       },
       notifyWatchedFiles: () => Effect.void,
-      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -405,7 +398,6 @@ test("leaves files pending with a message while the server is downloading", asyn
     const installing = Layer.succeed(LanguageServers)({
       acquire: () => Effect.fail(new ServerInstalling({ language: "typescript" })),
       notifyWatchedFiles: () => Effect.void,
-      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -427,7 +419,6 @@ test("degrades to unavailable when the server cannot be acquired", async () => {
           }),
         ),
       notifyWatchedFiles: () => Effect.void,
-      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -480,9 +471,9 @@ function pullingHandle(options: {
     whenProjectLoaded: Effect.void,
   };
   return {
-    capabilities: new Set<Capability>(["pullDiagnostics"]),
     connection,
     plugins: new Set<string>(),
+    pullDiagnostics: true,
     stale: connection.closed,
   };
 }
@@ -568,9 +559,9 @@ test("a related report's findings survive the named file's own pull failing", as
       whenProjectLoaded: Effect.void,
     };
     const handle: ServerHandle = {
-      capabilities: new Set<Capability>(["pullDiagnostics"]),
       connection,
       plugins: new Set<string>(),
+      pullDiagnostics: true,
       stale: connection.closed,
     };
 
@@ -614,9 +605,9 @@ function keeperProbe() {
     whenProjectLoaded: Effect.void,
   };
   const handle: ServerHandle = {
-    capabilities: new Set<Capability>(["pullDiagnostics"]),
     connection,
     plugins: new Set<string>(),
+    pullDiagnostics: true,
     stale: connection.closed,
   };
   return { changes, closes, handle, opens };
@@ -755,9 +746,9 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
     const second = keeperProbe();
     const handles = [
       {
-        capabilities: first.handle.capabilities,
         connection: dyingConnection,
         plugins: first.handle.plugins,
+        pullDiagnostics: first.handle.pullDiagnostics,
         stale: dyingConnection.closed,
       },
       second.handle,
@@ -773,7 +764,6 @@ test("reopens the set on a fresh server after the pooled one dies between runs",
             : Effect.succeed(handle);
         }),
       notifyWatchedFiles: () => Effect.void,
-      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -836,7 +826,6 @@ test("concurrent runs share one keeper instead of racing two into existence", as
           acquires += 1;
         }).pipe(Effect.andThen(Effect.sleep("50 millis")), Effect.as(probe.handle)),
       notifyWatchedFiles: () => Effect.void,
-      providers: (path, capability, repoRoot) => serversProviding(path, capability, repoRoot),
       provisionPlugins: () => Effect.void,
       restart: () => Effect.void,
     });
@@ -891,9 +880,9 @@ test("resetServers drops the keepers, so the next run reopens every document", a
     };
     const servers = fakeServers({
       typescript: {
-        capabilities: new Set(),
         connection,
         plugins: new Set<string>(),
+        pullDiagnostics: false,
         stale: connection.closed,
       },
     });
@@ -927,8 +916,8 @@ test("an open another holder already made is followed by a change, so the server
     const published = new Map<string, unknown[]>();
     const changes: string[] = [];
     /**
-     * An intel pull or the tsserver bridge holds the document already: this open sends nothing, and
-     * the publish answering the earlier open was dropped by the run's `clearPublished`.
+     * The tsserver bridge holds the document already: this open sends nothing, and the publish
+     * answering the earlier open was dropped by the run's `clearPublished`.
      */
     const connection: LspConnection = {
       changeDocument: (changedUri) =>
@@ -961,7 +950,7 @@ test("an open another holder already made is followed by a change, so the server
       dir,
       [changed("config.yaml")],
       fakeServers({
-        yaml: { capabilities: new Set(), connection, plugins: new Set(), stale: connection.closed },
+        yaml: { connection, plugins: new Set(), pullDiagnostics: false, stale: connection.closed },
       }),
     );
 

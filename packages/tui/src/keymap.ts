@@ -390,55 +390,6 @@ export function createKeyHandler(host: HostEffects) {
         }
       }
 
-      // The references overlay owns the keyboard while open. It has no input, so Enter
-      // Jumps to the highlighted result here (the search overlay delegates that to its
-      // Input's onSubmit); nav clamps over the result set, escape closes.
-      if (state.referencesOpen()) {
-        if (key.name === "escape") {
-          state.closeReferences();
-        } else if (key.name === "return") {
-          state.jumpToReference(state.referencesIndex());
-        } else if (key.name === "tab") {
-          // Flip a call hierarchy's direction (incoming↔outgoing) in place; a no-op for
-          // References/definitions, which carry no direction.
-          state.toggleReferencesDirection();
-        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
-          state.setReferencesIndex(
-            Math.min(
-              state.referencesIndex() + 1,
-              Math.max(0, state.referencesResults().length - 1),
-            ),
-          );
-        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
-          state.setReferencesIndex(Math.max(state.referencesIndex() - 1, 0));
-        }
-        return;
-      }
-
-      // The symbol outline overlay owns the keyboard while open, mirroring the references
-      // Overlay: no input, so Enter jumps to the highlighted symbol; nav clamps, escape closes.
-      if (state.symbolsOpen()) {
-        if (key.name === "escape") {
-          state.closeSymbols();
-        } else if (key.name === "return") {
-          state.jumpToSymbol(state.symbolsIndex());
-        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
-          state.setSymbolsIndex(
-            Math.min(state.symbolsIndex() + 1, Math.max(0, state.symbolsResults().length - 1)),
-          );
-        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
-          state.setSymbolsIndex(Math.max(state.symbolsIndex() - 1, 0));
-        }
-        return;
-      }
-
-      // A caret-anchored decoration (the hover card) is dismiss-on-esc, claiming the
-      // Key before the find and global esc handlers; any caret move already closes it.
-      if (state.viewerDecoration() !== undefined && key.name === "escape") {
-        state.closeViewerDecoration();
-        return;
-      }
-
       // The find bar owns the keyboard while open: only escape cancels it; text
       // And submit are the input element's job (same split as the palette).
       if (state.findOpen()) {
@@ -602,15 +553,6 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // Find symbols in the open file, an outline overlay. A bare uppercase S ("Symbols") by
-      // Default, not the IDE-standard Ctrl+Shift+O: a control key can't reliably carry Shift
-      // Across terminals (a bare 0x0F on Terminal.app/VHS, an unsolicited CSI-u on cmux), so
-      // The Shift is lost, whereas a plain letter always arrives. The action guards itself.
-      if (pressed("symbols") && state.mainView() === "file") {
-        void state.findSymbols();
-        return;
-      }
-
       if (pressed("scope")) {
         openScopeMenu();
         return;
@@ -671,7 +613,7 @@ export function createKeyHandler(host: HostEffects) {
 
       // Open the context menu on the focused pane (Shift+F10, the IDE-standard "show
       // Context menu" key). The tree menu works from tree focus; the viewer menu only
-      // While the file view is on screen (its intel/copy actions need a caret).
+      // While the file view is on screen (its copy actions need a caret).
       if (pressed("context-menu")) {
         const pane = state.focusedPane();
         if (pane === "tree") {
@@ -728,6 +670,10 @@ export function createKeyHandler(host: HostEffects) {
       // Run-checks re-reads what the servers already think; this throws the
       // Servers away and asks again.
       if (pressed("restart-servers")) {
+        if (!state.diagnosticsEnabled()) {
+          state.notify("diagnostics disabled");
+          return;
+        }
         void state.restartLanguageServers();
         return;
       }
@@ -756,43 +702,6 @@ export function createKeyHandler(host: HostEffects) {
         const line = state.navigableLines()[state.cursorIndex()];
         const lineNumber = line?.newLine ?? line?.oldLine;
         void host.openInEditor(selectedPath, lineNumber, "ide");
-        return;
-      }
-
-      // Go to definition of the symbol under the caret (IDE-standard F12). The action reads the
-      // Caret from state and guards itself, so it's safe to dispatch globally.
-      if (pressed("go-to-definition") && fileViewShowing) {
-        void state.goToDefinition();
-        return;
-      }
-
-      // Find references to the symbol under the caret (IDE-standard Shift+F12). Opens the
-      // Results overlay; the action reads the caret from state and guards itself.
-      if (pressed("find-references") && fileViewShowing) {
-        void state.findReferences();
-        return;
-      }
-
-      // Hover (type + docs) for the symbol under the caret, in a caret-anchored card
-      // (Shift+K, the established LSP hover key). The action reads the caret and guards itself.
-      if (pressed("hover") && fileViewShowing) {
-        void state.showHover();
-        return;
-      }
-
-      // Call hierarchy for the symbol under the caret (Shift+H): who calls this / what this calls,
-      // In the references overlay with a Tab direction toggle. Bare uppercase like Shift+K, chosen
-      // Over Ctrl+F12 since modified F-keys aren't portably delivered. The action guards itself.
-      if (pressed("call-hierarchy") && fileViewShowing) {
-        state.callHierarchy();
-        return;
-      }
-
-      // Find implementations for the symbol under the caret (Shift+I): a concrete symbol jumps to its
-      // Single implementation, an interface/abstract member lists every concrete body in the
-      // References overlay. Bare uppercase like Shift+K/Shift+H. The action guards itself.
-      if (pressed("implementations") && fileViewShowing) {
-        void state.findImplementations();
         return;
       }
 

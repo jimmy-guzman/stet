@@ -193,11 +193,11 @@ function syncDocuments(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
         continue;
       }
       /**
-       * An open another holder already made (an intel pull, the tsserver bridge) sends nothing, and
-       * the server answered that holder's open before `clearPublished` dropped it, so this run
-       * would wait on a publish that never comes. A full-text change in its place provokes one for
-       * a file with findings; typescript-language-server publishes nothing for a file that stays
-       * clean, which leaves that case pending, as any clean-to-clean change does (#371).
+       * An open another holder already made (the tsserver bridge) sends nothing, and the server
+       * answered that holder's open before `clearPublished` dropped it, so this run would wait on a
+       * publish that never comes. A full-text change in its place provokes one for a file with
+       * findings; typescript-language-server publishes nothing for a file that stays clean, which
+       * leaves that case pending, as any clean-to-clean change does (#371).
        */
       const send = keeper.sent.has(uri)
         ? connection.changeDocument(uri, text)
@@ -262,7 +262,7 @@ function collectOnce(keeper: Keeper, repoRoot: string, files: ChangedFile[]) {
     // A server that advertises pull answers request/response, no settle heuristics. Every tracked
     // File is pulled, not just dirty ones: an untouched file answers `unchanged` cheaply, and an
     // Edit elsewhere in the open set can change its result even when its own text didn't move.
-    if (handle.capabilities.has("pullDiagnostics")) {
+    if (handle.pullDiagnostics) {
       const collected = yield* pullDiagnostics(handle, tracked);
       return { ...collected, pending: [...pending, ...collected.pending] } satisfies Collected;
     }

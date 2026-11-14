@@ -162,14 +162,12 @@ function bridgeScenario(
 const vueSpec: ServerSpec = {
   args: ["vuefake"],
   binary: "bun",
-  provides: [],
   tsserverBridge: { plugin: "fake-plugin", server: "tsfake" },
 };
 const tsSpec: ServerSpec = {
   args: ["tsfake"],
   binary: "bun",
   plugins: [{ name: "fake-plugin", when: "package.json" }],
-  provides: [],
 };
 
 function pluginRepo() {

@@ -237,10 +237,9 @@ async function ensureLanguages(meta: { name: string; prevName?: string }) {
 }
 
 /**
- * Highlight a standalone code snippet (a hover card's signature) into per-line spans, reusing the
- * diff's shared highlighter and active theme so the colors match. Never rejects: an unknown
- * language or highlighter failure falls back to one plain span per line, so the snippet still shows
- * uncolored.
+ * Highlight a standalone code snippet (a search excerpt) into per-line spans, reusing the diff's
+ * shared highlighter and active theme so the colors match. Never rejects: an unknown language or
+ * highlighter failure falls back to one plain span per line, so the snippet still shows uncolored.
  */
 export async function highlightSnippet(code: string, lang: string): Promise<RenderSpan[][]> {
   try {

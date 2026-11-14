@@ -34,12 +34,6 @@ in a hint row along their bottom edge, so those are not repeated here.
 | `f`           | load full content when truncated                                           | `load-full`                      |
 | `ctrl-d / u`  | half-page cursor movement in the viewer                                    | `half-page-down`, `half-page-up` |
 | `g / G`       | jump to first / last line                                                  | `first-line`, `last-line`        |
-| `F12`         | go to definition of the symbol under the caret                             | `go-to-definition`               |
-| `Shift+F12`   | find references to the symbol under the caret                              | `find-references`                |
-| `Shift+I`     | find implementations of the symbol under the caret                         | `implementations`                |
-| `Shift+H`     | call hierarchy of the symbol (Tab flips direction)                         | `call-hierarchy`                 |
-| `K`           | hover: type and docs for the symbol under the caret                        | `hover`                          |
-| `S`           | find symbols: outline of the open file                                     | `symbols`                        |
 | `< / >`       | back / forward through viewer history                                      | `back`, `forward`                |
 | `y`           | copy path (tree), path:line:col (viewer), or the selected result / problem | `copy-reference`                 |
 | `Y`           | copy the file (viewer) or every entry (problems)                           | `copy-file`                      |
@@ -83,7 +77,7 @@ in a hint row along their bottom edge, so those are not repeated here.
 | `e`         | open in terminal editor (suspends TUI, --editor template)      | `open-editor`   |
 | `o`         | open in GUI / IDE (renderer stays live, --ide template)        | `open-ide`      |
 | `O`         | open externally in the OS default app (images, PDFs, binaries) | `open-external` |
-| `Shift+F10` | context menu for the focused row or symbol (or right-click)    | `context-menu`  |
+| `Shift+F10` | context menu for the focused row or caret (or right-click)     | `context-menu`  |
 | `?`         | show all keybindings and the marks legend                      | `help`          |
 | `q`         | quit (confirm with y)                                          | `quit`          |
 
@@ -137,15 +131,15 @@ to pin it as a tab; double-click a problem to jump to it. Clicks also work in
 the overlays and the search pane, and hovering a theme in the switcher previews
 it live. Clicking a pane focuses it, so clicking the problems panel's chrome
 focuses it without changing the selection, and the wheel scrolls whichever pane
-the pointer is over. Right-click a tree row or a viewer symbol for a context
+the pointer is over. Right-click a tree row or a viewer line for a context
 menu of the actions that apply there, the same menu `Shift+F10` opens on the
 focused pane.
 
-![The viewer's context menu opened on a symbol, listing the code intelligence pulls above copy and open actions](/screenshots/context-menu.png)
+![The viewer's context menu listing its copy and open actions](/screenshots/context-menu.png)
 
 The menu carries whatever applies where you opened it, so it is shorter
-elsewhere: the code intelligence rows above need a symbol under the caret, and a
-directory in the tree offers only Copy path. Nothing in it is shown greyed out.
+elsewhere: a directory in the tree offers only Copy path. Nothing in it is shown
+greyed out.
 
 Drag across diff lines to select a range. Holding the pointer at the top or
 bottom edge scrolls the viewer and continues the selection. Shift-click extends

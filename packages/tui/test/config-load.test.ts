@@ -127,7 +127,6 @@ describe("loadConfigText", () => {
       "sidebar": { "open": false, "width": 40, "changesOnly": true },
       "provenance": { "enabled": true },
       "diagnostics": { "enabled": false, "download": false },
-      "intel": { "enabled": false },
       "update": { "check": false },
       "search": { "regex": true, "caseSensitive": true, "scope": "repo" }
     }`);
@@ -138,7 +137,6 @@ describe("loadConfigText", () => {
     expect(config.sidebar).toEqual({ changesOnly: true, open: false, width: 40 });
     expect(config.provenance).toEqual({ enabled: true });
     expect(config.diagnostics).toEqual({ download: false, enabled: false });
-    expect(config.intel).toEqual({ enabled: false });
     expect(config.update).toEqual({ check: false });
     expect(config.search).toEqual({ caseSensitive: true, regex: true, scope: "repo" });
   });

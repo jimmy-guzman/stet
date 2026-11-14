@@ -123,7 +123,7 @@ try {
   setSelection(themeSelection);
 
   // Resolve servers first because language profiles validate their named references. Everything
-  // Registers before the runtime builds, so diff, icons, diagnostics, and intel share one startup
+  // Registers before the runtime builds, so diff, icons, and diagnostics share one startup
   // Snapshot for the full session.
   const { issues: serverIssues, servers } = resolveServers(config.diagnostics?.servers ?? {});
   // The JSON server takes its schema map only as a post-`initialized` notification; the YAML server
@@ -238,7 +238,6 @@ try {
     state.setProblemsOpen(config.problems?.open ?? configDefaults.problems.open);
     state.setBlameEnabled(config.provenance?.enabled ?? configDefaults.provenance.enabled);
     state.setDiagnosticsEnabled(diagnosticsEnabled);
-    state.setIntelEnabled(config.intel?.enabled ?? configDefaults.intel.enabled);
     state.setSearchRegex(config.search?.regex ?? configDefaults.search.regex);
     state.setSearchCaseSensitive(
       config.search?.caseSensitive ?? configDefaults.search.caseSensitive,

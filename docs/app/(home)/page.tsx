@@ -1,4 +1,4 @@
-import { Eye, GitBranch, ListTree, Search, TriangleAlert, Waypoints } from "lucide-react";
+import { Eye, GitBranch, ListTree, Search, TriangleAlert } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -31,11 +31,6 @@ const features = [
     icon: TriangleAlert,
     title: "Diagnostics",
     body: "Type errors and lint findings stream into the tree, the viewer, and a problems panel as the repo's language servers finish.",
-  },
-  {
-    icon: Waypoints,
-    title: "Code intel",
-    body: "Read-only language-server pulls: go to definition, find references and implementations, call hierarchy, hover, and symbol outline.",
   },
 ];
 
@@ -88,7 +83,7 @@ export default function Page() {
         {features.map((feature) => (
           <div
             key={feature.title}
-            className="flex flex-col gap-3 bg-fd-background p-6 transition-colors hover:bg-fd-muted"
+            className="flex flex-col gap-3 bg-fd-background p-6 transition-colors hover:bg-fd-muted sm:last:col-span-2"
           >
             <feature.icon className="size-5 text-fd-primary" />
             <h2 className="font-mono text-base font-semibold">{feature.title}</h2>

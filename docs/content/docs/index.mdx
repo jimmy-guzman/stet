@@ -6,7 +6,7 @@ description: stet is a read-only companion TUI for inspecting an agent's changes
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Callout } from "fumadocs-ui/components/callout";
 import { Card, Cards } from "fumadocs-ui/components/card";
-import { FileText, GitBranch, Palette, PanelsTopLeft, Search, Waypoints } from "lucide-react";
+import { FileText, GitBranch, Palette, PanelsTopLeft, Search, TriangleAlert } from "lucide-react";
 
 ## Introduction
 
@@ -36,8 +36,8 @@ or talks to the agent. You decide what to say next.
   <Card icon={<Search />} title="Search & navigation" href="/docs/guides/search-and-navigation">
     Jump to any file, find within the open file, and search the whole repo.
   </Card>
-  <Card icon={<Waypoints />} title="Code intelligence" href="/docs/guides/code-intelligence">
-    Go to definition, references, implementations, call hierarchy, hover, and problems.
+  <Card icon={<TriangleAlert />} title="Diagnostics" href="/docs/guides/diagnostics">
+    See type errors and lint findings in a problems panel, and copy them back to the agent.
   </Card>
   <Card icon={<GitBranch />} title="Scopes & worktrees" href="/docs/guides/scopes-and-worktrees">
     Choose what the diff compares, and see which worktree an agent is working in.

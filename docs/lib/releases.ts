@@ -179,10 +179,9 @@ export const getReleases = async (): Promise<Release[]> => {
 
     return [first, ...rest]
       .flatMap((page) => page.releases)
-      .values()
-      .filter((release) => !release.draft && !release.prerelease)
-      .map(toRelease)
-      .toArray();
+      .flatMap((release) =>
+        release.draft || release.prerelease ? [] : [toRelease(release)]
+      );
   } catch {
     return [];
   }

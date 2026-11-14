@@ -1,7 +1,11 @@
 import { Predicate } from "effect";
 import type { Schema } from "effect";
 
-/** Within a JSON value, the only non-null, non-array object is a JSON object. */
+/**
+ * Narrows an already-parsed JSON value: within `Json` the only non-null, non-array object is a
+ * JSON object. `Schema.is(Schema.JsonObject)` would re-validate the subtree and narrow to an
+ * intersection that object rest and spread reject.
+ */
 export const isJsonObject = (value: Schema.Json): value is Schema.JsonObject =>
   Predicate.isObject(value);
 

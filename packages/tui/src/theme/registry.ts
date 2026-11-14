@@ -107,8 +107,10 @@ export const resolveThemes = (raw: Schema.JsonObject): ResolvedThemes => {
     return known ? value : undefined;
   };
 
-  // A `syntax` names a bundled theme, overrides the base's syntax tokens, or is
-  // Absent and inherits the base's bundled theme.
+  /**
+   * A `syntax` names a bundled theme, overrides the base's syntax tokens, or is absent and
+   * inherits the base's bundled theme.
+   */
   const syntaxOf = (
     name: string,
     value: Schema.Json | undefined,

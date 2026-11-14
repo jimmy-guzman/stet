@@ -10,7 +10,7 @@ import type { Theme } from "@/theme/tokens";
 
 const HEX = /^#[0-9a-f]{6}$/u;
 
-// Every theme leaf is a color, at most two levels deep (`success`, `text.primary`).
+/** Every theme leaf is a color, at most two levels deep (`success`, `text.primary`). */
 const colorEntries = (theme: Theme) =>
   Object.entries(theme).flatMap(([group, value]) =>
     Predicate.isString(value)

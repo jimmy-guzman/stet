@@ -113,15 +113,7 @@ function resolveFiles(
       issues.push(`file "${name}": must be an object or false`);
       continue;
     }
-    // Reported apart from an unknown field, which drops the whole entry: the language facet only
-    // Routed files to language servers, so the entry's syntax and icon facets still apply. An
-    // Entry with no other facet then fails the facet check below, after this message.
-    if ("language" in entry) {
-      issues.push(`file "${name}": "language" was removed`);
-    }
-    const unknown = Object.keys(entry).filter(
-      (field) => field !== "language" && !fileFields.has(field),
-    );
+    const unknown = Object.keys(entry).filter((field) => !fileFields.has(field));
     if (unknown.length > 0) {
       issues.push(...unknown.map((field) => `file "${name}": unknown field "${field}"`));
       continue;

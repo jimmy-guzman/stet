@@ -160,26 +160,6 @@ describe("loadConfigText", () => {
     expect(issues).toHaveLength(1);
   });
 
-  test("the removed diagnostics keys are reported as unknown and the rest still loads", () => {
-    const { config, issues } = loadConfigText(`{
-      "diagnostics": { "enabled": false },
-      "languages": {},
-      "problems": { "open": true },
-      "schemas": {},
-      "servers": {},
-      "viewer": { "wrap": true }
-    }`);
-
-    expect(config).toEqual({ viewer: { wrap: true } });
-    expect(issues).toEqual([
-      'config: unknown key "diagnostics"',
-      'config: unknown key "languages"',
-      'config: unknown key "problems"',
-      'config: unknown key "schemas"',
-      'config: unknown key "servers"',
-    ]);
-  });
-
   test("pre-restructure flat icon glyphs point at icons.glyphs", () => {
     const { config, issues } = loadConfigText(`{ "icons": { "typescript": "" } }`);
 

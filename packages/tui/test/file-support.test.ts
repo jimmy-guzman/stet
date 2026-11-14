@@ -136,13 +136,13 @@ test("invalid overrides retain built-ins while an invalid reference drops only i
   );
 });
 
-test("a removed language facet is reported and the rest of its entry still applies", async () => {
+test("an unknown field drops the whole entry", async () => {
   await withFileSupport(
-    { files: { probe: { extensions: ["probe"], icon: "json", language: "json", syntax: "yaml" } } },
+    { files: { probe: { colour: "red", extensions: ["probe"], icon: "json", syntax: "yaml" } } },
     (issues) => {
-      expect(issues).toEqual(['file "probe": "language" was removed']);
-      expect(fileSupportForPath("a.probe").syntax).toBe("yaml");
-      expect(fileSupportForPath("a.probe").icon).toBe("json");
+      expect(issues).toEqual(['file "probe": unknown field "colour"']);
+      expect(fileSupportForPath("a.probe").syntax).toBe("text");
+      expect(fileSupportForPath("a.probe").icon).toBe("file");
     },
   );
 });

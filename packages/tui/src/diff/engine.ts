@@ -81,13 +81,15 @@ const ensureDiffTheme = async () => {
     registerCustomTheme(themeName, async () => await theme);
   }
 
-  await getSharedHighlighter({
-    langs: [],
-    preferredHighlighter: "shiki-wasm",
-    themes: [themeName],
-  }).catch(() => {
+  try {
+    await getSharedHighlighter({
+      langs: [],
+      preferredHighlighter: "shiki-wasm",
+      themes: [themeName],
+    });
+  } catch {
     // Attach failed; the render falls back to plain text.
-  });
+  }
 
   return themeName;
 };

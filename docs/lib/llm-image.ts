@@ -6,9 +6,13 @@ type VFile = Parameters<typeof replaceSource>[0];
 
 type MdastNode = Parameters<typeof replaceSource>[1];
 
-/** Escaped the way fumadocs' own remark-image writes an image, so any alt, URL, or title round-trips. */
+/**
+ * Alt and title escaped the way fumadocs' own remark-image writes them, plus the URL's angle
+ * brackets and backslashes, which remark-image leaves bare, so a `>` in a path cannot end the
+ * destination early.
+ */
 const imageMarkdown = (alt: string, url: string, title: string) =>
-  `![${alt.replaceAll(/[\\[\]]/gu, String.raw`\$&`)}](<${url}>${
+  `![${alt.replaceAll(/[\\[\]]/gu, String.raw`\$&`)}](<${url.replaceAll(/[<>\\]/gu, String.raw`\$&`)}>${
     title === "" ? "" : ` "${title.replaceAll(/["\\]/gu, String.raw`\$&`)}"`
   })`;
 

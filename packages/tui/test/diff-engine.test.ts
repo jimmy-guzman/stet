@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { languageForPath, renderDiff } from "@/diff/engine";
 import { isLineRow } from "@/diff/rows";
+import { setSelection } from "@/theme/active";
+import { registerThemes, resolveThemes } from "@/theme/registry";
 
 const patch = `diff --git a/foo.ts b/foo.ts
 index 1111111..2222222 100644
@@ -219,6 +221,40 @@ index 1111111..2222222 100644
     }
 
     expect(added.spans.map((span) => span.text).join("")).toBe("new line here");
+  });
+});
+
+const addedColors = async () => {
+  const render = await renderDiff({ full: false, maxLines: 1600, patch });
+
+  const added = render.rows.filter(isLineRow).find((row) => row.type === "add");
+
+  return added?.spans.map((span) => span.fg) ?? [];
+};
+
+describe("renderDiff theme attach", () => {
+  test("colors a diff under a second token theme", async () => {
+    setSelection("light");
+
+    const colors = await addedColors();
+
+    expect(colors.some((fg) => fg !== undefined)).toBe(true);
+  });
+
+  test("colors a diff under a bundled syntax theme with that theme's colors", async () => {
+    const tokenColors = await addedColors();
+
+    registerThemes(
+      resolveThemes({
+        "test-catppuccin": { base: "dark", syntax: "catppuccin-mocha" },
+      }).themes
+    );
+    setSelection("test-catppuccin");
+
+    const bundledColors = await addedColors();
+
+    expect(bundledColors.some((fg) => fg !== undefined)).toBe(true);
+    expect(bundledColors).not.toEqual(tokenColors);
   });
 });
 

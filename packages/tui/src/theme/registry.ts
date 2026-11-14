@@ -8,15 +8,19 @@ import { monoDarkTheme, monoLightTheme } from "./mono";
 import { ThemeSchema } from "./tokens";
 import type { Theme } from "./tokens";
 
-// Kept here, not imported from config, so theme/ stays free of a config
-// Dependency; the config schema validates the matching shape.
+/**
+ * Kept here, not imported from config, so theme/ stays free of a config dependency; the config
+ * schema validates the matching shape.
+ */
 export type ThemeSelection =
   | string
   | { dark: string; light: string }
   | undefined;
 
-// `syntaxTheme` (set when a theme's `syntax` is a bundled name) sources code colors
-// From that theme; otherwise `tokens.syntax` does. `tokens` always drive the UI.
+/**
+ * `syntaxTheme` (set when a theme's `syntax` is a bundled name) sources code colors from that theme;
+ * otherwise `tokens.syntax` does. `tokens` always drive the UI.
+ */
 interface RegisteredTheme {
   tokens: Theme;
   syntaxTheme?: string;
@@ -41,20 +45,20 @@ export const syntaxThemeForName = (name: string) =>
 
 export const hasTheme = (name: string) => registry.has(name);
 
-// Built-ins first (`dark`, `light`), then user themes in registration order; `Map`
-// Preserves insertion order, which is the order the switcher lists them in.
+/**
+ * Built-ins first (`dark`, `light`), then user themes in registration order; `Map` preserves
+ * insertion order, which is the order the switcher lists them in.
+ */
 export const themeNames = () => [...registry.keys()];
 
-// Test-only: the registry is a process-global map, so a test that registers themes
-// Would leak them into later tests. Snapshot before and restore after to isolate.
-export const snapshotRegistry = () => new Map(registry);
-
-export const restoreRegistry = (
-  snapshot: ReturnType<typeof snapshotRegistry>
-) => {
+/**
+ * Test-only: the registry is a process-global map, so the test preload resets it to the built-ins
+ * before every test.
+ */
+export const restoreRegistry = () => {
   registry.clear();
 
-  for (const [name, theme] of snapshot) {
+  for (const [name, theme] of builtins) {
     registry.set(name, theme);
   }
 };

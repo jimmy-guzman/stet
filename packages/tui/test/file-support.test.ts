@@ -6,7 +6,6 @@ import { resolveFileSupportConfig } from "@/file-support/config";
 import {
   fileIconForPath,
   fileSupportForPath,
-  defaultFileSupportRegistry,
   registerFileSupport,
 } from "@/file-support/registry";
 
@@ -16,34 +15,8 @@ const withFileSupport = async (
 ) => {
   const resolved = resolveFileSupportConfig(raw);
   registerFileSupport(resolved.registry);
-
-  try {
-    await run(resolved.issues);
-  } finally {
-    registerFileSupport(defaultFileSupportRegistry());
-  }
+  await run(resolved.issues);
 };
-
-test("the default registry comes back when a callback throws synchronously", async () => {
-  const before = fileSupportForPath("a.probe").syntax;
-  expect(before).not.toBe("json");
-
-  const [outcome] = await Promise.allSettled([
-    withFileSupport(
-      { files: { probe: { extensions: ["probe"], syntax: "json" } } },
-      () => {
-        throw new Error("assertion failed inside the callback");
-      }
-    ),
-  ]);
-
-  expect(outcome).toEqual({
-    reason: new Error("assertion failed inside the callback"),
-    status: "rejected",
-  });
-
-  expect(fileSupportForPath("a.probe").syntax).toBe(before);
-});
 
 test("file matching resolves exact name, glob, extension, and dotfile specificity", async () => {
   await withFileSupport(

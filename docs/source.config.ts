@@ -7,7 +7,10 @@ export const docs = defineDocs({
   dir: "content/docs",
   docs: {
     postprocess: {
-      includeProcessedMarkdown: true,
+      // The default output for a collection renders components through `renderToMarkdown`,
+      // which names each one after its minified function (`<Component>`, `<l>`). The string
+      // output keeps each component as its authored JSX.
+      includeProcessedMarkdown: { output: "string" },
     },
   },
 });

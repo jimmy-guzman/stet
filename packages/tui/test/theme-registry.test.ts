@@ -7,9 +7,7 @@ import { monoDarkTheme, monoLightTheme } from "@/theme/mono";
 import {
   registerThemes,
   resolveThemes,
-  restoreRegistry,
   selectThemeName,
-  snapshotRegistry,
   themeForName,
   themeNames,
 } from "@/theme/registry";
@@ -205,21 +203,13 @@ describe("themeNames", () => {
   });
 
   test("lists registered themes after the built-ins", () => {
-    const snapshot = snapshotRegistry();
+    registerThemes(
+      resolveThemes({ "registry-probe": { base: "dark" } }).themes
+    );
+    const names = themeNames();
 
-    try {
-      registerThemes(
-        resolveThemes({ "registry-probe": { base: "dark" } }).themes
-      );
-      const names = themeNames();
-
-      expect(names).toContain("registry-probe");
-      expect(names.indexOf("dark")).toBeLessThan(
-        names.indexOf("registry-probe")
-      );
-    } finally {
-      restoreRegistry(snapshot);
-    }
+    expect(names).toContain("registry-probe");
+    expect(names.indexOf("dark")).toBeLessThan(names.indexOf("registry-probe"));
   });
 });
 

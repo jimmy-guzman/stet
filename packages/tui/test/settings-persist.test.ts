@@ -35,7 +35,6 @@ const withConfigDir = async (run: (dir: string) => Promise<void>) => {
       process.env.XDG_CONFIG_HOME = previous;
     }
 
-    setSelection(undefined);
     rmSync(dir, { force: true, recursive: true });
   });
 };

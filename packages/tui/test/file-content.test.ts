@@ -1,5 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -118,6 +124,10 @@ describe("contentToContextPatch", () => {
 
 describe("loadFileContent", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "stet-file-view-"));
+
+  afterAll(() => {
+    rmSync(dir, { force: true, recursive: true });
+  });
 
   test("reads text files from disk", () => {
     writeFileSync(path.join(dir, "a.ts"), "const a = 1\n");

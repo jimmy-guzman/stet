@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import path from "node:path";
 
 import type { ThemeMode } from "@opentui/core";
 import {
@@ -24,7 +23,7 @@ import { openInEditor } from "./editor/open";
 import type { Worktree } from "./git/worktree";
 import { createKeyHandler } from "./keymap";
 import type { LogLevel } from "./log/levels";
-import { log } from "./log/terminal";
+import { exitAfterRestore } from "./shutdown";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { theme } from "./theme/context";
@@ -52,20 +51,6 @@ export const App = () => {
   renderer.on("theme_mode", onThemeMode);
   onCleanup(() => renderer.off("theme_mode", onThemeMode));
 
-  createEffect(() => {
-    const dir = path.basename(state.gitModel().repoRoot);
-
-    if (dir === "") {
-      renderer.setTerminalTitle("stet");
-
-      return;
-    }
-
-    const repo = path.basename(state.mainWorktreePath()) || dir;
-    const segments = dir === repo ? [repo] : [dir, repo];
-    renderer.setTerminalTitle([...segments, "stet"].join(" · "));
-  });
-
   // A read-only TUI should not show a stray terminal cursor outside its inputs.
   // The renderer shows one by default, so hide it whenever no input overlay is
   // Open (each input shows its own caret while focused); `autoFocus: false` on the
@@ -85,20 +70,12 @@ export const App = () => {
     }
   });
 
+  /**
+   * The git poll runs on the shared runtime, not the render tree, and keeps the event loop alive, so
+   * quitting tears down the screen and exits rather than waiting for the loop to drain.
+   */
   const quit = (message?: { text: string; level: LogLevel }) => {
-    // The renderer no longer owns the background fibers (the git poll runs on the
-    // Shared runtime, not the render tree), so tear down the screen and exit
-    // Rather than waiting for an event loop that the poll keeps alive.
-    renderer.setTerminalTitle("");
-    renderer.destroy();
-
-    // Log after destroy so the message lands on the restored screen, not the alt
-    // Buffer, at its own severity rather than a hardcoded one.
-    if (message !== undefined) {
-      log(message.level, message.text);
-    }
-
-    process.exit(0);
+    void exitAfterRestore(renderer, 0, message);
   };
 
   // The user-initiated quit (keyboard) surfaces a pending update on the way out, gh-style. The

@@ -50,19 +50,25 @@ export const openInEditor = async (
   }
 
   if (mode === "terminal") {
-    renderer.suspend();
+    state.setTerminalSuspended(true);
 
     try {
-      await runtime.runPromise(
-        Editor.use((editor) => editor.openTerminal(argv, cwd))
-      );
-    } catch (error) {
-      state.notify(
-        `couldn't open the editor: ${error instanceof Error ? error.message : String(error)}`,
-        "error"
-      );
+      await renderer.suspend();
+
+      try {
+        await runtime.runPromise(
+          Editor.use((editor) => editor.openTerminal(argv, cwd))
+        );
+      } catch (error) {
+        state.notify(
+          `couldn't open the editor: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        );
+      } finally {
+        await renderer.resume();
+      }
     } finally {
-      renderer.resume();
+      state.setTerminalSuspended(false);
     }
 
     return;

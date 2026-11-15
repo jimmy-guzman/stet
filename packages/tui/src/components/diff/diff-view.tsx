@@ -258,7 +258,12 @@ const toggleMarker = (row: DiffRow) => {
 // Thrashing into the scheduler wedge the built-in `<diff>` triggered.
 export const DiffView = () => {
   const renderer = useRenderer();
-  const measurer = createLineMeasurer(renderer.widthMethod);
+
+  const measurer = createLineMeasurer(
+    renderer.widthMethod,
+    renderer.nativeScene
+  );
+
   onCleanup(() => {
     measurer.destroy();
   });
@@ -423,7 +428,7 @@ export const DiffView = () => {
   // Clamp scrollTop when the content shrinks under it (toggle to a shorter file,
   // Terminal resize), mirroring the scrollX clamp. Reads scrollTop untracked so it
   // Fires on a height/viewport change, not on every scroll tick, and never feeds
-  // Back into the reconciler below.
+  // Back into the projection below.
   createEffect(() => {
     const max = maxScrollY();
 
@@ -432,43 +437,22 @@ export const DiffView = () => {
     }
   });
 
-  // The scrollbox's physical scroll is a pure projection of the scrollTop signal:
-  // The windowed slice (driven by scrollTop) and what's painted must never disagree.
-  // The scrollbox clamps scrollTo to `scrollSize - viewportSize`, where scrollSize is
-  // The content height *as last laid out*. Right after a content swap grows the file,
-  // OpenTUI's layout overwrites scrollSize with a transiently-stale height and
-  // Re-clamps the physical scroll toward 0, stranding the viewport in the empty top
-  // Spacer (the toggle-blank bug). It is a race: whether a follow-up frame re-applies
-  // The scroll after layout settles is non-deterministic, so a one-shot scrollTo can
-  // Lose. Reconcile every rendered frame instead: re-assert the scrollbar's metrics
-  // From the content height we already compute (the per-row heights the spacers
-  // Reconstruct) and project scrollTop onto the physical scroll. While the two
-  // Diverge we request another frame, so a clamped scroll always recovers within a
-  // Frame or two; once aligned every call is a cheap early-return/no-op and the
-  // Renderer goes idle. scrollTop stays the single source of truth. It runs as the
-  // Scrollbox's lifecycle pass, which `root.render` calls synchronously right after
-  // The frame callbacks and before layout, so the metrics land in the same frame.
-  const syncScroll = (scroll: ScrollBoxRenderable) => {
-    const want = untrack(scrollTop);
-    const diverged = scroll.scrollTop !== want;
-    scroll.verticalScrollBar.scrollSize = untrack(contentHeight);
-    scroll.verticalScrollBar.viewportSize = state.viewerHeight();
-    scroll.scrollTo(want);
-
-    if (diverged) {
-      renderer.requestRender();
-    }
-  };
-
-  onCleanup(() => {
-    if (scrollRef !== undefined) {
-      renderer.unregisterLifecyclePass(scrollRef);
-    }
+  /**
+   * The scrollbox's physical scroll is a pure projection of the scrollTop signal: the windowed slice
+   * (driven by scrollTop) and what's painted must never disagree. A scroll made in the same tick as a
+   * content swap could land against the old height and strand the viewport in the empty top spacer
+   * (the toggle-blank bug), but OpenTUI's `scrollTo` applies again after the next frame's layout, so
+   * it lands against the new content. Only the target needs tracking: content that shrinks under
+   * scrollTop moves it through the clamp above, and the scrollbox keeps its own position when its
+   * content grows.
+   */
+  createEffect(() => {
+    scrollRef?.scrollTo(scrollTop());
   });
 
   // Wheel: left/right scroll long lines horizontally (shared across all lines, so
-  // The whole view shifts); up/down drive scrollTop directly (the reconciler above
-  // Projects it onto the scrollbox). Both axes own the scroll and zero the native
+  // The whole view shifts); up/down drive scrollTop directly (the projection above
+  // Carries it to the scrollbox). Both axes own the scroll and zero the native
   // Delta so the scrollbox never also acts on it: scrollTop must stay the single
   // Source of truth for the window, or a native read-back races the uncommitted
   // Scroll and the slice trails the visible content, blanking the lower viewport.
@@ -755,11 +739,6 @@ export const DiffView = () => {
       <scrollbox
         ref={(el) => {
           scrollRef = el;
-          el.onLifecyclePass = () => {
-            syncScroll(el);
-          };
-
-          renderer.registerLifecyclePass(el);
         }}
         width="100%"
         height={state.viewerHeight()}

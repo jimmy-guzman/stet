@@ -1,5 +1,5 @@
 import { TextBuffer, TextBufferView } from "@opentui/core";
-import type { WidthMethod } from "@opentui/core";
+import type { NativeResourceOwner, WidthMethod } from "@opentui/core";
 
 // Exact wrapped-line measurement: a reusable native TextBufferView measures how
 // Many terminal rows a line occupies under word wrap, via the same engine call
@@ -9,8 +9,11 @@ import type { WidthMethod } from "@opentui/core";
 // Renderer's so column widths agree with what is painted.
 const LARGE_HEIGHT = 2 ** 24;
 
-export const createLineMeasurer = (widthMethod: WidthMethod) => {
-  const buffer = TextBuffer.create(widthMethod);
+export const createLineMeasurer = (
+  widthMethod: WidthMethod,
+  owner: NativeResourceOwner
+) => {
+  const buffer = TextBuffer.create(widthMethod, owner);
   const view = TextBufferView.create(buffer);
   view.setWrapMode("word");
 

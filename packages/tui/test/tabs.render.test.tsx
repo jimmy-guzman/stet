@@ -327,7 +327,9 @@ describe("tabs strip", () => {
       // `italic` is a single bit, so the cell carries it when that bit of its mask is set.
       const isItalicAt = (x: number, y: number) =>
         Math.floor(
-          (buffer.buffers.attributes[y * buffer.width + x] ?? 0) / italic
+          buffer.withBuffers(
+            (cells) => cells.attributes[y * cells.width + x] ?? 0
+          ) / italic
         ) %
           2 ===
         1;

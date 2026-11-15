@@ -97,7 +97,6 @@ export const ThemeCombobox = () => {
             foregroundColor: theme.colors.scrollbar.thumb,
           },
         }}
-        horizontalScrollbarOptions={{ visible: false }}
       >
         <Show
           when={state.themeComboboxResults().length > 0}

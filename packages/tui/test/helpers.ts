@@ -1,4 +1,3 @@
-import { afterEach } from "bun:test";
 import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
@@ -28,8 +27,10 @@ import { stripGitEnv } from "@/utils/env";
 const GitTestLive = GitLive.pipe(Layer.provide(ProcessLive));
 const FileTestLive = FileLive.pipe(Layer.provide(ProcessLive));
 
-// Run the File service against a fixture repo's git-show path, the same path the
-// App uses for deleted files, so tests exercise the production classification.
+/**
+ * Run the File service against a fixture repo's git-show path, the same path the app uses for
+ * deleted files, so tests exercise the production classification.
+ */
 export const loadGitShowContent = async (repoRoot: string, file: string) =>
   await Effect.runPromise(
     File.pipe(
@@ -43,8 +44,10 @@ export const loadGitShowContent = async (repoRoot: string, file: string) =>
     )
   );
 
-// Run the Git service against a fixture repo, the same path the app uses, so
-// Tests exercise the production load instead of a mock.
+/**
+ * Run the Git service against a fixture repo, the same path the app uses, so tests exercise the
+ * production load instead of a mock.
+ */
 export const loadModel = async (repoRoot: string, scope: DiffScope) =>
   await Effect.runPromise(
     Git.pipe(
@@ -104,9 +107,10 @@ export const loadBinaryMeta = async (
     )
   );
 
-// State is a global singleton, so render tests seed it fresh (and reset the UI
-// Signals that might bleed from a prior test) before rendering App. Mirrors the
-// Startup seeding in main.tsx.
+/**
+ * State is a global singleton, so render tests seed it fresh (and reset the UI signals that might
+ * bleed from a prior test) before rendering App. Mirrors the startup seeding in main.tsx.
+ */
 export const seedState = (
   model: GitModel,
   scope: DiffScope,
@@ -206,17 +210,17 @@ export const runGit = (repoRoot: string, args: string[]) => {
 
 const fixtureRepoRoots = new Set<string>();
 
-afterEach(() => {
+export const sweepFixtureRepos = () => {
   for (const repoRoot of fixtureRepoRoots) {
     rmSync(repoRoot, { force: true, recursive: true });
   }
 
   fixtureRepoRoots.clear();
-});
+};
 
 /**
- * A fixture repository, swept by the `afterEach` above however the test ends (a timeout or a failed
- * assertion never reaches a test's own `finally`, which is why cleanup lives here).
+ * A fixture repository, swept by the preload's `afterEach` however the test ends (a timeout or a
+ * failed assertion never reaches a test's own `finally`, which is why cleanup lives there).
  *
  * @param objectFormat Git's hash algorithm, for the SHA-256 cases where the empty tree is a
  *   different object than the SHA-1 one.
@@ -228,10 +232,12 @@ export const createFixtureRepo = (
   files: Record<string, string>,
   { commit = true, objectFormat = "sha1" } = {}
 ) => {
-  // Realpath, because that is what the app gets: it takes repoRoot from `git rev-parse
-  // --show-toplevel`, and git resolves symlinks (on macOS /var/folders is a link to /private/var).
-  // A fixture rooted at the unresolved path would not match the paths git reports back, so anything
-  // Comparing the two (the picker's current-worktree marker, a worktree summary's key) would miss.
+  /**
+   * Realpath, because that is what the app gets: it takes repoRoot from `git rev-parse
+   * --show-toplevel`, and git resolves symlinks (on macOS /var/folders is a link to /private/var).
+   * A fixture rooted at the unresolved path would not match the paths git reports back, so anything
+   * comparing the two (the picker's current-worktree marker, a worktree summary's key) would miss.
+   */
   const repoRoot = realpathSync(mkdtempSync(path.join(tmpdir(), prefix)));
   fixtureRepoRoots.add(repoRoot);
 
@@ -255,11 +261,12 @@ interface FrameSource {
   captureCharFrame: () => string;
 }
 
-// `maxAttempts` defaults to the same headroom already proven necessary for the
-// Slower call sites (search debounce, watcher/scope re-checks) that pass an
-// Explicit override: a fixed low ceiling at a nominal per-tick cost silently
-// Shrinks on a slower/loaded runner (macOS CI has flaked this way), well under
-// The generous per-test timeout callers already declare.
+/**
+ * `maxAttempts` defaults to the same headroom already proven necessary for the slower call sites
+ * (search debounce, watcher/scope re-checks) that pass an explicit override: a fixed low ceiling at
+ * a nominal per-tick cost silently shrinks on a slower/loaded runner (macOS CI has flaked this way),
+ * well under the generous per-test timeout callers already declare.
+ */
 export const makeSettleUntil =
   ({ renderOnce, captureCharFrame }: FrameSource) =>
   async (

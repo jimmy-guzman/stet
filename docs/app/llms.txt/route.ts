@@ -5,7 +5,7 @@ import { llmSource } from "@/lib/source";
 
 export const revalidate = false;
 
-export const GET = async () => {
+export const GET = () => {
   const pages = llms(llmSource);
 
   const index = [
@@ -15,11 +15,7 @@ export const GET = async () => {
     "",
     "## Docs",
     "",
-    ...(await Promise.all(
-      llmSource
-        .getPageTree()
-        .children.map(async (child) => await pages.indexNode(child))
-    )),
+    ...llmSource.getPageTree().children.map((child) => pages.indexNode(child)),
     "",
     "## Optional",
     "",

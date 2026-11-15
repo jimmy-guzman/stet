@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import { RGBA } from "@opentui/core";
 import { testRender } from "@opentui/solid";
@@ -37,12 +37,6 @@ const hasBackground = (
   );
 };
 
-afterEach(() => {
-  // Reset the global theme signals so other render tests see the default.
-  setSelection(undefined);
-  setAppearance("dark");
-});
-
 describe("runtime appearance follow (#101)", () => {
   test("flipping the terminal appearance re-themes the UI live", async () => {
     registerThemes(
@@ -58,7 +52,6 @@ describe("runtime appearance follow (#101)", () => {
       }).themes
     );
     setSelection({ dark: "t-dark", light: "t-light" });
-    setAppearance("dark");
 
     const repoRoot = createFixtureRepo("theme-reactive-", { "a.txt": "a\n" });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });

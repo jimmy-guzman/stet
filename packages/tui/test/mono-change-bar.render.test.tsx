@@ -72,7 +72,6 @@ describe("monochrome change bar", () => {
 
       expect(colored).toContain("▎");
     } finally {
-      setSelection(undefined);
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
     }

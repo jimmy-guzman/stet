@@ -1,4 +1,4 @@
-import type { ThemeRegistration } from "@pierre/diffs";
+import type { ThemeRegistration } from "shiki";
 
 import type { Theme } from "./tokens";
 

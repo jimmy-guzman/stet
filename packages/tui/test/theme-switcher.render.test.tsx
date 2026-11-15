@@ -1,18 +1,12 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import { RGBA } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
 import { state } from "@/state";
-import { setAppearance, setSelection } from "@/theme/active";
 import { darkTheme } from "@/theme/dark";
-import {
-  registerThemes,
-  resolveThemes,
-  restoreRegistry,
-  snapshotRegistry,
-} from "@/theme/registry";
+import { registerThemes, resolveThemes } from "@/theme/registry";
 
 import {
   createFixtureRepo,
@@ -54,18 +48,6 @@ const locate = (frame: string, needle: string) => {
   return { x: y === -1 ? 0 : lines[y].indexOf(needle), y };
 };
 
-// Captured before any test registers, so afterEach can drop this file's themes from
-// The process-global registry and keep later tests isolated.
-const registryBaseline = snapshotRegistry();
-
-afterEach(() => {
-  // Reset the global theme + picker state so other render tests see the default.
-  state.closeThemePicker(false);
-  setSelection(undefined);
-  setAppearance("dark");
-  restoreRegistry(registryBaseline);
-});
-
 describe("theme switcher", () => {
   // Guards a staleness trap: themes register at startup, after `state`'s root is
   // Created, so the unfiltered list must read the registry lazily, not snapshot it
@@ -88,8 +70,6 @@ describe("theme switcher", () => {
       resolveThemes({ zzonly: { base: "dark", surface: surface(KB_BG) } })
         .themes
     );
-    setSelection(undefined);
-    setAppearance("dark");
 
     const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
@@ -153,8 +133,6 @@ describe("theme switcher", () => {
         zztwob: { base: "dark", surface: surface(TWO_BG) },
       }).themes
     );
-    setSelection(undefined);
-    setAppearance("dark");
 
     const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });

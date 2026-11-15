@@ -1,15 +1,33 @@
 import { expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 
+import { resolveFileSupportConfig } from "@/file-support/config";
+import {
+  fileSupportForPath,
+  registerFileSupport,
+} from "@/file-support/registry";
+import { comboTextsFor, registerKeybindings } from "@/keys/registry";
+import { resolveKeybindings } from "@/keys/resolve";
 import { state } from "@/state";
+import {
+  activeTheme,
+  activeThemeName,
+  appearance,
+  setAppearance,
+  setSelection,
+} from "@/theme/active";
+import { darkTheme } from "@/theme/dark";
+import { registerThemes, resolveThemes, themeNames } from "@/theme/registry";
 
 import { createFixtureRepo, loadModel, runGit, seedState } from "./helpers";
 
-// Bun runs every test file in one process, so `state` outlives each of them. A test that dies on a
-// Timeout or a failed assertion never reaches its own cleanup, so whatever it set has to be undone
-// For it. These two tests are ordered on purpose: the first leaves the state as a dead test would,
-// The second asserts none of it survived. If the preload's reset ever goes away, the second fails,
-// Which is the whole point (that leak once turned one dead render test into fifteen CI failures).
+/**
+ * Bun runs every test file in one process, so `state` outlives each of them. A test that dies on a
+ * timeout or a failed assertion never reaches its own cleanup, so whatever it set has to be undone
+ * for it. These two tests are ordered on purpose: the first leaves the state as a dead test would,
+ * the second asserts none of it survived. If the preload's reset ever goes away, the second fails,
+ * which is the whole point (that leak once turned one dead render test into fifteen CI failures).
+ */
 test("a dying test leaves the state dirty", () => {
   state.setIconsEnabled(false);
   state.setFindOpen(true);
@@ -26,16 +44,86 @@ test("the next test still starts from the defaults", () => {
   expect(state.terminalWidth()).toBe(80);
 });
 
-// A signal is not the only thing that survives a test. `notify` arms a timer that clears the notice
-// 1.5s later, which lands inside whichever test is running by then, so the reset has to disarm it.
+/**
+ * The theme registry and the active theme live outside `state`, so `resetState` alone would leave a
+ * dead test's registered theme and selection in place for every file after it.
+ */
+test("a dying test leaves a theme registered and selected", () => {
+  registerThemes(
+    resolveThemes({ "isolation-probe": { base: "light" } }).themes
+  );
+  setSelection("isolation-probe");
+  setAppearance("light");
+
+  expect(activeThemeName()).toBe("isolation-probe");
+});
+
+test("the next test still starts from the default theme", () => {
+  expect(themeNames()).not.toContain("isolation-probe");
+  expect(activeThemeName()).toBe("dark");
+  expect(appearance()).toBe("dark");
+});
+
+test("a dying test leaves the active built-in theme overridden", () => {
+  registerThemes(
+    resolveThemes({
+      dark: {
+        base: "light",
+        surface: { ...darkTheme.surface, base: "#123456" },
+      },
+    }).themes
+  );
+
+  expect(activeTheme().colors.surface.base).toBe("#123456");
+});
+
+test("the next test still resolves the built-in theme under that name", () => {
+  expect(activeTheme().colors.surface.base).toBe(darkTheme.surface.base);
+});
+
+test("a dying test leaves a rebind and a file association registered", () => {
+  registerKeybindings(resolveKeybindings({ "toggle-sidebar": "ctrl+e" }).set);
+  registerFileSupport(
+    resolveFileSupportConfig({
+      files: { probe: { extensions: ["probe"], syntax: "json" } },
+    }).registry
+  );
+
+  expect(comboTextsFor("toggle-sidebar")).toEqual(["ctrl+e"]);
+  expect(fileSupportForPath("a.probe").syntax).toBe("json");
+});
+
+test("the next test still starts from the default keybindings and file support", () => {
+  expect(comboTextsFor("toggle-sidebar")).not.toContain("ctrl+e");
+  expect(fileSupportForPath("a.probe").syntax).not.toBe("json");
+});
+
+let leftFixture = "";
+
+test("a dying test leaves a fixture repository on disk", () => {
+  leftFixture = createFixtureRepo("stet-sweep-probe-", { "a.txt": "a\n" });
+
+  expect(existsSync(leftFixture)).toBe(true);
+});
+
+test("the next test finds the fixture swept", () => {
+  expect(existsSync(leftFixture)).toBe(false);
+});
+
+/**
+ * A signal is not the only thing that survives a test. `notify` arms a timer that clears the notice
+ * 1.5s later, which lands inside whichever test is running by then, so the reset has to disarm it.
+ */
 test("a dying test leaves a notice timer armed", () => {
   state.notify("stale notice");
 
   expect(state.statusBarModel()).toMatchObject({ message: "stale notice" });
 });
 
-// This notice is set directly, so it carries no timer of its own to expire it. If it is gone by the
-// Time the sleep ends, the only thing that could have cleared it is the previous test's timer.
+/**
+ * This notice is set directly, so it carries no timer of its own to expire it. If it is gone by the
+ * time the sleep ends, the only thing that could have cleared it is the previous test's timer.
+ */
 test("the armed timer never fires into this test's notice", async () => {
   state.setNotice({ level: "info", text: "fresh notice" });
   await Bun.sleep(1700);
@@ -43,13 +131,16 @@ test("the armed timer never fires into this test's notice", async () => {
   expect(state.statusBarModel()).toMatchObject({ message: "fresh notice" });
 });
 
-// The picker loads its worktrees, then writes its rows and kicks a summaries refresh, all after an
-// Await. A reset landing in that window has to stop the whole chain: guarding only the refresh is
-// Not enough, because it would merely start late, capture the new epoch, and pass its own check.
+/**
+ * The picker loads its worktrees, then writes its rows and kicks a summaries refresh, all after an
+ * await. A reset landing in that window has to stop the whole chain: guarding only the refresh is
+ * not enough, because it would merely start late, capture the new epoch, and pass its own check.
+ */
 test("a worktree load in flight when a reset lands never writes into the next test", async () => {
-  // The repo has to exist before it can be cleaned up, so its creation is the one step outside the
-  // Try; everything that can fail after it (adding the peer worktree, loading, seeding) sits inside,
-  // So a setup failure still takes the fixture directories with it.
+  /**
+   * The preload sweeps the fixture repo; the `finally` is for the peer worktree beside it, which the
+   * sweep does not track, so a failure after adding it still removes it.
+   */
   const repoRoot = createFixtureRepo("stet-isolation-", {
     "README.md": "# Fixture\n",
   });
@@ -66,7 +157,6 @@ test("a worktree load in flight when a reset lands never writes into the next te
     expect(state.worktreeSummaries().size).toBe(0);
     expect(state.worktrees()).toBeUndefined();
   } finally {
-    rmSync(repoRoot, { force: true, recursive: true });
     rmSync(`${repoRoot}-peer`, { force: true, recursive: true });
   }
 }, 20_000);

@@ -200,15 +200,19 @@ try {
    * `autoFocus` is off because OpenTUI's focus-the-element-under-the-pointer on mouse-down would
    * draw the terminal cursor in a clicked renderable (a tab, say); stet drives focus through its own
    * keymap, and overlay inputs focus via their explicit `focused` prop. stet owns process shutdown
-   * (the handlers below), so the renderer installs no signal handlers of its own: its defaults only
-   * destroy, and a listener replaces a signal's default termination, so the git poll kept a
-   * destroyed stet running.
+   * (`exitOnSignals`, registered before setup so it covers it), so the renderer installs no signal
+   * handlers of its own: its defaults only destroy, and a listener replaces a signal's default
+   * termination, so the git poll kept a destroyed stet running.
    */
-  const renderer = await createCliRenderer({
+  const pendingRenderer = createCliRenderer({
     autoFocus: false,
     exitOnCtrlC: false,
     exitSignals: [],
   });
+
+  exitOnSignals(pendingRenderer);
+
+  const renderer = await pendingRenderer;
 
   const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
 
@@ -224,8 +228,6 @@ try {
       text: cause instanceof Error ? cause.message : String(cause),
     });
   };
-
-  exitOnSignals(renderer);
 
   process.on("uncaughtException", crash);
   process.on("unhandledRejection", crash);

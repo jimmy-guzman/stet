@@ -60,8 +60,9 @@ const signalChildScript = `
 import { createCliRenderer } from "@opentui/core";
 import { exitOnSignals } from ${JSON.stringify(SHUTDOWN_MODULE)};
 
-const renderer = await createCliRenderer({ exitSignals: [], exitOnCtrlC: false });
-exitOnSignals(renderer);
+const pending = createCliRenderer({ exitSignals: [], exitOnCtrlC: false });
+exitOnSignals(pending);
+const renderer = await pending;
 setInterval(() => renderer.requestRender(), 50);
 process.stderr.write("ready\\n");
 `;
@@ -88,6 +89,41 @@ test("a signal exits stet with the shell's 128 + signal number", async () => {
 
     child.kill("SIGTERM");
 
+    const outcome = await Promise.race([
+      child.exited,
+      Bun.sleep(4000).then(() => "still running"),
+    ]);
+
+    expect(outcome).toBe(143);
+    expect(child.signalCode).toBeNull();
+  } finally {
+    child.kill(9);
+  }
+}, 15_000);
+
+/**
+ * The child signals itself while `createCliRenderer` is still setting up, the window in which the
+ * renderer has taken over the terminal but has not resolved yet.
+ */
+const setupSignalChildScript = `
+import { createCliRenderer } from "@opentui/core";
+import { exitOnSignals } from ${JSON.stringify(SHUTDOWN_MODULE)};
+
+const pending = createCliRenderer({ exitSignals: [], exitOnCtrlC: false });
+exitOnSignals(pending);
+process.kill(process.pid, "SIGTERM");
+const renderer = await pending;
+setInterval(() => renderer.requestRender(), 50);
+`;
+
+test("a signal during renderer setup still exits through stet's handler", async () => {
+  const child = Bun.spawn(["bun", "-e", setupSignalChildScript], {
+    cwd: PACKAGE_DIR,
+    stderr: "ignore",
+    stdout: "ignore",
+  });
+
+  try {
     const outcome = await Promise.race([
       child.exited,
       Bun.sleep(4000).then(() => "still running"),

@@ -75,9 +75,22 @@ export const exitOnOutputFailure = async (renderer: CliRenderer) => {
  * crash. Each exits with the shell's 128 + signal number, so a script never reads a killed stet as a
  * success.
  *
- * @param renderer The renderer to tear down when a signal arrives.
+ * It takes the renderer still being created, because `createCliRenderer` enters the alt screen
+ * before it resolves: handlers registered only after it left a signal during startup to its default
+ * action, which skips every restore. A signal that arrives before setup finishes waits for it, then
+ * restores the same way; a setup that fails has already torn itself down, so it just exits.
+ *
+ * @param pending The renderer `createCliRenderer` is still setting up.
  */
-export const exitOnSignals = (renderer: CliRenderer) => {
+export const exitOnSignals = (pending: Promise<CliRenderer>) => {
+  const exitWhenReady = async (code: number) => {
+    try {
+      await exitAfterRestore(await pending, code);
+    } catch {
+      process.exit(code);
+    }
+  };
+
   for (const signal of [
     "SIGINT",
     "SIGTERM",
@@ -87,7 +100,7 @@ export const exitOnSignals = (renderer: CliRenderer) => {
     "SIGPIPE",
   ] as const) {
     process.on(signal, () => {
-      void exitAfterRestore(renderer, 128 + constants.signals[signal]);
+      void exitWhenReady(128 + constants.signals[signal]);
     });
   }
 };

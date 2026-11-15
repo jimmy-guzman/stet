@@ -1,4 +1,4 @@
-import type { FileDiffMetadata, HunksRenderResult } from "@pierre/diffs";
+import type { columnCells, FileDiffMetadata, HunkData } from "@pierre/diffs";
 import { Predicate } from "effect";
 
 import { flattenLineSpans } from "./hast";
@@ -57,7 +57,10 @@ export const gapIndexOf = (key: string) => Number(key.slice(GAP_PREFIX.length));
 const unmodifiedLabel = (count: number) =>
   count === 1 ? "1 unmodified line" : `${count} unmodified lines`;
 
-type AstNode = NonNullable<HunksRenderResult["unifiedContentAST"]>[number];
+/** The unified column's row cells (`columnCells(result.columns.unified).content`), one per row. */
+export type UnifiedNodes = ReturnType<typeof columnCells>["content"];
+
+type AstNode = UnifiedNodes[number];
 
 type Element = Extract<AstNode, { type: "element" }>;
 
@@ -80,7 +83,7 @@ const gapIndexFor = (meta: FileDiffMetadata, newLine: number) => {
   return index === -1 ? meta.hunks.length : index;
 };
 
-const separatorRow = (data: HunksRenderResult["hunkData"][number]): DiffRow =>
+const separatorRow = (data: HunkData): DiffRow =>
   data.expandable === undefined
     ? { glyph: "⋯", kind: "separator", text: unmodifiedLabel(data.lines) }
     : {
@@ -127,7 +130,8 @@ const lineSides = (props: Element["properties"]) => {
  */
 export const rowsFromHunks = (
   meta: FileDiffMetadata,
-  result: Pick<HunksRenderResult, "hunkData" | "unifiedContentAST">,
+  nodes: UnifiedNodes,
+  hunkData: HunkData[],
   expanded: ReadonlySet<string>,
   cutoff: number | undefined
 ) => {
@@ -137,7 +141,7 @@ export const rowsFromHunks = (
   let openGap: Extract<DiffRow, { kind: "marker" }> | undefined;
   let reachedCap = false;
 
-  for (const node of result.unifiedContentAST ?? []) {
+  for (const node of nodes) {
     if (node.type !== "element") {
       continue;
     }
@@ -149,7 +153,7 @@ export const rowsFromHunks = (
         break;
       }
 
-      const data = result.hunkData[separatorOrdinal];
+      const data = hunkData[separatorOrdinal];
       separatorOrdinal += 1;
       openGap = undefined;
 
@@ -222,11 +226,8 @@ const isBodyLine = (node: AstNode): node is Element =>
  * (`undefined` when the diff fits) and how many body lines it hides. Measured once, without gap
  * expansion, so the cap is a fixed point in the file.
  */
-export const capCutoff = (
-  result: Pick<HunksRenderResult, "unifiedContentAST">,
-  maxLines: number
-) => {
-  const body = (result.unifiedContentAST ?? []).filter(isBodyLine);
+export const capCutoff = (nodes: UnifiedNodes, maxLines: number) => {
+  const body = nodes.filter(isBodyLine);
 
   return body.length > maxLines
     ? {

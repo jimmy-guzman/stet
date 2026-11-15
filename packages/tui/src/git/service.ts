@@ -7,7 +7,7 @@ import { Process } from "@/process";
 
 import { GitError } from "./errors";
 import {
-  buildFilePatch,
+  buildDiffInput,
   classifySideBytes,
   fileDiffSides,
   readWorktreeSide,
@@ -15,8 +15,7 @@ import {
 } from "./file-patch";
 import type {
   BinaryDiff,
-  DiffSides,
-  FilePatch,
+  DiffInput,
   PatchSide,
   SideContent,
 } from "./file-patch";
@@ -91,12 +90,12 @@ export class Git extends Context.Service<
       Pick<GitModel, "changed" | "changedByPath" | "scopeKey" | "branch">,
       GitError
     >;
-    /** The file's patch, plus both sides' text when it was built in-process (see `buildFilePatch`). */
+    /** Git's patch for the file, or both sides' text when it diffs in-process (see `buildDiffInput`). */
     readonly fileDiff: (
       repoRoot: string,
       scope: DiffScope,
       file: ChangedFile
-    ) => Effect.Effect<{ patch: string; sides?: DiffSides }, GitError>;
+    ) => Effect.Effect<DiffInput, GitError>;
     readonly gitDir: (repoRoot: string) => Effect.Effect<string, GitError>;
     /** The SHA HEAD points at, or `undefined` on a commitless repo (an unborn HEAD). */
     readonly headRef: (
@@ -232,7 +231,8 @@ export const GitLive = Layer.effect(
       // Repos git's pathspec-limited diff-index walks the whole index (seconds per
       // Invocation, #188), while a blob read stays O(path depth). The pathspec
       // Invocation survives only as the fallback for sides an in-process diff
-      // Can't reproduce faithfully (submodules, eol conversion, oversized files).
+      // Can't reproduce faithfully (submodules, eol conversion, oversized files)
+      // Or can't bound (a worst-case diff cost over budget).
       fileDiff: (repoRoot, scope, file) => {
         if (file.kind === "untracked") {
           return process
@@ -275,20 +275,20 @@ export const GitLive = Layer.effect(
           { concurrency: "unbounded" }
         ).pipe(
           Effect.map(([oldContent, newContent]) =>
-            buildFilePatch(file, oldContent, newContent)
+            buildDiffInput(file, oldContent, newContent)
           ),
           // A `git show` failure (submodule gitlink, ref gone mid-flight) falls
           // Back to the pathspec diff; scoped to CommandError so nothing else is
           // Swallowed into a fallback.
           Effect.catchTag("CommandError", () =>
-            Effect.succeed<FilePatch>({ kind: "fallback" })
+            Effect.succeed<DiffInput | undefined>(undefined)
           ),
           Effect.flatMap((built) =>
-            built.kind === "patch"
-              ? Effect.succeed({ patch: built.patch, sides: built.sides })
-              : pathspecDiff.pipe(
-                  Effect.map((result) => ({ patch: result.stdout }))
+            built === undefined
+              ? pathspecDiff.pipe(
+                  Effect.map((result): DiffInput => ({ patch: result.stdout }))
                 )
+              : Effect.succeed(built)
           )
         );
       },

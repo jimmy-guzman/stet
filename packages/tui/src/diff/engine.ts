@@ -1,16 +1,17 @@
 import {
+  columnCells,
   DiffHunksRenderer,
   getSharedHighlighter,
-  hydratePartialDiff,
+  parseDiffFromFile,
   parsePatchFiles,
   registerCustomTheme,
   setLanguageOverride,
 } from "@pierre/diffs";
-import type { HunkExpansionRegion } from "@pierre/diffs";
+import type { HunkExpansionRegion, HunksRenderResult } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
 
 import { fileSupportForPath } from "@/file-support/registry";
-import type { DiffSides } from "@/git/file-patch";
+import type { DiffInput } from "@/git/file-patch";
 import { activeThemeName, appearance } from "@/theme/active";
 import { syntaxThemeForName, themeForName } from "@/theme/registry";
 import { STET_SYNTAX_THEME_NAME, syntaxTheme } from "@/theme/syntax";
@@ -41,16 +42,11 @@ export interface DiffRender extends DiffLayout {
   expand: (gaps: ReadonlySet<string>) => DiffLayout;
 }
 
-export interface RenderInput {
-  patch: string;
-  full: boolean;
-  maxLines: number;
-  /**
-   * Both sides' full text, when they are faithful to `patch`. They make the diff's gaps
-   * expandable; without them (a git fallback patch) gaps render as plain separators.
-   */
-  sides?: DiffSides;
-}
+/**
+ * A diff to render. Both files' text makes the diff's gaps expandable; a patch alone (a git
+ * fallback) renders its gaps as plain separators.
+ */
+export type RenderInput = DiffInput & { full: boolean; maxLines: number };
 
 // The render theme for the active stet theme: a bundled theme id when the theme
 // Opted into one (`syntaxTheme`), else a per-name custom theme built from the
@@ -150,7 +146,7 @@ export const preloadDiffHighlighter = async () => {
   }
 };
 
-// Content fingerprint: a hash of the full patch and sides (not sampled slices, which
+// Content fingerprint: a hash of the full patch or files (not sampled slices, which
 // Could collide for a same-length edit outside the sampled windows and return a stale
 // Render) plus the render options that change output. The active render theme is
 // Part of the key so a theme switch never serves a stale-colored render.
@@ -159,9 +155,11 @@ const fingerprint = (input: RenderInput) =>
     diffThemeName(),
     input.full ? 1 : 0,
     input.maxLines,
-    Bun.hash(input.patch),
-    input.sides === undefined ? "" : Bun.hash(input.sides.oldText),
-    input.sides === undefined ? "" : Bun.hash(input.sides.newText),
+    ...("patch" in input
+      ? [Bun.hash(input.patch)]
+      : [input.files.oldFile, input.files.newFile].map((file) =>
+          file === null ? "-" : `${file.name}:${Bun.hash(file.contents)}`
+        )),
   ].join(":");
 
 /**
@@ -192,42 +190,35 @@ export const highlightSnippet = async (
   }
 };
 
-// Only a two-sided diff has gaps to fill; `new`/`deleted` are one whole-file hunk
-// And a pure rename has no hunks at all.
-const HYDRATABLE = new Set(["change", "rename-changed"]);
+// @pierre/patches for both the file diff and the changed-word marks (jsdiff output,
+// 4-40x faster), with git's three lines of context so gaps match what `git diff` elides.
+const DIFF_OPTIONS = {
+  context: 3,
+  preferredDiffLib: "@pierre/patches",
+} as const;
 
 /**
- * Parse the patch and, given both sides, hydrate it with their full contents so its gaps can be
- * expanded. The language is forced to the basename-resolved syntax because the library re-derives
- * it from `meta.name` (the full path), the fix for extensionless names in a subdirectory. `text`
- * is forced too: left unset, the library would infer a language from the extension and highlight
- * a file whose association turned syntax off.
+ * Parse git's patch, or diff both files. The language is forced to the basename-resolved syntax
+ * because the library re-derives it from `meta.name` (the full path), the fix for extensionless
+ * names in a subdirectory. `text` is forced too: left unset, the library would infer a language
+ * from the extension and highlight a file whose association turned syntax off.
  */
 const parseDiff = (input: RenderInput) => {
-  const parsed = parsePatchFiles(input.patch)[0]?.files[0];
+  const meta =
+    "patch" in input
+      ? parsePatchFiles(input.patch)[0]?.files[0]
+      : parseDiffFromFile(
+          input.files.oldFile,
+          input.files.newFile,
+          DIFF_OPTIONS,
+          // Without it a wasm failure logs over the TUI and reruns on jsdiff with no
+          // Deadline, outside the budget `buildDiffInput` checked.
+          true
+        );
 
-  if (parsed === undefined) {
-    return parsed;
-  }
-
-  const meta = setLanguageOverride(parsed, languageForPath(parsed.name));
-
-  if (input.sides === undefined || !HYDRATABLE.has(meta.type)) {
-    return meta;
-  }
-
-  try {
-    return hydratePartialDiff("clone", meta, {
-      newFile: { contents: input.sides.newText, name: meta.name },
-      oldFile: {
-        contents: input.sides.oldText,
-        name: meta.prevName ?? meta.name,
-      },
-    });
-  } catch {
-    // Sides that disagree with the patch's hunks: keep the patch-only diff.
-    return meta;
-  }
+  return meta === undefined
+    ? undefined
+    : setLanguageOverride(meta, languageForPath(meta.name));
 };
 
 // Reveal a gap whole: `fromStart`/`fromEnd` are lines from the gap's top and bottom,
@@ -251,6 +242,12 @@ const expansionMap = (gaps: ReadonlySet<string>) =>
 // Count, is what bounds a cache of large files.
 const HIGHLIGHT_UNITS_PER_CHAR = 22;
 
+/** The unified column's row cells, the shape `rowsFromHunks` reads (empty when no rows rendered). */
+const unifiedCells = (result: HunksRenderResult) =>
+  result.columns.unified === undefined
+    ? []
+    : columnCells(result.columns.unified).content;
+
 const compute = async (
   input: RenderInput
 ): Promise<{ render: DiffRender; retained: number }> => {
@@ -272,6 +269,7 @@ const compute = async (
     // Joining runs across one-character neutral gaps.
     lineDiffType: "word-alt",
     maxLineDiffLength: 5000,
+    parseDiffOptions: DIFF_OPTIONS,
     theme: themeName,
     tokenizeMaxLineLength: 5000,
   });
@@ -290,10 +288,16 @@ const compute = async (
 
   const { cutoff, hiddenLines } = input.full
     ? { cutoff: undefined, hiddenLines: 0 }
-    : capCutoff(collapsed, input.maxLines);
+    : capCutoff(unifiedCells(collapsed), input.maxLines);
 
   const layout = (result: typeof collapsed, gaps: ReadonlySet<string>) => {
-    const rows = rowsFromHunks(meta, result, gaps, cutoff);
+    const rows = rowsFromHunks(
+      meta,
+      unifiedCells(result),
+      result.hunkData,
+      gaps,
+      cutoff
+    );
 
     return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
   };
@@ -340,7 +344,7 @@ const evict = () => {
  * an empty render.
  */
 export const renderDiff = async (input: RenderInput): Promise<DiffRender> => {
-  if (input.patch === "") {
+  if ("patch" in input && input.patch === "") {
     return EMPTY;
   }
 

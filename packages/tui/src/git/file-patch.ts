@@ -303,9 +303,9 @@ const anchoredBound = (oldText: string, newText: string) => {
     tails[low] = index;
   }
 
-  const chain: (readonly [number, number])[] = [
-    [oldLines.length, newLines.length],
-  ];
+  // Walked back to front, then reversed once: `unshift` per anchor moves the whole
+  // Array each time, which made 100k unique lines take ~1s instead of ~130ms.
+  const chain: (readonly [number, number])[] = [];
 
   for (
     let index = tails.at(-1) ?? -1;
@@ -315,9 +315,12 @@ const anchoredBound = (oldText: string, newText: string) => {
     const anchor = anchors[index];
 
     if (anchor !== undefined) {
-      chain.unshift(anchor);
+      chain.push(anchor);
     }
   }
+
+  chain.reverse();
+  chain.push([oldLines.length, newLines.length]);
 
   let matched = chain.length - 1;
   let from: readonly [number, number] = [-1, -1];

@@ -199,7 +199,9 @@ const HYDRATABLE = new Set(["change", "rename-changed"]);
 /**
  * Parse the patch and, given both sides, hydrate it with their full contents so its gaps can be
  * expanded. The language is forced to the basename-resolved syntax because the library re-derives
- * it from `meta.name` (the full path), the fix for extensionless names in a subdirectory.
+ * it from `meta.name` (the full path), the fix for extensionless names in a subdirectory. `text`
+ * is forced too: left unset, the library would infer a language from the extension and highlight
+ * a file whose association turned syntax off.
  */
 const parseDiff = (input: RenderInput) => {
   const parsed = parsePatchFiles(input.patch)[0]?.files[0];
@@ -208,8 +210,7 @@ const parseDiff = (input: RenderInput) => {
     return parsed;
   }
 
-  const lang = languageForPath(parsed.name);
-  const meta = lang === "text" ? parsed : setLanguageOverride(parsed, lang);
+  const meta = setLanguageOverride(parsed, languageForPath(parsed.name));
 
   if (input.sides === undefined || !HYDRATABLE.has(meta.type)) {
     return meta;

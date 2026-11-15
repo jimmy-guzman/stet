@@ -116,9 +116,12 @@ const expectSameRows = async (
 ) => {
   const file = await changedFile(repoRoot, scope, filePath);
   const { patch } = await loadFileDiff(repoRoot, scope, file);
-  expect(await rows(patch)).toEqual(
-    await rows(pathspecDiff(repoRoot, scope, file))
-  );
+  const inProcess = await rows(patch);
+
+  // A failed render resolves to an empty one.
+  // Two failures would compare equal without this check.
+  expect(inProcess.length).toBeGreaterThan(0);
+  expect(inProcess).toEqual(await rows(pathspecDiff(repoRoot, scope, file)));
 
   return patch;
 };

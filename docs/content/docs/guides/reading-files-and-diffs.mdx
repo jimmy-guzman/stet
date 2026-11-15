@@ -9,7 +9,7 @@ stet opens every file read-only. Unchanged files show as plain source; changed f
 
 ## Read any file
 
-Open any file and read it with syntax highlighting for more than 150 languages. Unchanged files open with no diff gutters, just the source.
+Open any file and read it with syntax highlighting for [every supported language](/docs/reference/languages). Unchanged files open with no diff gutters, just the source.
 
 ![A source file open in stet with syntax highlighting and no diff gutters](/screenshots/read-only.png)
 
@@ -25,7 +25,7 @@ A terminal can't display an image, so instead of the raw bytes stet shows a card
 
 ## Fold code
 
-Press `z` in the viewer to fold the block at the caret behind a `▸ N lines folded` marker. Code folds by indentation, markdown by heading section. The same key expands a git-elided gap (`⋯ N unmodified lines`, including the stretch after the last change) to reveal its unchanged lines, highlighted like the rest of the file, and collapses it again from its `hide` marker. Click any marker to toggle it.
+Press `z` in the viewer to fold the block at the caret behind a `▸ N lines folded` marker. Code folds by indentation, markdown by heading section. The same key expands a git-elided gap (`⋯ N unmodified lines`, including the stretch after the last change) to reveal its unchanged lines, highlighted like the rest of the file, and collapses it again from its `hide` marker. Click any marker to toggle it. A gap expands only in a diff stet computes itself: when it falls back to git's own diff, for example for a file with CRLF line endings on only one side, the gap stays a plain `⋯ N unmodified lines` row.
 
 ![A diff with a function's body folded behind a "lines folded" marker, its signature still visible](/screenshots/folding.png)
 

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { languageForPath, renderDiff } from "@/diff/engine";
 import { isLineRow } from "@/diff/rows";
+import { resolveFileSupportConfig } from "@/file-support/config";
+import { registerFileSupport } from "@/file-support/registry";
 import { setSelection } from "@/theme/active";
 import { registerThemes, resolveThemes } from "@/theme/registry";
 
@@ -236,6 +238,31 @@ const addedColors = async () => {
 
   return added?.spans.map((span) => span.fg) ?? [];
 };
+
+describe("renderDiff file associations", () => {
+  test("renders plain text when a files association turns syntax off", async () => {
+    registerFileSupport(
+      resolveFileSupportConfig({
+        files: { "plain-ts": { extensions: ["ts"], syntax: false } },
+      }).registry
+    );
+
+    const render = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: patch.replaceAll("foo.ts", "plain.ts"),
+    });
+
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
+
+    expect(added?.spans.map((span) => span.text).join("")).toBe(
+      'const b = "three";'
+    );
+    expect(new Set(added?.spans.map((span) => span.fg)).size).toBe(1);
+  });
+});
 
 describe("renderDiff theme attach", () => {
   test("colors a diff under a second token theme", async () => {

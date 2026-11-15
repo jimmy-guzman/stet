@@ -1,19 +1,17 @@
 import {
-  areLanguagesAttached,
-  areThemesAttached,
   getSharedHighlighter,
   parsePatchFiles,
   registerCustomTheme,
   renderDiffWithHighlighter,
   setLanguageOverride,
 } from "@pierre/diffs";
-import type { DiffsHighlighter, RenderDiffOptions } from "@pierre/diffs";
+import type { RenderDiffOptions } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
 
 import { fileSupportForPath } from "@/file-support/registry";
 import { activeThemeName, appearance } from "@/theme/active";
 import { syntaxThemeForName, themeForName } from "@/theme/registry";
-import { shikiTheme, STET_SHIKI_THEME_NAME } from "@/theme/shiki";
+import { STET_SYNTAX_THEME_NAME, syntaxTheme } from "@/theme/syntax";
 
 import { flattenLineSpans } from "./hast";
 import type { RenderSpan } from "./hast";
@@ -33,7 +31,7 @@ export interface RenderInput {
   maxLines: number;
 }
 
-// The render theme for the active stet theme: a bundled Shiki id when the theme
+// The render theme for the active stet theme: a bundled theme id when the theme
 // Opted into one (`syntaxTheme`), else a per-name custom theme built from the
 // Theme's own `syntax` tokens. Per-name (not one shared "stet") so switching
 // Themes attaches another theme rather than mutating the attached one, which is
@@ -42,7 +40,7 @@ export interface RenderInput {
 const diffThemeName = () => {
   const name = activeThemeName();
 
-  return syntaxThemeForName(name) ?? `${STET_SHIKI_THEME_NAME}:${name}`;
+  return syntaxThemeForName(name) ?? `${STET_SYNTAX_THEME_NAME}:${name}`;
 };
 
 /**
@@ -52,63 +50,36 @@ const diffThemeName = () => {
 const registeredThemes = new Set<string>();
 
 /**
- * Attach the active render theme to the shared highlighter, returning its name. Stet's token themes
- * register as TextMate loaders, so `@pierre/diffs` builds its own theme shape from them exactly as
- * it does for a bundled Shiki theme, and both kinds attach through the same highlighter call. An
- * attach failure leaves the render to fall back to plain text. Called before every render so a
+ * The shared highlighter with the active render theme attached, plus that theme's name. The
+ * `highlights` backend bundles every lexer, so there is no grammar to load or warm: the library
+ * memoizes the instance and dedupes concurrent theme resolution. Called before every render so a
  * theme switch attaches on demand.
  */
-const ensureDiffTheme = async () => {
+const highlighter = async () => {
   const name = activeThemeName();
   const themeName = diffThemeName();
-
-  await highlighter();
-
-  if (areThemesAttached(themeName)) {
-    return themeName;
-  }
 
   if (
     syntaxThemeForName(name) === undefined &&
     !registeredThemes.has(themeName)
   ) {
     const theme = Promise.resolve({
-      ...shikiTheme(themeForName(name), appearance()),
+      ...syntaxTheme(themeForName(name), appearance()),
       name: themeName,
     });
 
     registeredThemes.add(themeName);
-    registerCustomTheme(themeName, async () => await theme);
+    registerCustomTheme(themeName, async () => await theme, "zed");
   }
 
-  try {
-    await getSharedHighlighter({
-      langs: [],
-      preferredHighlighter: "shiki-wasm",
-      themes: [themeName],
-    });
-  } catch {
-    // Attach failed; the render falls back to plain text.
-  }
+  const hl = await getSharedHighlighter({
+    langs: [],
+    preferredHighlighter: "highlights",
+    themes: [themeName],
+  });
 
-  return themeName;
+  return { hl, themeName };
 };
-
-// Languages warmed into the shared highlighter at startup so the common cases
-// Render without paying the one-time grammar compile. Anything outside this set
-// Is still highlighted: `ensureLanguages` attaches its grammar on demand below.
-const LANGS = [
-  "typescript",
-  "tsx",
-  "javascript",
-  "jsx",
-  "json",
-  "jsonc",
-  "yaml",
-  "markdown",
-  "bash",
-  "zig",
-];
 
 // `theme` is supplied per render (the active theme can change), so it is omitted
 // Here and spread in at the call site.
@@ -153,35 +124,13 @@ const sizeOf = (render: DiffRender) => {
   return units * 2;
 };
 
-let highlighterPromise: Promise<DiffsHighlighter> | undefined;
-
-const highlighter = async () => {
-  // The WASM (oniguruma) engine is ~10x faster than the default JS regex engine
-  // For TypeScript-family grammars (cold ~125ms vs ~1300ms, warm ~5ms vs ~30ms).
-  // The highlight call is synchronous and would otherwise jank the event loop.
-  // Created once with no theme; ensureDiffTheme attaches each render theme.
-  highlighterPromise ??= getSharedHighlighter({
-    langs: LANGS,
-    preferredHighlighter: "shiki-wasm",
-    themes: [],
-  });
-
-  return await highlighterPromise;
-};
-
-// A tiny TS patch used to trigger the one-time cold grammar compile at startup
-// Rather than on the first real diff (the compile is synchronous and ~125ms).
-const WARM_PATCH =
-  "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -0,0 +1 @@\n+const warm = 1\n";
-
 /**
- * Warm the shared Shiki highlighter (and the TS grammar) so the first diff renders without paying
- * the one-time load/compile. Called at startup (and in test setup); never rejects.
+ * Initialize the shared highlighter (its WebAssembly module and the active theme) so the first diff
+ * does not pay for it. Called at startup (and in test setup); never rejects.
  */
 export const preloadDiffHighlighter = async () => {
   try {
-    await ensureDiffTheme();
-    await renderDiff({ full: false, maxLines: 10, patch: WARM_PATCH });
+    await highlighter();
   } catch {
     // Best-effort warm-up.
   }
@@ -218,64 +167,12 @@ export const structureDiff = (input: RenderInput): DiffRender => {
   return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
 };
 
-// Grammars not in LANGS are attached on demand: the file's language is inferred
-// From its name (and its pre-rename name) and loaded into the shared highlighter
-// Before the synchronous render below, so any language Shiki bundles highlights
-// Without preloading every grammar. Each language's attachment is memoized by
-// `attaching` so concurrent renders of the same new language await one shared
-// Promise instead of racing it (a render that skipped the wait would cache
-// Plain-text spans before the grammar finished attaching). A successful attach
-// Drops its entry (`areLanguagesAttached` dedupes thereafter), so the map only
-// Retains failed extensions, which keeps a bogus extension from re-resolving on
-// Every render without growing one entry per language for the process lifetime.
-const attaching = new Map<string, Promise<unknown>>();
-
-const attach = async (lang: string) => {
-  const existing = attaching.get(lang);
-
-  if (existing !== undefined) {
-    return await existing;
-  }
-
-  const promise = getSharedHighlighter({
-    langs: [lang],
-    preferredHighlighter: "shiki-wasm",
-    themes: [diffThemeName()],
-  })
-    .then(() => attaching.delete(lang))
-    .catch(() => {
-      // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
-      // Keep the settled entry so the failed extension is not re-resolved every render.
-    });
-
-  attaching.set(lang, promise);
-
-  return await promise;
-};
-
 /**
- * The Shiki language a file highlights as, shared by the diff and any surface that renders code
+ * The syntax language a file highlights as, shared by the diff and any surface that renders code
  * from that file (search results), so their colors agree.
  */
 export const languageForPath = (path: string) =>
   fileSupportForPath(path).syntax;
-
-const ensureLanguages = async (meta: { name: string; prevName?: string }) => {
-  const names =
-    meta.prevName === undefined ? [meta.name] : [meta.name, meta.prevName];
-
-  const pending = new Set(names.map(languageForPath)).difference(
-    new Set(["text"])
-  );
-
-  await Promise.all(
-    pending
-      .values()
-      .filter((lang) => !areLanguagesAttached(lang))
-      .map(attach)
-      .toArray()
-  );
-};
 
 /**
  * Highlight a standalone code snippet (a search excerpt) into per-line spans, reusing the diff's
@@ -287,13 +184,7 @@ export const highlightSnippet = async (
   lang: string
 ): Promise<RenderSpan[][]> => {
   try {
-    const themeName = await ensureDiffTheme();
-    const hl = await highlighter();
-
-    if (!areLanguagesAttached(lang)) {
-      await attach(lang);
-    }
-
+    const { hl, themeName } = await highlighter();
     const { tokens } = hl.codeToTokens(code, { lang, theme: themeName });
 
     return tokens.map((line) =>
@@ -311,16 +202,13 @@ const compute = async (input: RenderInput): Promise<DiffRender> => {
     return EMPTY;
   }
 
-  const themeName = await ensureDiffTheme();
-  const hl = await highlighter();
-  await ensureLanguages(meta);
-
   let addSpans: RenderSpan[][] = [];
   let delSpans: RenderSpan[][] = [];
 
   try {
+    const { hl, themeName } = await highlighter();
     // The library re-derives the language from `meta.name` (the full path) internally,
-    // So force the basename-resolved grammar; a no-op for extension files that already
+    // So force the basename-resolved syntax; a no-op for extension files that already
     // Match, the fix for extensionless names in a subdirectory.
     const lang = languageForPath(meta.name);
     const target = lang === "text" ? meta : setLanguageOverride(meta, lang);

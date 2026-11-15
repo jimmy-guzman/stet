@@ -18,7 +18,7 @@ Stet is the proofreader's mark for "let it stand": strike a word out, add dots b
 
 - Shows the full repo tree, including tracked files and untracked files that are not ignored by git.
 - Marks changed files in place, with staged, unstaged, mixed, and untracked states.
-- Opens unchanged files read-only, with syntax highlighting for any language Shiki supports.
+- Opens unchanged files read-only, with syntax highlighting for more than 150 languages.
 - Opens changed files as diffs, with a toggle for the full file.
 - Shows an image or binary file as a metadata card (type, dimensions, size) instead of raw bytes, since a terminal can't render the pixels, and opens it in the OS default app with `O`.
 - Finds text within the open file, and searches file contents across the repo, scoped to the changes or the whole tree.

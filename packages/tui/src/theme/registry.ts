@@ -1,5 +1,5 @@
+import { themes } from "@pierre/highlights/themes/loader";
 import { Predicate, Result, Schema } from "effect";
-import { bundledThemesInfo } from "shiki/themes";
 import { createSignal } from "solid-js";
 
 import { darkTheme } from "./dark";
@@ -51,7 +51,7 @@ const readRegistry = () => {
 
 const bumpRegistry = () => setRegistryVersion((version) => version + 1);
 
-const bundledThemeIds = new Set(bundledThemesInfo.map((theme) => theme.id));
+const bundledThemeIds = new Set(Object.keys(themes));
 
 export const themeForName = (name: string): Theme =>
   readRegistry().get(name)?.tokens ?? darkTheme;
@@ -245,8 +245,8 @@ export const resolveThemes = (raw: Schema.JsonObject): ResolvedThemes => {
   return { issues, themes: resolved };
 };
 
-export const registerThemes = (themes: Map<string, RegisteredTheme>) => {
-  for (const [name, theme] of themes) {
+export const registerThemes = (resolved: Map<string, RegisteredTheme>) => {
+  for (const [name, theme] of resolved) {
     registry.set(name, theme);
   }
 

@@ -17,13 +17,13 @@ Language support is layered. Named file associations select syntax and icons ind
 | CSS                     | yes          | indent     |
 | GraphQL                 | yes          | indent     |
 | Markdown                | yes          | by heading |
-| 200+ others             | yes          | indent     |
+| 150+ others             | yes          | indent     |
 
 ## Syntax highlighting
 
-[Shiki](https://shiki.style/) bundles grammars for more than 200 languages. stet picks the grammar from the file's name, including exact names such as `Dockerfile`, and loads it on demand. The diff, full-file view, and search results share the same highlighter and theme. An unrecognized file type falls back to plain text.
+stet highlights with [`@pierre/highlights`](https://diffs.com/highlights), which bundles lexers for more than 150 languages. stet picks the language from the file's name, including exact names such as `Dockerfile`. The diff, full-file view, and search results share the same highlighter and theme. An unrecognized file type falls back to plain text.
 
-Config dotfiles carry no extension to pick a grammar from, so they resolve by name: `.npmrc` highlights as INI and `.prettierrc` as JSONC, so a comment in it reads as a comment. Their extension variants, such as `.prettierrc.json` and `.prettierrc.yaml`, already resolve on the extension.
+Config dotfiles carry no extension to pick a language from, so they resolve by name: `.npmrc` highlights as INI and `.prettierrc` as JSONC, so a comment in it reads as a comment. Their extension variants, such as `.prettierrc.json` and `.prettierrc.yaml`, already resolve on the extension.
 
 ## Folding
 

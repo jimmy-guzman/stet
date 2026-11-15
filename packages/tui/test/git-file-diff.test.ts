@@ -6,6 +6,7 @@ import path from "node:path";
 import type { DiffScope } from "@/cli";
 import { renderDiff } from "@/diff/engine";
 import type { NavigableLine } from "@/diff/rows";
+import type { DiffInput } from "@/git/file-patch";
 import { diffArgs, untrackedDiffArgs } from "@/git/model";
 import type { ChangedFile } from "@/git/model";
 import { stripGitEnv } from "@/utils/env";
@@ -85,8 +86,12 @@ const pathspecDiff = (
   }
 };
 
-const rows = async (patch: string): Promise<NavigableLine[]> => {
-  const { navigable } = await renderDiff({ full: true, maxLines: 4000, patch });
+const rows = async (input: DiffInput): Promise<NavigableLine[]> => {
+  const { navigable } = await renderDiff({
+    full: true,
+    maxLines: 4000,
+    ...input,
+  });
 
   return navigable;
 };
@@ -108,22 +113,24 @@ const changedFile = async (
 
 // The in-process fileDiff and git's own pathspec diff must render identical rows.
 // Row equality (not patch bytes) tolerates legitimate equal-cost hunk-placement
-// Drift between jsdiff's Myers and git's xdiff.
+// Drift between @pierre/patches' Myers and git's xdiff.
 const expectSameRows = async (
   repoRoot: string,
   scope: DiffScope,
   filePath: string
 ) => {
   const file = await changedFile(repoRoot, scope, filePath);
-  const { patch } = await loadFileDiff(repoRoot, scope, file);
-  const inProcess = await rows(patch);
+  const input = await loadFileDiff(repoRoot, scope, file);
+  const inProcess = await rows(input);
 
   // A failed render resolves to an empty one.
   // Two failures would compare equal without this check.
   expect(inProcess.length).toBeGreaterThan(0);
-  expect(inProcess).toEqual(await rows(pathspecDiff(repoRoot, scope, file)));
+  expect(inProcess).toEqual(
+    await rows({ patch: pathspecDiff(repoRoot, scope, file) })
+  );
 
-  return patch;
+  return input;
 };
 
 const head = (repoRoot: string) =>
@@ -172,9 +179,12 @@ describe("in-process fileDiff matches git", () => {
     writeFileSync(path.join(repoRoot, "src/a.ts"), "one\nSTAGED\nWORKTREE\n");
 
     const scope: DiffScope = { kind: "staged", ref: "HEAD" };
-    const inProcess = await expectSameRows(repoRoot, scope, "src/a.ts");
-    expect(inProcess).toContain("+STAGED");
-    expect(inProcess).not.toContain("WORKTREE");
+    const input = await expectSameRows(repoRoot, scope, "src/a.ts");
+    const rendered = await rows(input);
+    const contents = rendered.map((line) => line.content);
+
+    expect(contents).toContain("STAGED");
+    expect(contents).not.toContain("WORKTREE");
   });
 
   test("added file, staged scope", async () => {
@@ -277,7 +287,7 @@ describe("in-process fileDiff matches git", () => {
     const file = await changedFile(repoRoot, scope, "a.txt");
     const diff = await loadFileDiff(repoRoot, scope, file);
 
-    expect(diff.sides).toBeUndefined();
+    expect("patch" in diff).toBe(true);
 
     const { navigable } = await renderDiff({
       full: true,
@@ -334,9 +344,7 @@ describe("in-process fileDiff matches git", () => {
     const file = await changedFile(repoRoot, scope, "img.bin");
     expect(file.binary).toBe(true);
 
-    const { patch } = await loadFileDiff(repoRoot, scope, file);
-
-    expect(await rows(patch)).toEqual([]);
+    expect(await rows(await loadFileDiff(repoRoot, scope, file))).toEqual([]);
   });
 
   test("last-commit scope diffs the two committed trees", async () => {

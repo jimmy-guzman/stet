@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
+import { createTwoFilesPatch } from "@pierre/patches";
+
 import { renderDiff } from "@/diff/engine";
 import type { DiffRow } from "@/diff/rows";
-import { buildFilePatch } from "@/git/file-patch";
+import { buildDiffInput } from "@/git/file-patch";
 import type { ChangedFile } from "@/git/model";
 
 const modified: ChangedFile = {
@@ -22,18 +24,31 @@ const OLD = `${Array.from({ length: 30 }, (_, i) => `const a${i + 1} = ${i + 1};
 const NEW = OLD.replace("const a11 = 11;", "const a11 = 110;");
 
 const built = (oldText: string, newText: string) => {
-  const result = buildFilePatch(
+  const result = buildDiffInput(
     modified,
     { kind: "text", text: oldText },
     { kind: "text", text: newText }
   );
 
-  if (result.kind !== "patch") {
-    throw new Error("expected an in-process patch");
+  if (result === undefined || !("files" in result)) {
+    throw new Error("expected an in-process diff");
   }
 
   return result;
 };
+
+// A unified patch with no files beside it, the shape git's fallback hands the engine.
+const patchOnly = (oldText: string, newText: string) => ({
+  patch: createTwoFilesPatch(
+    "a/x.ts",
+    "b/x.ts",
+    oldText,
+    newText,
+    undefined,
+    undefined,
+    { context: 3 }
+  ),
+});
 
 const describeRow = (row: DiffRow) => {
   if (row.kind === "line") {
@@ -49,8 +64,8 @@ const describeRow = (row: DiffRow) => {
 
 describe("diff rows", () => {
   test("emits unified rows with deletions before additions and tracked line numbers", async () => {
-    const { patch } = built(OLD, NEW);
-    const render = await renderDiff({ full: false, maxLines: 1600, patch });
+    const input = patchOnly(OLD, NEW);
+    const render = await renderDiff({ full: false, maxLines: 1600, ...input });
 
     expect(render.hiddenLines).toBe(0);
     expect(render.rows.map(describeRow)).toEqual([
@@ -67,12 +82,12 @@ describe("diff rows", () => {
   });
 
   test("a patch-only diff singularizes a one-line gap's label", async () => {
-    const { patch } = built(
+    const input = patchOnly(
       OLD,
       OLD.replace("const a5 = 5;", "const a5 = 50;")
     );
 
-    const render = await renderDiff({ full: false, maxLines: 1600, patch });
+    const render = await renderDiff({ full: false, maxLines: 1600, ...input });
 
     expect(render.rows[0]).toEqual({
       glyph: "⋯",
@@ -82,13 +97,12 @@ describe("diff rows", () => {
   });
 
   test("with both sides, every gap (the trailing one too) is a collapsed marker keyed by the hunk it precedes", async () => {
-    const { patch, sides } = built(OLD, NEW);
+    const input = built(OLD, NEW);
 
     const render = await renderDiff({
       full: false,
       maxLines: 1600,
-      patch,
-      sides,
+      ...input,
     });
 
     expect(render.rows.map(describeRow)).toEqual([
@@ -106,13 +120,12 @@ describe("diff rows", () => {
   });
 
   test("expanding a gap reveals its lines highlighted behind a hide marker, with contiguous navIndex", async () => {
-    const { patch, sides } = built(OLD, NEW);
+    const input = built(OLD, NEW);
 
     const render = await renderDiff({
       full: false,
       maxLines: 1600,
-      patch,
-      sides,
+      ...input,
     });
 
     const layout = render.expand(new Set(["gap:0"]));
@@ -133,24 +146,20 @@ describe("diff rows", () => {
   });
 
   test("emits no gap when the hunk starts at line 1", async () => {
-    const { patch, sides } = built(
-      OLD,
-      OLD.replace("const a1 = 1;", "const a1 = 10;")
-    );
+    const input = built(OLD, OLD.replace("const a1 = 1;", "const a1 = 10;"));
 
     const render = await renderDiff({
       full: false,
       maxLines: 1600,
-      patch,
-      sides,
+      ...input,
     });
 
     expect(render.rows[0]?.kind).toBe("line");
   });
 
   test("marks a missing trailing newline with git's own row", async () => {
-    const { patch } = built(OLD, NEW.trimEnd());
-    const render = await renderDiff({ full: false, maxLines: 1600, patch });
+    const input = patchOnly(OLD, NEW.trimEnd());
+    const render = await renderDiff({ full: false, maxLines: 1600, ...input });
 
     expect(render.rows.at(-1)).toEqual({
       glyph: "\\",
@@ -160,9 +169,9 @@ describe("diff rows", () => {
   });
 
   test("caps body lines at maxLines and counts the hidden rest, ignoring the cap when full", async () => {
-    const { patch, sides } = built(OLD, NEW);
+    const input = built(OLD, NEW);
 
-    const capped = await renderDiff({ full: false, maxLines: 3, patch, sides });
+    const capped = await renderDiff({ full: false, maxLines: 3, ...input });
 
     expect(capped.hiddenLines).toBe(5);
     expect(capped.navigable).toHaveLength(3);
@@ -174,15 +183,15 @@ describe("diff rows", () => {
       expanded.navigable.map((line) => line.newLine ?? line.oldLine)
     ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
-    const full = await renderDiff({ full: true, maxLines: 3, patch, sides });
+    const full = await renderDiff({ full: true, maxLines: 3, ...input });
 
     expect(full.hiddenLines).toBe(0);
     expect(full.navigable).toHaveLength(8);
   });
 
   test("marks the changed words of a paired removed/added line, and nothing on context lines", async () => {
-    const { patch } = built(OLD, NEW);
-    const render = await renderDiff({ full: false, maxLines: 1600, patch });
+    const input = patchOnly(OLD, NEW);
+    const render = await renderDiff({ full: false, maxLines: 1600, ...input });
 
     const changedText = (type: string) =>
       render.rows
@@ -205,8 +214,8 @@ describe("diff rows", () => {
       "const a25 = 250;"
     );
 
-    const { patch, sides } = built(OLD, edited);
-    const capped = await renderDiff({ full: false, maxLines: 8, patch, sides });
+    const input = built(OLD, edited);
+    const capped = await renderDiff({ full: false, maxLines: 8, ...input });
 
     expect(capped.hiddenLines).toBe(8);
     expect(capped.rows.at(-1)?.kind).toBe("line");
@@ -215,8 +224,8 @@ describe("diff rows", () => {
   test("keeps the cap line's own no-newline row", async () => {
     // The old side's last line `c` has no trailing newline.
     // It is the third body line, so a cap of three ends on it.
-    const { patch, sides } = built("a\nb\nc", "a\nb\nc\nd\ne\n");
-    const capped = await renderDiff({ full: false, maxLines: 3, patch, sides });
+    const input = built("a\nb\nc", "a\nb\nc\nd\ne\n");
+    const capped = await renderDiff({ full: false, maxLines: 3, ...input });
 
     expect(capped.rows.map(describeRow)).toEqual([
       "context:1/1",

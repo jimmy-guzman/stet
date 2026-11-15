@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { Effect, Layer } from "effect";
 
+import { renderDiff } from "@/diff/engine";
 import { Git, GitLive } from "@/git/service";
 import { ProcessLive } from "@/process";
 import { stripGitEnv } from "@/utils/env";
@@ -123,9 +124,15 @@ test("a SHA-256 root commit reports no parent and diffs against the empty tree",
 
   expect(added.kind).toBe("added");
 
-  const { patch } = await loadFileDiff(repo, scope, added);
+  const { navigable } = await renderDiff({
+    full: true,
+    maxLines: 4000,
+    ...(await loadFileDiff(repo, scope, added)),
+  });
 
-  expect(patch).toContain("+one");
+  expect(navigable.map((line) => `${line.type}:${line.content}`)).toEqual([
+    "add:one",
+  ]);
 });
 
 // The empty tree is resolved once at startup and never again, which is only sound because every

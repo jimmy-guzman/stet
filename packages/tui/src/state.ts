@@ -47,7 +47,7 @@ import {
   recordActivity,
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
-import type { BinaryDiff, DiffSides } from "./git/file-patch";
+import type { BinaryDiff, DiffInput } from "./git/file-patch";
 import type { Commit } from "./git/log";
 import { changedPathsDiffer, mergeChanged } from "./git/model";
 import type { ChangedFile, GitModel } from "./git/model";
@@ -182,8 +182,7 @@ interface DiffView {
 }
 
 interface DiffBase {
-  diff: string;
-  sides?: DiffSides;
+  diff: DiffInput;
   fileContent: FileContent | undefined;
   showFileContent: boolean;
   binary?: BinaryDiff;
@@ -235,8 +234,7 @@ const loadDiffView = (src: {
           engine.render({
             full: result.showFileContent || src.full,
             maxLines: DIFF_MAX_LINES,
-            patch: result.diff,
-            sides: result.sides,
+            ...result.diff,
           })
         ).pipe(
           Effect.map((render): DiffView => ({
@@ -263,10 +261,12 @@ const loadDiffView = (src: {
         file.content(src.model.repoRoot, src.path, { full: src.full, gitSpec })
       ).pipe(
         Effect.map((content): DiffBase => ({
-          diff:
-            content.kind === "text"
-              ? contentToContextPatch(src.path, content.content)
-              : "",
+          diff: {
+            patch:
+              content.kind === "text"
+                ? contentToContextPatch(src.path, content.content)
+                : "",
+          },
           fileContent: content,
           showFileContent: true,
         }))
@@ -279,7 +279,7 @@ const loadDiffView = (src: {
   if (file === undefined) {
     return toView(
       Effect.succeed<DiffBase>({
-        diff: "",
+        diff: { patch: "" },
         fileContent: undefined,
         showFileContent: false,
       })
@@ -295,7 +295,7 @@ const loadDiffView = (src: {
       ).pipe(
         Effect.map((binary): DiffBase => ({
           binary,
-          diff: "",
+          diff: { patch: "" },
           fileContent: undefined,
           showFileContent: false,
         })),
@@ -305,7 +305,7 @@ const loadDiffView = (src: {
         Effect.catchTag("GitError", () =>
           Effect.succeed<DiffBase>({
             binary: {},
-            diff: "",
+            diff: { patch: "" },
             fileContent: undefined,
             showFileContent: false,
           })
@@ -316,15 +316,14 @@ const loadDiffView = (src: {
 
   return toView(
     Git.use((git) => git.fileDiff(src.model.repoRoot, src.scope, file)).pipe(
-      Effect.map(({ patch, sides }): DiffBase => ({
-        diff: patch,
+      Effect.map((diff): DiffBase => ({
+        diff,
         fileContent: undefined,
         showFileContent: false,
-        sides,
       })),
       Effect.catch(() =>
         Effect.succeed<DiffBase>({
-          diff: "",
+          diff: { patch: "" },
           fileContent: undefined,
           showFileContent: false,
         })

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { renderDiff } from "@/diff/engine";
+import type { DiffInput } from "@/git/file-patch";
 import {
   changedPathsDiffer,
   diffArgs,
@@ -25,6 +27,21 @@ import {
   loadRecentCommits,
   runGit,
 } from "../test/helpers";
+
+/** A rendered diff's changed lines, `+`/`-` prefixed the way a patch spells them. */
+const changedLines = async (input: DiffInput) => {
+  const { navigable } = await renderDiff({
+    full: true,
+    maxLines: 4000,
+    ...input,
+  });
+
+  return navigable
+    .values()
+    .filter((line) => line.type !== "context")
+    .map((line) => `${line.type === "add" ? "+" : "-"}${line.content}`)
+    .toArray();
+};
 
 const file = (
   filePath: string,
@@ -375,13 +392,15 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("unicode file missing from model");
       }
 
-      const { patch: diff } = await loadFileDiff(
-        loaded.repoRoot,
-        { kind: "all", ref: "HEAD" },
-        changed
-      );
-
-      expect(diff).toContain("+const a = 2");
+      expect(
+        await changedLines(
+          await loadFileDiff(
+            loaded.repoRoot,
+            { kind: "all", ref: "HEAD" },
+            changed
+          )
+        )
+      ).toEqual(["-const a = 1", "+const a = 2"]);
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
     }
@@ -395,7 +414,9 @@ describe("loadModel in a fixture repo", () => {
     try {
       runGit(repoRoot, ["config", "diff.noprefix", "true"]);
       runGit(repoRoot, ["config", "diff.mnemonicPrefix", "true"]);
-      writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
+      // One-sided CRLF sends the file to git's own pathspec diff, the path the
+      // Prefix flags protect.
+      writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\r\n");
 
       const scope = { kind: "all", ref: "HEAD" } as const;
       const loaded = await loadModel(repoRoot, scope);
@@ -405,14 +426,14 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("changed file missing from model");
       }
 
-      const { patch: diff } = await loadFileDiff(
-        loaded.repoRoot,
-        scope,
-        changed
-      );
+      const diff = await loadFileDiff(loaded.repoRoot, scope, changed);
 
-      expect(diff).toContain("--- a/src/a.ts");
-      expect(diff).toContain("+++ b/src/a.ts");
+      if (!("patch" in diff)) {
+        throw new Error("expected git's fallback patch");
+      }
+
+      expect(diff.patch).toContain("--- a/src/a.ts");
+      expect(diff.patch).toContain("+++ b/src/a.ts");
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
     }
@@ -448,18 +469,9 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("renamed file missing from model");
       }
 
-      const { patch: diff } = await loadFileDiff(
-        loaded.repoRoot,
-        scope,
-        renamed
-      );
-
-      const addedLines = diff
-        .split("\n")
-        .filter((line) => line.startsWith("+") && !line.startsWith("+++"));
-
-      expect(diff).toContain("rename from src/old.ts");
-      expect(addedLines).toEqual(["+const added = true"]);
+      expect(
+        await changedLines(await loadFileDiff(loaded.repoRoot, scope, renamed))
+      ).toEqual(["+const added = true"]);
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
     }
@@ -503,8 +515,9 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("b.txt missing from the commit model");
       }
 
-      const { patch: diff } = await loadFileDiff(loaded.repoRoot, scope, added);
-      expect(diff).toContain("+two");
+      expect(
+        await changedLines(await loadFileDiff(loaded.repoRoot, scope, added))
+      ).toEqual(["+two"]);
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
     }

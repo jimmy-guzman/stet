@@ -23,7 +23,18 @@ export type SideContent =
   | { kind: "too-large" }
   | { kind: "missing" };
 
-export type FilePatch = { kind: "patch"; patch: string } | { kind: "fallback" };
+/**
+ * Both sides' full text, carried beside a patch only when they are faithful to it, so the diff
+ * engine can fill its gaps from them (`hydratePartialDiff` reads each line by its hunk number).
+ */
+export interface DiffSides {
+  oldText: string;
+  newText: string;
+}
+
+export type FilePatch =
+  | { kind: "patch"; patch: string; sides?: DiffSides }
+  | { kind: "fallback"; sides?: DiffSides };
 
 /** A binary side's size and (for a recognized image) pixel dimensions, for the viewer placeholder. */
 export interface SideMeta {
@@ -151,7 +162,10 @@ export const readWorktreeSide = async (
  * eol-converting the worktree before diffing, so raw bytes would paint a whole-file rewrite), or
  * zero hunks against non-zero numstat counts (an unmodeled content filter). Binary sides yield an
  * empty patch: the render is a model-driven placeholder either way, same as git's `Binary files
- * differ` line.
+ * differ` line. The sides ride along wherever they still match git's line numbering: a timeout
+ * changes nothing about the bytes, and a one-sided CRLF normalized to LF keeps every line's number
+ * and visible text whether or not git converted it. A content filter can renumber lines, so it
+ * carries none.
  */
 export const buildFilePatch = (
   file: ChangedFile,
@@ -168,12 +182,20 @@ export const buildFilePatch = (
 
   const created = file.kind === "added" || file.kind === "untracked";
 
+  const sides = { newText: newContent.text, oldText: oldContent.text };
+
   if (
     !created &&
     file.kind !== "deleted" &&
     oldContent.text.includes("\r\n") !== newContent.text.includes("\r\n")
   ) {
-    return { kind: "fallback" };
+    return {
+      kind: "fallback",
+      sides: {
+        newText: newContent.text.replaceAll("\r\n", "\n"),
+        oldText: oldContent.text.replaceAll("\r\n", "\n"),
+      },
+    };
   }
 
   const patch = structuredPatch(
@@ -187,7 +209,7 @@ export const buildFilePatch = (
   );
 
   if (patch === undefined) {
-    return { kind: "fallback" };
+    return { kind: "fallback", sides };
   }
 
   if (patch.hunks.length === 0 && file.additions + file.deletions > 0) {
@@ -203,5 +225,6 @@ export const buildFilePatch = (
       isGit: true,
       isRename: file.oldPath !== undefined,
     }),
+    sides,
   };
 };

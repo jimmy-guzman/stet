@@ -1,34 +1,50 @@
 import {
+  DiffHunksRenderer,
   getSharedHighlighter,
+  hydratePartialDiff,
   parsePatchFiles,
   registerCustomTheme,
-  renderDiffWithHighlighter,
   setLanguageOverride,
 } from "@pierre/diffs";
-import type { RenderDiffOptions } from "@pierre/diffs";
+import type { HunkExpansionRegion } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
 
 import { fileSupportForPath } from "@/file-support/registry";
+import type { DiffSides } from "@/git/file-patch";
 import { activeThemeName, appearance } from "@/theme/active";
 import { syntaxThemeForName, themeForName } from "@/theme/registry";
 import { STET_SYNTAX_THEME_NAME, syntaxTheme } from "@/theme/syntax";
 
-import { flattenLineSpans } from "./hast";
 import type { RenderSpan } from "./hast";
-import { buildDiffRows, navigableLinesFromRows } from "./rows";
+import { capCutoff, navigableLinesFromRows, rowsFromHunks } from "./rows";
 import type { DiffRow, NavigableLine } from "./rows";
 
-export interface DiffRender {
+interface DiffLayout {
   rows: DiffRow[];
   navigable: NavigableLine[];
   /** Line rows dropped by the `maxLines` cap (0 when the whole diff fit). */
   hiddenLines: number;
 }
 
+/** A rendered diff: its layout with every gap collapsed, plus every other gap expansion. */
+export interface DiffRender extends DiffLayout {
+  /**
+   * The layout with the given gaps (`gap:<hunk index>` marker keys) revealed. Synchronous: it
+   * re-lays out the renderer's cached highlight, so a gap toggle lands in the same batch as the
+   * caret remap that follows it.
+   */
+  expand: (gaps: ReadonlySet<string>) => DiffLayout;
+}
+
 export interface RenderInput {
   patch: string;
   full: boolean;
   maxLines: number;
+  /**
+   * Both sides' full text, when they are faithful to `patch`. They make the diff's gaps
+   * expandable; without them (a git fallback patch) gaps render as plain separators.
+   */
+  sides?: DiffSides;
 }
 
 // The render theme for the active stet theme: a bundled theme id when the theme
@@ -81,31 +97,24 @@ const highlighter = async () => {
   return { hl, themeName };
 };
 
-// `theme` is supplied per render (the active theme can change), so it is omitted
-// Here and spread in at the call site.
-const RENDER_OPTIONS: Omit<RenderDiffOptions, "theme"> = {
-  lineDiffType: "none",
-  maxLineDiffLength: 5000,
-  tokenizeMaxLineLength: 5000,
-  useTokenTransformer: false,
-};
-
 const MAX_CACHE = 40;
 
 // A count cap alone lets 40 large full-file renders hold hundreds of MB, since each
 // Render retains every line's text. Cap on approximate bytes too, with the count as a
 // Backstop for many tiny renders.
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
-const EMPTY: DiffRender = { hiddenLines: 0, navigable: [], rows: [] };
+const EMPTY_LAYOUT: DiffLayout = { hiddenLines: 0, navigable: [], rows: [] };
+const EMPTY: DiffRender = { ...EMPTY_LAYOUT, expand: () => EMPTY_LAYOUT };
 
 const cache = new Map<string, { render: DiffRender; bytes: number }>();
 let cacheBytes = 0;
 const inflight = new Map<string, Promise<DiffRender>>();
 
 // Approximate retained size: the per-line text dominates (UTF-16, 2 bytes/code unit);
-// `fg` labels and object overhead are ignored and offset by a conservative cap.
-const sizeOf = (render: DiffRender) => {
-  let units = 0;
+// `fg` labels and object overhead are ignored and offset by a conservative cap. The
+// Renderer behind `expand` also holds both sides' highlighted text, counted as `retained`.
+const sizeOf = (render: DiffLayout, retained: number) => {
+  let units = retained;
 
   for (const row of render.rows) {
     if (row.kind === "line") {
@@ -136,36 +145,19 @@ export const preloadDiffHighlighter = async () => {
   }
 };
 
-// Content fingerprint: a hash of the full patch (not sampled slices, which could
-// Collide for a same-length edit outside the sampled windows and return a stale
+// Content fingerprint: a hash of the full patch and sides (not sampled slices, which
+// Could collide for a same-length edit outside the sampled windows and return a stale
 // Render) plus the render options that change output. The active render theme is
 // Part of the key so a theme switch never serves a stale-colored render.
 const fingerprint = (input: RenderInput) =>
-  `${diffThemeName()}:${input.full ? 1 : 0}:${input.maxLines}:${Bun.hash(input.patch)}`;
-
-/**
- * Synchronous structure-only pass: parse + plain rows, no highlighting. Lets the viewer paint
- * instantly (one span per line = one renderable per line); the async highlight pass upgrades the
- * spans afterward, off the critical path.
- */
-export const structureDiff = (input: RenderInput): DiffRender => {
-  if (input.patch === "") {
-    return EMPTY;
-  }
-
-  const meta = parsePatchFiles(input.patch)[0]?.files[0];
-
-  if (meta === undefined) {
-    return EMPTY;
-  }
-
-  const { hiddenLines, rows } = buildDiffRows(meta, [], [], {
-    full: input.full,
-    maxLines: input.maxLines,
-  });
-
-  return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
-};
+  [
+    diffThemeName(),
+    input.full ? 1 : 0,
+    input.maxLines,
+    Bun.hash(input.patch),
+    input.sides === undefined ? "" : Bun.hash(input.sides.oldText),
+    input.sides === undefined ? "" : Bun.hash(input.sides.newText),
+  ].join(":");
 
 /**
  * The syntax language a file highlights as, shared by the diff and any surface that renders code
@@ -195,41 +187,124 @@ export const highlightSnippet = async (
   }
 };
 
-const compute = async (input: RenderInput): Promise<DiffRender> => {
-  const meta = parsePatchFiles(input.patch)[0]?.files[0];
+// Only a two-sided diff has gaps to fill; `new`/`deleted` are one whole-file hunk
+// And a pure rename has no hunks at all.
+const HYDRATABLE = new Set(["change", "rename-changed"]);
 
-  if (meta === undefined) {
-    return EMPTY;
+/**
+ * Parse the patch and, given both sides, hydrate it with their full contents so its gaps can be
+ * expanded. The language is forced to the basename-resolved syntax because the library re-derives
+ * it from `meta.name` (the full path), the fix for extensionless names in a subdirectory.
+ */
+const parseDiff = (input: RenderInput) => {
+  const parsed = parsePatchFiles(input.patch)[0]?.files[0];
+
+  if (parsed === undefined) {
+    return parsed;
   }
 
-  let addSpans: RenderSpan[][] = [];
-  let delSpans: RenderSpan[][] = [];
+  const lang = languageForPath(parsed.name);
+  const meta = lang === "text" ? parsed : setLanguageOverride(parsed, lang);
+
+  if (input.sides === undefined || !HYDRATABLE.has(meta.type)) {
+    return meta;
+  }
 
   try {
-    const { hl, themeName } = await highlighter();
-    // The library re-derives the language from `meta.name` (the full path) internally,
-    // So force the basename-resolved syntax; a no-op for extension files that already
-    // Match, the fix for extensionless names in a subdirectory.
-    const lang = languageForPath(meta.name);
-    const target = lang === "text" ? meta : setLanguageOverride(meta, lang);
-
-    const themed = renderDiffWithHighlighter(target, hl, {
-      ...RENDER_OPTIONS,
-      theme: themeName,
+    return hydratePartialDiff("clone", meta, {
+      newFile: { contents: input.sides.newText, name: meta.name },
+      oldFile: {
+        contents: input.sides.oldText,
+        name: meta.prevName ?? meta.name,
+      },
     });
-
-    addSpans = themed.code.additionLines.map(flattenLineSpans);
-    delSpans = themed.code.deletionLines.map(flattenLineSpans);
   } catch {
-    // Unknown language or highlighter failure: render the rows as plain text.
+    // Sides that disagree with the patch's hunks: keep the patch-only diff.
+    return meta;
+  }
+};
+
+// Reveal a gap whole: `fromStart`/`fromEnd` are lines from the gap's top and bottom,
+// And together they cover it however large it is.
+const WHOLE_GAP: HunkExpansionRegion = {
+  fromEnd: Number.POSITIVE_INFINITY,
+  fromStart: Number.POSITIVE_INFINITY,
+};
+
+const expansionMap = (gaps: ReadonlySet<string>) =>
+  new Map(
+    gaps
+      .values()
+      .map((key) => [Number(key.slice("gap:".length)), WHOLE_GAP] as const)
+      .toArray()
+  );
+
+// UTF-16 units the renderer retains per source character of its whole-file highlight
+// (the text plus a HAST element per token): ~44 bytes/char measured on a two-sided
+// Diff of a 4k-line TypeScript file (~12MB per render), so the byte cap, not the
+// Count, is what bounds a cache of large files.
+const HIGHLIGHT_UNITS_PER_CHAR = 22;
+
+const compute = async (
+  input: RenderInput
+): Promise<{ render: DiffRender; retained: number }> => {
+  const meta = parseDiff(input);
+
+  if (meta === undefined) {
+    return { render: EMPTY, retained: 0 };
   }
 
-  const { hiddenLines, rows } = buildDiffRows(meta, addSpans, delSpans, {
-    full: input.full,
-    maxLines: input.maxLines,
+  const { themeName } = await highlighter();
+
+  // Owned by this render's closure, never by app state: it caches the whole-file
+  // Highlight once, so each `expand` only re-lays out rows.
+  const renderer = new DiffHunksRenderer({
+    collapsedContextThreshold: 1,
+    diffStyle: "unified",
+    hunkSeparators: "line-info",
+    lineDiffType: "none",
+    maxLineDiffLength: 5000,
+    theme: themeName,
+    tokenizeMaxLineLength: 5000,
   });
 
-  return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
+  const renderWith = (gaps: ReadonlySet<string>) => {
+    renderer.setExpandedHunksMap(expansionMap(gaps));
+
+    return renderer.renderDiff(meta);
+  };
+
+  const collapsed = renderWith(new Set());
+
+  if (collapsed === undefined) {
+    return { render: EMPTY, retained: 0 };
+  }
+
+  const { cutoff, hiddenLines } = input.full
+    ? { cutoff: undefined, hiddenLines: 0 }
+    : capCutoff(collapsed, input.maxLines);
+
+  const layout = (
+    result: typeof collapsed,
+    gaps: ReadonlySet<string>
+  ): DiffLayout => {
+    const rows = rowsFromHunks(meta, result, gaps, cutoff);
+
+    return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
+  };
+
+  const base = layout(collapsed, new Set());
+
+  return {
+    render: {
+      ...base,
+      expand: (gaps) =>
+        gaps.size === 0 ? base : layout(renderWith(gaps) ?? collapsed, gaps),
+    },
+    retained:
+      (meta.additionCharacterCount + meta.deletionCharacterCount) *
+      HIGHLIGHT_UNITS_PER_CHAR,
+  };
 };
 
 const evict = () => {
@@ -278,14 +353,14 @@ export const renderDiff = async (input: RenderInput): Promise<DiffRender> => {
   }
 
   const promise = compute(input)
-    .then((result) => {
+    .then(({ render, retained }) => {
       inflight.delete(key);
-      const bytes = sizeOf(result);
-      cache.set(key, { bytes, render: result });
+      const bytes = sizeOf(render, retained);
+      cache.set(key, { bytes, render });
       cacheBytes += bytes;
       evict();
 
-      return result;
+      return render;
     })
     .catch(() => {
       inflight.delete(key);

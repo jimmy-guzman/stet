@@ -25,7 +25,7 @@ A terminal can't display an image, so instead of the raw bytes stet shows a card
 
 ## Fold code
 
-Press `z` in the viewer to fold the block at the caret behind a `▸ N lines folded` marker. Code folds by indentation, markdown by heading section. The same key expands a git-elided gap to reveal the unchanged lines around a hunk. Click any marker to toggle it.
+Press `z` in the viewer to fold the block at the caret behind a `▸ N lines folded` marker. Code folds by indentation, markdown by heading section. The same key expands a git-elided gap (`⋯ N unmodified lines`, including the stretch after the last change) to reveal its unchanged lines, highlighted like the rest of the file, and collapses it again from its `hide` marker. Click any marker to toggle it.
 
 ![A diff with a function's body folded behind a "lines folded" marker, its signature still visible](/screenshots/folding.png)
 

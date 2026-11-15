@@ -219,12 +219,22 @@ const gutterBackground = (row: DiffLineRow) =>
 
 const asLineRow = (row: DiffRow) => (isLineRow(row) ? row : undefined);
 
-// A collapsed-region marker: a fold (`▸ N lines folded`), a collapsed git gap
-// (`⋯ N unmodified lines`), or an expanded gap's re-collapse handle (`⋯ hide N …`).
-const markerGlyph = (row: DiffRow) =>
-  row.kind === "marker" && row.regionKind === "fold" ? "▸" : "⋯";
+// A non-line row: a fold (`▸ N lines folded`), a collapsed git gap
+// (`⋯ N unmodified lines`), an expanded gap's re-collapse handle (`⋯ hide N …`), or
+// A separator that carries its own glyph (`\ No newline at end of file`).
+const markerGlyph = (row: DiffRow) => {
+  if (row.kind === "separator") {
+    return row.glyph;
+  }
+
+  return row.kind === "marker" && row.regionKind === "fold" ? "▸" : "⋯";
+};
 
 const markerLabel = (row: DiffRow) => {
+  if (row.kind === "separator") {
+    return row.text;
+  }
+
   if (row.kind !== "marker") {
     return "";
   }

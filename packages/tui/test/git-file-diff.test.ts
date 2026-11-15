@@ -4,7 +4,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { DiffScope } from "@/cli";
-import { structureDiff } from "@/diff/engine";
+import { renderDiff } from "@/diff/engine";
 import type { NavigableLine } from "@/diff/rows";
 import { diffArgs, untrackedDiffArgs } from "@/git/model";
 import type { ChangedFile } from "@/git/model";
@@ -85,8 +85,11 @@ const pathspecDiff = (
   }
 };
 
-const rows = (patch: string): NavigableLine[] =>
-  structureDiff({ full: true, maxLines: 4000, patch }).navigable;
+const rows = async (patch: string): Promise<NavigableLine[]> => {
+  const { navigable } = await renderDiff({ full: true, maxLines: 4000, patch });
+
+  return navigable;
+};
 
 const changedFile = async (
   repoRoot: string,
@@ -112,10 +115,12 @@ const expectSameRows = async (
   filePath: string
 ) => {
   const file = await changedFile(repoRoot, scope, filePath);
-  const inProcess = await loadFileDiff(repoRoot, scope, file);
-  expect(rows(inProcess)).toEqual(rows(pathspecDiff(repoRoot, scope, file)));
+  const { patch } = await loadFileDiff(repoRoot, scope, file);
+  expect(await rows(patch)).toEqual(
+    await rows(pathspecDiff(repoRoot, scope, file))
+  );
 
-  return inProcess;
+  return patch;
 };
 
 const head = (repoRoot: string) =>
@@ -274,7 +279,7 @@ describe("in-process fileDiff matches git", () => {
       "src/new.ts"
     );
 
-    expect(rows(inProcess)).toEqual([
+    expect(await rows(inProcess)).toEqual([
       { content: "brand", newLine: 1, oldLine: undefined, type: "add" },
       { content: "new", newLine: 2, oldLine: undefined, type: "add" },
     ]);
@@ -293,7 +298,10 @@ describe("in-process fileDiff matches git", () => {
     const scope: DiffScope = { kind: "staged", ref: "HEAD" };
     const file = await changedFile(repoRoot, scope, "img.bin");
     expect(file.binary).toBe(true);
-    expect(rows(await loadFileDiff(repoRoot, scope, file))).toEqual([]);
+
+    const { patch } = await loadFileDiff(repoRoot, scope, file);
+
+    expect(await rows(patch)).toEqual([]);
   });
 
   test("last-commit scope diffs the two committed trees", async () => {

@@ -1,188 +1,182 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildDiffRows, navigableLinesFromRows } from "@/diff/rows";
-import type { DiffMetaInput } from "@/diff/rows";
+import { renderDiff } from "@/diff/engine";
+import type { DiffRow } from "@/diff/rows";
+import { buildFilePatch } from "@/git/file-patch";
+import type { ChangedFile } from "@/git/model";
 
-// Mirrors the probe: one context line, a 1/1 change, then two context lines.
-// `collapsedBefore` defaults to 0 (a hunk at line 1, so no leading separator).
-const sampleMeta = (collapsedBefore = 0): DiffMetaInput => ({
-  additionLines: [
-    "const a = 1;",
-    'const b = "three";',
-    "const c = 4;",
-    "const d = 5;",
-  ],
-  deletionLines: [
-    "const a = 1;",
-    'const b = "two";',
-    "const c = 4;",
-    "const d = 5;",
-  ],
-  hunks: [
-    {
-      additionStart: 1,
-      collapsedBefore,
-      deletionStart: 1,
-      hunkContent: [
-        {
-          additionLineIndex: 0,
-          deletionLineIndex: 0,
-          lines: 1,
-          type: "context",
-        },
-        {
-          additionLineIndex: 1,
-          additions: 1,
-          deletionLineIndex: 1,
-          deletions: 1,
-          type: "change",
-        },
-        {
-          additionLineIndex: 2,
-          deletionLineIndex: 2,
-          lines: 2,
-          type: "context",
-        },
-      ],
-    },
-  ],
-});
+const modified: ChangedFile = {
+  additions: 1,
+  binary: false,
+  deletions: 1,
+  kind: "modified",
+  mtimeMs: 0,
+  path: "x.ts",
+  stage: "unstaged",
+  warnings: [],
+};
 
-describe("buildDiffRows", () => {
-  test("emits unified rows with deletions before additions and tracked line numbers", () => {
-    const { hiddenLines, rows } = buildDiffRows(sampleMeta(), [], [], {
-      full: false,
-      maxLines: 1600,
-    });
+// Thirty numbered lines with one edit at line 11: a 7-line gap above the hunk and a
+// 16-line gap below it.
+const OLD = `${Array.from({ length: 30 }, (_, i) => `const a${i + 1} = ${i + 1};`).join("\n")}\n`;
+const NEW = OLD.replace("const a11 = 11;", "const a11 = 110;");
 
-    expect(hiddenLines).toBe(0);
-    expect(
-      rows.map((row) => {
-        if (row.kind === "separator") {
-          return `S:${row.text}`;
-        }
+const built = (oldText: string, newText: string) => {
+  const result = buildFilePatch(
+    modified,
+    { kind: "text", text: oldText },
+    { kind: "text", text: newText }
+  );
 
-        if (row.kind === "line") {
-          return `${row.type}:${row.oldLine ?? "-"}/${row.newLine ?? "-"}`;
-        }
+  if (result.kind !== "patch") {
+    throw new Error("expected an in-process patch");
+  }
 
-        return `M:${row.key}`;
-      })
-    ).toEqual([
-      "context:1/1",
-      "remove:2/-",
-      "add:-/2",
-      "context:3/3",
-      "context:4/4",
+  return result;
+};
+
+const describeRow = (row: DiffRow) => {
+  if (row.kind === "line") {
+    return `${row.type}:${row.oldLine ?? "-"}/${row.newLine ?? "-"}`;
+  }
+
+  if (row.kind === "marker") {
+    return `${row.collapsed ? "gap" : "open"}:${row.key}:${row.count}`;
+  }
+
+  return `sep:${row.text}`;
+};
+
+describe("diff rows", () => {
+  test("emits unified rows with deletions before additions and tracked line numbers", async () => {
+    const { patch } = built(OLD, NEW);
+    const render = await renderDiff({ full: false, maxLines: 1600, patch });
+
+    expect(render.hiddenLines).toBe(0);
+    expect(render.rows.map(describeRow)).toEqual([
+      "sep:7 unmodified lines",
+      "context:8/8",
+      "context:9/9",
+      "context:10/10",
+      "remove:11/-",
+      "add:-/11",
+      "context:12/12",
+      "context:13/13",
+      "context:14/14",
     ]);
   });
 
-  test("emits a 'N unmodified lines' separator for the lines collapsed before a hunk", () => {
-    const { rows } = buildDiffRows(sampleMeta(6), [], [], {
-      full: false,
-      maxLines: 1600,
-    });
+  test("a patch-only diff singularizes a one-line gap's label", async () => {
+    const { patch } = built(
+      OLD,
+      OLD.replace("const a5 = 5;", "const a5 = 50;")
+    );
 
-    expect(rows[0]).toEqual({
-      count: 6,
-      kind: "separator",
-      text: "6 unmodified lines",
-    });
-  });
+    const render = await renderDiff({ full: false, maxLines: 1600, patch });
 
-  test("singularizes the separator label for a single collapsed line", () => {
-    const { rows } = buildDiffRows(sampleMeta(1), [], [], {
-      full: false,
-      maxLines: 1600,
-    });
-
-    expect(rows[0]).toEqual({
-      count: 1,
+    expect(render.rows[0]).toEqual({
+      glyph: "⋯",
       kind: "separator",
       text: "1 unmodified line",
     });
   });
 
-  test("emits no separator when nothing is collapsed before the hunk (e.g. full-file view)", () => {
-    const { rows } = buildDiffRows(sampleMeta(0), [], [], {
+  test("with both sides, every gap (the trailing one too) is a collapsed marker keyed by the hunk it precedes", async () => {
+    const { patch, sides } = built(OLD, NEW);
+
+    const render = await renderDiff({
       full: false,
       maxLines: 1600,
+      patch,
+      sides,
     });
 
-    expect(rows.some((row) => row.kind === "separator")).toBe(false);
+    expect(render.rows.map(describeRow)).toEqual([
+      "gap:gap:0:7",
+      "context:8/8",
+      "context:9/9",
+      "context:10/10",
+      "remove:11/-",
+      "add:-/11",
+      "context:12/12",
+      "context:13/13",
+      "context:14/14",
+      "gap:gap:1:16",
+    ]);
   });
 
-  test("falls back to plain line text when no highlighted spans are supplied", () => {
-    const { rows } = buildDiffRows(sampleMeta(), [], [], {
+  test("expanding a gap reveals its lines highlighted behind a hide marker, with contiguous navIndex", async () => {
+    const { patch, sides } = built(OLD, NEW);
+
+    const render = await renderDiff({
       full: false,
       maxLines: 1600,
+      patch,
+      sides,
     });
 
-    const remove = rows.find(
-      (row) => row.kind === "line" && row.type === "remove"
+    const layout = render.expand(new Set(["gap:0"]));
+
+    expect(layout.rows.slice(0, 3).map(describeRow)).toEqual([
+      "open:gap:0:7",
+      "context:1/1",
+      "context:2/2",
+    ]);
+
+    const [, first] = layout.rows;
+
+    expect(first?.kind === "line" && first.spans.length).toBeGreaterThan(1);
+    expect(layout.navigable[0]?.content).toBe("const a1 = 1;");
+    expect(
+      layout.rows.flatMap((row) => (row.kind === "line" ? [row.navIndex] : []))
+    ).toEqual(layout.navigable.map((_, index) => index));
+  });
+
+  test("emits no gap when the hunk starts at line 1", async () => {
+    const { patch, sides } = built(
+      OLD,
+      OLD.replace("const a1 = 1;", "const a1 = 10;")
     );
 
-    expect(remove?.kind === "line" && remove.spans).toEqual([
-      { text: 'const b = "two";' },
-    ]);
-  });
-
-  test("prefers supplied highlighted spans over plain text, indexed by line", () => {
-    const addSpans = [
-      [],
-      [{ fg: "#79B8FF", text: 'const b = "three";' }],
-      [],
-      [],
-    ];
-
-    const { rows } = buildDiffRows(sampleMeta(), addSpans, [], {
+    const render = await renderDiff({
       full: false,
       maxLines: 1600,
+      patch,
+      sides,
     });
 
-    const added = rows.find((row) => row.kind === "line" && row.type === "add");
-    expect(added?.kind === "line" && added.spans).toEqual([
-      { fg: "#79B8FF", text: 'const b = "three";' },
-    ]);
+    expect(render.rows[0]?.kind).toBe("line");
   });
 
-  test("assigns contiguous navIndex to line rows matching navigable order", () => {
-    const { rows } = buildDiffRows(sampleMeta(), [], [], {
-      full: false,
-      maxLines: 1600,
-    });
+  test("marks a missing trailing newline with git's own row", async () => {
+    const { patch } = built(OLD, NEW.trimEnd());
+    const render = await renderDiff({ full: false, maxLines: 1600, patch });
 
-    const navIndexes = rows
-      .filter((row) => row.kind === "line")
-      .map((row) => (row.kind === "line" ? row.navIndex : -1));
-
-    expect(navIndexes).toEqual([0, 1, 2, 3, 4]);
-
-    const navigable = navigableLinesFromRows(rows);
-    expect(navigable).toHaveLength(5);
-    expect(navigable[1]).toEqual({
-      content: 'const b = "two";',
-      newLine: undefined,
-      oldLine: 2,
-      type: "remove",
+    expect(render.rows.at(-1)).toEqual({
+      glyph: "\\",
+      kind: "separator",
+      text: "No newline at end of file",
     });
   });
 
-  test("caps body lines at maxLines and counts the hidden rest, ignoring the cap when full", () => {
-    const capped = buildDiffRows(sampleMeta(), [], [], {
-      full: false,
-      maxLines: 3,
-    });
+  test("caps body lines at maxLines and counts the hidden rest, ignoring the cap when full", async () => {
+    const { patch, sides } = built(OLD, NEW);
 
-    expect(capped.hiddenLines).toBe(2);
-    expect(capped.rows.filter((row) => row.kind === "line")).toHaveLength(3);
+    const capped = await renderDiff({ full: false, maxLines: 3, patch, sides });
 
-    const full = buildDiffRows(sampleMeta(), [], [], {
-      full: true,
-      maxLines: 3,
-    });
+    expect(capped.hiddenLines).toBe(5);
+    expect(capped.navigable).toHaveLength(3);
+
+    // Revealing the gap above the cap shows its lines but pulls in nothing below it.
+    const expanded = capped.expand(new Set(["gap:0"]));
+
+    expect(
+      expanded.navigable.map((line) => line.newLine ?? line.oldLine)
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+    const full = await renderDiff({ full: true, maxLines: 3, patch, sides });
 
     expect(full.hiddenLines).toBe(0);
-    expect(full.rows.filter((row) => row.kind === "line")).toHaveLength(5);
+    expect(full.navigable).toHaveLength(8);
   });
 });

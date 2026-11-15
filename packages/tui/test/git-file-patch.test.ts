@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { structureDiff } from "@/diff/engine";
+import { renderDiff } from "@/diff/engine";
 import {
   buildFilePatch,
   classifySideBytes,
@@ -26,8 +26,11 @@ const file = (
 
 const text = (value: string): SideContent => ({ kind: "text", text: value });
 
-const rows = (patch: string) =>
-  structureDiff({ full: true, maxLines: 1600, patch }).navigable;
+const rows = async (patch: string) => {
+  const { navigable } = await renderDiff({ full: true, maxLines: 1600, patch });
+
+  return navigable;
+};
 
 describe("fileDiffSides", () => {
   test("all and session compare the ref blob against the worktree", () => {
@@ -184,7 +187,7 @@ describe("classifySideBytes", () => {
 });
 
 describe("buildFilePatch", () => {
-  test("a modified file produces a git-shaped patch with three context lines", () => {
+  test("a modified file produces a git-shaped patch with three context lines", async () => {
     const oldText = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\n";
     const newText = "one\ntwo\nthree\nfour\nCHANGED\nsix\nseven\neight\nnine\n";
 
@@ -202,7 +205,7 @@ describe("buildFilePatch", () => {
     expect(built.patch).toContain("--- a/src/a.ts\n");
     expect(built.patch).toContain("+++ b/src/a.ts\n");
 
-    expect(rows(built.patch)).toEqual([
+    expect(await rows(built.patch)).toEqual([
       { content: "two", newLine: 2, oldLine: 2, type: "context" },
       { content: "three", newLine: 3, oldLine: 3, type: "context" },
       { content: "four", newLine: 4, oldLine: 4, type: "context" },
@@ -214,7 +217,7 @@ describe("buildFilePatch", () => {
     ]);
   });
 
-  test("an added file carries new-file headers and renders all-added", () => {
+  test("an added file carries new-file headers and renders all-added", async () => {
     const built = buildFilePatch(
       file("src/a.ts", { deletions: 0, kind: "added" }),
       text(""),
@@ -229,13 +232,13 @@ describe("buildFilePatch", () => {
     expect(built.patch).toContain("new file mode 100644\n");
     expect(built.patch).toContain("--- /dev/null\n");
     expect(built.patch).toContain("+++ b/src/a.ts\n");
-    expect(rows(built.patch)).toEqual([
+    expect(await rows(built.patch)).toEqual([
       { content: "hello", newLine: 1, oldLine: undefined, type: "add" },
       { content: "world", newLine: 2, oldLine: undefined, type: "add" },
     ]);
   });
 
-  test("a deleted file carries deleted-file headers and renders all-removed", () => {
+  test("a deleted file carries deleted-file headers and renders all-removed", async () => {
     const built = buildFilePatch(
       file("src/a.ts", { additions: 0, kind: "deleted" }),
       text("hello\nworld\n"),
@@ -249,13 +252,13 @@ describe("buildFilePatch", () => {
     expect(built.patch).toContain("deleted file mode 100644\n");
     expect(built.patch).toContain("--- a/src/a.ts\n");
     expect(built.patch).toContain("+++ /dev/null\n");
-    expect(rows(built.patch)).toEqual([
+    expect(await rows(built.patch)).toEqual([
       { content: "hello", newLine: undefined, oldLine: 1, type: "remove" },
       { content: "world", newLine: undefined, oldLine: 2, type: "remove" },
     ]);
   });
 
-  test("a rename with an edit carries rename headers and both names", () => {
+  test("a rename with an edit carries rename headers and both names", async () => {
     const built = buildFilePatch(
       file("src/new.ts", { kind: "renamed", oldPath: "src/old.ts" }),
       text("keep\nbefore\n"),
@@ -269,14 +272,14 @@ describe("buildFilePatch", () => {
     expect(built.patch).toStartWith("diff --git a/src/old.ts b/src/new.ts\n");
     expect(built.patch).toContain("rename from src/old.ts\n");
     expect(built.patch).toContain("rename to src/new.ts\n");
-    expect(rows(built.patch)).toEqual([
+    expect(await rows(built.patch)).toEqual([
       { content: "keep", newLine: 1, oldLine: 1, type: "context" },
       { content: "before", newLine: undefined, oldLine: 2, type: "remove" },
       { content: "after", newLine: 2, oldLine: undefined, type: "add" },
     ]);
   });
 
-  test("a pure rename produces a header-only patch with no rows, like git", () => {
+  test("a pure rename produces a header-only patch with no rows, like git", async () => {
     const built = buildFilePatch(
       file("src/new.ts", {
         additions: 0,
@@ -294,7 +297,7 @@ describe("buildFilePatch", () => {
 
     expect(built.patch).toContain("rename from src/old.ts\n");
     expect(built.patch).not.toContain("@@");
-    expect(rows(built.patch)).toEqual([]);
+    expect(await rows(built.patch)).toEqual([]);
   });
 
   test("a missing trailing newline emits the no-newline marker on the right side", () => {
@@ -343,11 +346,12 @@ describe("buildFilePatch", () => {
     });
   });
 
-  test("CRLF on exactly one side falls back; CRLF on both sides diffs in-process", () => {
+  test("CRLF on exactly one side falls back with LF-normalized sides; CRLF on both sides diffs in-process", () => {
     expect(
       buildFilePatch(file("a.txt"), text("a\r\nb\r\n"), text("a\nb\nc\n"))
     ).toEqual({
       kind: "fallback",
+      sides: { newText: "a\nb\nc\n", oldText: "a\nb\n" },
     });
 
     const both = buildFilePatch(
@@ -357,6 +361,15 @@ describe("buildFilePatch", () => {
     );
 
     expect(both.kind).toBe("patch");
+  });
+
+  test("an in-process patch carries both sides' text for gap expansion", () => {
+    const built = buildFilePatch(file("a.txt"), text("a\nb\n"), text("a\nc\n"));
+
+    expect(built).toMatchObject({
+      kind: "patch",
+      sides: { newText: "a\nc\n", oldText: "a\nb\n" },
+    });
   });
 
   test("zero hunks against non-zero numstat counts falls back instead of rendering empty", () => {
@@ -369,7 +382,7 @@ describe("buildFilePatch", () => {
     ).toEqual({ kind: "fallback" });
   });
 
-  test("identical text with zero numstat counts renders empty, like a mode-only change", () => {
+  test("identical text with zero numstat counts renders empty, like a mode-only change", async () => {
     const built = buildFilePatch(
       file("a.txt", { additions: 0, deletions: 0 }),
       text("same\n"),
@@ -380,10 +393,10 @@ describe("buildFilePatch", () => {
       throw new Error("expected a patch");
     }
 
-    expect(rows(built.patch)).toEqual([]);
+    expect(await rows(built.patch)).toEqual([]);
   });
 
-  test("adding an empty file produces the header-only new-file patch", () => {
+  test("adding an empty file produces the header-only new-file patch", async () => {
     const built = buildFilePatch(
       file("empty.txt", { additions: 0, deletions: 0, kind: "added" }),
       text(""),
@@ -395,6 +408,6 @@ describe("buildFilePatch", () => {
     }
 
     expect(built.patch).toContain("new file mode 100644\n");
-    expect(rows(built.patch)).toEqual([]);
+    expect(await rows(built.patch)).toEqual([]);
   });
 });

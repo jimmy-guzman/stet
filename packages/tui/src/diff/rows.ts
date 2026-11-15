@@ -1,40 +1,15 @@
+import type { FileDiffMetadata, HunksRenderResult } from "@pierre/diffs";
+import { Predicate } from "effect";
+
+import { flattenLineSpans } from "./hast";
 import type { RenderSpan } from "./hast";
 
 type DiffLineType = "context" | "add" | "remove";
 
-// Structural subset of `@pierre/diffs` FileDiffMetadata that the row builder
-// Reads. The real metadata satisfies this, and the narrower shape keeps this
-// Module dependency-free and directly testable.
-type HunkContentInput =
-  | {
-      type: "context";
-      lines: number;
-      additionLineIndex: number;
-      deletionLineIndex: number;
-    }
-  | {
-      type: "change";
-      additions: number;
-      deletions: number;
-      additionLineIndex: number;
-      deletionLineIndex: number;
-    };
-
-interface HunkInput {
-  collapsedBefore: number;
-  additionStart: number;
-  deletionStart: number;
-  hunkContent: HunkContentInput[];
-}
-
-export interface DiffMetaInput {
-  hunks: HunkInput[];
-  additionLines: string[];
-  deletionLines: string[];
-}
-
 export type DiffRow =
-  | { kind: "separator"; text: string; count: number }
+  // A non-expandable break in the row stream: a git-elided gap the diff has no full
+  // Contents for (`⋯ N unmodified lines`), or git's `\ No newline at end of file`.
+  | { kind: "separator"; glyph: string; text: string }
   | {
       kind: "line";
       navIndex: number;
@@ -43,9 +18,10 @@ export type DiffRow =
       newLine?: number;
       spans: RenderSpan[];
     }
-  // A collapsed region placeholder produced by `applyCollapsedRegions`, never by
-  // `buildDiffRows`: a user fold (▸ N lines folded) or an expandable git-elided gap
-  // (⋯ N unmodified lines). Non-navigable, so the caret skips it like a separator.
+  // A collapsed-region placeholder: a user fold (▸ N lines folded) from
+  // `applyCollapsedRegions`, or an expandable git-elided gap (⋯ N unmodified lines)
+  // From `rowsFromHunks`, keyed `gap:<hunk index>`. Non-navigable, so the caret
+  // Skips it like a separator.
   | {
       kind: "marker";
       regionKind: "fold" | "gap";
@@ -64,139 +40,179 @@ export interface NavigableLine {
   content: string;
 }
 
-export interface BuiltDiff {
-  rows: DiffRow[];
-  /** Line rows dropped by the `maxLines` cap (0 when the whole diff fit). */
-  hiddenLines: number;
-}
-
 export const isLineRow = (row: DiffRow): row is DiffLineRow =>
   row.kind === "line";
 
-const stripNewline = (text: string) =>
-  text.endsWith("\n") ? text.slice(0, -1) : text;
-
-const collapsedLabel = (count: number) =>
+const unmodifiedLabel = (count: number) =>
   count === 1 ? "1 unmodified line" : `${count} unmodified lines`;
 
-const spansAt = (
-  spans: RenderSpan[][],
-  lines: string[],
-  index: number
-): RenderSpan[] => {
-  const highlighted = spans[index];
+type AstNode = NonNullable<HunksRenderResult["unifiedContentAST"]>[number];
 
-  if (highlighted !== undefined && highlighted.length > 0) {
-    return highlighted;
+type Element = Extract<AstNode, { type: "element" }>;
+
+type PropertyValue = Element["properties"][string];
+
+const numberProp = (value: PropertyValue) =>
+  Predicate.isNumber(value) ? value : undefined;
+
+// `data-line-index` is "<unified>,<split>"; the unified half is the row's position in
+// The whole file's unified stream, which no gap expansion renumbers.
+const unifiedIndexOf = (value: PropertyValue) =>
+  Predicate.isString(value) ? Number(value.split(",")[0]) : undefined;
+
+/** The gap (keyed by the hunk it precedes) a revealed unchanged line sits in. */
+const gapIndexFor = (meta: FileDiffMetadata, newLine: number) => {
+  const index = meta.hunks.findIndex((hunk) => hunk.additionStart > newLine);
+
+  return index === -1 ? meta.hunks.length : index;
+};
+
+const separatorRow = (data: HunksRenderResult["hunkData"][number]): DiffRow =>
+  data.expandable === undefined
+    ? { glyph: "⋯", kind: "separator", text: unmodifiedLabel(data.lines) }
+    : {
+        collapsed: true,
+        count: data.lines,
+        key: `gap:${data.hunkIndex}`,
+        kind: "marker",
+        regionKind: "gap",
+      };
+
+// A unified line node's side and numbers: `data-line` is the side's own number (the
+// New side for context), `data-alt-line` the old side's number on a context row.
+const lineSides = (props: Element["properties"]) => {
+  const line = numberProp(props["data-line"]);
+
+  if (props["data-line-type"] === "change-deletion") {
+    return { oldLine: line, type: "remove" as const };
   }
 
-  return [{ text: stripNewline(lines[index] ?? "") }];
+  if (props["data-line-type"] === "change-addition") {
+    return { newLine: line, type: "add" as const };
+  }
+
+  return {
+    newLine: line,
+    oldLine: numberProp(props["data-alt-line"]),
+    type: "context" as const,
+  };
 };
 
 /**
- * Build the unified row stream from `@pierre/diffs` metadata plus the flattened per-line spans
- * (index-aligned to `meta.additionLines`/`deletionLines`). Line rows carry a contiguous `navIndex`
- * so the cursor and find can index navigable lines exactly as the old parsed-patch model did. Body
- * (line) rows are capped at `maxLines` unless `full`, mirroring the previous viewer.
+ * Turn `DiffHunksRenderer`'s unified row stream into stet's rows. The renderer owns which lines
+ * exist for the current gap expansion; this reads each node's line type and numbers off its data
+ * attributes and flattens its highlighted HAST into spans. A separator is a collapsed gap marker
+ * when the diff carries full contents (`hunkData.expandable`), else a plain separator, and a run of
+ * revealed lines is headed by its gap's "hide" marker so `z` can collapse it again. Line rows carry
+ * a contiguous `navIndex`. Body (line) rows are capped at `maxLines` unless `full`: `cutoff` is the
+ * unified index of the last kept line (from the unexpanded layout), so revealing a gap above the
+ * cap never pulls more of the file in below it.
  */
-export const buildDiffRows = (
-  meta: DiffMetaInput,
-  addSpans: RenderSpan[][],
-  delSpans: RenderSpan[][],
-  options: { full: boolean; maxLines: number }
-): BuiltDiff => {
+export const rowsFromHunks = (
+  meta: FileDiffMetadata,
+  result: Pick<HunksRenderResult, "hunkData" | "unifiedContentAST">,
+  expanded: ReadonlySet<string>,
+  cutoff: number | undefined
+) => {
   const rows: DiffRow[] = [];
   let navIndex = 0;
+  let separatorOrdinal = 0;
+  let openGap: Extract<DiffRow, { kind: "marker" }> | undefined;
 
-  const pushLine = (
-    type: DiffLineType,
-    oldLine: number | undefined,
-    newLine: number | undefined,
-    spans: RenderSpan[]
-  ) => {
-    rows.push({ kind: "line", navIndex, newLine, oldLine, spans, type });
-    navIndex += 1;
-  };
-
-  for (const hunk of meta.hunks) {
-    // The count of unchanged lines git collapsed before this hunk; rendered as a
-    // Separator so the gutter's line-number jump isn't read as contiguous. Zero
-    // (a hunk at line 1, e.g. the whole-file context patch) gets no separator.
-    if (hunk.collapsedBefore > 0) {
-      rows.push({
-        count: hunk.collapsedBefore,
-        kind: "separator",
-        text: collapsedLabel(hunk.collapsedBefore),
-      });
-    }
-
-    let oldLine = hunk.deletionStart;
-    let newLine = hunk.additionStart;
-
-    for (const content of hunk.hunkContent) {
-      if (content.type === "context") {
-        for (let offset = 0; offset < content.lines; offset += 1) {
-          const index = content.additionLineIndex + offset;
-          pushLine(
-            "context",
-            oldLine,
-            newLine,
-            spansAt(addSpans, meta.additionLines, index)
-          );
-          oldLine += 1;
-          newLine += 1;
-        }
-
-        continue;
-      }
-
-      for (let offset = 0; offset < content.deletions; offset += 1) {
-        const index = content.deletionLineIndex + offset;
-        pushLine(
-          "remove",
-          oldLine,
-          undefined,
-          spansAt(delSpans, meta.deletionLines, index)
-        );
-        oldLine += 1;
-      }
-
-      for (let offset = 0; offset < content.additions; offset += 1) {
-        const index = content.additionLineIndex + offset;
-        pushLine(
-          "add",
-          undefined,
-          newLine,
-          spansAt(addSpans, meta.additionLines, index)
-        );
-        newLine += 1;
-      }
-    }
-  }
-
-  if (options.full) {
-    return { hiddenLines: 0, rows };
-  }
-
-  let body = 0;
-
-  for (let index = 0; index < rows.length; index += 1) {
-    if (rows[index]?.kind !== "line") {
+  for (const node of result.unifiedContentAST ?? []) {
+    if (node.type !== "element") {
       continue;
     }
 
-    body += 1;
+    const props = node.properties;
 
-    if (body > options.maxLines) {
-      return {
-        hiddenLines: rows.slice(index).filter((row) => row.kind === "line")
-          .length,
-        rows: rows.slice(0, index),
-      };
+    if ("data-separator" in props) {
+      const data = result.hunkData[separatorOrdinal];
+      separatorOrdinal += 1;
+      openGap = undefined;
+
+      if (data === undefined) {
+        continue;
+      }
+
+      rows.push(separatorRow(data));
+      continue;
     }
+
+    if ("data-no-newline" in props) {
+      rows.push({
+        glyph: "\\",
+        kind: "separator",
+        text: "No newline at end of file",
+      });
+      continue;
+    }
+
+    const unified = unifiedIndexOf(props["data-line-index"]);
+
+    if (cutoff !== undefined && unified !== undefined && unified > cutoff) {
+      break;
+    }
+
+    const line = numberProp(props["data-line"]);
+
+    if (props["data-line-type"] === "context-expanded" && line !== undefined) {
+      const key = `gap:${gapIndexFor(meta, line)}`;
+
+      if (expanded.has(key) && openGap?.key !== key) {
+        openGap = {
+          collapsed: false,
+          count: 0,
+          key,
+          kind: "marker",
+          regionKind: "gap",
+        };
+        rows.push(openGap);
+      }
+
+      if (openGap?.key === key) {
+        openGap.count += 1;
+      }
+    } else {
+      openGap = undefined;
+    }
+
+    rows.push({
+      kind: "line",
+      navIndex,
+      spans: flattenLineSpans(node),
+      ...lineSides(props),
+    });
+    navIndex += 1;
   }
 
-  return { hiddenLines: 0, rows };
+  return rows;
+};
+
+const isBodyLine = (node: AstNode): node is Element =>
+  node.type === "element" &&
+  "data-line-index" in node.properties &&
+  !("data-no-newline" in node.properties);
+
+/**
+ * Where the `maxLines` cap cuts the unexpanded layout: the unified index of the last kept body line
+ * (`undefined` when the diff fits) and how many body lines it hides. Measured once, without gap
+ * expansion, so the cap is a fixed point in the file.
+ */
+export const capCutoff = (
+  result: Pick<HunksRenderResult, "unifiedContentAST">,
+  maxLines: number
+) => {
+  const body = (result.unifiedContentAST ?? []).filter(isBodyLine);
+
+  return body.length > maxLines
+    ? {
+        cutoff: unifiedIndexOf(
+          body[maxLines - 1]?.properties["data-line-index"]
+        ),
+        hiddenLines: body.length - maxLines,
+      }
+    : { cutoff: undefined, hiddenLines: 0 };
 };
 
 /** The navigable (cursorable) lines in order; `navIndex` equals array position. */

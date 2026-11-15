@@ -59,9 +59,13 @@ describe("renderDiff", () => {
   });
 
   test("resolves an empty render for an empty patch", async () => {
-    expect(
-      await renderDiff({ full: false, maxLines: 1600, patch: "" })
-    ).toEqual({
+    const { hiddenLines, navigable, rows } = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: "",
+    });
+
+    expect({ hiddenLines, navigable, rows }).toEqual({
       hiddenLines: 0,
       navigable: [],
       rows: [],

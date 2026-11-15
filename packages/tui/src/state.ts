@@ -22,8 +22,8 @@ import type {
   CommandMenuInput,
 } from "./components/command-menu/items";
 import { Config } from "./config/service";
-import { DiffEngine, languageForPath, structureDiff } from "./diff/engine";
-import type { DiffRender, RenderInput } from "./diff/engine";
+import { DiffEngine, languageForPath } from "./diff/engine";
+import type { DiffRender } from "./diff/engine";
 import { followScrollTop } from "./diff/follow";
 import {
   applyCollapsedRegions,
@@ -31,7 +31,6 @@ import {
   foldRegionsFor,
   remapCursorAfterToggle,
 } from "./diff/regions";
-import type { GapSource } from "./diff/regions";
 import type { DiffRow } from "./diff/rows";
 import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { openExternalCommand } from "./editor/reference";
@@ -48,7 +47,7 @@ import {
   recordActivity,
 } from "./git/activity";
 import type { ActivityEventKind, ActivityLog } from "./git/activity";
-import type { BinaryDiff } from "./git/file-patch";
+import type { BinaryDiff, DiffSides } from "./git/file-patch";
 import type { Commit } from "./git/log";
 import { changedPathsDiffer, mergeChanged } from "./git/model";
 import type { ChangedFile, GitModel } from "./git/model";
@@ -167,17 +166,16 @@ interface PendingRestore {
   viewport: { scrollTop: number; scrollX: number };
 }
 
-// The coherent diff-pane snapshot. A selection commits in two structure-identical
-// Phases: first plain rows (parse only, instant), then a rows upgrade once the
-// Async highlight resolves. The signal holds the previous snapshot until phase 1
-// Resolves, so the renderer never receives empty/stale/partial content; the
-// Phase-2 swap keeps the same row count and gutter width, so it never thrashes.
+// The coherent diff-pane snapshot, committed once per selection with its rows
+// Already highlighted (the `highlights` backend tokenizes a 4k-line file in ~35ms,
+// So there is no plain first pass to upgrade). The signal holds the previous
+// Snapshot until the new one resolves, so the renderer never receives
+// Empty/stale/partial content.
 interface DiffView {
   path: string;
   showFileContent: boolean;
   fileContent: FileContent | undefined;
   render: DiffRender;
-  highlighted: boolean;
   // Present only for a changed binary file: its two sides' size/dimensions, so the
   // Viewer renders a metadata placeholder instead of the empty diff stet can't draw.
   binary?: BinaryDiff;
@@ -185,6 +183,7 @@ interface DiffView {
 
 interface DiffBase {
   diff: string;
+  sides?: DiffSides;
   fileContent: FileContent | undefined;
   showFileContent: boolean;
   binary?: BinaryDiff;
@@ -221,11 +220,6 @@ const emptyModel: GitModel = {
   scopeKey: "",
 };
 
-interface LoadedDiff {
-  view: DiffView;
-  highlight: RenderInput;
-}
-
 const loadDiffView = (src: {
   path: string;
   scope: DiffScope;
@@ -233,31 +227,27 @@ const loadDiffView = (src: {
   full: boolean;
   file: ChangedFile | undefined;
   model: GitModel;
-}): Effect.Effect<LoadedDiff, never, File | Git> => {
-  // Phase 1: after the git/file I/O, build the plain row structure synchronously
-  // And commit it. The patch + render options travel out as `highlight` so the
-  // Caller can run the async highlight pass and swap in colored rows.
+}): Effect.Effect<DiffView, never, File | Git | DiffEngine> => {
   const toView = (base: Effect.Effect<DiffBase, never, File | Git>) =>
     base.pipe(
-      Effect.map((result): LoadedDiff => {
-        const highlight: RenderInput = {
-          full: result.showFileContent || src.full,
-          maxLines: DIFF_MAX_LINES,
-          patch: result.diff,
-        };
-
-        return {
-          highlight,
-          view: {
+      Effect.flatMap((result) =>
+        DiffEngine.use((engine) =>
+          engine.render({
+            full: result.showFileContent || src.full,
+            maxLines: DIFF_MAX_LINES,
+            patch: result.diff,
+            sides: result.sides,
+          })
+        ).pipe(
+          Effect.map((render): DiffView => ({
             binary: result.binary,
             fileContent: result.fileContent,
-            highlighted: false,
             path: src.path,
-            render: structureDiff(highlight),
+            render,
             showFileContent: result.showFileContent,
-          },
-        };
-      })
+          }))
+        )
+      )
     );
 
   if (src.showFile) {
@@ -326,10 +316,11 @@ const loadDiffView = (src: {
 
   return toView(
     Git.use((git) => git.fileDiff(src.model.repoRoot, src.scope, file)).pipe(
-      Effect.map((diff): DiffBase => ({
-        diff,
+      Effect.map(({ patch, sides }): DiffBase => ({
+        diff: patch,
         fileContent: undefined,
         showFileContent: false,
+        sides,
       })),
       Effect.catch(() =>
         Effect.succeed<DiffBase>({
@@ -601,13 +592,6 @@ const createState = () => {
   // Are two sets, not one; the transform that consumes them is shared.
   const [foldedRegions, setFoldedRegions] = tracked(new Set<string>());
   const [expandedGaps, setExpandedGaps] = tracked(new Set<string>());
-
-  // The current file's revealed-gap source, loaded lazily on the first gap expansion.
-  const [gapSource, setGapSource] = tracked<
-    | { path: string; status: "loading" | "error" }
-    | { path: string; status: "loaded"; lines: string[] }
-    | undefined
-  >(undefined);
 
   const [focusedNodeId, setFocusedNodeId] = tracked("");
 
@@ -1043,43 +1027,16 @@ const createState = () => {
 
     const load = async () => {
       try {
-        const { highlight, view } = await runtime.runPromise(
-          loadDiffView(src),
-          { signal }
-        );
+        const view = await runtime.runPromise(loadDiffView(src), { signal });
 
         // The controller can abort after the load resolved but before this
         // Microtask drains; committing then would paint a stale snapshot over the
-        // Fresh one. Mirror the phase-2 guard so only the live selection lands.
+        // Fresh one, so only the live selection lands.
         if (signal.aborted) {
           return;
         }
 
         setDiffView(view);
-
-        // Phase 2: highlight off the critical path, then swap in colored rows
-        // (structure-identical) only if this exact phase-1 snapshot is still
-        // Showing. Reference identity (not path equality) is required so a stale
-        // Highlight never lands on a newer same-path snapshot (scope/full toggle,
-        // Live edit); the abort guard drops it when the selection changed.
-        const render = await runtime.runPromise(
-          DiffEngine.use((engine) => engine.render(highlight)),
-          { signal }
-        );
-
-        if (signal.aborted) {
-          return;
-        }
-
-        setDiffView((current) =>
-          current === view
-            ? {
-                ...current,
-                highlighted: true,
-                render: { ...current.render, rows: render.rows },
-              }
-            : current
-        );
       } catch {
         // An aborted or failed load keeps the previous snapshot showing.
       }
@@ -1430,12 +1387,6 @@ const createState = () => {
     )
   );
 
-  const loadedGapSource = (): GapSource | undefined => {
-    const source = gapSource();
-
-    return source?.status === "loaded" ? { lines: source.lines } : undefined;
-  };
-
   // Fold by structure: markdown files fold by heading section, everything else by
   // Indentation. The same `languageForPath` the highlighter uses, so the fold model
   // Agrees with the rendered language.
@@ -1447,17 +1398,21 @@ const createState = () => {
       : "indent";
   };
 
-  // The single "collapsed regions" transform: the raw render folded/gapped for the
+  // The render laid out for the expanded gaps: the engine's renderer reveals each
+  // Expanded gap's (highlighted) lines and heads them with a "hide" marker.
+  const expandedLayout = createMemo(() =>
+    diffView()?.render.expand(expandedGaps())
+  );
+
+  // The single "collapsed regions" transform: the expanded layout folded for the
   // Current state. `navigableLines` and the viewer's rows both read it, so the caret
   // Indexes only visible lines and can never land inside a collapsed region. Keyed on
-  // The fold/gap sets and the loaded source (not the caret), so cursor moves don't
-  // Recompute it. `truncated`/`truncatedHidden` stay on the raw `render` deliberately:
-  // The maxLines cap is about the whole file, not what the user folded away.
+  // The fold/gap sets (not the caret), so cursor moves don't recompute it.
+  // `truncated`/`truncatedHidden` stay on the raw `render` deliberately: the maxLines
+  // Cap is about the whole file, not what the user folded away.
   const collapsedRender = createMemo(() =>
-    applyCollapsedRegions(diffView()?.render.rows ?? [], {
-      expandedGaps: expandedGaps(),
+    applyCollapsedRegions(expandedLayout()?.rows ?? [], {
       folded: foldedRegions(),
-      gapSource: loadedGapSource(),
       mode: foldMode(),
     })
   );
@@ -1471,10 +1426,8 @@ const createState = () => {
     folded: ReadonlySet<string>,
     gaps: ReadonlySet<string>
   ) =>
-    applyCollapsedRegions(diffView()?.render.rows ?? [], {
-      expandedGaps: gaps,
+    applyCollapsedRegions(diffView()?.render.expand(gaps).rows ?? [], {
       folded,
-      gapSource: loadedGapSource(),
       mode: foldMode(),
     }).navigable;
 
@@ -1536,15 +1489,13 @@ const createState = () => {
     })
   );
 
-  // Folds/gaps are per file (the #181 v1 decision): a file switch clears them and
-  // Drops any loaded gap source, so a returned-to file opens fully expanded. A scope
-  // Change clears them too, since the gap keys (`gap:N` hunk ordinals) and the loaded
-  // `gapSource` (the scope's new-side text) are both scope-relative, so keeping them
-  // Could reveal mismatched lines from the previous scope's snapshot.
+  // Folds/gaps are per file (the #181 v1 decision): a file switch clears them, so a
+  // Returned-to file opens fully expanded. A scope change clears them too, since the
+  // Gap keys (`gap:N`, the hunk a gap precedes) are scope-relative, so keeping them
+  // Could reveal a different stretch of the next scope's diff.
   const resetFolds = () => {
     setFoldedRegions(new Set<string>());
     setExpandedGaps(new Set<string>());
-    setGapSource(undefined);
   };
 
   createEffect(
@@ -2360,17 +2311,16 @@ const createState = () => {
     });
   };
 
-  // Toggle one git-elided gap; expanding one lazily loads the file's source so the
-  // Revealed lines can be filled (until it resolves the gap stays a collapsed marker).
+  // Toggle one git-elided gap: reveal its unchanged lines (highlighted, from the
+  // Diff's full contents) or collapse them again, keeping the caret on its file line.
   const toggleGap = (key: string) => {
     const previous = navigableLines();
     const next = new Set(expandedGaps());
-    const expanding = !next.has(key);
 
-    if (expanding) {
-      next.add(key);
-    } else {
+    if (next.has(key)) {
       next.delete(key);
+    } else {
+      next.add(key);
     }
 
     const nextLines = collapsedNavigableFor(foldedRegions(), next);
@@ -2386,76 +2336,6 @@ const createState = () => {
       setCursorRow(remapCursorAfterToggle(previous, cursorIndex(), nextLines));
       setSelectionAnchor(remappedAnchor);
     });
-
-    if (expanding) {
-      ensureGapSource();
-    }
-  };
-
-  const ensureGapSource = () => {
-    const path = selectedPath();
-    const file = selectedFile();
-
-    if (path === undefined || file === undefined) {
-      return;
-    }
-
-    const current = gapSource();
-
-    if (current?.path === path && current.status !== "error") {
-      return;
-    }
-
-    setGapSource({ path, status: "loading" });
-    const model = gitModel();
-
-    const load = async () => {
-      try {
-        const content = await runtime.runPromise(
-          Git.use((git) => git.fileSource(model.repoRoot, scope(), file))
-        );
-
-        if (selectedPath() !== path) {
-          return;
-        }
-
-        if (content.kind !== "text") {
-          setGapSource({ path, status: "error" });
-
-          return;
-        }
-
-        // Revealing lines shifts the index of everything below them; keep the caret on
-        // Its file line across the async load. The synchronous toggle could not remap
-        // Yet (the source was not loaded, so it revealed nothing), so do it here.
-        batch(() => {
-          const previous = navigableLines();
-          const anchor = cursorIndex();
-          const selAnchor = selectionAnchor();
-          setGapSource({
-            lines: content.text.replace(/\r?\n$/u, "").split(/\r?\n/u),
-            path,
-            status: "loaded",
-          });
-          const next = navigableLines();
-          setCursorRow(remapCursorAfterToggle(previous, anchor, next));
-
-          // Restore the anchor remapped (setCursorRow above cleared it) so a live
-          // Selection survives the async reveal as the synchronous toggleGap kept it.
-          if (selAnchor !== undefined) {
-            setSelectionAnchor(
-              remapCursorAfterToggle(previous, selAnchor, next)
-            );
-          }
-        });
-      } catch {
-        if (selectedPath() === path) {
-          setGapSource({ path, status: "error" });
-        }
-      }
-    };
-
-    void load();
   };
 
   // The `z` action: fold/unfold the region at the caret. Unfold when the caret sits on
@@ -2518,13 +2398,13 @@ const createState = () => {
   // Clear the fold(s) covering it so the jump can land; the Viewer's jump effect
   // Re-runs on the resulting navigable change and finds the now-visible line.
   const revealLineForJump = (line: number) => {
-    const view = diffView();
+    const expanded = expandedLayout();
 
-    if (view === undefined) {
+    if (expanded === undefined) {
       return false;
     }
 
-    const rawIndex = view.render.navigable.findIndex(
+    const rawIndex = expanded.navigable.findIndex(
       (navigable) => navigable.newLine === line
     );
 
@@ -2532,7 +2412,7 @@ const createState = () => {
       return false;
     }
 
-    const covering = foldRegionsFor(view.render.navigable, foldMode()).filter(
+    const covering = foldRegionsFor(expanded.navigable, foldMode()).filter(
       (region) =>
         region.headerNavIndex < rawIndex &&
         rawIndex <= region.endNavIndex &&

@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { structureDiff } from "@/diff/engine";
+import { renderDiff } from "@/diff/engine";
 import {
   classifyFileBytes,
   contentToContextPatch,
@@ -105,20 +105,30 @@ describe("classifyFileBytes", () => {
 });
 
 describe("contentToContextPatch", () => {
-  test("produces an all-context patch the diff engine renders with correct line numbers", () => {
+  test("produces an all-context patch the diff engine renders with correct line numbers", async () => {
     const patch = contentToContextPatch("src/a.ts", "const a = 1\nconst b = 2");
-    const { navigable } = structureDiff({ full: true, maxLines: 100, patch });
+
+    const { navigable } = await renderDiff({
+      full: true,
+      maxLines: 100,
+      patch,
+    });
 
     expect(navigable.map((line) => line.type)).toEqual(["context", "context"]);
     expect(navigable.map((line) => line.newLine)).toEqual([1, 2]);
     expect(navigable[1]?.content).toBe("const b = 2");
   });
 
-  test("renders empty content as a patch with no navigable lines", () => {
+  test("renders empty content as a patch with no navigable lines", async () => {
     const patch = contentToContextPatch("src/a.ts", "");
-    expect(
-      structureDiff({ full: true, maxLines: 100, patch }).navigable
-    ).toEqual([]);
+
+    const { navigable } = await renderDiff({
+      full: true,
+      maxLines: 100,
+      patch,
+    });
+
+    expect(navigable).toEqual([]);
   });
 });
 

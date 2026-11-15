@@ -46,7 +46,7 @@ process.exit = (code) => {
 };
 
 /**
- * Warm the diff highlighter once so render tests don't race the one-time Shiki load (the first diff
+ * Warm the diff highlighter once so render tests don't race the one-time highlighter load (the first diff
  * would otherwise time out the settle helper).
  */
 await preloadDiffHighlighter();

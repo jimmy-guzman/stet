@@ -1,5 +1,5 @@
+import { isSupportedLanguage } from "@pierre/highlights";
 import { Option, Predicate, Schema } from "effect";
-import { bundledLanguagesInfo } from "shiki";
 
 import type { FileAssociation, FileSupportRegistry } from "./model";
 import { defaultFileSupportRegistry } from "./registry";
@@ -21,16 +21,6 @@ const decodeNames = Schema.decodeUnknownOption(
 );
 
 const decodeBoolean = Schema.decodeUnknownOption(Schema.Boolean);
-
-const syntaxIds = new Set(["text"]);
-
-for (const language of bundledLanguagesInfo) {
-  syntaxIds.add(language.id);
-
-  for (const alias of language.aliases ?? []) {
-    syntaxIds.add(alias);
-  }
-}
 
 const fileFields = new Set([
   "caseSensitive",
@@ -204,7 +194,7 @@ const dropUnknownFacets = (
 
   if (
     Predicate.isString(candidate.syntax) &&
-    !syntaxIds.has(candidate.syntax)
+    !isSupportedLanguage(candidate.syntax)
   ) {
     issues.push(
       `file "${name}": unknown syntax "${candidate.syntax}"; dropping the syntax facet`

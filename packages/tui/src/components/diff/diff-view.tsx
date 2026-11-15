@@ -57,6 +57,15 @@ const caretRangeFor = (
   };
 };
 
+// Only removed/added lines carry changed words, so a context row never reads this.
+const changedWordBg = (row: DiffLineRow, lifted: boolean) => {
+  if (row.type === "add") {
+    return lifted ? theme.rgba.addedWordBgActive : theme.rgba.addedWordBg;
+  }
+
+  return lifted ? theme.rgba.removedWordBgActive : theme.rgba.removedWordBg;
+};
+
 // One renderable per line: the per-token colors live inside a single StyledText
 // Buffer instead of one <text> per token (a screenful of highlighted code was
 // Hundreds of flex nodes). Content is set imperatively because the binding's
@@ -67,6 +76,8 @@ const StyledLine = (props: {
   width: number;
   scrollX: number;
   caret: CaretRange | undefined;
+  /** The row wears the lifted cursor/selection background, so its changed words layer over that. */
+  lifted: boolean;
 }) => {
   let ref: TextRenderable | undefined;
   createEffect(() => {
@@ -96,13 +107,19 @@ const StyledLine = (props: {
             props.caret.to - offset
           );
 
+    // A changed word layers its line's sign color over the row's own background; the
+    // Caret word wins over it.
+    const wordBg = changedWordBg(row, props.lifted);
+
     ref.content = new StyledText(
       spans.map((part) => {
         const chunk = fg(part.fg ?? theme.colors.text.primary)(part.text);
 
-        return part.highlight === true
-          ? bg(theme.colors.caret.wordBg)(chunk)
-          : chunk;
+        if (part.highlight === true) {
+          return bg(theme.colors.caret.wordBg)(chunk);
+        }
+
+        return part.changed === true ? bg(wordBg)(chunk) : chunk;
       })
     );
   });
@@ -219,12 +236,22 @@ const gutterBackground = (row: DiffLineRow) =>
 
 const asLineRow = (row: DiffRow) => (isLineRow(row) ? row : undefined);
 
-// A collapsed-region marker: a fold (`▸ N lines folded`), a collapsed git gap
-// (`⋯ N unmodified lines`), or an expanded gap's re-collapse handle (`⋯ hide N …`).
-const markerGlyph = (row: DiffRow) =>
-  row.kind === "marker" && row.regionKind === "fold" ? "▸" : "⋯";
+// A non-line row: a fold (`▸ N lines folded`), a collapsed git gap
+// (`⋯ N unmodified lines`), an expanded gap's re-collapse handle (`⋯ hide N …`), or
+// A separator that carries its own glyph (`\ No newline at end of file`).
+const markerGlyph = (row: DiffRow) => {
+  if (row.kind === "separator") {
+    return row.glyph;
+  }
+
+  return row.kind === "marker" && row.regionKind === "fold" ? "▸" : "⋯";
+};
 
 const markerLabel = (row: DiffRow) => {
+  if (row.kind === "separator") {
+    return row.text;
+  }
+
   if (row.kind !== "marker") {
     return "";
   }
@@ -831,6 +858,7 @@ export const DiffView = () => {
                       width={contentWidth()}
                       scrollX={scrollX()}
                       caret={isCursor(line()) ? caretRange() : undefined}
+                      lifted={isCursor(line()) || isSelected(line())}
                     />
                   </box>
                 </box>

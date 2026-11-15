@@ -99,11 +99,13 @@ const SCREENSHOT_CONFIG = JSON.stringify(
      * in the capture reveals this: the menu's footer hint names its own keys, never its opener.
      */
     keybindings: { "context-menu": "ctrl+n" },
-    // Named palettes for the theme-switcher shot: each carries a distinct accent (the row swatch)
-    // And a bundled Shiki `syntax` (so previewing one re-themes the diff). `theme` stays unset so
-    // The app starts on `auto`, keeping the ✓ there while the highlighted row previews another.
-    // Registration (and so list) order after the built-ins, sorted: catppuccin, gruvbox,
-    // Rose-pine, tokyo-night, the last of the nine rows the switcher then lists.
+    /**
+     * Named palettes for the theme-switcher shot: each carries a distinct accent (the row swatch)
+     * and a bundled `syntax` theme (so previewing one re-themes the diff). `theme` stays unset so
+     * the app starts on `auto`, keeping the ✓ there while the highlighted row previews another.
+     * Registration (and so list) order after the built-ins, sorted: catppuccin, gruvbox,
+     * rose-pine, tokyo-night, the last of the nine rows the switcher then lists.
+     */
     themes: {
       catppuccin: {
         accent: { primary: "#cba6f7" },

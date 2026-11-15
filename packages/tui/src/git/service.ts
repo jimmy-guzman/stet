@@ -15,6 +15,7 @@ import {
 } from "./file-patch";
 import type {
   BinaryDiff,
+  DiffSides,
   FilePatch,
   PatchSide,
   SideContent,
@@ -90,20 +91,12 @@ export class Git extends Context.Service<
       Pick<GitModel, "changed" | "changedByPath" | "scopeKey" | "branch">,
       GitError
     >;
+    /** The file's patch, plus both sides' text when it was built in-process (see `buildFilePatch`). */
     readonly fileDiff: (
       repoRoot: string,
       scope: DiffScope,
       file: ChangedFile
-    ) => Effect.Effect<string, GitError>;
-    /**
-     * The full text of the side an expanded gap reveals (the new side, or the old side for a
-     * deletion). Loaded lazily on the first gap expansion in a file, never on the diff hot path.
-     */
-    readonly fileSource: (
-      repoRoot: string,
-      scope: DiffScope,
-      file: ChangedFile
-    ) => Effect.Effect<SideContent, GitError>;
+    ) => Effect.Effect<{ patch: string; sides?: DiffSides }, GitError>;
     readonly gitDir: (repoRoot: string) => Effect.Effect<string, GitError>;
     /** The SHA HEAD points at, or `undefined` on a commitless repo (an unborn HEAD). */
     readonly headRef: (
@@ -247,7 +240,7 @@ export const GitLive = Layer.effect(
               allowedExitCodes: [0, 1],
             })
             .pipe(
-              Effect.map((result) => result.stdout),
+              Effect.map((result) => ({ patch: result.stdout })),
               Effect.mapError(toGitError)
             );
         }
@@ -255,7 +248,7 @@ export const GitLive = Layer.effect(
         // Numstat already flagged it binary; the render is a model-driven
         // Placeholder, so skip both side fetches.
         if (file.binary) {
-          return Effect.succeed("");
+          return Effect.succeed({ patch: "" });
         }
 
         const pathspecDiff = process
@@ -270,10 +263,7 @@ export const GitLive = Layer.effect(
             repoRoot,
             { allowedExitCodes: [0, 1] }
           )
-          .pipe(
-            Effect.map((result) => result.stdout),
-            Effect.mapError(toGitError)
-          );
+          .pipe(Effect.mapError(toGitError));
 
         const { newSide, oldSide } = fileDiffSides(scope, file);
 
@@ -294,18 +284,13 @@ export const GitLive = Layer.effect(
             Effect.succeed<FilePatch>({ kind: "fallback" })
           ),
           Effect.flatMap((built) =>
-            built.kind === "patch" ? Effect.succeed(built.patch) : pathspecDiff
+            built.kind === "patch"
+              ? Effect.succeed({ patch: built.patch, sides: built.sides })
+              : pathspecDiff.pipe(
+                  Effect.map((result) => ({ patch: result.stdout }))
+                )
           )
         );
-      },
-      fileSource: (repoRoot, scope, file) => {
-        const { newSide, oldSide } = fileDiffSides(scope, file);
-
-        return fetchSide(
-          repoRoot,
-          file.kind === "deleted" ? oldSide : newSide,
-          file.path
-        ).pipe(Effect.mapError(toGitError));
       },
       // The per-worktree git dir, absolute. In a linked worktree this resolves
       // Outside the worktree tree (to <main>/.git/worktrees/<name>), so the watcher

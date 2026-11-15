@@ -27,7 +27,7 @@ const line = (navIndex: number, newLine: number, content: string): DiffRow => ({
   type: "context",
 });
 
-const empty = { expandedGaps: new Set<string>(), folded: new Set<string>() };
+const empty = { folded: new Set<string>() };
 
 describe("computeFoldRegions", () => {
   test("heads a region at a line whose following lines are more indented", () => {
@@ -96,7 +96,6 @@ describe("applyCollapsedRegions folds", () => {
 
   test("drops the folded body behind a fold marker and re-densifies navIndex", () => {
     const result = applyCollapsedRegions(rows, {
-      expandedGaps: new Set(),
       folded: new Set(["fold:n1"]),
     });
 
@@ -119,17 +118,22 @@ describe("applyCollapsedRegions folds", () => {
 
   test("hides a git gap that sits inside a folded region", () => {
     // A folded block can span an elided middle (edits at both ends), so its fold region
-    // Covers a separator; folding must hide that gap marker too, not leak it in the fold.
+    // Covers a gap marker; folding must hide it too, not leak it in the fold.
     const spanning: DiffRow[] = [
       line(0, 1, "function foo() {"),
       line(1, 2, "  const a = 1"),
-      { count: 3, kind: "separator", text: "3 unmodified lines" },
+      {
+        collapsed: true,
+        count: 3,
+        key: "gap:1",
+        kind: "marker",
+        regionKind: "gap",
+      },
       line(2, 6, "  const b = 2"),
       line(3, 7, "}"),
     ];
 
     const result = applyCollapsedRegions(spanning, {
-      expandedGaps: new Set(),
       folded: new Set(["fold:n1"]),
     });
 
@@ -161,7 +165,6 @@ describe("applyCollapsedRegions folds", () => {
     ];
 
     const result = applyCollapsedRegions(nested, {
-      expandedGaps: new Set(),
       folded: new Set(["fold:n1", "fold:n2"]),
     });
 
@@ -180,55 +183,23 @@ describe("applyCollapsedRegions folds", () => {
 });
 
 describe("applyCollapsedRegions gaps", () => {
-  const rows: DiffRow[] = [
-    { count: 3, kind: "separator", text: "3 unmodified lines" },
-    line(0, 10, "  changed();"),
-  ];
+  test("passes the engine's gap markers and separators through untouched", () => {
+    const rows: DiffRow[] = [
+      {
+        collapsed: true,
+        count: 3,
+        key: "gap:0",
+        kind: "marker",
+        regionKind: "gap",
+      },
+      line(0, 10, "  changed();"),
+      { glyph: "\\", kind: "separator", text: "No newline at end of file" },
+    ];
 
-  test("renders a collapsed separator as a gap marker by default", () => {
     const result = applyCollapsedRegions(rows, empty);
-    expect(result.rows[0]).toEqual({
-      collapsed: true,
-      count: 3,
-      key: "gap:0",
-      kind: "marker",
-      regionKind: "gap",
-    });
+
+    expect(result.rows).toEqual(rows);
     expect(result.navigable).toHaveLength(1);
-  });
-
-  test("reveals the elided lines from source behind a hide marker when expanded", () => {
-    const result = applyCollapsedRegions(rows, {
-      expandedGaps: new Set(["gap:0"]),
-      folded: new Set(),
-      gapSource: { lines: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] },
-    });
-
-    expect(result.rows[0]).toEqual({
-      collapsed: false,
-      count: 3,
-      key: "gap:0",
-      kind: "marker",
-      regionKind: "gap",
-    });
-    // Gap of 3 before new line 10 -> reveals source lines 7, 8, 9 (indices 6..8: "g","h","i").
-    expect(
-      result.navigable.map(
-        (navigable) => `${navigable.newLine}:${navigable.content}`
-      )
-    ).toEqual(["7:g", "8:h", "9:i", "10:  changed();"]);
-  });
-
-  test("stays a collapsed marker when expanded but no source is loaded yet", () => {
-    const result = applyCollapsedRegions(rows, {
-      expandedGaps: new Set(["gap:0"]),
-      folded: new Set(),
-    });
-
-    expect(result.rows[0]).toMatchObject({
-      collapsed: true,
-      regionKind: "gap",
-    });
   });
 });
 

@@ -1,4 +1,3 @@
-import type { RenderSpan } from "./hast";
 import { navigableLinesFromRows } from "./rows";
 import type { DiffRow, NavigableLine } from "./rows";
 
@@ -6,19 +5,14 @@ import type { DiffRow, NavigableLine } from "./rows";
  * A collapsible region computed from indentation: a header line whose following lines are more
  * indented. `headerNavIndex`/`endNavIndex` are positions in the navigable (line-only) list the
  * region is computed over; `count` is the body line count hidden when the region folds (the header
- * stays). The `key` is side-qualified by the header's own line number so it survives the phase-1 ->
- * phase-2 highlight swap and matches whether it is computed over the raw or the collapsed set.
+ * stays). The `key` is side-qualified by the header's own line number so it survives a gap
+ * expansion re-layout and matches whether it is computed over the raw or the collapsed set.
  */
 export interface FoldRegion {
   key: string;
   headerNavIndex: number;
   endNavIndex: number;
   count: number;
-}
-
-/** Full source of a file's one side, so an expanded gap can be filled with its unchanged lines. */
-export interface GapSource {
-  lines: string[];
 }
 
 export const foldKey = (line: NavigableLine) =>
@@ -183,18 +177,15 @@ const nextLineRow = (rows: DiffRow[], from: number) => {
 
 interface ApplyOptions {
   folded: ReadonlySet<string>;
-  expandedGaps: ReadonlySet<string>;
-  gapSource?: GapSource;
   mode?: FoldMode;
 }
 
 /**
- * Rewrite the row stream for the current collapsed state: drop folded bodies behind a fold marker,
- * and turn each git-elided separator into a gap marker (or, when expanded and a source is loaded,
- * the revealed unchanged lines behind a "hide" marker). `navIndex` is re-densified over the
- * surviving/added line rows and `navigable` rebuilt, so the caret indexes only visible lines and
- * can never land inside a collapsed region. Markers are non-navigable, exactly like the separators
- * they replace.
+ * Fold the row stream for the current state: drop each folded body behind a fold marker.
+ * `navIndex` is re-densified over the surviving line rows and `navigable` rebuilt, so the caret
+ * indexes only visible lines and can never land inside a folded region. Gap markers and separators
+ * (from the engine's layout) pass through, except one that sits inside a folded body (a fold
+ * spanning an elided middle, edits at both ends of a block), which hides with it.
  */
 export const applyCollapsedRegions = (
   rows: DiffRow[],
@@ -212,17 +203,6 @@ export const applyCollapsedRegions = (
   const out: DiffRow[] = [];
   let navIndex = 0;
   let skipUntil = -1;
-  let gapOrdinal = 0;
-
-  const pushLine = (
-    type: NavigableLine["type"],
-    oldLine: number | undefined,
-    newLine: number | undefined,
-    spans: RenderSpan[]
-  ) => {
-    out.push({ kind: "line", navIndex, newLine, oldLine, spans, type });
-    navIndex += 1;
-  };
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
@@ -231,59 +211,13 @@ export const applyCollapsedRegions = (
       continue;
     }
 
-    if (row.kind === "separator") {
-      const key = `gap:${gapOrdinal}`;
-      gapOrdinal += 1;
+    if (row.kind !== "line") {
       const following = nextLineRow(rows, index + 1);
 
-      // A gap can sit inside a fold region that spans an elided middle (edits at both
-      // Ends of a block); hide it with the folded body. Its ordinal stays reserved
-      // Above so the remaining gap keys don't shift when the region unfolds.
-      if (following !== undefined && following.navIndex <= skipUntil) {
-        continue;
+      if (following === undefined || following.navIndex > skipUntil) {
+        out.push(row);
       }
 
-      const revealSource = options.expandedGaps.has(key)
-        ? options.gapSource
-        : undefined;
-
-      if (
-        revealSource !== undefined &&
-        following?.newLine !== undefined &&
-        following.oldLine !== undefined
-      ) {
-        out.push({
-          collapsed: false,
-          count: row.count,
-          key,
-          kind: "marker",
-          regionKind: "gap",
-        });
-        const firstNew = following.newLine - row.count;
-        const firstOld = following.oldLine - row.count;
-
-        for (let offset = 0; offset < row.count; offset += 1) {
-          const source = revealSource.lines[firstNew - 1 + offset] ?? "";
-          pushLine("context", firstOld + offset, firstNew + offset, [
-            { text: source },
-          ]);
-        }
-
-        continue;
-      }
-
-      out.push({
-        collapsed: true,
-        count: row.count,
-        key,
-        kind: "marker",
-        regionKind: "gap",
-      });
-      continue;
-    }
-
-    if (row.kind !== "line") {
-      out.push(row);
       continue;
     }
 
@@ -291,7 +225,8 @@ export const applyCollapsedRegions = (
       continue;
     }
 
-    pushLine(row.type, row.oldLine, row.newLine, row.spans);
+    out.push({ ...row, navIndex });
+    navIndex += 1;
 
     const region = regionByHeader.get(row.navIndex);
 

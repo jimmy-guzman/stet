@@ -216,11 +216,12 @@ export const nameStatusArgs = (scope: DiffScope) => [
   "-z",
 ];
 
-// Pin canonical a//b/ prefixes and disable external/textconv diff drivers so a
-// User's gitconfig (diff.noprefix, diff.mnemonicPrefix, diff.external) can't
-// Corrupt the patch text the viewer parses. These are command-line options, not
-// `-c diff.srcPrefix` overrides: the config form loses to diff.mnemonicPrefix,
-// The command-line form wins.
+/**
+ * Pin the canonical `a/` and `b/` prefixes and disable external diff drivers so a user's gitconfig
+ * (diff.noprefix, diff.mnemonicPrefix, diff.external) can't corrupt the patch text the viewer
+ * parses. These are command-line options, not `-c diff.srcPrefix` overrides: the config form loses
+ * to diff.mnemonicPrefix, the command-line form wins.
+ */
 const diffFlags = ["--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"];
 
 export const diffArgs = (scope: DiffScope) => {

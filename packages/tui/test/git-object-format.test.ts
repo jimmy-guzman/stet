@@ -122,7 +122,10 @@ test("a SHA-256 root commit reports no parent and diffs against the empty tree",
   }
 
   expect(added.kind).toBe("added");
-  expect(await loadFileDiff(repo, scope, added)).toContain("+one");
+
+  const { patch } = await loadFileDiff(repo, scope, added);
+
+  expect(patch).toContain("+one");
 });
 
 // The empty tree is resolved once at startup and never again, which is only sound because every

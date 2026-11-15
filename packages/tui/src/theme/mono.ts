@@ -16,13 +16,13 @@ export const prefersMonochrome = (env: Record<string, string | undefined>) => {
   return env.NO_COLOR !== undefined && env.NO_COLOR !== "";
 };
 
-// The NO_COLOR pair: every token is a pure grey (r = g = b), so no hue ever
-// Carries meaning; ordering signals (recency, severity, stage) keep
-// Their ramps as brightness. `icon` is empty so every glyph falls back to
-// `text.muted`, and `syntax` greys feed the Shiki theme, so code highlighting
-// Degrades to weight and brightness. Selected automatically when the terminal
-// Reports colors off (see `main.tsx`), and listed in the `t` switcher like any
-// Built-in.
+/**
+ * The NO_COLOR pair: every token is a pure grey (r = g = b), so no hue ever carries meaning;
+ * ordering signals (recency, severity, stage) keep their ramps as brightness. `icon` is empty so
+ * every glyph falls back to `text.muted`, and `syntax` greys feed the syntax theme, so code
+ * highlighting degrades to brightness. Selected automatically when the terminal reports colors off
+ * (see `main.tsx`), and listed in the `t` switcher like any built-in.
+ */
 export const monoDarkTheme: Theme = {
   accent: { primary: "#e9e9e9" },
   border: { focused: "#e9e9e9", unfocused: "#2c2c2c" },

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { languageForPath, renderDiff } from "@/diff/engine";
 import { isLineRow } from "@/diff/rows";
+import { resolveFileSupportConfig } from "@/file-support/config";
+import { registerFileSupport } from "@/file-support/registry";
 import { setSelection } from "@/theme/active";
 import { registerThemes, resolveThemes } from "@/theme/registry";
 
@@ -17,9 +19,9 @@ index 1111111..2222222 100644
  const d = 5;
 `;
 
-// Go is not preloaded. Two different files (distinct fingerprints, so no cache/in-flight
-// De-dup) rendered together must both wait for the grammar to attach: neither may race ahead
-// And cache plain-text spans while the attachment is still in flight.
+// Two different files (distinct fingerprints, so no cache/in-flight de-dup) rendered
+// Together must both come back highlighted: neither may cache plain-text spans while
+// The shared highlighter is still resolving its theme.
 const goPatch = (name: string, body: string) => `diff --git a/${name} b/${name}
 index 1111111..2222222 100644
 --- a/${name}
@@ -49,19 +51,23 @@ describe("renderDiff", () => {
       throw new Error("expected an addition row");
     }
 
-    // The reconstructed text is exact, and Shiki colored it (the plain-text fallback is one
-    // Uncolored span, so a foreground color is what says the grammar attached).
+    // The reconstructed text is exact, and the highlighter colored it (plain text is one
+    // Foreground color, so distinct colors are what say it highlighted).
     expect(added.spans.map((span) => span.text).join("")).toBe(
       'const b = "three";'
     );
-    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+    expect(new Set(added.spans.map((span) => span.fg)).size).toBeGreaterThan(1);
     expect(added.newLine).toBe(2);
   });
 
   test("resolves an empty render for an empty patch", async () => {
-    expect(
-      await renderDiff({ full: false, maxLines: 1600, patch: "" })
-    ).toEqual({
+    const { hiddenLines, navigable, rows } = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: "",
+    });
+
+    expect({ hiddenLines, navigable, rows }).toEqual({
       hiddenLines: 0,
       navigable: [],
       rows: [],
@@ -76,8 +82,7 @@ describe("renderDiff", () => {
     expect(second).toBe(first);
   });
 
-  test("highlights a language not in the warm preload set by attaching its grammar on demand", async () => {
-    // Rust is not preloaded; its grammar must be resolved and attached before the diff highlights.
+  test("highlights a Rust diff", async () => {
     const rustPatch = `diff --git a/main.rs b/main.rs
 index 1111111..2222222 100644
 --- a/main.rs
@@ -104,10 +109,10 @@ index 1111111..2222222 100644
     expect(added.spans.map((span) => span.text).join("")).toBe(
       "let total: u32 = sum(items);"
     );
-    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+    expect(new Set(added.spans.map((span) => span.fg)).size).toBeGreaterThan(1);
   });
 
-  test("highlights both files when two diffs of a new language render concurrently", async () => {
+  test("highlights both files when two diffs render concurrently", async () => {
     const [first, second] = await Promise.all([
       renderDiff({
         full: false,
@@ -130,7 +135,9 @@ index 1111111..2222222 100644
         throw new Error("expected an addition row");
       }
 
-      expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+      expect(new Set(added.spans.map((span) => span.fg)).size).toBeGreaterThan(
+        1
+      );
     }
   });
 
@@ -163,7 +170,7 @@ index 1111111..2222222 100644
     expect(added.spans.map((span) => span.text).join("")).toBe(
       "FROM oven/bun:1"
     );
-    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+    expect(new Set(added.spans.map((span) => span.fg)).size).toBeGreaterThan(1);
   });
 
   test("renders an .npmrc with syntax highlighting", async () => {
@@ -193,7 +200,7 @@ index 1111111..2222222 100644
     expect(added.spans.map((span) => span.text).join("")).toBe(
       "save-exact=true"
     );
-    expect(added.spans.some((span) => span.fg !== undefined)).toBe(true);
+    expect(new Set(added.spans.map((span) => span.fg)).size).toBeGreaterThan(1);
   });
 
   test("renders an unknown extension as plain text without throwing", async () => {
@@ -232,13 +239,38 @@ const addedColors = async () => {
   return added?.spans.map((span) => span.fg) ?? [];
 };
 
+describe("renderDiff file associations", () => {
+  test("renders plain text when a files association turns syntax off", async () => {
+    registerFileSupport(
+      resolveFileSupportConfig({
+        files: { "plain-ts": { extensions: ["ts"], syntax: false } },
+      }).registry
+    );
+
+    const render = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: patch.replaceAll("foo.ts", "plain.ts"),
+    });
+
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
+
+    expect(added?.spans.map((span) => span.text).join("")).toBe(
+      'const b = "three";'
+    );
+    expect(new Set(added?.spans.map((span) => span.fg)).size).toBe(1);
+  });
+});
+
 describe("renderDiff theme attach", () => {
   test("colors a diff under a second token theme", async () => {
     setSelection("light");
 
     const colors = await addedColors();
 
-    expect(colors.some((fg) => fg !== undefined)).toBe(true);
+    expect(new Set(colors).size).toBeGreaterThan(1);
   });
 
   test("colors a diff under a bundled syntax theme with that theme's colors", async () => {
@@ -253,7 +285,7 @@ describe("renderDiff theme attach", () => {
 
     const bundledColors = await addedColors();
 
-    expect(bundledColors.some((fg) => fg !== undefined)).toBe(true);
+    expect(new Set(bundledColors).size).toBeGreaterThan(1);
     expect(bundledColors).not.toEqual(tokenColors);
   });
 });

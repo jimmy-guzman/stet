@@ -23,7 +23,19 @@ export type SideContent =
   | { kind: "too-large" }
   | { kind: "missing" };
 
-export type FilePatch = { kind: "patch"; patch: string } | { kind: "fallback" };
+/**
+ * Both sides' full text, carried beside an in-process patch (built from these exact bytes), so the
+ * diff engine can fill its gaps from them (`hydratePartialDiff` reads each line by its hunk
+ * number, unchecked).
+ */
+export interface DiffSides {
+  oldText: string;
+  newText: string;
+}
+
+export type FilePatch =
+  | { kind: "patch"; patch: string; sides?: DiffSides }
+  | { kind: "fallback" };
 
 /** A binary side's size and (for a recognized image) pixel dimensions, for the viewer placeholder. */
 export interface SideMeta {
@@ -151,7 +163,9 @@ export const readWorktreeSide = async (
  * eol-converting the worktree before diffing, so raw bytes would paint a whole-file rewrite), or
  * zero hunks against non-zero numstat counts (an unmodeled content filter). Binary sides yield an
  * empty patch: the render is a model-driven placeholder either way, same as git's `Binary files
- * differ` line.
+ * differ` line. Only the in-process patch carries the sides: git's fallback patch runs through
+ * textconv and clean filters, which can renumber or rewrite lines, so raw bytes beside it would
+ * fill its hunks with the wrong text or none.
  */
 export const buildFilePatch = (
   file: ChangedFile,
@@ -203,5 +217,6 @@ export const buildFilePatch = (
       isGit: true,
       isRename: file.oldPath !== undefined,
     }),
+    sides: { newText: newContent.text, oldText: oldContent.text },
   };
 };

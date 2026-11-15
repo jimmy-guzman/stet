@@ -375,7 +375,7 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("unicode file missing from model");
       }
 
-      const diff = await loadFileDiff(
+      const { patch: diff } = await loadFileDiff(
         loaded.repoRoot,
         { kind: "all", ref: "HEAD" },
         changed
@@ -405,7 +405,12 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("changed file missing from model");
       }
 
-      const diff = await loadFileDiff(loaded.repoRoot, scope, changed);
+      const { patch: diff } = await loadFileDiff(
+        loaded.repoRoot,
+        scope,
+        changed
+      );
+
       expect(diff).toContain("--- a/src/a.ts");
       expect(diff).toContain("+++ b/src/a.ts");
     } finally {
@@ -443,7 +448,11 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("renamed file missing from model");
       }
 
-      const diff = await loadFileDiff(loaded.repoRoot, scope, renamed);
+      const { patch: diff } = await loadFileDiff(
+        loaded.repoRoot,
+        scope,
+        renamed
+      );
 
       const addedLines = diff
         .split("\n")
@@ -494,7 +503,7 @@ describe("loadModel in a fixture repo", () => {
         throw new Error("b.txt missing from the commit model");
       }
 
-      const diff = await loadFileDiff(loaded.repoRoot, scope, added);
+      const { patch: diff } = await loadFileDiff(loaded.repoRoot, scope, added);
       expect(diff).toContain("+two");
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });

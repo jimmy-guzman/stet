@@ -56,7 +56,7 @@ describe("gap expansion", () => {
 
       // Put the caret on the last line (below the gap), then expand the gap above it.
       // The revealed lines are inserted above the caret; it must stay on line 20, not
-      // Shift up by the number of revealed lines once the async source load lands.
+      // Shift up by the number of revealed lines.
       mockInput.pressTab();
       mockInput.pressKey("G");
       await settleUntil("caret on last line", (frame) =>
@@ -64,9 +64,10 @@ describe("gap expansion", () => {
       );
       mockInput.pressKey("z");
 
-      const expanded = await settleUntil("gap expanded", (frame) =>
-        frame.includes("const l10 = 10")
-      );
+      // The diff already carries the gap's lines, so the reveal lands on the very next
+      // Frame, with nothing left to load.
+      await renderOnce();
+      const expanded = captureCharFrame();
 
       expect(expanded).toContain("const l10 = 10");
       expect(expanded).toMatch(/ln 20:\d/u);

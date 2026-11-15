@@ -5,15 +5,13 @@ export interface HighlightSpan extends RenderSpan {
   highlight?: boolean;
 }
 
+// A piece of `span` carrying `text`, keeping its color and changed-word flag.
 const highlightSpan = (
-  fg: string | undefined,
+  span: RenderSpan,
   text: string,
   highlight: boolean
-): HighlightSpan => {
-  const base = fg === undefined ? { text } : { fg, text };
-
-  return highlight ? { ...base, highlight: true } : base;
-};
+): HighlightSpan =>
+  highlight ? { ...span, highlight: true, text } : { ...span, text };
 
 // Tag the display-column range [from, to) of these spans as highlighted, splitting
 // Spans at the boundaries so the caret word can carry a background. Columns are
@@ -39,7 +37,7 @@ export const markRange = (
       const inRange = col >= from && col < to;
 
       if (text !== "" && inRange !== highlighted) {
-        out.push(highlightSpan(span.fg, text, highlighted));
+        out.push(highlightSpan(span, text, highlighted));
         text = "";
       }
 
@@ -49,7 +47,7 @@ export const markRange = (
     }
 
     if (text !== "") {
-      out.push(highlightSpan(span.fg, text, highlighted));
+      out.push(highlightSpan(span, text, highlighted));
     }
   }
 
@@ -116,7 +114,7 @@ export const sliceSpansWindow = (
     }
 
     if (text !== "") {
-      out.push(span.fg === undefined ? { text } : { fg: span.fg, text });
+      out.push({ ...span, text });
     }
 
     if (col >= end) {

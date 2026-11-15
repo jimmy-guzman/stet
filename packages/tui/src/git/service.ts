@@ -91,7 +91,7 @@ export class Git extends Context.Service<
       Pick<GitModel, "changed" | "changedByPath" | "scopeKey" | "branch">,
       GitError
     >;
-    /** The file's patch, plus both sides' text when they are faithful to it (see `buildFilePatch`). */
+    /** The file's patch, plus both sides' text when it was built in-process (see `buildFilePatch`). */
     readonly fileDiff: (
       repoRoot: string,
       scope: DiffScope,
@@ -287,10 +287,7 @@ export const GitLive = Layer.effect(
             built.kind === "patch"
               ? Effect.succeed({ patch: built.patch, sides: built.sides })
               : pathspecDiff.pipe(
-                  Effect.map((result) => ({
-                    patch: result.stdout,
-                    sides: built.sides,
-                  }))
+                  Effect.map((result) => ({ patch: result.stdout }))
                 )
           )
         );

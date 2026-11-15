@@ -22,8 +22,6 @@ const decodeNames = Schema.decodeUnknownOption(
 
 const decodeBoolean = Schema.decodeUnknownOption(Schema.Boolean);
 
-const isSyntaxId = (id: string) => id === "text" || isSupportedLanguage(id);
-
 const fileFields = new Set([
   "caseSensitive",
   "dotfiles",
@@ -194,7 +192,10 @@ const dropUnknownFacets = (
     delete candidate.icon;
   }
 
-  if (Predicate.isString(candidate.syntax) && !isSyntaxId(candidate.syntax)) {
+  if (
+    Predicate.isString(candidate.syntax) &&
+    !isSupportedLanguage(candidate.syntax)
+  ) {
     issues.push(
       `file "${name}": unknown syntax "${candidate.syntax}"; dropping the syntax facet`
     );

@@ -197,4 +197,32 @@ describe("diff rows", () => {
     expect(changedText("add")).toBe("110");
     expect(changedText("context")).toBe("");
   });
+
+  test("ends a capped diff at the cap line, with no gap after it that would expand into nothing", async () => {
+    // Edits at lines 12 and 25: the first hunk's 8 body lines exactly fill the cap.
+    const edited = OLD.replace("const a12 = 12;", "const a12 = 120;").replace(
+      "const a25 = 25;",
+      "const a25 = 250;"
+    );
+
+    const { patch, sides } = built(OLD, edited);
+    const capped = await renderDiff({ full: false, maxLines: 8, patch, sides });
+
+    expect(capped.hiddenLines).toBe(8);
+    expect(capped.rows.at(-1)?.kind).toBe("line");
+  });
+
+  test("keeps the cap line's own no-newline row", async () => {
+    // The old side's last line `c` has no trailing newline.
+    // It is the third body line, so a cap of three ends on it.
+    const { patch, sides } = built("a\nb\nc", "a\nb\nc\nd\ne\n");
+    const capped = await renderDiff({ full: false, maxLines: 3, patch, sides });
+
+    expect(capped.rows.map(describeRow)).toEqual([
+      "context:1/1",
+      "context:2/2",
+      "remove:3/-",
+      "sep:No newline at end of file",
+    ]);
+  });
 });

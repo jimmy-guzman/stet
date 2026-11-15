@@ -5,8 +5,8 @@ import type { DiffRow, NavigableLine } from "./rows";
  * A collapsible region computed from indentation: a header line whose following lines are more
  * indented. `headerNavIndex`/`endNavIndex` are positions in the navigable (line-only) list the
  * region is computed over; `count` is the body line count hidden when the region folds (the header
- * stays). The `key` is side-qualified by the header's own line number so it survives the phase-1 ->
- * phase-2 highlight swap and matches whether it is computed over the raw or the collapsed set.
+ * stays). The `key` is side-qualified by the header's own line number so it survives a gap
+ * expansion re-layout and matches whether it is computed over the raw or the collapsed set.
  */
 export interface FoldRegion {
   key: string;

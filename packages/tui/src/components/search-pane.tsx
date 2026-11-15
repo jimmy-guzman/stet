@@ -25,8 +25,10 @@ import { FileIcon } from "./file-icon";
 import { ListScrollbar } from "./list-scrollbar";
 import { windowWheelHandler } from "./wheel";
 
-// A contiguous run of line rows (one excerpt): highlighted as a block so Shiki
-// Tokenizes with real surrounding context, then mapped back to rows by offset.
+/**
+ * A contiguous run of line rows (one excerpt): highlighted as a block so the highlighter tokenizes
+ * with real surrounding context, then mapped back to rows by offset.
+ */
 interface Excerpt {
   key: string;
   path: string;

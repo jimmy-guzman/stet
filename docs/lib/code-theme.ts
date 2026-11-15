@@ -1,8 +1,10 @@
 /**
  * Shiki themes for docs code blocks, mapped onto stet's own syntax palette so highlighted code
- * reads identically to the TUI. Ported self-contained from `src/theme/shiki.ts` (the scope->token
- * mapping) and `src/theme/dark.ts` / `src/theme/light.ts` (the token hexes). Keep in sync with
- * those files; this is a deliberate duplication so the docs build never reaches outside `docs/`.
+ * reads identically to the TUI. The token hexes are ported self-contained from `src/theme/dark.ts` /
+ * `src/theme/light.ts`, and which token colors which construct follows `src/theme/syntax.ts`
+ * (the TUI's `Theme.syntax` mapping, written as Zed scopes there); the docs keep their own TextMate
+ * scopes because Fumadocs code blocks still highlight with Shiki. Keep in sync with those files;
+ * this is a deliberate duplication so the docs build never reaches outside `docs/`.
  */
 interface Tokens {
   bg: string;

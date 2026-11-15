@@ -253,6 +253,38 @@ describe("in-process fileDiff matches git", () => {
     await expectSameRows(repoRoot, { kind: "all", ref: "HEAD" }, "a.txt");
   });
 
+  test("a textconv'd fallback renders git's patch, never raw sides that disagree with it", async () => {
+    // One-sided CRLF sends the file to git's own diff, which runs the textconv
+    // Driver (here doubling every line), so its hunk numbers no longer match the
+    // Raw bytes; filling the hunks from those bytes blanked the diff.
+    const lines = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`);
+
+    const repoRoot = createFixtureRepo("stet-fd-textconv-", {
+      ".gitattributes": "*.txt diff=dbl -text\n",
+      "a.txt": `${lines.join("\r\n")}\r\n`,
+    });
+
+    runGit(repoRoot, ["config", "diff.dbl.textconv", "sed G"]);
+    writeFileSync(
+      path.join(repoRoot, "a.txt"),
+      `${lines.join("\n").replace("line 30", "LINE 30")}\n`
+    );
+
+    const scope: DiffScope = { kind: "all", ref: "HEAD" };
+    const file = await changedFile(repoRoot, scope, "a.txt");
+    const diff = await loadFileDiff(repoRoot, scope, file);
+
+    expect(diff.sides).toBeUndefined();
+
+    const { navigable } = await renderDiff({
+      full: true,
+      maxLines: 4000,
+      ...diff,
+    });
+
+    expect(navigable.map((line) => line.content)).toContain("LINE 30");
+  });
+
   test("path with spaces and non-ASCII characters", async () => {
     const repoRoot = createFixtureRepo("stet-fd-space-", {
       "src/a file café.ts": "one\ntwo\n",

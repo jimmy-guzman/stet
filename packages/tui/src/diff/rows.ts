@@ -7,8 +7,10 @@ import type { RenderSpan } from "./hast";
 type DiffLineType = "context" | "add" | "remove";
 
 export type DiffRow =
-  // A non-expandable break in the row stream: a git-elided gap the diff has no full
-  // Contents for (`⋯ N unmodified lines`), or git's `\ No newline at end of file`.
+  /**
+   * A non-expandable break in the row stream: a git-elided gap the diff has no full contents for
+   * (`⋯ N unmodified lines`), or git's `\ No newline at end of file`.
+   */
   | { kind: "separator"; glyph: string; text: string }
   | {
       kind: "line";
@@ -18,10 +20,11 @@ export type DiffRow =
       newLine?: number;
       spans: RenderSpan[];
     }
-  // A collapsed-region placeholder: a user fold (▸ N lines folded) from
-  // `applyCollapsedRegions`, or an expandable git-elided gap (⋯ N unmodified lines)
-  // From `rowsFromHunks`, keyed `gap:<hunk index>`. Non-navigable, so the caret
-  // Skips it like a separator.
+  /**
+   * A collapsed-region placeholder: a user fold (▸ N lines folded) from `applyCollapsedRegions`,
+   * or an expandable git-elided gap (⋯ N unmodified lines) from `rowsFromHunks`, keyed
+   * `gap:<hunk index>`. Non-navigable, so the caret skips it like a separator.
+   */
   | {
       kind: "marker";
       regionKind: "fold" | "gap";
@@ -43,6 +46,14 @@ export interface NavigableLine {
 export const isLineRow = (row: DiffRow): row is DiffLineRow =>
   row.kind === "line";
 
+const GAP_PREFIX = "gap:";
+
+/** The marker key of the gap before hunk `index` (`hunks.length` is the gap after the last). */
+const gapKey = (index: number) => `${GAP_PREFIX}${index}`;
+
+/** The hunk index a `gapKey` names. */
+export const gapIndexOf = (key: string) => Number(key.slice(GAP_PREFIX.length));
+
 const unmodifiedLabel = (count: number) =>
   count === 1 ? "1 unmodified line" : `${count} unmodified lines`;
 
@@ -55,8 +66,10 @@ type PropertyValue = Element["properties"][string];
 const numberProp = (value: PropertyValue) =>
   Predicate.isNumber(value) ? value : undefined;
 
-// `data-line-index` is "<unified>,<split>"; the unified half is the row's position in
-// The whole file's unified stream, which no gap expansion renumbers.
+/**
+ * `data-line-index` is "<unified>,<split>"; the unified half is the row's position in the whole
+ * file's unified stream, which no gap expansion renumbers.
+ */
 const unifiedIndexOf = (value: PropertyValue) =>
   Predicate.isString(value) ? Number(value.split(",")[0]) : undefined;
 
@@ -73,13 +86,15 @@ const separatorRow = (data: HunksRenderResult["hunkData"][number]): DiffRow =>
     : {
         collapsed: true,
         count: data.lines,
-        key: `gap:${data.hunkIndex}`,
+        key: gapKey(data.hunkIndex),
         kind: "marker",
         regionKind: "gap",
       };
 
-// A unified line node's side and numbers: `data-line` is the side's own number (the
-// New side for context), `data-alt-line` the old side's number on a context row.
+/**
+ * A unified line node's side and numbers: `data-line` is the side's own number (the new side for
+ * context), `data-alt-line` the old side's number on a context row.
+ */
 const lineSides = (props: Element["properties"]) => {
   const line = numberProp(props["data-line"]);
 
@@ -106,7 +121,9 @@ const lineSides = (props: Element["properties"]) => {
  * revealed lines is headed by its gap's "hide" marker so `z` can collapse it again. Line rows carry
  * a contiguous `navIndex`. Body (line) rows are capped at `maxLines` unless `full`: `cutoff` is the
  * unified index of the last kept line (from the unexpanded layout), so revealing a gap above the
- * cap never pulls more of the file in below it.
+ * cap never pulls more of the file in below it. The stream ends at the next separator or line after
+ * the cap line, since a gap there could only expand into lines past the cap, while that line's own
+ * `\ No newline at end of file` row still lands.
  */
 export const rowsFromHunks = (
   meta: FileDiffMetadata,
@@ -118,6 +135,7 @@ export const rowsFromHunks = (
   let navIndex = 0;
   let separatorOrdinal = 0;
   let openGap: Extract<DiffRow, { kind: "marker" }> | undefined;
+  let reachedCap = false;
 
   for (const node of result.unifiedContentAST ?? []) {
     if (node.type !== "element") {
@@ -127,6 +145,10 @@ export const rowsFromHunks = (
     const props = node.properties;
 
     if ("data-separator" in props) {
+      if (reachedCap) {
+        break;
+      }
+
       const data = result.hunkData[separatorOrdinal];
       separatorOrdinal += 1;
       openGap = undefined;
@@ -157,7 +179,7 @@ export const rowsFromHunks = (
     const line = numberProp(props["data-line"]);
 
     if (props["data-line-type"] === "context-expanded" && line !== undefined) {
-      const key = `gap:${gapIndexFor(meta, line)}`;
+      const key = gapKey(gapIndexFor(meta, line));
 
       if (expanded.has(key) && openGap?.key !== key) {
         openGap = {
@@ -184,6 +206,7 @@ export const rowsFromHunks = (
       ...lineSides(props),
     });
     navIndex += 1;
+    reachedCap = cutoff !== undefined && unified === cutoff;
   }
 
   return rows;

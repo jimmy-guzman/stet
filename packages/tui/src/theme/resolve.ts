@@ -1,4 +1,6 @@
-import { RGBA } from "@opentui/core";
+import { RGBA, rgbToHex } from "@opentui/core";
+
+import { lerpHex } from "@/utils/color";
 
 import type { Theme } from "./tokens";
 
@@ -58,18 +60,6 @@ const LIGHT_ACTIVE_FACTOR = 0.82;
 const DARK_WORD_ALPHA = 0.2;
 const LIGHT_WORD_ALPHA = 0.15;
 
-const layer = (under: RGBA, overHex: string, alpha: number) => {
-  const over = RGBA.fromHex(overHex);
-  const mix = (from: number, to: number) => from + (to - from) * alpha;
-
-  return RGBA.fromValues(
-    mix(under.r, over.r),
-    mix(under.g, over.g),
-    mix(under.b, over.b),
-    1
-  );
-};
-
 // Opacity of the alert-dialog backdrop over the app: enough to read as modal,
 // Light enough that the dimmed content stays legible behind it.
 const SCRIM_ALPHA = 0.5;
@@ -81,7 +71,7 @@ export const resolveTheme = (theme: Theme): ResolvedTheme => {
   const active = (hex: string) => scaleRgba(hex, factor);
 
   const word = (under: RGBA, signHex: string) =>
-    layer(under, signHex, wordAlpha);
+    RGBA.fromHex(lerpHex(rgbToHex(under), signHex, wordAlpha));
 
   const scrim = RGBA.fromHex(theme.surface.scrim);
 

@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import { RGBA } from "@opentui/core";
-import { Predicate } from "effect";
+import { Predicate, Schema } from "effect";
 
 import { darkTheme } from "@/theme/dark";
 import { lightTheme } from "@/theme/light";
 import { monoDarkTheme, monoLightTheme } from "@/theme/mono";
 import { resolveTheme } from "@/theme/resolve";
+import { syntaxTheme } from "@/theme/syntax";
+import { ThemeSchema } from "@/theme/tokens";
 import type { Theme } from "@/theme/tokens";
 
 const HEX = /^#[0-9a-f]{6}$/u;
@@ -131,5 +133,31 @@ describe.each([
       expect(word).not.toEqual(row);
       expect(distance(word, sign)).toBeLessThan(distance(row, sign));
     }
+  });
+});
+
+describe("syntaxTheme", () => {
+  test("maps every Theme.syntax key into the highlighter theme", () => {
+    // A distinct sentinel per key, so an unmapped key cannot hide behind another
+    // Key that shares its color.
+    const syntax = Object.fromEntries(
+      Object.keys(darkTheme.syntax).map((key, index) => [
+        key,
+        `#0000${index.toString(16).padStart(2, "0")}`,
+      ])
+    );
+
+    const theme = Schema.decodeUnknownSync(ThemeSchema)({
+      ...darkTheme,
+      syntax,
+    });
+
+    const mapped = new Set(
+      Object.values(syntaxTheme(theme, "dark").style.syntax ?? {})
+    );
+
+    expect(Object.values(syntax).filter((color) => !mapped.has(color))).toEqual(
+      []
+    );
   });
 });

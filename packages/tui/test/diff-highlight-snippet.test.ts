@@ -4,8 +4,8 @@ import { highlightSnippet } from "@/diff/engine";
 import { activeThemeName } from "@/theme/active";
 import { themeForName } from "@/theme/registry";
 
-// The test preload warms the shared highlighter (its lexers and the active
-// Theme), so a TS snippet tokenizes and colors without a network or LSP touch.
+// The test preload initializes the shared highlighter and the active theme, so a
+// TS snippet tokenizes and colors without a network or LSP touch.
 test("highlightSnippet colors a typescript snippet", async () => {
   const lines = await highlightSnippet("const alpha: number = 1", "typescript");
   expect(lines).toHaveLength(1);

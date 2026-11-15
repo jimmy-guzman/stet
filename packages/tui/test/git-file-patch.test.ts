@@ -346,12 +346,13 @@ describe("buildFilePatch", () => {
     });
   });
 
-  test("CRLF on exactly one side falls back with LF-normalized sides; CRLF on both sides diffs in-process", () => {
+  test("CRLF on exactly one side falls back without sides; CRLF on both sides diffs in-process", () => {
+    // Git's fallback patch runs through textconv and clean filters, so the raw sides
+    // Cannot be trusted to match its line numbers.
     expect(
       buildFilePatch(file("a.txt"), text("a\r\nb\r\n"), text("a\nb\nc\n"))
     ).toEqual({
       kind: "fallback",
-      sides: { newText: "a\nb\nc\n", oldText: "a\nb\n" },
     });
 
     const both = buildFilePatch(

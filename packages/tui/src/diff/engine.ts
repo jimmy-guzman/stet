@@ -16,7 +16,12 @@ import { syntaxThemeForName, themeForName } from "@/theme/registry";
 import { STET_SYNTAX_THEME_NAME, syntaxTheme } from "@/theme/syntax";
 
 import type { RenderSpan } from "./hast";
-import { capCutoff, navigableLinesFromRows, rowsFromHunks } from "./rows";
+import {
+  capCutoff,
+  gapIndexOf,
+  navigableLinesFromRows,
+  rowsFromHunks,
+} from "./rows";
 import type { DiffRow, NavigableLine } from "./rows";
 
 interface DiffLayout {
@@ -235,7 +240,7 @@ const expansionMap = (gaps: ReadonlySet<string>) =>
   new Map(
     gaps
       .values()
-      .map((key) => [Number(key.slice("gap:".length)), WHOLE_GAP] as const)
+      .map((key) => [gapIndexOf(key), WHOLE_GAP] as const)
       .toArray()
   );
 
@@ -286,10 +291,7 @@ const compute = async (
     ? { cutoff: undefined, hiddenLines: 0 }
     : capCutoff(collapsed, input.maxLines);
 
-  const layout = (
-    result: typeof collapsed,
-    gaps: ReadonlySet<string>
-  ): DiffLayout => {
+  const layout = (result: typeof collapsed, gaps: ReadonlySet<string>) => {
     const rows = rowsFromHunks(meta, result, gaps, cutoff);
 
     return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };

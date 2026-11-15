@@ -141,7 +141,6 @@ export const WorktreeCombobox = () => {
             foregroundColor: theme.colors.scrollbar.thumb,
           },
         }}
-        horizontalScrollbarOptions={{ visible: false }}
       >
         <Show
           when={state.worktreeComboboxResults() !== undefined}

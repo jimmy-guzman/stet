@@ -3,7 +3,7 @@
 import { createCliRenderer } from "@opentui/core";
 import { render } from "@opentui/solid";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { batch } from "solid-js";
+import { batch, createRoot } from "solid-js";
 
 import packageJson from "../package.json";
 import { App } from "./app";
@@ -24,7 +24,13 @@ import { resolveKeybindings } from "./keys/resolve";
 import { logError } from "./log/terminal";
 import { ProcessLive } from "./process";
 import { runtime } from "./runtime";
+import {
+  exitAfterRestore,
+  exitOnOutputFailure,
+  exitOnSignals,
+} from "./shutdown";
 import { state } from "./state";
+import { syncTerminalTitle } from "./terminal-title";
 import { setAppearance, setSelection } from "./theme/active";
 import { prefersMonochrome } from "./theme/mono";
 import {
@@ -186,44 +192,42 @@ try {
 
   await preflightRuntime.dispose();
 
-  // Create the renderer up front and detect the terminal's dark/light appearance
-  // Before the first runtime use (which warms the diff highlighter), so the whole
-  // App themes to match. Detection is a bounded terminal query; a terminal that
-  // Does not answer within the timeout falls back to dark. The same renderer is
-  // Reused for the first paint below, so detection costs no extra frame.
-  // Disable OpenTUI's focus-the-element-under-the-pointer on mouse-down
-  // (`autoFocus`), which would otherwise draw the terminal cursor in a clicked
-  // Renderable (e.g. a tab). stet drives focus through its own keymap, and
-  // Overlay inputs focus via their explicit `focused` prop, so nothing relies on it.
-  const renderer = await createCliRenderer({
+  /**
+   * Created up front so the terminal's dark/light appearance is detected before the first runtime
+   * use (which warms the diff highlighter), and the whole App themes to match. Detection is a
+   * bounded terminal query; a terminal that does not answer within the timeout falls back to dark.
+   * The same renderer is reused for the first paint below, so detection costs no extra frame.
+   * `autoFocus` is off because OpenTUI's focus-the-element-under-the-pointer on mouse-down would
+   * draw the terminal cursor in a clicked renderable (a tab, say); stet drives focus through its own
+   * keymap, and overlay inputs focus via their explicit `focused` prop. stet owns process shutdown
+   * (`exitOnSignals`, registered before setup so it covers it), so the renderer installs no signal
+   * handlers of its own: its defaults only destroy, and a listener replaces a signal's default
+   * termination, so the git poll kept a destroyed stet running.
+   */
+  const pendingRenderer = createCliRenderer({
     autoFocus: false,
     exitOnCtrlC: false,
+    exitSignals: [],
   });
+
+  exitOnSignals(pendingRenderer);
+
+  const renderer = await pendingRenderer;
 
   const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
 
-  // Restore the terminal on every exit path, not just a clean quit. In raw mode a
-  // Keyboard ctrl-c is a keypress the keymap owns, so these process signals fire
-  // Only on an external kill or a crash — exactly the paths that otherwise leave
-  // The alt-screen buffer active and the next launch blank. destroy() is
-  // Idempotent, so racing the keymap's own quit is harmless.
-  const restoreTerminal = () => {
-    renderer.setTerminalTitle("");
-    renderer.destroy();
-  };
+  void exitOnOutputFailure(renderer);
 
+  /**
+   * An uncaught error or rejection restores the terminal and exits 1 with its message, so a crash
+   * cannot leave the alt-screen buffer active and the next launch blank.
+   */
   const crash = (cause: unknown) => {
-    restoreTerminal();
-    logError(cause instanceof Error ? cause.message : String(cause));
-    process.exit(1);
-  };
-
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-    process.on(signal, () => {
-      restoreTerminal();
-      process.exit(0);
+    void exitAfterRestore(renderer, 1, {
+      level: "error",
+      text: cause instanceof Error ? cause.message : String(cause),
     });
-  }
+  };
 
   process.on("uncaughtException", crash);
   process.on("unhandledRejection", crash);
@@ -283,6 +287,10 @@ try {
   // Preflight, so a failure here is a repository git can no longer read; it
   // Restores the terminal before exiting, the alt-screen now being entered.
   void render(() => <App />, renderer);
+
+  createRoot(() => {
+    syncTerminalTitle(renderer);
+  });
 
   // Check for a newer release in the background, independent of the git load, so it neither gates
   // Nor is gated by it. A hit surfaces on the way out via the quit notice.
@@ -361,10 +369,10 @@ try {
         state.notify(issues[0] ?? "config has issues");
       }
     } catch (error) {
-      const message = await explainFailure(error);
-      restoreTerminal();
-      logError(message);
-      process.exit(1);
+      await exitAfterRestore(renderer, 1, {
+        level: "error",
+        text: await explainFailure(error),
+      });
     }
   };
 

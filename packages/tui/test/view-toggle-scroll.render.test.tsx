@@ -15,19 +15,22 @@ import {
   seedState,
 } from "./helpers";
 
-// Toggling a diff to whole-file view used to leave the viewport blank until the user
-// Scrolled: the cursor jumps deep into the now-taller content, but the scrollbox
-// Clamps the physical scroll to its content height as last laid out, and OpenTUI's
-// Layout pass transiently overwrites that height and re-clamps the scroll toward 0,
-// Stranding the viewport in the empty top spacer. The viewer now reconciles the
-// Physical scroll to the scrollTop signal every rendered frame, so it always recovers.
+/**
+ * Toggling a diff to whole-file view used to leave the viewport blank until the user scrolled: the
+ * cursor jumps deep into the now-taller content, but the scrollbox clamped the physical scroll to its
+ * content height as last laid out, stranding the viewport in the empty top spacer. The viewer now
+ * re-applies `scrollTo` whenever scrollTop changes, and OpenTUI applies it again after the next
+ * frame's layout, so the deep scroll lands against the new content.
+ */
 const visibleLineNumbers = (frame: string) =>
   (frame.match(/line_\d+ =/gu) ?? []).map((match) =>
     Number(match.replaceAll(/\D/gu, ""))
   );
 
-// The diff viewer's scrollbox is the deepest-scrolling box in the tree (the file tree
-// Is short); find it so the test can read and perturb physical scroll metrics.
+/**
+ * The diff viewer's scrollbox is the deepest-scrolling box in the tree (the file tree is short);
+ * find it so the test can read physical scroll metrics.
+ */
 const diffScrollBox = (node: Renderable) => {
   const candidates: ScrollBoxRenderable[] = [];
 

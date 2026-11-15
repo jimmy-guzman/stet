@@ -726,9 +726,11 @@ const createState = () => {
     undefined
   );
 
-  // The viewer's scroll offsets, lifted out of DiffView so a navigation can
-  // Capture and restore them; the renderer mirrors `viewerScrollTop` onto the
-  // Scrollbox every frame (it stays the single source of truth for the window).
+  /**
+   * The viewer's scroll offsets, lifted out of DiffView so a navigation can capture and restore
+   * them; DiffView projects `viewerScrollTop` onto the scrollbox whenever it changes (it stays the
+   * single source of truth for the window).
+   */
   const [viewerScrollTop, setViewerScrollTop] = tracked(0);
   const [viewerScrollX, setViewerScrollX] = tracked(0);
   // The viewer's navigation history: tabs of visited Locations plus a per-path
@@ -792,6 +794,12 @@ const createState = () => {
   const [now, setNow] = tracked(Date.now());
   const [terminalWidth, setTerminalWidth] = tracked(80);
   const [terminalHeight, setTerminalHeight] = tracked(24);
+  /**
+   * True while stet has handed the terminal to another program (the terminal editor). OpenTUI
+   * rejects terminal controls such as the title while suspended, so a terminal-control effect skips
+   * its write here and re-runs when the flag clears, landing whatever changed in the meantime.
+   */
+  const [terminalSuspended, setTerminalSuspended] = tracked(false);
 
   const [editorTemplate, setEditorTemplate] =
     tracked<string>("vim +{line} {file}");
@@ -3983,6 +3991,7 @@ const createState = () => {
     setSidebarScrollTop,
     setSidebarWidthOverride,
     setTerminalHeight,
+    setTerminalSuspended,
     setTerminalWidth,
     setThemeComboboxIndex,
     setThemeComboboxQuery,
@@ -4002,6 +4011,7 @@ const createState = () => {
     switchWorktree,
     tabItems,
     terminalHeight,
+    terminalSuspended,
     terminalWidth,
     themeComboboxIndex,
     themeComboboxOpen,

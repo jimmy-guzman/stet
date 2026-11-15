@@ -50,8 +50,6 @@ export const ScopeMenu = () => {
     },
   };
 
-  const horizontalScrollbarOptions = { visible: false };
-
   return (
     <box
       position="absolute"
@@ -84,7 +82,6 @@ export const ScopeMenu = () => {
           scrollY
           viewportCulling
           scrollbarOptions={scrollbarOptions}
-          horizontalScrollbarOptions={horizontalScrollbarOptions}
         >
           {/* Id-by-index is required: reordering must never change a live renderable's id.
               The "changes"/"history" section labels are interleaved off the grouped
@@ -181,7 +178,6 @@ export const ScopeMenu = () => {
             scrollY
             viewportCulling
             scrollbarOptions={scrollbarOptions}
-            horizontalScrollbarOptions={horizontalScrollbarOptions}
           >
             <Index each={state.commits()}>
               {(commit, index) => {

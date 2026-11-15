@@ -1,13 +1,17 @@
 import { afterAll, describe, expect, test } from "bun:test";
 
+import { ResourceContext } from "@opentui/core";
+
 import { createLineMeasurer } from "@/components/diff/line-measure";
 
 // Drives the real OpenTUI text engine (the same call the renderable's layout
 // Uses), so these assert rendered wrap behavior, not a reimplemented formula.
-const measurer = createLineMeasurer("unicode");
+const context = new ResourceContext({ objectCapacity: 64, renderCellsMax: 1 });
+const measurer = createLineMeasurer("unicode", context);
 
 afterAll(() => {
   measurer.destroy();
+  context.destroy();
 });
 
 describe("createLineMeasurer", () => {

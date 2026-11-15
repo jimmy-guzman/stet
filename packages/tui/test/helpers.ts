@@ -247,6 +247,14 @@ export const createFixtureRepo = (
   }
 
   runGit(repoRoot, ["init", `--object-format=${objectFormat}`]);
+  /**
+   * Since git 2.47 every commit detaches `git maintenance run --auto`, which can keep writing into
+   * `.git` after the commit returns. Racing the sweep's `rmSync`, it re-creates the directory, so the
+   * fixture outlives the sweep with no error (about 1 in 100 locally; it failed macOS CI on #386).
+   * Repo-local, so it holds for every later commit in the fixture, including tests that spawn git
+   * themselves; an environment override would not, since `stripGitEnv` drops every `GIT_*` name.
+   */
+  runGit(repoRoot, ["config", "maintenance.auto", "false"]);
 
   if (commit) {
     runGit(repoRoot, ["add", "."]);

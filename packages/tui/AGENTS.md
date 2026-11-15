@@ -16,7 +16,7 @@ See the repo-root `README.md` for what stet does, its keys, and its non-goals; s
 
 ## Conventions
 
-- Read the relevant `SKILL.md` under `.agents/skills` before related work: `bun` before any dependency/script/build change, `opentui` before any OpenTUI code.
+- Read `.agents/skills/opentui/SKILL.md` before any OpenTUI code. For Bun, read the Bun API docs in `node_modules/bun-types/docs/**/*.mdx` before any dependency/script/build change; they ship with the installed `bun-types`, so they match the pinned version.
 - Prefer `bun run`, `bun test`, `bun install`, `bun add`, `bun add -d`, `bun remove`, `bun build`. No Node/npm/Jest/esbuild wrappers unless explicitly requested. Runtime flags go before `run` (e.g. `bun --watch run <script>`).
 - Keep `bun.lock` changes paired with dependency changes. Declare direct dependencies in `package.json`; don't rely on transitive ones.
 - Pin every `dependencies` and `devDependencies` entry to an exact version (no `^`/`~`). stet ships as a compiled binary (`private: true`, `bun build --compile`), so the manifest mirrors the lock and every bump is an explicit, reviewable edit; caret ranges only help library consumers dedupe, which never applies here.
@@ -56,6 +56,12 @@ See the repo-root `README.md` for what stet does, its keys, and its non-goals; s
 - No AI-generated sign-offs in commits, PR text, docs, or generated content.
 
 ## State and Effect conventions
+
+This repository uses the Effect TypeScript library.
+
+Before writing any Effect code, first read `node_modules/effect/AGENTS.md` **completely**, and follow the links in the file when required.
+
+If you need to learn more about particular Effect apis and concepts that the guide doesn't cover, search through the source code in `node_modules/effect/src`.
 
 Reactive state is SolidJS-native (signals/memos); async IO is Effect v4. `effect` is pinned to an exact version, so a bump is an explicit edit and its fallout lands in one reviewable change. The two layers meet only at one seam: the long-lived `ManagedRuntime` in `src/runtime.ts`.
 

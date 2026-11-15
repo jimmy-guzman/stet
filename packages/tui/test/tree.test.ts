@@ -1,15 +1,30 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ChangedFile, RepoFile } from "@/git/model";
-import {
-  buildFileTree,
-  buildTreeStructure,
-  decorateTree,
-  defaultExpandedDirectories,
-  expandAncestorsForPath,
-  firstFileInNode,
-  flattenTree,
-} from "@/git/tree";
+import { defaultExpandedDirectories } from "@/git/tree";
+import { createTreeModel } from "@/tree/model";
+
+const models: ReturnType<typeof createTreeModel>[] = [];
+
+const filesFor = (paths: string[]) =>
+  new Map<string, RepoFile>(
+    paths.map((path) => [path, { path, symlink: false, tracked: true }])
+  );
+
+const modelFor = (paths: string[], expanded = new Set<string>()) => {
+  const model = createTreeModel();
+  models.push(model);
+  model.setExpanded(expanded);
+  model.syncPaths(filesFor(paths));
+
+  return model;
+};
+
+afterEach(() => {
+  for (const model of models.splice(0)) {
+    model.cleanUp();
+  }
+});
 
 const changed = (
   path: string,
@@ -26,300 +41,299 @@ const changed = (
   ...overrides,
 });
 
-const repoFiles: RepoFile[] = [
-  { path: "README.md", symlink: false, tracked: true },
-  { path: "src/App.tsx", symlink: false, tracked: true },
-  { path: "src/git.ts", symlink: false, tracked: true },
-  { path: "src/components/ui/Button.tsx", symlink: false, tracked: true },
-  { path: "notes.md", symlink: false, tracked: false },
-];
+describe("terminal tree model", () => {
+  test("uses Trees natural ordering with directories first and case-insensitive names", () => {
+    const model = modelFor([
+      "z/child",
+      "a",
+      "A",
+      "f2",
+      "f10",
+      "aDir/child",
+      "README.md",
+    ]);
 
-const changedByPath = new Map([
-  [
-    "src/App.tsx",
-    changed("src/App.tsx", {
-      additions: 10,
-      kind: "added",
-      stage: "staged",
-      warnings: ["new"],
-    }),
-  ],
-  ["src/git.ts", changed("src/git.ts", { additions: 3, deletions: 1 })],
-]);
-
-describe("buildFileTree", () => {
-  test("includes unchanged files with a change overlay on changed ones", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, {
-      changesOnly: false,
-    });
-
-    const rows = flattenTree(tree, new Set(["dir:src"]));
-    const appRow = rows.find((row) => row.node.path === "src/App.tsx");
-    const readmeRow = rows.find((row) => row.node.path === "README.md");
-
-    expect(appRow?.node.type === "file" && appRow.node.changed?.kind).toBe(
-      "added"
-    );
-    expect(readmeRow?.node.type === "file" && readmeRow.node.changed).toBe(
-      undefined
-    );
-  });
-
-  test("sorts directories first, then alphabetically", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, {
-      changesOnly: false,
-    });
-
-    expect(tree.map((node) => node.name)).toEqual([
-      "src",
-      "notes.md",
+    expect(model.rows(0, 20).map((row) => row.node.name)).toEqual([
+      "aDir",
+      "z",
+      "A",
+      "a",
+      "f2",
+      "f10",
       "README.md",
     ]);
   });
-
-  test("aggregates churn and changed counts from changed descendants only", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, {
-      changesOnly: false,
-    });
-
-    const src = tree.find(
-      (node) => node.type === "directory" && node.path === "src"
-    );
-
-    expect(src).toMatchObject({
-      additions: 13,
-      changedCount: 2,
-      deletions: 1,
-      fileCount: 3,
-      type: "directory",
-    });
-  });
-
-  test("flattens single-child directory chains", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, {
-      changesOnly: false,
-    });
-
-    const src = tree.find(
-      (node) => node.type === "directory" && node.path === "src"
-    );
-
-    const chain =
-      src?.type === "directory"
-        ? src.children.find((node) => node.type === "directory")
-        : undefined;
-
-    expect(chain?.name).toBe("components/ui");
-    expect(chain?.path).toBe("src/components/ui");
-    expect(chain?.id).toBe("dir:src/components/ui");
-  });
-
-  test("changes-only filter prunes unchanged files", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, { changesOnly: true });
-    const rows = flattenTree(tree, new Set(["dir:src"]));
-
-    expect(rows.map((row) => row.node.path)).toEqual([
-      "src",
-      "src/App.tsx",
-      "src/git.ts",
+  test("flattens chains and reports visual depths", () => {
+    const paths = ["src/App.tsx", "src/components/ui/Button.tsx", "README.md"];
+    const model = modelFor(paths, defaultExpandedDirectories(paths));
+    expect(
+      model.rows(0, 20).map(({ depth, node }) => [depth, node.id, node.name])
+    ).toEqual([
+      [0, "dir:src", "src"],
+      [1, "dir:src/components/ui", "components/ui"],
+      [2, "file:src/components/ui/Button.tsx", "Button.tsx"],
+      [1, "file:src/App.tsx", "App.tsx"],
+      [0, "file:README.md", "README.md"],
     ]);
   });
-
-  test("keeps files that vanished from the index but are in the changed set", () => {
-    const deleted = changed("src/gone.ts", {
-      additions: 0,
-      deletions: 12,
-      kind: "deleted",
-      stage: "staged",
-    });
-
-    const tree = buildFileTree(
-      repoFiles,
-      new Map([...changedByPath, ["src/gone.ts", deleted]]),
-      {
-        changesOnly: false,
-      }
-    );
-
-    const rows = flattenTree(tree, new Set(["dir:src"]));
-
-    expect(rows.map((row) => row.node.path)).toContain("src/gone.ts");
+  test("translates inclusive windows and handles empty or zero-height panes", () => {
+    const model = modelFor(["a", "b", "c", "d"]);
+    expect(model.rows(1, 2).map((row) => [row.index, row.node.path])).toEqual([
+      [1, "b"],
+      [2, "c"],
+    ]);
+    expect(model.rows(3, 20).map((row) => row.node.path)).toEqual(["d"]);
+    expect(model.rows(0, 0)).toEqual([]);
+    expect(model.rows(9, 2)).toEqual([]);
+    const empty = modelFor([]);
+    expect(empty.rowCount()).toBe(0);
+    empty.move("next");
+    expect(empty.focusedRow()).toBeUndefined();
   });
-
-  test("assigns visual depths after flattening", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, {
-      changesOnly: false,
-    });
-
-    const rows = flattenTree(
-      tree,
-      new Set(["dir:src", "dir:src/components/ui"])
-    );
-
-    const button = rows.find(
-      (row) => row.node.path === "src/components/ui/Button.tsx"
-    );
-
-    expect(button?.depth).toBe(2);
+  test("reveals files under collapsed ancestors and navigates visible rows", () => {
+    const model = modelFor(["src/ui/a.ts", "src/b.ts"]);
+    model.reveal("src/ui/a.ts");
+    expect(model.focusedRow()?.node.path).toBe("src/ui/a.ts");
+    model.move("next");
+    expect(model.focusedRow()?.node.path).toBe("src/b.ts");
+    model.move("previous");
+    expect(model.focusedRow()?.node.path).toBe("src/ui/a.ts");
   });
-
-  test("carries the symlink flag onto the file node", () => {
-    const tree = buildFileTree(
-      [
-        { path: "link.ts", symlink: true, tracked: true },
-        { path: "real.ts", symlink: false, tracked: true },
-      ],
-      new Map(),
-      { changesOnly: false }
+  test("keeps deleted files distinct from same-named directories and prunes orphans", () => {
+    const model = modelFor(
+      ["a", "a/b/c.ts", "other"],
+      defaultExpandedDirectories(["a/b/c.ts"])
     );
 
-    expect(tree.find((node) => node.path === "link.ts")).toMatchObject({
-      symlink: true,
-    });
-    expect(tree.find((node) => node.path === "real.ts")).toMatchObject({
-      symlink: false,
-    });
+    expect(model.rows(0, 10).map((row) => row.node.id)).toEqual([
+      "dir:a/b",
+      "file:a/b/c.ts",
+      "file:a",
+      "file:other",
+    ]);
+    model.focus("file:a/b/c.ts");
+    model.syncPaths(filesFor(["a", "other"]));
+    expect(model.rows(0, 10).map((row) => row.node.id)).toEqual([
+      "file:a",
+      "file:other",
+    ]);
+    expect(model.focusedRow()).toBeDefined();
+    model.focus("file:a");
+    expect(model.focusedRow()?.node.path).toBe("a");
   });
-});
+  test("preserves unusual filenames and symlink metadata exactly", () => {
+    const paths = [
+      " spaced /tab\tname\n.ts",
+      "back\\slash",
+      "雪/é.ts",
+      "dir:literal",
+      "file:literal",
+      "a\r.ts",
+    ];
 
-describe("structure and decoration split", () => {
-  test("structure depends only on the path set, not on changed values", () => {
-    const paths = new Set(["src/App.tsx", "src/git.ts"]);
-    const lean = buildTreeStructure(repoFiles, paths, { changesOnly: false });
-
-    const churned = buildTreeStructure(repoFiles, paths, {
-      changesOnly: false,
-    });
-
-    // Same file set in, structurally identical tree out (no change overlay yet).
-    expect(lean).toEqual(churned);
-
-    const appRow = flattenTree(lean, new Set(["dir:src"])).find(
-      (row) => row.node.path === "src/App.tsx"
+    const model = modelFor(paths, defaultExpandedDirectories(paths));
+    model.syncPaths(
+      new Map(
+        paths.map((path) => [path, { path, symlink: true, tracked: false }])
+      )
     );
+    expect(
+      model
+        .rows(0, 20)
+        .values()
+        .filter((row) => row.node.type === "file")
+        .map((row) => row.node.path)
+        .toArray()
+        .toSorted()
+    ).toEqual(paths.toSorted());
 
-    expect(appRow?.node.type === "file" && appRow.node.changed).toBe(undefined);
-
-    const src = lean.find(
-      (node) => node.type === "directory" && node.path === "src"
-    );
-
-    expect(src?.type === "directory" && src.changedCount).toBe(0);
-  });
-
-  test("decorateTree overlays the changed set and aggregates without mutating the structure", () => {
-    const structure = buildTreeStructure(
-      repoFiles,
-      new Set(changedByPath.keys()),
-      {
-        changesOnly: false,
-      }
-    );
-
-    const decorated = decorateTree(structure, changedByPath);
-
-    expect(decorated.find((node) => node.path === "src")).toMatchObject({
-      additions: 13,
-      changedCount: 2,
-      deletions: 1,
-      fileCount: 3,
-      type: "directory",
-    });
-    // The cached structure stays pristine, so the reactive layer can reuse it.
-    expect(structure.find((node) => node.path === "src")).toMatchObject({
-      additions: 0,
-      changedCount: 0,
-    });
-  });
-
-  test("decorateTree returns stable references for nodes whose changed field did not change", () => {
-    const structure = buildTreeStructure(
-      repoFiles,
-      new Set(changedByPath.keys()),
-      {
-        changesOnly: false,
-      }
-    );
-
-    const first = decorateTree(structure, changedByPath);
-    const second = decorateTree(first, changedByPath);
-
-    // Nothing changed between calls — the entire array and every node should be the same ref.
-    expect(second).toBe(first);
-
-    for (const [i, node] of first.entries()) {
-      expect(second[i]).toBe(node);
+    for (const path of paths) {
+      model.focus(`file:${path}`);
+      expect(model.focusedRow()?.node).toMatchObject({
+        path,
+        symlink: true,
+        tracked: false,
+      });
     }
-
-    // An unchanged file inside a directory also keeps its reference.
-    const expanded = new Set(["dir:src", "dir:src/components/ui"]);
-    const rows = flattenTree(first, expanded);
-
-    const buttonBefore = rows.find(
-      (r) => r.node.path === "src/components/ui/Button.tsx"
-    );
-
-    expect(buttonBefore).toBeDefined();
-    const rows2 = flattenTree(second, expanded);
-
-    const buttonAfter = rows2.find(
-      (r) => r.node.path === "src/components/ui/Button.tsx"
-    );
-
-    expect(buttonAfter).toBeDefined();
-    expect(buttonAfter?.node).toBe(buttonBefore?.node);
   });
+  test("updates counts, stages, and warnings without disturbing focus or expansion", () => {
+    const paths = ["src/a.ts", "src/b.ts", "src/nested/c.ts"];
+    const model = modelFor(paths, new Set(["dir:src"]));
+    model.focus("file:src/b.ts");
+    model.setChanges(
+      new Map([
+        [
+          "src/a.ts",
+          changed("src/a.ts", {
+            additions: 10,
+            stage: "staged",
+            warnings: ["new"],
+          }),
+        ],
+        [
+          "src/b.ts",
+          changed("src/b.ts", {
+            additions: 3,
+            deletions: 1,
+            warnings: ["new", "large"],
+          }),
+        ],
+      ])
+    );
+    expect(model.rows(0, 1)[0].node).toMatchObject({
+      additions: 13,
+      deletions: 1,
+      fileCount: 3,
+      changedCount: 2,
+      stage: "mixed",
+      warnings: ["new", "large"],
+    });
+    expect(model.focusedRow()?.node.path).toBe("src/b.ts");
+    expect(model.rows(0, 20).map((row) => row.node.path)).not.toContain(
+      "src/nested/c.ts"
+    );
+    model.setChanges(new Map());
+    expect(model.rows(0, 1)[0].node).toMatchObject({
+      additions: 0,
+      deletions: 0,
+      changedCount: 0,
+      stage: undefined,
+      warnings: [],
+    });
+  });
+  test("retains expansion through additions, filtering, and deferred loading", () => {
+    const expansion = defaultExpandedDirectories(["src/nested/a", "other/b"]);
+    const model = modelFor([], expansion);
+    model.syncPaths(filesFor(["src/nested/a", "other/b"]));
+    expect(model.rows(0, 20).map((row) => row.node.path)).toContain(
+      "src/nested/a"
+    );
+    model.syncPaths(filesFor(["other/b"]));
+    model.syncPaths(filesFor(["src/nested/a", "src/new", "other/b"]));
+    expect(model.rows(0, 20).map((row) => row.node.path)).toContain(
+      "src/nested/a"
+    );
+    model.setExpanded(new Set());
+    model.syncPaths(
+      filesFor(["src/nested/a", "src/new", "other/b", "other/c"])
+    );
+    expect(model.rows(0, 20).map((row) => row.node.path)).toEqual([
+      "other",
+      "src",
+    ]);
+  });
+  test("notifies subscribers and lets owners unsubscribe before cleanup", () => {
+    const model = modelFor(["a", "b"]);
+    let notifications = 0;
 
-  test("buildFileTree equals structure-then-decorate", () => {
-    const composed = buildFileTree(repoFiles, changedByPath, {
-      changesOnly: false,
+    const unsubscribe = model.subscribe(() => {
+      notifications += 1;
     });
 
-    const split = decorateTree(
-      buildTreeStructure(repoFiles, new Set(changedByPath.keys()), {
-        changesOnly: false,
-      }),
-      changedByPath
+    model.focus("file:b");
+    expect(notifications).toBeGreaterThan(0);
+    unsubscribe();
+    const before = notifications;
+    model.focus("file:a");
+    expect(notifications).toBe(before);
+  });
+  test("reads bounded windows on 10,000 files through repeated updates", () => {
+    const paths = Array.from(
+      { length: 10_000 },
+      (_, i) => `dir${Math.floor(i / 100)}/file${i}.ts`
     );
 
-    expect(composed).toEqual(split);
+    const model = modelFor(paths, defaultExpandedDirectories(paths));
+    expect(model.rowCount()).toBe(10_100);
+    model.focus("file:dir99/file9999.ts");
+
+    for (let i = 0; i < 10; i += 1) {
+      model.setChanges(
+        new Map([[paths[0], changed(paths[0], { additions: i })]])
+      );
+      expect(model.rows(5000, 40)).toHaveLength(40);
+      expect(model.focusedRow()?.node.path).toBe("dir99/file9999.ts");
+    }
   });
 });
 
-describe("expansion", () => {
-  test("default expansion covers ancestors of changed paths only", () => {
-    const expanded = defaultExpandedDirectories([
-      "src/App.tsx",
-      "src/components/ui/Button.tsx",
-    ]);
-
-    expect([...expanded].toSorted()).toEqual([
-      "dir:src",
-      "dir:src/components",
-      "dir:src/components/ui",
-    ]);
-  });
-
-  test("expands ancestors for a selected path", () => {
-    expect([...expandAncestorsForPath(new Set(), "src/ui/App.tsx")]).toEqual([
-      "dir:src",
-      "dir:src/ui",
-    ]);
-  });
+test("directory controls expose Trees' live expansion and retain it through refreshes", () => {
+  const model = modelFor(["src/deep/a", "src/b"]);
+  expect(model.rows(0, 1)[0].node).toMatchObject({ expanded: false });
+  model.move("right");
+  expect(model.rows(0, 1)[0].node).toMatchObject({ expanded: true });
+  model.toggle("dir:src");
+  expect(model.rows(0, 1)[0].node).toMatchObject({ expanded: false });
+  model.syncPaths(filesFor(["src/deep/a", "src/b", "src/c"]));
+  expect(model.rowCount()).toBe(1);
+  model.move("right");
+  model.move("left");
+  expect(model.rowCount()).toBe(1);
+  expect(model.activate()).toBeNull();
+  expect(model.rows(0, 1)[0].node).toMatchObject({ expanded: true });
+  model.move("right");
+  expect(model.focusedRow()?.node.path).toBe("src/deep");
+  model.move("right");
+  model.move("right");
+  expect(model.activate()).toBe("src/deep/a");
 });
 
-describe("navigation helpers", () => {
-  test("finds the first file in a directory", () => {
-    const tree = buildFileTree(repoFiles, changedByPath, {
-      changesOnly: false,
-    });
+test("initial expansion with natural numeric ordering opens only the requested path", () => {
+  const model = modelFor(
+    ["dir2/a", "dir20/b", "dir9/c"],
+    new Set(["dir:dir2"])
+  );
 
-    const src = tree.find(
-      (node) => node.type === "directory" && node.path === "src"
-    );
+  expect(model.rows(0, 20).map((row) => row.node.path)).toEqual([
+    "dir2",
+    "dir2/a",
+    "dir9",
+    "dir20",
+  ]);
+});
 
-    expect(src === undefined ? undefined : firstFileInNode(src)?.path).toBe(
-      "src/components/ui/Button.tsx"
-    );
+test("incremental replacements preserve directory counts and activation order", () => {
+  const model = modelFor(["a", "a/old/file", "a/z"], new Set(["dir:a"]));
+  model.syncPaths(filesFor(["a", "a/new/file", "a/y", "a/z"]));
+  expect(model.rows(0, 1)[0].node).toMatchObject({
+    path: "a",
+    fileCount: 3,
+    expanded: true,
   });
+  expect(model.rows(0, 20).map((row) => row.node.path)).not.toContain("a/old");
+  model.move("right");
+  model.move("right");
+  model.move("right");
+  expect(model.activate()).toBe("a/new/file");
+  model.syncPaths(filesFor([]));
+  expect(model.activate()).toBeNull();
+});
+
+test("left collapses an open folder, otherwise focuses its parent", () => {
+  const model = modelFor(["src/deep/a", "src/b"]);
+  model.reveal("src/deep/a");
+  model.move("left");
+  expect(model.focusedRow()?.node).toMatchObject({
+    path: "src/deep",
+    expanded: true,
+  });
+  model.move("left");
+  expect(model.focusedRow()?.node).toMatchObject({
+    path: "src/deep",
+    expanded: false,
+  });
+  model.move("left");
+  expect(model.focusedRow()?.node.path).toBe("src");
+  model.move("left");
+  expect(model.rowCount()).toBe(1);
+});
+
+test("right advances from a file and first/last focus the visible endpoints", () => {
+  const model = modelFor(["a", "b", "c"]);
+  model.move("right");
+  expect(model.focusedRow()?.node.path).toBe("b");
+  model.move("last");
+  expect(model.focusedRow()?.node.path).toBe("c");
+  model.move("first");
+  expect(model.focusedRow()?.node.path).toBe("a");
 });

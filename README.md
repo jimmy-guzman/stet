@@ -61,6 +61,8 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 
 ## Development
 
+The TUI uses OpenTUI with SolidJS. `@pierre/trees` owns the tree hierarchy, focus, expansion, and default file icon matching. Stet renders its visible rows and keeps Git metadata and viewer navigation in state.
+
 ```sh
 bun install
 bun run stet             # run from source (the TUI lives in packages/tui)

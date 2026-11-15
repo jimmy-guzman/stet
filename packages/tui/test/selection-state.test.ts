@@ -20,7 +20,7 @@ const seed = (paths: string[]) => {
     state.setChangesOnly(false);
     state.setExpandedDirectories(new Set<string>());
     state.setGitModel(modelWith(paths));
-    state.setFocusedNodeId(`file:${paths[0]}`);
+    state.focusTreeNode(`file:${paths[0]}`);
     state.seedNav(undefined);
   });
 };
@@ -30,7 +30,7 @@ afterEach(() => {
   batch(() => {
     state.setGitModel(modelWith([]));
     state.setExpandedDirectories(new Set<string>());
-    state.setFocusedNodeId("");
+    state.focusTreeNode("");
     state.seedNav(undefined);
   });
 });
@@ -39,7 +39,7 @@ test("focusedRowIndex derives from the focused node and moving selects the file"
   seed(["a.ts", "b.ts", "c.ts"]);
   expect(state.focusedRowIndex()).toBe(0);
 
-  state.moveFocus(1);
+  state.moveFocus("next");
   expect(state.focusedRowIndex()).toBe(1);
   expect(state.selectedPath()).toBe("b.ts");
 });
@@ -47,8 +47,8 @@ test("focusedRowIndex derives from the focused node and moving selects the file"
 test("consecutive moves advance by each step, not collapse", () => {
   seed(["a.ts", "b.ts", "c.ts"]);
 
-  state.moveFocus(1);
-  state.moveFocus(1);
+  state.moveFocus("next");
+  state.moveFocus("next");
 
   expect(state.focusedRowIndex()).toBe(2);
   expect(state.selectedPath()).toBe("c.ts");

@@ -23,11 +23,11 @@ export const Sidebar = () => {
   const visibleRows = createMemo(() => {
     const start = state.sidebarScrollTop();
 
-    return state.treeRows().slice(start, start + viewport());
+    return state.treeSlice(start, viewport());
   });
 
   const onWheel = windowWheelHandler({
-    rowCount: () => state.treeRows().length,
+    rowCount: state.treeRowCount,
     scrollTop: state.sidebarScrollTop,
     setScrollTop: (next) => {
       state.setSidebarScrollTop(next);
@@ -60,7 +60,7 @@ export const Sidebar = () => {
           flexDirection="column"
         >
           <Show
-            when={state.treeRows().length > 0}
+            when={state.treeRowCount() > 0}
             fallback={
               // No rows yet. During the deferred repoFiles load, render nothing: the
               // Window is already a fixed viewport, so the pane stays blank and
@@ -96,7 +96,7 @@ export const Sidebar = () => {
           </Show>
         </box>
         <ListScrollbar
-          rowCount={() => state.treeRows().length}
+          rowCount={state.treeRowCount}
           viewport={viewport}
           scrollTop={state.sidebarScrollTop}
         />

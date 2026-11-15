@@ -29,7 +29,7 @@ const isBlank = (content: string) => content.trim().length === 0;
  * Indent-based fold regions over a navigable line list. Every non-blank line whose following
  * non-blank lines are more indented heads a region running to the last such line (interior blanks
  * fold with it, trailing blanks do not). Nesting falls out naturally: an inner block heads its own
- * region inside its parent's. Pure and language-agnostic, mirroring `flattenTree`.
+ * region inside its parent's. Pure and language-agnostic.
  */
 export const computeFoldRegions = (
   navigable: NavigableLine[]

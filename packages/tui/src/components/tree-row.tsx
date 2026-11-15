@@ -77,7 +77,7 @@ const DirectoryRow = (props: {
     if (isRightClick(event)) {
       batch(() => {
         state.setFocusedPane("tree");
-        state.setFocusedNodeId(props.node.id);
+        state.focusTreeNode(props.node.id);
       });
       state.openCommandMenu("tree", { x: event.x, y: event.y });
 
@@ -86,25 +86,17 @@ const DirectoryRow = (props: {
 
     batch(() => {
       state.setFocusedPane("tree");
-      state.setFocusedNodeId(props.node.id);
+      state.focusTreeNode(props.node.id);
       // Advance the shared double-click tracker (its result is unused here, a directory
       // Has no double-click action), so a directory click between two clicks on the same
       // File registers as a distinct row and breaks the sequence, rather than being
       // Invisible to the tracker and letting the second file click read as a double-pin.
       props.isDoubleClick(props.node.id);
-      const next = new Set(state.expandedDirectories());
-
-      if (next.has(props.node.id)) {
-        next.delete(props.node.id);
-      } else {
-        next.add(props.node.id);
-      }
-
-      state.setExpandedDirectories(next);
+      state.toggleTreeNode(props.node.id);
     });
   };
 
-  const isExpanded = () => state.expandedDirectories().has(props.node.id);
+  const isExpanded = () => props.node.expanded;
   const icon = () => namedIcon(isExpanded() ? "folder-open" : "folder");
 
   // The directory dot tracks its most recently changed descendant; the dot itself
@@ -216,7 +208,7 @@ const FileRow = (props: {
     if (isRightClick(event)) {
       batch(() => {
         state.setFocusedPane("tree");
-        state.setFocusedNodeId(props.node.id);
+        state.focusTreeNode(props.node.id);
       });
       state.openCommandMenu("tree", { x: event.x, y: event.y });
 

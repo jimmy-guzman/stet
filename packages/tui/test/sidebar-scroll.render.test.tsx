@@ -55,7 +55,7 @@ describe("sidebar scroll follow", () => {
       .map((line) => line.split("││")[0])
       .join("\n");
 
-    const focusedPath = state.treeRows()[state.focusedRowIndex()].node.path;
+    const focusedPath = state.focusedTreeRow().node.path;
 
     expect(sidebar).toContain(focusedPath);
 

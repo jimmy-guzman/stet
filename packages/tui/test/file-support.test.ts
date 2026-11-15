@@ -119,17 +119,18 @@ test("invalid overrides retain built-ins while an invalid reference drops only i
   await withFileSupport(
     {
       files: {
-        "icon-typescript": { extensions: [".ts"] },
+        "syntax-env": { extensions: [".env"] },
         probe: { extensions: ["probe"], icon: "missing", syntax: "json" },
       },
     },
     (issues) => {
       expect(issues).toContain(
-        'file "icon-typescript": extensions must be bare suffixes without a leading dot'
+        'file "syntax-env": extensions must be bare suffixes without a leading dot'
       );
       expect(issues).toContain(
         'file "probe": unknown icon "missing"; dropping the icon facet'
       );
+      expect(fileSupportForPath(".env").syntax).toBe("dotenv");
       expect(fileSupportForPath("src/a.ts").icon).toBe("typescript");
       expect(fileSupportForPath("src/a.probe").syntax).toBe("json");
       expect(fileSupportForPath("src/a.probe").icon).toBe("file");
@@ -155,4 +156,66 @@ test("an unknown field drops the whole entry", async () => {
       expect(fileSupportForPath("a.probe").icon).toBe("file");
     }
   );
+});
+
+test("user icon associations override Trees with full-path globs and independent syntax", async () => {
+  await withFileSupport(
+    {
+      icons: { generated: "G" },
+      files: {
+        source: { extensions: ["ts"], icon: "javascript" },
+        generated: { globs: ["generated/**/*.ts"], icon: "generated" },
+        exact: { filenames: ["keep.ts"], icon: "typescript" },
+      },
+    },
+    (issues) => {
+      expect(issues).toEqual([]);
+      expect(fileIconForPath("src/a.ts").name).toBe("javascript");
+      expect(fileIconForPath("generated/nested/a.ts")).toEqual({
+        glyph: "G",
+        name: "generated",
+      });
+      expect(fileIconForPath("generated/nested/keep.ts").name).toBe(
+        "typescript"
+      );
+      expect(fileSupportForPath("generated/nested/a.ts").syntax).toBe(
+        "typescript"
+      );
+    }
+  );
+});
+
+test("case-sensitive user icons and glyph overrides apply before the Trees fallback", async () => {
+  await withFileSupport(
+    {
+      icons: { typescript: "T" },
+      files: {
+        special: {
+          filenames: ["SPECIAL.ts"],
+          caseSensitive: true,
+          icon: "test",
+        },
+      },
+    },
+    (issues) => {
+      expect(issues).toEqual([]);
+      expect(fileIconForPath("SPECIAL.ts").name).toBe("test");
+      expect(fileIconForPath("special.ts")).toEqual({
+        glyph: "T",
+        name: "typescript",
+      });
+    }
+  );
+});
+
+test("replacing the registry clears cached overrides and restores Trees defaults", async () => {
+  await withFileSupport(
+    { files: { ts: { extensions: ["ts"], icon: "test" } } },
+    () => {
+      expect(fileIconForPath("main.ts").name).toBe("test");
+    }
+  );
+  await withFileSupport({}, () => {
+    expect(fileIconForPath("main.ts").name).toBe("typescript");
+  });
 });

@@ -147,7 +147,7 @@ export const seedState = (
     state.setCurrentWorktreeDeleted(false);
     state.setLastChange(Date.now());
     state.seedNav(selected);
-    state.setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
+    state.focusTreeNode(selected === undefined ? "" : `file:${selected}`);
     state.setExpandedDirectories(expanded);
     state.setFileView(false);
     state.setFullContentPaths(new Set<string>());
@@ -187,8 +187,7 @@ export const seedState = (
   });
 };
 
-export const focusedRow = (): FileTreeRow | undefined =>
-  state.treeRows()[state.focusedRowIndex()];
+export const focusedRow = (): FileTreeRow | undefined => state.focusedTreeRow();
 
 export const runGit = (repoRoot: string, args: string[]) => {
   execFileSync(

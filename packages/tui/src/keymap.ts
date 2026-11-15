@@ -4,7 +4,6 @@ import { batch } from "solid-js";
 import { scopeKinds } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { latestActivity } from "./git/activity";
-import { firstFileInNode } from "./git/tree";
 import type { KeyActionId } from "./keys/actions";
 import { matchesKey } from "./keys/combo";
 import { combosFor } from "./keys/registry";
@@ -959,7 +958,7 @@ const handleCopyReference: KeyStep = ({ pressed }) => {
   }
 
   if (state.focusedPane() === "tree") {
-    const row = state.treeRows()[state.focusedRowIndex()];
+    const row = state.focusedTreeRow();
 
     if (row !== undefined) {
       state.copy(formatCopyReference({ path: row.node.path }));
@@ -1085,59 +1084,47 @@ const handleDiffPane: KeyStep = (ctx) => {
   return true;
 };
 
-const focusedTreeRow = () => state.treeRows()[state.focusedRowIndex()];
-
 const treeBindings: readonly Binding[] = [
   {
     id: "focus-down",
     run: () => {
-      state.moveFocus(1);
+      state.moveFocus("next");
     },
   },
   {
     id: "focus-up",
     run: () => {
-      state.moveFocus(-1);
+      state.moveFocus("previous");
     },
   },
   {
     id: "expand",
     run: () => {
-      const row = focusedTreeRow();
-
-      if (row?.node.type === "directory") {
-        state.setExpandedDirectories(
-          new Set(state.expandedDirectories()).add(row.node.id)
-        );
-      } else if (row?.node.type === "file") {
-        state.selectFile(row.node.path);
-      }
+      state.moveFocus("right");
     },
   },
   {
     id: "collapse",
     run: () => {
-      const row = focusedTreeRow();
-
-      if (row?.node.type === "directory") {
-        const next = new Set(state.expandedDirectories());
-        next.delete(row.node.id);
-        state.setExpandedDirectories(next);
-      }
+      state.moveFocus("left");
     },
   },
   {
     id: "open",
     run: () => {
-      const row = focusedTreeRow();
-
-      if (row !== undefined) {
-        const file = firstFileInNode(row.node);
-
-        if (file !== undefined) {
-          state.selectFile(file.path);
-        }
-      }
+      state.activateTreeNode();
+    },
+  },
+  {
+    id: "first-item",
+    run: () => {
+      state.moveFocus("first");
+    },
+  },
+  {
+    id: "last-item",
+    run: () => {
+      state.moveFocus("last");
     },
   },
 ];

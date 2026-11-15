@@ -351,7 +351,7 @@ try {
         state.setEmptyTree(emptyTree);
         state.setLastChange(Date.now());
         state.seedNav(initialSelectedPath);
-        state.setFocusedNodeId(
+        state.focusTreeNode(
           initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`
         );
         state.setExpandedDirectories(initialExpanded);

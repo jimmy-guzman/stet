@@ -24,16 +24,27 @@ const KEY_HELP_GROUPS: {
         description: "move in the tree or viewer",
       },
       {
-        actions: ["collapse", "expand", "caret-prev", "caret-next"],
-        description:
-          "collapse / expand folders (tree) or hop the caret by word (viewer)",
+        actions: ["collapse"],
+        description: "collapse an open folder or focus its parent",
+      },
+      {
+        actions: ["expand"],
+        description: "expand a closed folder or focus the next item",
+      },
+      {
+        actions: ["caret-prev", "caret-next"],
+        description: "previous / next word in the viewer",
       },
       {
         actions: ["switch-pane"],
         description:
           "switch focus between the tree and viewer; the search pane's tab cycles its fields",
       },
-      { actions: ["open"], description: "open the focused item" },
+      { actions: ["open"], description: "open a file or toggle a folder" },
+      {
+        actions: ["first-item", "last-item"],
+        description: "jump to first / last tree item",
+      },
       {
         actions: ["go-to-file"],
         description: "go to file: fuzzy-search the whole repo",

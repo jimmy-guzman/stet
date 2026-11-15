@@ -21,7 +21,7 @@ const seed = (paths: string[]) => {
     state.setChangesOnly(false);
     state.setExpandedDirectories(new Set<string>());
     state.setGitModel(modelWith(paths));
-    state.setFocusedNodeId(`file:${paths[0]}`);
+    state.focusTreeNode(`file:${paths[0]}`);
     state.seedNav(undefined);
   });
 };
@@ -30,7 +30,7 @@ afterEach(() => {
   batch(() => {
     state.setGitModel(modelWith([]));
     state.setExpandedDirectories(new Set<string>());
-    state.setFocusedNodeId("");
+    state.focusTreeNode("");
     state.seedNav(undefined);
   });
 });
@@ -151,8 +151,8 @@ test("re-focusing an already-pinned file with no line target keeps its own remem
 test("consecutive tree browsing collapses to one history entry", () => {
   seed(["a.ts", "b.ts", "c.ts"]);
   state.selectFile("a.ts");
-  state.moveFocus(1);
-  state.moveFocus(1);
+  state.moveFocus("next");
+  state.moveFocus("next");
   expect(state.selectedPath()).toBe("c.ts");
 
   state.goBack();

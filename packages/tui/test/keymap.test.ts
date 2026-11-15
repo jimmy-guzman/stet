@@ -4,6 +4,8 @@ import { KeyEvent } from "@opentui/core";
 import { batch } from "solid-js";
 
 import { createKeyHandler } from "@/keymap";
+import { registerKeybindings } from "@/keys/registry";
+import { resolveKeybindings } from "@/keys/resolve";
 import { state } from "@/state";
 
 const keyEvent = (overrides: {
@@ -444,3 +446,66 @@ describe("createKeyHandler", () => {
     expect(state.quitConfirmOpen()).toBe(false);
   });
 });
+
+test("tree keys follow natural ordering and toggle folders without opening a file", () => {
+  state.setGitModel({
+    ...state.gitModel(),
+    repoFiles: ["src/file10", "src/file2", "z"].map((path) => ({
+      path,
+      symlink: false,
+      tracked: true,
+    })),
+    repoFilesKey: "loaded",
+  });
+  state.focusTreeNode("dir:src");
+  const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
+
+  const press = (name: string) => {
+    handle(keyEvent({ name }));
+  };
+
+  press("return");
+  expect(state.treeRowCount()).toBe(4);
+  expect(state.selectedPath()).toBeUndefined();
+  press("right");
+  expect(state.focusedTreeRow()?.node.path).toBe("src/file2");
+  expect(state.selectedPath()).toBe("src/file2");
+  press("left");
+  expect(state.focusedTreeRow()?.node.path).toBe("src");
+  press("left");
+  expect(state.treeRowCount()).toBe(2);
+  press("end");
+  expect(state.focusedTreeRow()?.node.path).toBe("z");
+  press("home");
+  expect(state.focusedTreeRow()?.node.path).toBe("src");
+  press("right");
+  expect(state.treeRowCount()).toBe(4);
+  press("return");
+  expect(state.treeRowCount()).toBe(2);
+  expect(state.selectedPath()).toBe("z");
+});
+
+test.each(["first-item", "last-item"])(
+  "open wins an Enter conflict with %s as reported",
+  (action) => {
+    const { set, issues } = resolveKeybindings({ [action]: "enter" });
+    expect(issues).toContain(
+      `keybinding "${action}" (enter) conflicts with "open"; the earlier binding wins`
+    );
+    registerKeybindings(set);
+    state.setGitModel({
+      ...state.gitModel(),
+      repoFiles: ["a", "b", "c"].map((path) => ({
+        path,
+        symlink: false,
+        tracked: true,
+      })),
+      repoFilesKey: "loaded",
+    });
+    state.selectFile("b");
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
+    handle(keyEvent({ name: "return" }));
+    expect(state.focusedTreeRow()?.node.path).toBe("b");
+    expect(state.selectedPath()).toBe("b");
+  }
+);

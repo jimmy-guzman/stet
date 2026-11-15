@@ -3,6 +3,7 @@ import { getFiletypeFromFileName } from "@pierre/diffs";
 import { fileNameParts } from "@/utils/file-name";
 
 import { builtinFiles, builtinIcons } from "./builtins";
+import { defaultIconForPath } from "./icon-resolver";
 import type {
   FileAssociation,
   FileSupportRegistry,
@@ -114,7 +115,7 @@ const resolve = (path: string): ResolvedFileSupport => {
     ?.association.icon;
 
   return {
-    icon: icon === undefined || icon === false ? "file" : icon,
+    icon: icon === false ? "file" : (icon ?? defaultIconForPath(path)),
     syntax: syntax === false ? "text" : (syntax ?? inferredSyntax(path)),
   };
 };

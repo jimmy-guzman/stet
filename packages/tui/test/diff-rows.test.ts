@@ -179,4 +179,22 @@ describe("diff rows", () => {
     expect(full.hiddenLines).toBe(0);
     expect(full.navigable).toHaveLength(8);
   });
+
+  test("marks the changed words of a paired removed/added line, and nothing on context lines", async () => {
+    const { patch } = built(OLD, NEW);
+    const render = await renderDiff({ full: false, maxLines: 1600, patch });
+
+    const changedText = (type: string) =>
+      render.rows
+        .flatMap((row) =>
+          row.kind === "line" && row.type === type ? row.spans : []
+        )
+        .filter((span) => span.changed === true)
+        .map((span) => span.text)
+        .join("");
+
+    expect(changedText("remove")).toBe("11");
+    expect(changedText("add")).toBe("110");
+    expect(changedText("context")).toBe("");
+  });
 });

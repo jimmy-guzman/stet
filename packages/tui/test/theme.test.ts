@@ -5,6 +5,7 @@ import { Predicate } from "effect";
 
 import { darkTheme } from "@/theme/dark";
 import { lightTheme } from "@/theme/light";
+import { monoDarkTheme, monoLightTheme } from "@/theme/mono";
 import { resolveTheme } from "@/theme/resolve";
 import type { Theme } from "@/theme/tokens";
 
@@ -93,6 +94,42 @@ describe("resolveTheme", () => {
       expect(active.r + active.g + active.b).toBeLessThan(
         base.r + base.g + base.b
       );
+    }
+  });
+});
+
+const distance = (a: RGBA, b: RGBA) =>
+  Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
+
+describe.each([
+  ["darkTheme", darkTheme],
+  ["lightTheme", lightTheme],
+  ["monoDarkTheme", monoDarkTheme],
+  ["monoLightTheme", monoLightTheme],
+])("%s changed-word backgrounds", (_name, theme) => {
+  test("lean toward the line's sign color over both the normal and the lifted row", () => {
+    const { rgba } = resolveTheme(theme);
+
+    const cases = [
+      [
+        rgba.addedWordBg,
+        RGBA.fromHex(theme.diff.addedBg),
+        theme.diff.addedSign,
+      ],
+      [rgba.addedWordBgActive, rgba.addedBgActive, theme.diff.addedSign],
+      [
+        rgba.removedWordBg,
+        RGBA.fromHex(theme.diff.removedBg),
+        theme.diff.removedSign,
+      ],
+      [rgba.removedWordBgActive, rgba.removedBgActive, theme.diff.removedSign],
+    ] as const;
+
+    for (const [word, row, signHex] of cases) {
+      const sign = RGBA.fromHex(signHex);
+
+      expect(word).not.toEqual(row);
+      expect(distance(word, sign)).toBeLessThan(distance(row, sign));
     }
   });
 });

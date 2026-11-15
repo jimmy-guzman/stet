@@ -262,7 +262,9 @@ const compute = async (
     collapsedContextThreshold: 1,
     diffStyle: "unified",
     hunkSeparators: "line-info",
-    lineDiffType: "none",
+    // Marks the changed words of each paired removed/added line (`data-diff-span`),
+    // Joining runs across one-character neutral gaps.
+    lineDiffType: "word-alt",
     maxLineDiffLength: 5000,
     theme: themeName,
     tokenizeMaxLineLength: 5000,

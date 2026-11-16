@@ -60,6 +60,8 @@ export const keyActions = [
   { combos: ["l", "→"], context: "tree", id: "expand" },
   { combos: ["h", "←"], context: "tree", id: "collapse" },
   { combos: ["enter"], context: "tree", id: "open" },
+  { combos: ["home"], context: "tree", id: "first-item" },
+  { combos: ["end"], context: "tree", id: "last-item" },
 ] as const satisfies readonly {
   combos: readonly [string, ...string[]];
   context: KeyContext;

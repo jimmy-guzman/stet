@@ -3,7 +3,7 @@ title: Languages
 description: The highlighting, folding, and icons stet gives every language.
 ---
 
-Language support is layered. Named file associations select syntax and icons independently. Every recognized file gets syntax highlighting, a file-type icon, and structural folding. You can change any layer through [your config](/docs/reference/configuration#file-support).
+Language support is layered. Named file associations select syntax and icons independently. Highlighting, folding, and icon coverage depend on their respective libraries. You can change any layer through [your config](/docs/reference/configuration#file-support).
 
 | Language                | Highlighting | Folding    |
 | ----------------------- | ------------ | ---------- |
@@ -31,6 +31,6 @@ Press `z` to fold the block at the caret: code folds by indentation in every lan
 
 ## File icons
 
-Recognized file types use restrained colored Nerd Font icons; structural and generic icons remain muted. Recognizable brands keep their identity, while unbranded formats reuse stet's palette. The same named icon and theme color appears in every file-list surface. Matching follows exact filename, glob, extension, and dotfile specificity; `--no-icons` keeps every layout stable while hiding the glyphs if your terminal font lacks them.
+Recognized file types use restrained colored Nerd Font icons; structural and generic icons remain muted. Recognizable brands keep their identity, while unbranded formats reuse stet's palette. The same named icon and theme color appears in every file-list surface. Default file matching comes from Trees' `complete` icon set, with its categories mapped to terminal glyphs and colors. For example, `package.json` uses the JSON icon and test files retain their language icon. User associations override these defaults. `--no-icons` hides glyphs while keeping the layout stable if your terminal font lacks them.
 
 To add a file type, map it to a syntax and an icon with a `files` association. See [configuration](/docs/reference/configuration#file-support) for matching rules and overriding or disabling built-ins.

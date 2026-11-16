@@ -46,9 +46,12 @@ const contrast = (foreground: string, background: string) => {
 describe("built-in icon colors", () => {
   test("uses the curated file icon palette", () => {
     const coloredIcons = [
+      "archive",
       "astro",
       "bun",
+      "c",
       "codeowners",
+      "cpp",
       "css",
       "csv",
       "database",
@@ -56,6 +59,7 @@ describe("built-in icon colors", () => {
       "git",
       "go",
       "gradle",
+      "graphql",
       "groovy",
       "heroku",
       "html",
@@ -77,17 +81,22 @@ describe("built-in icon colors", () => {
       "readme",
       "ruby",
       "rust",
+      "sass",
       "scala",
       "shell",
       "spreadsheet",
       "storybook",
+      "svelte",
+      "swift",
       "test",
       "toml",
       "tsconfig",
       "typescript",
       "video",
       "vue",
+      "wasm",
       "yaml",
+      "zig",
     ];
 
     expect(Object.keys(darkTheme.icon)).toEqual(coloredIcons);
@@ -101,6 +110,7 @@ describe("built-in icon colors", () => {
       "file",
       "folder",
       "folder-open",
+      "font",
       "lock",
       "symlink",
       "template",

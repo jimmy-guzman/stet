@@ -1,7 +1,17 @@
 import type { FileAssociation } from "./model";
 
-/** Named Nerd Font glyphs used by built-in file associations and tree chrome. */
+/** Named Nerd Font glyphs for Trees icon tokens, user associations, and tree chrome. */
 export const builtinIcons = new Map<string, string>([
+  ["archive", "\u{F1C6}"],
+  ["c", "\u{E61E}"],
+  ["cpp", "\u{E61D}"],
+  ["font", "\u{F031}"],
+  ["graphql", "\u{E7F4}"],
+  ["sass", "\u{E74B}"],
+  ["svelte", "\u{E8B7}"],
+  ["swift", "\u{E755}"],
+  ["wasm", "\u{E8E0}"],
+  ["zig", "\u{E8EF}"],
   ["file", "\u{EA7B}"],
   ["folder", "\u{F0256}"],
   ["folder-open", "\u{F0DCF}"],
@@ -54,139 +64,11 @@ export const builtinIcons = new Map<string, string>([
   ["storybook", "\u{E8B3}"],
 ]);
 
-const iconExtensions = (
-  name: string,
-  icon: string,
-  extensions: readonly string[]
-): readonly [string, FileAssociation] => [name, { extensions, icon }];
-
-/** Built-in file associations. Later entries win ties at the same match specificity. */
+/** Syntax overrides layered over filename inference. Trees supplies default file icons. */
 export const builtinFiles = new Map<string, FileAssociation>([
   ["syntax-env", { filenames: [".env"], syntax: "dotenv" }],
   ["syntax-npmrc", { filenames: [".npmrc"], syntax: "ini" }],
   ["syntax-prettierrc", { filenames: [".prettierrc"], syntax: "jsonc" }],
   ["syntax-gradle", { globs: ["*.gradle"], syntax: "groovy" }],
   ["syntax-ruby-template", { globs: ["*.rb.tmpl"], syntax: "ruby" }],
-
-  iconExtensions("icon-typescript", "typescript", ["ts", "mts", "cts"]),
-  iconExtensions("icon-react", "react", ["tsx", "jsx"]),
-  iconExtensions("icon-javascript", "javascript", ["js", "mjs", "cjs"]),
-  iconExtensions("icon-json", "json", ["json"]),
-  iconExtensions("icon-markdown", "markdown", ["md", "mdx"]),
-  iconExtensions("icon-css", "css", ["css"]),
-  iconExtensions("icon-csv", "csv", ["csv"]),
-  iconExtensions("icon-spreadsheet", "spreadsheet", ["xls", "xlsx"]),
-  iconExtensions("icon-profile", "profile", ["cpuprofile"]),
-  iconExtensions("icon-database", "database", ["sql"]),
-  iconExtensions("icon-document", "document", ["txt"]),
-  iconExtensions("icon-html", "html", ["html"]),
-  iconExtensions("icon-http", "http", ["http"]),
-  iconExtensions("icon-astro", "astro", ["astro"]),
-  iconExtensions("icon-vue", "vue", ["vue"]),
-  iconExtensions("icon-template", "template", ["mako"]),
-  iconExtensions("icon-pdf", "pdf", ["pdf"]),
-  iconExtensions("icon-rust", "rust", ["rs"]),
-  iconExtensions("icon-python", "python", ["py"]),
-  iconExtensions("icon-go", "go", ["go"]),
-  iconExtensions("icon-ruby", "ruby", ["rb"]),
-  iconExtensions("icon-shell", "shell", ["sh", "bash", "zsh"]),
-  iconExtensions("icon-toml", "toml", ["toml"]),
-  iconExtensions("icon-config", "config", ["conf", "ini"]),
-  iconExtensions("icon-yaml", "yaml", ["yml", "yaml"]),
-  iconExtensions("icon-lock", "lock", ["lock"]),
-  iconExtensions("icon-image", "image", [
-    "png",
-    "jpg",
-    "jpeg",
-    "gif",
-    "webp",
-    "ico",
-    "svg",
-  ]),
-  iconExtensions("icon-video", "video", ["mp4", "mov", "mkv", "webm", "avi"]),
-  iconExtensions("icon-java", "java", ["java", "jar", "class"]),
-  iconExtensions("icon-kotlin", "kotlin", ["kt", "kts"]),
-  iconExtensions("icon-groovy", "groovy", ["groovy", "gvy"]),
-  iconExtensions("icon-scala", "scala", ["scala", "sc"]),
-  iconExtensions("icon-gradle", "gradle", ["gradle"]),
-
-  [
-    "icon-go-filenames",
-    { filenames: ["go.mod", "go.sum", "go.work"], icon: "go" },
-  ],
-  ["icon-node-filename", { filenames: ["package.json"], icon: "node" }],
-  [
-    "icon-tsconfig-filename",
-    { filenames: ["tsconfig.json"], icon: "tsconfig" },
-  ],
-  [
-    "icon-bun-filenames",
-    { filenames: ["bun.lock", "bunfig.toml"], icon: "bun" },
-  ],
-  ["icon-dockerfile", { filenames: ["dockerfile"], icon: "docker" }],
-  ["icon-makefile", { filenames: ["makefile"], icon: "make" }],
-  ["icon-gitignore", { filenames: [".gitignore"], icon: "git" }],
-  ["icon-env", { filenames: [".env"], icon: "config" }],
-  ["icon-readme", { filenames: ["readme.md", "readme"], icon: "readme" }],
-  ["icon-codeowners", { filenames: ["codeowners"], icon: "codeowners" }],
-  ["icon-procfile", { filenames: ["procfile"], icon: "heroku" }],
-  [
-    "icon-gradle-filenames",
-    {
-      filenames: [
-        "build.gradle",
-        "settings.gradle",
-        "build.gradle.kts",
-        "settings.gradle.kts",
-        "gradle.properties",
-        "gradle-wrapper.properties",
-        "gradlew",
-        "gradlew.bat",
-      ],
-      icon: "gradle",
-    },
-  ],
-  ["icon-maven-filename", { filenames: ["pom.xml"], icon: "maven" }],
-  [
-    "icon-license",
-    {
-      filenames: [
-        "copying",
-        "unlicense",
-        "notice",
-        "mit",
-        "isc",
-        "apache-2.0",
-        "bsd-2-clause",
-        "bsd-3-clause",
-        "gpl-2.0",
-        "gpl-3.0",
-        "lgpl-3.0",
-        "agpl-3.0",
-        "mpl-2.0",
-      ],
-      globs: ["license*", "licence*", "cc-by*", "cc0*"],
-      icon: "license",
-    },
-  ],
-  ["icon-ruby-template", { globs: ["*.rb.tmpl"], icon: "ruby" }],
-  [
-    "icon-test",
-    {
-      globs: [
-        "*.test.*",
-        "*.spec.*",
-        "*_test.*",
-        "*_spec.*",
-        "*.cy.*",
-        "test_*.*",
-      ],
-      icon: "test",
-    },
-  ],
-  [
-    "icon-storybook",
-    { globs: ["*.stories.*", "*.story.*"], icon: "storybook" },
-  ],
-  ["icon-dotfiles", { dotfiles: true, icon: "config" }],
 ]);

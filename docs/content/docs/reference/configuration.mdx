@@ -151,7 +151,7 @@ Each association may set `syntax` and `icon`. Built-in and user associations par
 }
 ```
 
-Without a matching syntax facet, stet asks its bundled filename inference for a language. Bare dotfiles do not masquerade as extensions. Without an icon match it uses `file`.
+Without a matching syntax facet, stet asks its bundled filename inference for a language. Bare dotfiles do not masquerade as extensions. Without an icon facet, stet uses Trees' `complete` icon set to match filenames and extensions, then maps the result to a Nerd Font glyph. Unrecognized types use `file`. To override a Trees default, add a `files` entry with explicit match rules; default icon rules are no longer named `icon-*` entries in the `files` registry.
 
 <Callout>
   An entry that does not validate is reported in a notice; the rest of the

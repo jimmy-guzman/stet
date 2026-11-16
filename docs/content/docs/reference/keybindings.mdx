@@ -12,9 +12,12 @@ The keyboard drives everything in stet. Press `?` at any time to see this list i
 | Key | Action | Rebind id |
 | --- | --- | --- |
 | `j / k` | move in the tree or viewer | `focus-down`, `focus-up`, `cursor-down`, `cursor-up` |
-| `h / l` | collapse / expand folders (tree) or hop the caret by word (viewer) | `collapse`, `expand`, `caret-prev`, `caret-next` |
+| `h` | collapse an open folder or focus its parent | `collapse` |
+| `l` | expand a closed folder or focus the next item | `expand` |
+| `h / l` | previous / next word in the viewer | `caret-prev`, `caret-next` |
 | `tab` | switch focus between the tree and viewer; the search pane's tab cycles its fields | `switch-pane` |
-| `enter` | open the focused item | `open` |
+| `enter` | open a file or toggle a folder | `open` |
+| `home / end` | jump to first / last tree item | `first-item`, `last-item` |
 | `ctrl-p` | go to file: fuzzy-search the whole repo | `go-to-file` |
 | `.` | jump to the most recently changed file | `latest-file` |
 

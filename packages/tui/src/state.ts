@@ -54,13 +54,7 @@ import type { ChangedFile, GitModel } from "./git/model";
 import { filterPathspecs } from "./git/search";
 import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
-import {
-  buildTreeStructure,
-  decorateTree,
-  defaultExpandedDirectories,
-  expandAncestorsForPath,
-  flattenTree,
-} from "./git/tree";
+import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
 import {
   mergeWorktreeSummaries,
   orderWorktrees,
@@ -97,6 +91,8 @@ import {
 } from "./theme/active";
 import { themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
+import { createTreeModel } from "./tree/model";
+import type { TreeMove } from "./tree/model";
 import { worktreeLabel } from "./ui-helpers";
 import { fetchLatestVersion, isNewer } from "./upgrade/release";
 import { findMatches as findMatchIndices } from "./utils/find";
@@ -579,10 +575,6 @@ const createState = () => {
     undefined
   );
 
-  const [expandedDirectories, setExpandedDirectories] = tracked(
-    new Set<string>()
-  );
-
   const [fileView, setFileView] = tracked(false);
   const [fullContentPaths, setFullContentPaths] = tracked(new Set<string>());
   // Viewer folds/gaps for the current file (reset on file switch): a `Set` of folded
@@ -591,8 +583,6 @@ const createState = () => {
   // Are two sets, not one; the transform that consumes them is shared.
   const [foldedRegions, setFoldedRegions] = tracked(new Set<string>());
   const [expandedGaps, setExpandedGaps] = tracked(new Set<string>());
-
-  const [focusedNodeId, setFocusedNodeId] = tracked("");
 
   const [focusedPane, setFocusedPane] = tracked<"tree" | "diff" | "search">(
     "tree"
@@ -808,12 +798,6 @@ const createState = () => {
       (selectedFile() === undefined || fileView())
   );
 
-  // Split the tree build so the repo-size-proportional structure pass is skipped
-  // On a content-only edit. `repoFiles` is reference-stable across changed-set
-  // Updates (mergeChanged preserves it, repoFilesCache dedupes), and `changedPaths`
-  // Changes only when a path appears/disappears, so `treeStructure` rebuilds only
-  // On a real structural shift; `tree` overlays the live changed set (counts,
-  // Badges, aggregates) cheaply over that cached structure on every model update.
   const repoFiles = createMemo(() => gitModel().repoFiles);
 
   const changedPaths = createMemo(
@@ -852,34 +836,111 @@ const createState = () => {
     }
   );
 
-  const treeStructure = createMemo(() =>
-    buildTreeStructure(
-      repoFiles(),
-      changesOnly() ? changedPaths() : stagedDeletionPaths(),
-      {
-        changesOnly: changesOnly(),
+  const treeFiles = createMemo(() => {
+    const paths = changesOnly() ? changedPaths() : stagedDeletionPaths();
+
+    const files = new Map(
+      repoFiles()
+        .values()
+        .filter((file) => !changesOnly() || paths.has(file.path))
+        .map((file) => [file.path, file] as const)
+    );
+
+    for (const path of paths) {
+      if (!files.has(path)) {
+        files.set(path, { path, symlink: false, tracked: true });
       }
-    )
+    }
+
+    return files;
+  });
+
+  const [treeGeneration, setTreeGeneration] = createSignal(0);
+  onReset(() => {
+    setTreeGeneration((generation) => generation + 1);
+  });
+  const [treeRevision, setTreeRevision] = tracked(0);
+  const treeRoot = createMemo(() => gitModel().repoRoot);
+
+  const treeModel = createMemo(() => {
+    treeRoot();
+    treeGeneration();
+    const model = createTreeModel();
+
+    const unsubscribe = model.subscribe(() => {
+      setTreeRevision((revision) => revision + 1);
+    });
+
+    onCleanup(() => {
+      unsubscribe();
+      model.cleanUp();
+    });
+
+    return model;
+  });
+
+  const treeTopology = createMemo(
+    () => {
+      const model = treeModel();
+      model.syncPaths(treeFiles());
+
+      return model;
+    },
+    undefined,
+    { equals: false }
   );
 
-  const tree = createMemo(() =>
-    decorateTree(treeStructure(), gitModel().changedByPath)
+  const decoratedTree = createMemo(
+    () => {
+      const model = treeTopology();
+      model.setChanges(gitModel().changedByPath);
+
+      return model;
+    },
+    undefined,
+    { equals: false }
   );
 
-  const treeRows = createMemo(() => flattenTree(tree(), expandedDirectories()));
+  const setExpandedDirectories = (expanded: Set<string>) => {
+    treeTopology().setExpanded(expanded);
+  };
 
-  // Index the flat row list by node id so cursor moves are O(1) rather than O(rows).
-  const treeRowsById = createMemo(
-    () => new Map(treeRows().map((row) => [row.node.id, row.index]))
-  );
+  const focusTreeNode = (id: string) => {
+    treeTopology().focus(id);
+  };
 
-  const focusedRowIndex = createMemo(
-    () => treeRowsById().get(focusedNodeId()) ?? 0
-  );
+  const toggleTreeNode = (id: string) => {
+    treeTopology().toggle(id);
+  };
+
+  const treeRowCount = () => {
+    const model = treeTopology();
+    treeRevision();
+
+    return model.rowCount();
+  };
+
+  const treeSlice = (start: number, height: number) => {
+    decoratedTree();
+    const model = treeTopology();
+    treeRevision();
+
+    return model.rows(start, height);
+  };
+
+  const focusedRowIndex = createMemo(() => {
+    const model = treeTopology();
+    treeRevision();
+
+    return model.focusedIndex();
+  });
+
+  const focusedTreeRow = () => treeSlice(focusedRowIndex(), 1)[0];
+  const focusedNodeId = () => focusedTreeRow()?.node.id ?? "";
 
   followListWindow({
     cursor: focusedRowIndex,
-    rowCount: () => treeRows().length,
+    rowCount: treeRowCount,
     scrollTop: sidebarScrollTop,
     setScrollTop: (next) => {
       setSidebarScrollTop(next);
@@ -1782,7 +1843,7 @@ const createState = () => {
       };
     }
 
-    const node = treeRows()[focusedRowIndex()]?.node;
+    const node = focusedTreeRow()?.node;
 
     return {
       caretColumn: undefined,
@@ -2137,19 +2198,14 @@ const createState = () => {
   };
 
   // --- actions ---
-  const moveFocus = (direction: number) => {
-    const rows = treeRows();
-
-    const node =
-      rows[
-        Math.max(0, Math.min(focusedRowIndex() + direction, rows.length - 1))
-      ]?.node;
+  const moveFocus = (direction: TreeMove) => {
+    const model = treeTopology();
+    model.move(direction);
+    const node = model.focusedRow()?.node;
 
     if (node === undefined) {
       return;
     }
-
-    setFocusedNodeId(node.id);
 
     if (node.type === "file") {
       navigateTo(node.path, "browse");
@@ -2165,10 +2221,7 @@ const createState = () => {
     target?: { line: number; column?: number; escalate?: boolean }
   ) => {
     batch(() => {
-      setFocusedNodeId(`file:${path}`);
-      setExpandedDirectories((current) =>
-        expandAncestorsForPath(current, path)
-      );
+      treeTopology().reveal(path);
       navigateTo(path, "jump", target?.line);
 
       if (target !== undefined) {
@@ -2178,6 +2231,16 @@ const createState = () => {
           line: target.line,
           path,
         });
+      }
+    });
+  };
+
+  const activateTreeNode = () => {
+    batch(() => {
+      const path = treeTopology().activate();
+
+      if (path !== null) {
+        selectFile(path);
       }
     });
   };
@@ -3220,7 +3283,7 @@ const createState = () => {
         setLastChange(Date.now());
         setRepoRoot(fresh.repoRoot);
         setGitModel(fresh);
-        setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
+        focusTreeNode(selected === undefined ? "" : `file:${selected}`);
         setExpandedDirectories(
           selected === undefined
             ? expanded
@@ -3683,6 +3746,7 @@ const createState = () => {
 
   return {
     activateTab,
+    activateTreeNode,
     activityLog,
     availableUpdate,
     canGoBack,
@@ -3722,7 +3786,6 @@ const createState = () => {
     dispatchCommandAction,
     editorTemplate,
     emptyTree,
-    expandedDirectories,
     extendSelectionTo,
     fileComboboxIndex,
     fileComboboxOpen,
@@ -3735,9 +3798,11 @@ const createState = () => {
     findOpen,
     findQuery,
     focusNextPane,
+    focusTreeNode,
     focusedNodeId,
     focusedPane,
     focusedRowIndex,
+    focusedTreeRow,
     fullContentPaths,
     gitModel,
     goBack,
@@ -3830,7 +3895,6 @@ const createState = () => {
     setFindMatchPos,
     setFindOpen,
     setFindQuery,
-    setFocusedNodeId,
     setFocusedPane,
     setFullContentPaths,
     setGitModel,
@@ -3905,8 +3969,10 @@ const createState = () => {
     toggleSearchRegex,
     toggleSearchScope,
     toggleSidebar,
+    toggleTreeNode,
     toggleZoom,
-    treeRows,
+    treeRowCount,
+    treeSlice,
     truncated,
     truncatedHidden,
     viewerFocus,

@@ -12,7 +12,7 @@ import {
   seedState,
 } from "./helpers";
 
-const focusedName = () => state.treeRows()[state.focusedRowIndex()].node.name;
+const focusedName = () => state.focusedTreeRow().node.name;
 
 // The sidebar windows the tree to the viewport (only ~viewport rows are ever
 // Mounted), so these tests pin the behaviors that windowing must preserve: the
@@ -90,7 +90,7 @@ describe("sidebar windowing", () => {
     mockInput.pressKey("h");
     await renderOnce();
     await renderOnce();
-    expect(state.treeRows().length).toBeLessThan(5);
+    expect(state.treeRowCount()).toBeLessThan(5);
     expect(sidebarFrame()).toContain("big");
     expect(sidebarFrame()).not.toContain(".txt");
 

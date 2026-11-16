@@ -324,7 +324,8 @@ export const createTreeModel = () => {
         if (item !== null && "collapse" in item && item.isExpanded()) {
           expanded.delete(`dir:${decode(item.getPath())}`);
           item.collapse();
-        } else {
+        } else if ((rows(focusedIndex(), 1)[0]?.depth ?? 0) > 0) {
+          // Trees falls back to the first row when a flattened root has no visible parent.
           tree.focusParentItem();
         }
 

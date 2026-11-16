@@ -509,3 +509,34 @@ test.each(["first-item", "last-item"])(
     expect(state.selectedPath()).toBe("b");
   }
 );
+
+test("Left stays on a flattened root and still collapses or focuses visible parents", () => {
+  state.setGitModel({
+    ...state.gitModel(),
+    repoFiles: ["aaa/file", "src/deep/file"].map((path) => ({
+      path,
+      symlink: false,
+      tracked: true,
+    })),
+    repoFilesKey: "loaded",
+  });
+  state.focusTreeNode("dir:src/deep");
+  const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
+
+  handle(keyEvent({ name: "left" }));
+  expect(state.focusedTreeRow()?.node.path).toBe("src/deep");
+  expect(state.selectedPath()).toBeUndefined();
+
+  handle(keyEvent({ name: "right" }));
+  handle(keyEvent({ name: "left" }));
+  expect(state.focusedTreeRow()?.node).toMatchObject({
+    expanded: false,
+    path: "src/deep",
+  });
+
+  handle(keyEvent({ name: "right" }));
+  handle(keyEvent({ name: "right" }));
+  expect(state.focusedTreeRow()?.node.path).toBe("src/deep/file");
+  handle(keyEvent({ name: "left" }));
+  expect(state.focusedTreeRow()?.node.path).toBe("src/deep");
+});

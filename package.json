@@ -21,7 +21,7 @@
     "knip": "knip",
     "lint": "bun --bun x oxlint",
     "lint:fix": "bun --bun x oxlint --fix",
-    "prepare": "effect-language-service patch",
+    "prepare": "effect-tsgo patch",
     "screenshots": "bun run --cwd packages/tui screenshots",
     "stet": "bun run --cwd packages/tui stet",
     "test": "bun run --cwd packages/tui test",
@@ -29,12 +29,12 @@
     "fix": "bun --bun x ultracite fix"
   },
   "devDependencies": {
-    "@effect/language-service": "0.87.5",
-    "knip": "6.45.1",
+    "@effect/tsgo": "0.73.2",
+    "knip": "6.47.0",
     "lefthook": "2.2.2",
-    "oxfmt": "0.78.0",
-    "oxlint": "1.93.0",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
     "oxlint-tsgolint": "7.0.2007",
-    "ultracite": "8.2.0"
+    "ultracite": "8.3.1"
   }
 }

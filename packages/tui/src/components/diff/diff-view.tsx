@@ -152,7 +152,10 @@ const edgeDirection = (localY: number) => {
   return localY >= state.viewerHeight() - 1 ? 1 : 0;
 };
 
-const isCursor = (row: DiffLineRow) => row.navIndex === state.cursorIndex();
+// Like the tree's cursor row, the caret line lifts only while the viewer holds focus: with no frame
+// Around either pane, the lit cursor is the focus mark.
+const isCursor = (row: DiffLineRow) =>
+  state.focusedPane() === "diff" && row.navIndex === state.cursorIndex();
 
 // A row inside the active line selection. Selected rows reuse the cursor lift
 // (`resolveBackground`'s active branch), so the band is theme-correct per diff
@@ -662,7 +665,7 @@ export const DiffView = () => {
       : (rowEnds()[cursorRow - 1] ?? 0);
   });
 
-  // The viewer interior width (gutter + content, inside the border), the coordinate
+  // The viewer interior width (gutter + content), the coordinate
   // Space the context menu's absolute left/clamp live in.
   const innerWidth = () => contentWidth() + gutterWidth();
 

@@ -21,7 +21,8 @@ const typeLabel = (side: SideMeta | undefined) =>
   side?.image === undefined ? "Binary file" : `${side.image.format} image`;
 
 /**
- * Shows metadata instead of a blank pane because OpenTUI has no SIXEL or Kitty graphics path.
+ * Shows metadata instead of a blank pane; stet does not draw image pixels yet, although OpenTUI
+ * ships an `<image>` element.
  * Reserves the viewer height and uses width-stable ASCII for dimensions and deltas.
  */
 export const BinaryPreview = (props: {

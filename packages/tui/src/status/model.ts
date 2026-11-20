@@ -1,9 +1,8 @@
+import { BAR_EDGE, ISLAND_PAD } from "@/components/bar";
 import type { ChangeKind } from "@/git/model";
 import { levelGlyph } from "@/log/levels";
 import type { LogLevel } from "@/log/levels";
 import { truncate, truncateLeft } from "@/utils/text";
-
-export const STATUS_BAR_PADDING = 1;
 
 const ACTIVITY_LEAD_CELLS = Bun.stringWidth("● ");
 
@@ -106,7 +105,8 @@ export interface StatusBarModelInput {
 export const buildStatusBarModel = (
   input: StatusBarModelInput
 ): StatusBarModel => {
-  const width = Math.max(0, input.width - STATUS_BAR_PADDING * 2);
+  // A rule cell at each edge, and the island's padding.
+  const width = Math.max(0, input.width - BAR_EDGE * 2 - ISLAND_PAD * 2);
 
   if (input.foregroundProgress !== undefined) {
     return fitMessage(

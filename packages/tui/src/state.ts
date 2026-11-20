@@ -16,6 +16,7 @@ import {
 import type { DiffScope, ScopeKind } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { Clipboard } from "./clipboard/service";
+import { BAR_SEP } from "./components/bar";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type {
   CommandAction,
@@ -954,8 +955,9 @@ const createState = () => {
   // The default tree is the whole repo, so it stays empty until the deferred
   // RepoFiles poll fills it. parseRepoFiles always folds repoRoot into the key, so
   // A loaded 0-file repo has a non-empty key: an empty key means "not loaded yet"
-  // (including the pre-startup empty model), and the sidebar reserves blank space
-  // For that window instead of flashing the empty state.
+  // (including the pre-startup empty model), and the default tree reserves blank
+  // Space for that window instead of flashing the empty state. Changes-only rows come
+  // From the changed set, so that mode shows its empty state once the startup load lands.
   const repoFilesLoading = createMemo(() => gitModel().repoFilesKey === "");
   const recencyByPath = createMemo(() => lastChangedAt(activityLog()));
 
@@ -1542,6 +1544,18 @@ const createState = () => {
     setFindMatchPos(0);
   };
 
+  // An open find bar owns the keyboard, so it may only stay open while the viewer holds focus:
+  // Otherwise another pane looks focused while typing still goes into find. Closing it here
+  // Covers every path that moves focus (a click on a tree row or the tree pane, or any future
+  // Focus change), as esc would.
+  createEffect(
+    on(focusedPane, (pane) => {
+      if (pane !== "diff" && findOpen()) {
+        resetFind();
+      }
+    })
+  );
+
   // A file switch ends any active find so highlights never bleed across files.
   createEffect(
     on(selectedPath, () => {
@@ -1611,7 +1625,7 @@ const createState = () => {
   // A truncated file reserves one row for the "N more lines" footer, so the diff
   // Content shrinks by it; DiffView derives its whole windowing from this height,
   // So the single subtraction keeps the slice and scroll math correct. Chrome the
-  // Viewer owns inside its own border stays here rather than in the pure model.
+  // Viewer owns inside its own rect stays here rather than in the pure model.
   const viewerHeight = createMemo(() =>
     Math.max(1, layout().viewer.content.height - 1 - (truncated() ? 1 : 0))
   );
@@ -1872,10 +1886,12 @@ const createState = () => {
   // Standing tutorial line, since any live content outranks this and would bury it anyway.
   const guidance = createMemo(() => {
     if (findOpen()) {
-      return "enter find · esc cancel";
+      return ["enter find", "esc cancel"].join(BAR_SEP);
     }
 
-    return findActive() ? "n/N next/prev · esc clear" : "? help · q quit";
+    return (
+      findActive() ? ["n/N next/prev", "esc clear"] : ["? help", "q quit"]
+    ).join(BAR_SEP);
   });
 
   const statusBarModel = createMemo(() => {

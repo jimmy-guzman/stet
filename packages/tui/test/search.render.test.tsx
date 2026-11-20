@@ -233,15 +233,20 @@ describe("project content search", () => {
         frame.includes("switch scope")
       );
       mockInput.pressEscape();
-      await settleUntil(
+
+      const pane = await settleUntil(
         "picker closed, pane intact",
         (frame) => !frame.includes("switch scope")
       );
 
       // A single click on the match row selects it (the pane must not navigate
       // Away on a focus-intent click): the footer flips to the results variant
-      // And the results stay on screen. Rows: header y=5, context y=6, match y=7.
-      const matchRowY = 7;
+      // And the results stay on screen. The row is read from the frame so chrome
+      // Above the pane never retargets the click.
+      const matchRowY = pane
+        .split("\n")
+        .findIndex((line) => line.includes("needle = 2"));
+
       await mockMouse.click(state.layout().viewer.x + 10, matchRowY);
 
       const clicked = await settleUntil("click selects", (frame) =>

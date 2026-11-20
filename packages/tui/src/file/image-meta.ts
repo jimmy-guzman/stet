@@ -1,6 +1,6 @@
 /**
  * Pixel dimensions read from an image's header bytes only, no decode: enough to label an image stet
- * cannot render (OpenTUI has no SIXEL/Kitty graphics path, anomalyco/opentui#92). Covers the raster
+ * does not draw as pixels. Covers the raster
  * formats git flags binary; returns `undefined` for anything unrecognized. SVG stays text (it has
  * no NUL byte) and never reaches this classifier, so it is deliberately absent.
  */

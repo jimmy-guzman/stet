@@ -4,13 +4,18 @@ import { state } from "@/state";
 import { theme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 
+import { emptyStateTone } from "./focus-tone";
 import { ListScrollbar } from "./list-scrollbar";
-import { PaneFrame } from "./pane-frame";
 import { TreeRow } from "./tree-row";
 import { windowWheelHandler } from "./wheel";
 
-const focused = () => state.focusedPane() === "tree";
 const viewport = () => state.layout().sidebar.content.height;
+
+const dividerBorder = () => {
+  const side = state.layout().sidebar.divider;
+
+  return side === undefined ? false : [side];
+};
 
 export const Sidebar = () => {
   // One guard for the whole tree: double-clicking a file row pins it, mirroring
@@ -36,10 +41,12 @@ export const Sidebar = () => {
   });
 
   return (
-    <PaneFrame
-      focused={focused()}
+    <box
       width="100%"
       height="100%"
+      flexDirection="column"
+      border={dividerBorder()}
+      borderColor={theme.colors.border.unfocused}
       backgroundColor={theme.colors.surface.base}
       onMouseDown={() => {
         state.setFocusedPane("tree");
@@ -62,11 +69,29 @@ export const Sidebar = () => {
           <Show
             when={state.treeRowCount() > 0}
             fallback={
-              // No rows yet. During the deferred repoFiles load, render nothing: the
-              // Window is already a fixed viewport, so the pane stays blank and
-              // Reserved on its own. Only a genuinely loaded, file-less repo gets
-              // The real empty state.
-              <Show when={!state.repoFilesLoading()}>
+              // No rows yet. During the deferred repoFiles load, render no text: the
+              // Window is already a fixed viewport, so the pane stays reserved on its
+              // Own. Only a genuinely empty tree gets the real empty state: a loaded,
+              // File-less repo, or changes-only once the startup load has landed, since
+              // Changes-only rows come from the changed set and never wait on repoFiles.
+              // A focused tree still shows an empty cursor band on its first row as its
+              // Focus mark until the rows load.
+              <Show
+                when={
+                  !state.repoFilesLoading() ||
+                  (state.changesOnly() && state.gitModel().repoRoot !== "")
+                }
+                fallback={
+                  <Show when={state.focusedPane() === "tree"}>
+                    <box
+                      id="tree-loading-cursor"
+                      width="100%"
+                      height={1}
+                      backgroundColor={theme.colors.surface.cursor}
+                    />
+                  </Show>
+                }
+              >
                 <box
                   id="tree-empty"
                   width="100%"
@@ -76,7 +101,8 @@ export const Sidebar = () => {
                   alignItems="center"
                   backgroundColor={theme.colors.surface.base}
                 >
-                  <text fg={theme.colors.text.muted}>
+                  {/* With no rows there is no cursor row to mark focus, so this line carries it. */}
+                  <text fg={emptyStateTone("tree")}>
                     {state.changesOnly() ? "no changes" : "no files"}
                   </text>
                   <text fg={theme.colors.text.faint}>
@@ -101,6 +127,6 @@ export const Sidebar = () => {
           scrollTop={state.sidebarScrollTop}
         />
       </box>
-    </PaneFrame>
+    </box>
   );
 };

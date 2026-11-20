@@ -11,6 +11,7 @@ import { state } from "@/state";
 import {
   createFixtureRepo,
   loadModel,
+  makeHoldFor,
   makeSettleUntil,
   seedState,
 } from "./helpers";
@@ -22,7 +23,7 @@ const allScope = { kind: "all", ref: "HEAD" } as const;
 const sidebarOf = (frame: string) =>
   frame
     .split("\n")
-    .map((line) => line.split("││")[0])
+    .map((line) => line.split("│")[0])
     .join("\n");
 
 const emptyModel: GitModel = {
@@ -63,15 +64,11 @@ test("reserves blank space without flashing the empty state at first paint", asy
     // Stretch of frames (well past the old 150ms gate).
     await settleUntil("shell", (current) => current.includes("q quit"));
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      // oxlint-disable-next-line no-await-in-loop -- frame-by-frame check that nothing flashes
-      await Bun.sleep(10);
-      // oxlint-disable-next-line no-await-in-loop -- frame-by-frame check that nothing flashes
-      await renderOnce();
-      const sidebar = sidebarOf(captureCharFrame());
+    await makeHoldFor({ captureCharFrame, renderOnce })(20, (frame) => {
+      const sidebar = sidebarOf(frame);
       expect(sidebar).not.toContain("no files");
       expect(sidebar).not.toContain("loading…");
-    }
+    });
   } finally {
     renderer.destroy();
   }
@@ -138,13 +135,9 @@ test("shows no changed-only preview during a deferred load in the default view",
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     // The changed file must not appear during the load; assert across frames.
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      // oxlint-disable-next-line no-await-in-loop -- frame-by-frame check that nothing previews
-      await Bun.sleep(10);
-      // oxlint-disable-next-line no-await-in-loop -- frame-by-frame check that nothing previews
-      await renderOnce();
-      expect(sidebarOf(captureCharFrame())).not.toContain("changed.ts");
-    }
+    await makeHoldFor({ captureCharFrame, renderOnce })(12, (frame) => {
+      expect(sidebarOf(frame)).not.toContain("changed.ts");
+    });
 
     // RepoFiles fills: full tree (changed + unchanged)
     seedState(model, allScope);
@@ -190,6 +183,62 @@ test("keeps changed-file rows visible during a deferred load in changes-only mod
     const sidebar = sidebarOf(frame);
     expect(sidebar).toContain("new.ts");
     expect(sidebar).not.toContain("no files");
+  } finally {
+    renderer.destroy();
+  }
+});
+
+// Changes-only rows come from the changed set, so its empty state need not wait for the full
+// File list the way the all-files tree does.
+test("changes-only shows its empty state while the file list is still loading", async () => {
+  const repoRoot = createFixtureRepo("stet-loading-changes-only-", {
+    "a.txt": "alpha\n",
+  });
+
+  seedLoading(await loadModel(repoRoot, allScope));
+  state.setChangesOnly(true);
+
+  const { renderer, renderOnce, captureCharFrame } = await testRender(
+    () => <App />,
+    {
+      height: 24,
+      width: 100,
+    }
+  );
+
+  try {
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    await settleUntil("changes-only empty state", (current) =>
+      sidebarOf(current).includes("no changes")
+    );
+    expect(state.repoFilesLoading()).toBe(true);
+  } finally {
+    renderer.destroy();
+  }
+});
+
+// Before the startup load lands the changed set is not known yet, so changes-only must not claim
+// There are none: it holds blank space like the default tree.
+test("changes-only shows no empty state before the startup load lands", async () => {
+  seedState(emptyModel, allScope);
+  state.setChangesOnly(true);
+
+  const { renderer, renderOnce, captureCharFrame } = await testRender(
+    () => <App />,
+    {
+      height: 24,
+      width: 100,
+    }
+  );
+
+  try {
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    await settleUntil("shell", (current) => current.includes("q quit"));
+
+    await makeHoldFor({ captureCharFrame, renderOnce })(20, (frame) => {
+      expect(sidebarOf(frame)).not.toContain("no changes");
+    });
   } finally {
     renderer.destroy();
   }

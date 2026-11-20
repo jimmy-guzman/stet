@@ -15,6 +15,13 @@ import {
   seedState,
 } from "./helpers";
 
+// The screen row of a tree entry, read from the frame (left of the pane divider) so a
+// Change to the chrome above the tree never retargets a click onto a neighboring row.
+const treeRowOf = (frame: string, name: string) =>
+  frame
+    .split("\n")
+    .findIndex((line) => (line.split("│")[0] ?? "").includes(name));
+
 describe("context command menu", () => {
   // The menu writes the shared `state` singleton; leaving it open would swallow the
   // Keyboard in later render tests that share that global. Reset what these open.
@@ -43,12 +50,11 @@ describe("context command menu", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) =>
+      const tree = await settleUntil("tree shows the files", (frame) =>
         frame.includes("a.txt")
       );
 
-      // The first file row sits below the header and the sidebar's top border.
-      await mockMouse.click(5, 2, MouseButton.RIGHT);
+      await mockMouse.click(5, treeRowOf(tree, "a.txt"), MouseButton.RIGHT);
 
       const frame = await settleUntil(
         "menu opens with its actions",
@@ -138,19 +144,19 @@ describe("context command menu", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) =>
+      const tree = await settleUntil("tree shows the files", (frame) =>
         frame.includes("b.txt")
       );
 
       // Open the menu on the second row (its menu box sits below, leaving the first
       // Row clickable).
-      await mockMouse.click(5, 3, MouseButton.RIGHT);
+      await mockMouse.click(5, treeRowOf(tree, "b.txt"), MouseButton.RIGHT);
       await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
       expect(state.commandMenuOpen()).toBe(true);
 
       // Click a different tree row: the focused node drifts, so the menu must close
       // Rather than linger invisibly and keep swallowing keys.
-      await mockMouse.click(5, 2);
+      await mockMouse.click(5, treeRowOf(tree, "a.txt"));
 
       const dismissed = await settleUntil(
         "menu closed",
@@ -196,10 +202,11 @@ describe("context command menu", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) =>
+      const tree = await settleUntil("tree shows the files", (frame) =>
         frame.includes("f01.txt")
       );
-      await mockMouse.click(5, 3, MouseButton.RIGHT);
+
+      await mockMouse.click(5, treeRowOf(tree, "f01.txt"), MouseButton.RIGHT);
       await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
       expect(state.commandMenuOpen()).toBe(true);
 
@@ -281,14 +288,15 @@ describe("context command menu", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("tree shows the files", (frame) =>
+      const tree = await settleUntil("tree shows the files", (frame) =>
         frame.includes("b.txt")
       );
+
       // The seeded selection is the first file, so the viewer shows a.txt.
       expect(state.selectedPath()).toBe("a.txt");
 
-      // Right-click b.txt (row 3) and run its first item, "Pin as tab".
-      await mockMouse.click(5, 3, MouseButton.RIGHT);
+      // Right-click b.txt and run its first item, "Pin as tab".
+      await mockMouse.click(5, treeRowOf(tree, "b.txt"), MouseButton.RIGHT);
       await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
       expect(state.commandMenuItems()[0]?.label).toBe("Pin as tab");
       mockInput.pressEnter();

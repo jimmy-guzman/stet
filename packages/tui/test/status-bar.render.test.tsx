@@ -19,6 +19,10 @@ import {
 // Its git change-kind color (a warm amber for modified) plus a fading recency dot, so it
 // Reads as a changed file, not a neutral path. Colors can't be read from a char frame, so
 // This asserts the rendered cell colors via captureSpans against a genuinely modified file.
+// The tree also prints a changed file's name, so activity is read off the status row (the
+// Frame's last line) alone.
+const statusRow = (frame: string) => frame.trimEnd().split("\n").at(-1) ?? "";
+
 describe("status bar changed-file cue", () => {
   test("tints the recent path by change kind and draws a recency dot", async () => {
     const repoRoot = createFixtureRepo("stet-statusbar-", {
@@ -108,7 +112,7 @@ describe("status bar changed-file cue", () => {
         .find((row) => row.includes("copied src/state.ts"));
 
       expect(statusLine).toBeDefined();
-      expect(statusLine).not.toContain("? help · q quit");
+      expect(statusLine).not.toContain("? help ─ q quit");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
@@ -145,10 +149,10 @@ describe("status bar changed-file cue", () => {
 
       const guided = await settleUntil(
         "find guidance on the status line",
-        (current) => current.includes("enter find · esc cancel")
+        (current) => current.includes("enter find ─ esc cancel")
       );
 
-      expect(guided).toContain("enter find · esc cancel");
+      expect(guided).toContain("enter find ─ esc cancel");
 
       state.setActivityLog(
         recordActivity(
@@ -159,15 +163,13 @@ describe("status bar changed-file cue", () => {
       );
 
       const busy = await settleUntil("activity taking the row", (current) =>
-        current.includes("StatusBar.tsx")
+        statusRow(current).includes("StatusBar.tsx")
       );
 
-      const statusLine = busy
-        .split("\n")
-        .find((row) => row.includes("StatusBar.tsx"));
+      const statusLine = statusRow(busy);
 
       expect(statusLine).toContain("●");
-      expect(statusLine).not.toContain("enter find · esc cancel");
+      expect(statusLine).not.toContain("enter find ─ esc cancel");
 
       // Past the 30s recency window the file is no longer live, so the row is guidance's again.
       state.setActivityLog(
@@ -179,10 +181,10 @@ describe("status bar changed-file cue", () => {
       );
 
       const restored = await settleUntil("guidance restored", (current) =>
-        current.includes("enter find · esc cancel")
+        statusRow(current).includes("enter find ─ esc cancel")
       );
 
-      expect(restored).not.toContain("StatusBar.tsx");
+      expect(statusRow(restored)).not.toContain("StatusBar.tsx");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

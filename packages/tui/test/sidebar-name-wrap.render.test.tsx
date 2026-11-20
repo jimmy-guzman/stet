@@ -15,7 +15,7 @@ import {
 
 // The header and status bar also print the name, so assert on the tree-row line alone.
 const sidebarLines = (frame: string) =>
-  frame.split("\n").map((line) => line.split("││")[0]);
+  frame.split("\n").map((line) => line.split("│")[0]);
 
 // Guards the AGENTS.md invariant that a windowed tree row's name is pinned to one line, so a
 // Wheel over it cannot scroll a wrapped name into a mid or tail fragment (the mechanism is there).

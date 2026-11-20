@@ -7,13 +7,13 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 stet is two panes in one window: the repository tree and the file viewer. The viewer is always open. The tree docks to an edge, resizes, and closes, so you can shape the window around whatever you are doing.
 
-The project search pane (`ctrl-f`) is not a third pane. It replaces what the viewer shows, inside the viewer's own border, and keeps its query and results when you close it.
+The project search pane (`ctrl-f`) is not a third pane. It replaces what the viewer shows, inside the viewer, and keeps its query and results when you close it.
 
 ## Move between panes
 
 `tab` switches focus between the tree and the viewer. Clicking a pane focuses it, and the wheel scrolls whichever pane the pointer is over.
 
-The focused pane tints its four corner marks. The border itself stays neutral, so taking focus never moves anything.
+The panes have no box around them: a thin divider runs between the tree and the viewer, and the header and status bars are drawn as rules with their text inset. The focused pane is the one showing its cursor highlight: the tree lights its cursor row, the viewer lifts its caret line and brightens its file name, and the search view lights its selected result, each only while focused, so taking focus never moves anything.
 
 | Control  | Action                                   |
 | -------- | ---------------------------------------- |

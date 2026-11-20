@@ -1,13 +1,14 @@
-import { Match, Switch } from "solid-js";
+import { Index, Match, Show, Switch } from "solid-js";
 
 import { recencyFraction } from "@/git/activity";
 import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
-import { STATUS_BAR_PADDING } from "@/status/model";
 import type { StatusBarActivity, StatusBarModel } from "@/status/model";
 import { theme } from "@/theme/context";
 import { lerpHex } from "@/utils/color";
 
+import { BAR_EDGE, BAR_SEP } from "./bar";
+import { Island } from "./island";
 import { RecencyDot } from "./recency-dot";
 
 const model = () => state.statusBarModel();
@@ -40,38 +41,45 @@ const pathFg = (activity: StatusBarActivity) => {
 };
 
 export const StatusBar = () => (
-  <box
-    height={1}
-    flexDirection="row"
-    paddingLeft={STATUS_BAR_PADDING}
-    paddingRight={STATUS_BAR_PADDING}
-    backgroundColor={theme.colors.surface.base}
-  >
-    <Switch>
-      <Match when={asMessage(model())}>
-        {/* Glyph and message share one span (both level-colored), so no empty <text> sits
+  <box height={1} flexDirection="row" paddingLeft={BAR_EDGE}>
+    <Island>
+      <Switch>
+        <Match when={asMessage(model())}>
+          {/* Glyph and message share one span (both level-colored), so no empty <text> sits
               between them to paint a phantom cell. */}
-        {(current) => (
-          <text fg={levelColor(theme.colors, current().level)}>
-            {`${levelGlyph(current().level)} ${current().message}`}
-          </text>
-        )}
-      </Match>
-      <Match when={asAmbient(model())}>
-        {(current) => (
-          <box flexDirection="row">
-            <RecencyDot at={current().activity.at} marginRight={1} />
-            <text fg={pathFg(current().activity)}>
-              {current().activity.path}
+          {(current) => (
+            <text fg={levelColor(theme.colors, current().level)}>
+              {`${levelGlyph(current().level)} ${current().message}`}
             </text>
-          </box>
-        )}
-      </Match>
-      <Match when={asGuidance(model())}>
-        {(current) => (
-          <text fg={theme.colors.text.muted}>{current().text}</text>
-        )}
-      </Match>
-    </Switch>
+          )}
+        </Match>
+        <Match when={asAmbient(model())}>
+          {(current) => (
+            <box flexDirection="row">
+              <RecencyDot at={current().activity.at} marginRight={1} />
+              <text fg={pathFg(current().activity)}>
+                {current().activity.path}
+              </text>
+            </box>
+          )}
+        </Match>
+        <Match when={asGuidance(model())}>
+          {(current) => (
+            <box flexDirection="row">
+              <Index each={current().text.split(BAR_SEP)}>
+                {(hint, index) => (
+                  <>
+                    <Show when={index > 0}>
+                      <text fg={theme.colors.border.unfocused}>{BAR_SEP}</text>
+                    </Show>
+                    <text fg={theme.colors.text.muted}>{hint()}</text>
+                  </>
+                )}
+              </Index>
+            </box>
+          )}
+        </Match>
+      </Switch>
+    </Island>
   </box>
 );

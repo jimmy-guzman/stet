@@ -41,7 +41,7 @@ describe("help overlay", () => {
         5
       );
 
-      expect(initial).toContain("? help · q quit");
+      expect(initial).toContain("? help ─ q quit");
 
       mockInput.pressKey("?");
 
@@ -96,7 +96,7 @@ describe("help overlay", () => {
         (frame) => !frame.includes("switch to another git worktree")
       );
 
-      expect(closedByEscape).toContain("? help · q quit");
+      expect(closedByEscape).toContain("? help ─ q quit");
 
       // Q must close the overlay, not quit the app
       mockInput.pressKey("?");
@@ -111,7 +111,7 @@ describe("help overlay", () => {
       );
 
       expect(closed).toContain("q quit");
-      expect(closed).toContain("? help · q quit");
+      expect(closed).toContain("? help ─ q quit");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

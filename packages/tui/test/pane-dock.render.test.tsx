@@ -94,13 +94,21 @@ test("m zooms the focused pane to fill the band, and again restores it", async (
     // Focus starts on the tree, so that is what zooms. (`tab` is not used to move it:
     // The mock input never delivers it to the keymap, since OpenTUI consumes Tab for its
     // Own focus traversal first. `pane-zoom.test.ts` covers zoom following focus.)
-    const [before] = captureCharFrame().split("\n");
+    const frame = captureCharFrame().split("\n");
+    const [before] = frame;
+
+    // The tree's divider meets the status rule with a tee at the column the layout reports. The
+    // Status row holds only single-cell glyphs, so a string index is a terminal column.
+    const { junction } = state.layout();
+    expect(junction).toBeDefined();
+    expect(frame[state.layout().status.y]?.[junction ?? -1]).toBe("┴");
+
     mockInput.pressKey("m");
     const zoomed = await settleUntil("zoomed", () => state.zoomed());
 
-    // The header is durable and sits outside the band, so zoom must not touch it. A
-    // Zero-rect pane still paints its frame, and the viewer's collapsed `┌┐` landed here.
-    expect(zoomed.split("\n")[0]).toBe(before);
+    // The header is durable and sits outside the band, so zoom must not touch it beyond the
+    // Tee, which leaves with the divider since a zoomed pane faces nothing.
+    expect(zoomed.split("\n")[0]).toBe(before?.replace("┬", "─"));
     expect(state.layout().viewer.width).toBe(0);
     expect(state.layout().sidebar.width).toBe(100);
     expect(paneLines(zoomed, state.layout().sidebar).join("\n")).toContain(

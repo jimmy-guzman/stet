@@ -298,3 +298,19 @@ export const makeSettleUntil =
 
     throw new Error(`timed out waiting for ${label}\n\n${frame}`);
   };
+
+/**
+ * Render `frames` ticks and hand each frame to `check`: the counterpart of `makeSettleUntil` for
+ * asserting that something never appears (a flash, a premature preview) across a stretch of frames.
+ */
+export const makeHoldFor =
+  ({ renderOnce, captureCharFrame }: FrameSource) =>
+  async (frames: number, check: (frame: string) => void) => {
+    for (let attempt = 0; attempt < frames; attempt += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- each frame must render before it is checked
+      await Bun.sleep(10);
+      // oxlint-disable-next-line no-await-in-loop -- each frame must render before it is checked
+      await renderOnce();
+      check(captureCharFrame());
+    }
+  };

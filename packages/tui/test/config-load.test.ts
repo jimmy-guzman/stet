@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import { loadConfigText } from "@/config/load";
-import { darkTheme } from "@/theme/dark";
 
 describe("loadConfigText", () => {
   test("parses JSONC with comments and trailing commas", () => {
@@ -23,13 +22,12 @@ describe("loadConfigText", () => {
     expect(config.theme).toEqual({ dark: "a", light: "b" });
   });
 
-  test("accepts a full theme object", () => {
-    const { config, issues } = loadConfigText(
-      JSON.stringify({ themes: { mine: darkTheme } })
-    );
+  test("points a removed themes key at the themes directory", () => {
+    const { issues } = loadConfigText(JSON.stringify({ themes: { mine: {} } }));
 
-    expect(issues).toEqual([]);
-    expect(config.themes?.mine).toEqual(darkTheme);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('"themes" was removed');
+    expect(issues[0]).toContain("stet/themes");
   });
 
   test("an empty config is valid", () => {

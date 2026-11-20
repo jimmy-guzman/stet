@@ -5,8 +5,8 @@ import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
 import { state } from "@/state";
-import { darkTheme } from "@/theme/dark";
-import { registerThemes, resolveThemes } from "@/theme/registry";
+import { ansiFromSlots, paletteTheme } from "@/theme/palette";
+import { registerThemes } from "@/theme/registry";
 
 import {
   createFixtureRepo,
@@ -21,7 +21,15 @@ const KB_BG = "#061709";
 const ONE_BG = "#021304";
 const TWO_BG = "#041507";
 
-const surface = (base: string) => ({ ...darkTheme.surface, base });
+const themeWith = (name: string, background: string) =>
+  [
+    name,
+    paletteTheme(name, "dark", {
+      ansi: ansiFromSlots([]),
+      background,
+      foreground: "#eeeeee",
+    }),
+  ] as const;
 
 const near = (a: number, b: number) => Math.abs(a - b) < 0.01;
 
@@ -54,9 +62,7 @@ describe("theme switcher", () => {
   // At creation time. Without typing (which would force a recompute), a stale list
   // Would omit every user theme.
   test("the unfiltered list includes themes registered after startup", () => {
-    registerThemes(
-      resolveThemes({ "post-startup-probe": { base: "dark" } }).themes
-    );
+    registerThemes(new Map([themeWith("post-startup-probe", "#000000")]));
 
     expect(
       state
@@ -66,10 +72,7 @@ describe("theme switcher", () => {
   });
 
   test("t opens it; navigating previews live, esc reverts, enter commits", async () => {
-    registerThemes(
-      resolveThemes({ zzonly: { base: "dark", surface: surface(KB_BG) } })
-        .themes
-    );
+    registerThemes(new Map([themeWith("zzonly", KB_BG)]));
 
     const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
@@ -128,10 +131,7 @@ describe("theme switcher", () => {
 
   test("hovering a row previews it, clicking commits it", async () => {
     registerThemes(
-      resolveThemes({
-        zztwoa: { base: "dark", surface: surface(ONE_BG) },
-        zztwob: { base: "dark", surface: surface(TWO_BG) },
-      }).themes
+      new Map([themeWith("zztwoa", ONE_BG), themeWith("zztwob", TWO_BG)])
     );
 
     const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });

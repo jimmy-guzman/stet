@@ -1,5 +1,7 @@
 import { afterEach, beforeEach } from "bun:test";
 
+import { themes } from "@pierre/highlights/themes/loader";
+
 import { preloadDiffHighlighter } from "@/diff/engine";
 import {
   defaultFileSupportRegistry,
@@ -13,16 +15,20 @@ import { restoreRegistry } from "@/theme/registry";
 
 import { sweepFixtureRepos } from "./helpers";
 
+/** The bundled theme loaders as shipped, restored before every test. */
+const bundledLoaders = { ...themes };
+
 /**
  * Bun runs every test file in one process, so `state` (a singleton) outlives each file. A test that
  * dies mid-flight, on a timeout or a failed assertion, never reaches its own cleanup, and whatever
  * it left set poisoned every file after it, failing unrelated tests on a signal they never touched.
  * Registering here means this runs before any file's own hooks, so no test can inherit another's
- * state, however it ended. The theme, keybinding, and file-support registries and the active theme
- * signals live outside `state` (their own module state and root), where `resetState` cannot reach
- * them, so they reset here too.
+ * state, however it ended. The theme, keybinding, and file-support registries, the bundled theme
+ * loaders, and the active theme signals live outside `state` (their own module state and root),
+ * where `resetState` cannot reach them, so they reset here too.
  */
 beforeEach(() => {
+  Object.assign(themes, bundledLoaders);
   state.resetState();
   restoreRegistry();
   setSelection(undefined);

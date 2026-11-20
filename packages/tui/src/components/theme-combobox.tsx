@@ -3,12 +3,12 @@ import { batch, createEffect, Index, Show } from "solid-js";
 
 import { state } from "@/state";
 import { theme } from "@/theme/context";
-import { themeForName } from "@/theme/registry";
+import { AUTO_THEME, themeForName } from "@/theme/registry";
 
 // `auto` follows the terminal, so its swatch is the live active accent; every
 // Named theme shows its own accent regardless of what's currently active.
 const swatch = (name: string) =>
-  name === "auto"
+  name === AUTO_THEME
     ? theme.colors.accent.primary
     : themeForName(name).accent.primary;
 

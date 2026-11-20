@@ -1,13 +1,11 @@
 import { themes } from "@pierre/highlights/themes/loader";
-import { Predicate, Result, Schema } from "effect";
+import { Predicate } from "effect";
 import { createSignal } from "solid-js";
 
-import { darkTheme } from "./dark";
-import { lightTheme } from "./light";
-import { isJsonObject, mergeDeep } from "./merge";
-import { monoDarkTheme, monoLightTheme } from "./mono";
-import { ThemeSchema } from "./tokens";
-import type { Theme } from "./tokens";
+import { builtinThemes } from "./builtins";
+import { deriveTheme } from "./derive";
+import { normalizeTheme } from "./zed";
+import type { ZedTheme } from "./zed";
 
 /**
  * Kept here, not imported from config, so theme/ stays free of a config dependency; the config
@@ -18,28 +16,34 @@ export type ThemeSelection =
   | { dark: string; light: string }
   | undefined;
 
-/**
- * `syntaxTheme` (set when a theme's `syntax` is a bundled name) sources code colors from that theme;
- * otherwise `tokens.syntax` does. `tokens` always drive the UI.
- */
-interface RegisteredTheme {
-  tokens: Theme;
-  syntaxTheme?: string;
-}
+/** The theme built from the terminal's own palette, registered once the terminal reports one. */
+export const SYSTEM_THEME = "system";
 
-const builtins = new Map([
-  ["dark", { tokens: darkTheme }],
-  ["light", { tokens: lightTheme }],
-  ["mono-dark", { tokens: monoDarkTheme }],
-  ["mono-light", { tokens: monoLightTheme }],
-]);
+/** The switcher row for no selection, which follows the terminal; a name no theme may take. */
+export const AUTO_THEME = "auto";
 
-const registry = new Map<string, RegisteredTheme>(builtins);
+const builtins = new Map(
+  builtinThemes.map((theme) => [theme.name, normalizeTheme(theme)])
+);
+
+const bundledNames = Object.keys(themes);
+
+/** Bundled themes whose import failed: no longer listed or selectable, so none renders a fallback. */
+const failedBundled = new Set<string>();
+
+const availableBundled = () =>
+  bundledNames.filter((name) => !failedBundled.has(name));
+
+const registry = new Map<string, ZedTheme>(builtins);
+
+/** User theme names in registration order, the tail of the switcher's list. */
+const userNames: string[] = [];
 
 /**
  * Bumped on every registry write and read by every lookup, so a memo over a theme name (the active
- * theme in `active.ts`) re-resolves when the entry behind an unchanged name is replaced: a config
- * theme named `dark` registered after startup, or the test preload restoring the built-ins.
+ * theme in `active.ts`) re-resolves when the entry behind an unchanged name is replaced or loaded: a
+ * bundled theme finishing its import, a re-probed `system`, or the test preload restoring the
+ * built-ins.
  */
 const [registryVersion, setRegistryVersion] = createSignal(0);
 
@@ -51,21 +55,125 @@ const readRegistry = () => {
 
 const bumpRegistry = () => setRegistryVersion((version) => version + 1);
 
-const bundledThemeIds = new Set(Object.keys(themes));
-
-export const themeForName = (name: string): Theme =>
-  readRegistry().get(name)?.tokens ?? darkTheme;
-
-export const syntaxThemeForName = (name: string) =>
-  readRegistry().get(name)?.syntaxTheme;
-
-export const hasTheme = (name: string) => readRegistry().has(name);
+const fallback = () => builtins.get("stet-dark") ?? builtinThemes[0];
 
 /**
- * Built-ins first (`dark`, `light`), then user themes in registration order; `Map` preserves
- * insertion order, which is the order the switcher lists them in.
+ * The theme registered under `name`. A bundled theme still loading, or an unknown name, answers the
+ * `stet-dark` fallback until it lands.
  */
-export const themeNames = () => [...readRegistry().keys()];
+export const zedThemeForName = (name: string) =>
+  readRegistry().get(name) ?? fallback();
+
+export const themeForName = (name: string) =>
+  deriveTheme(zedThemeForName(name));
+
+export const hasTheme = (name: string) =>
+  readRegistry().has(name) || availableBundled().includes(name);
+
+/** `system` first when present, then stet's own, the bundled themes, and user themes. */
+export const themeNames = () => [
+  ...new Set([
+    ...(readRegistry().has(SYSTEM_THEME) ? [SYSTEM_THEME] : []),
+    ...builtins.keys(),
+    ...availableBundled(),
+    ...userNames,
+  ]),
+];
+
+/**
+ * Bumped by `restoreRegistry` (never zeroed, since it is only compared for equality). A load
+ * captures it when it starts and writes nothing once it has moved, so an import that straddles a
+ * reset reaches neither the restored registry nor its failure set.
+ */
+let registryGeneration = 0;
+
+/**
+ * One bundled theme, normalized, as a one-element list; empty when its import fails, which also
+ * drops it from the list, so it can never take the others, or a running session, down with it.
+ */
+const importTheme = async (name: string) => {
+  const generation = registryGeneration;
+
+  try {
+    const { default: theme } = await themes[name]();
+
+    return [normalizeTheme(theme)];
+  } catch {
+    if (generation === registryGeneration) {
+      failedBundled.add(name);
+    }
+
+    return [];
+  }
+};
+
+/** Import one bundled theme; a no-op for any other name or one already loaded. */
+export const loadTheme = async (name: string) => {
+  if (!bundledNames.includes(name) || registry.has(name)) {
+    return;
+  }
+
+  const generation = registryGeneration;
+  const imported = await importTheme(name);
+
+  if (generation !== registryGeneration) {
+    return;
+  }
+
+  for (const theme of imported) {
+    registry.set(name, theme);
+  }
+
+  bumpRegistry();
+};
+
+/**
+ * Import every bundled theme, for the switcher. Run after the first paint: the whole set is ~20ms of
+ * module evaluation the startup path should not pay. One registry bump for the batch, so the active
+ * theme re-resolves once.
+ */
+export const loadBundledThemes = async () => {
+  const generation = registryGeneration;
+
+  const loaded = await Promise.all(
+    bundledNames
+      .filter((name) => !registry.has(name))
+      .map(async (name) => {
+        const imported = await importTheme(name);
+
+        return imported.map((theme) => [name, theme] as const);
+      })
+  );
+
+  // Checked once for the whole batch: one import can finish before a reset and another after
+  // It, and the batch writes only once all of them are in.
+  if (generation !== registryGeneration) {
+    return;
+  }
+
+  for (const [name, theme] of loaded.flat()) {
+    registry.set(name, theme);
+  }
+
+  bumpRegistry();
+};
+
+/** Register user themes under their file-derived names; a name may replace a built-in. */
+export const registerThemes = (
+  userThemes: Iterable<readonly [string, ZedTheme]>
+) => {
+  for (const [name, theme] of userThemes) {
+    registry.set(name, normalizeTheme(theme));
+    userNames.push(name);
+  }
+
+  bumpRegistry();
+};
+
+export const registerSystemTheme = (theme: ZedTheme) => {
+  registry.set(SYSTEM_THEME, normalizeTheme(theme));
+  bumpRegistry();
+};
 
 /**
  * Test-only: the registry is a process-global map, so the test preload resets it to the built-ins
@@ -78,177 +186,50 @@ export const restoreRegistry = () => {
     registry.set(name, theme);
   }
 
+  userNames.length = 0;
+  failedBundled.clear();
+  registryGeneration += 1;
   bumpRegistry();
 };
 
-export const selectThemeName = (
-  selection: ThemeSelection,
-  appearance: "dark" | "light"
-) => {
+/**
+ * Names the built-ins had before themes became palettes, which `ctrl-s` wrote into configs; they
+ * keep resolving so an existing config is never orphaned.
+ */
+const renamedThemes = new Map([
+  ["dark", "stet-dark"],
+  ["light", "stet-light"],
+]);
+
+/**
+ * Names a user theme cannot take because stet already gives them a meaning: `system` is the
+ * terminal's palette, which any palette report overwrites (at startup or mid-session, and with none
+ * a user theme there would silently become the default); `auto` is the switcher's follow-the-terminal
+ * row; and the former built-in names always resolve to `stet-*`, so a theme under them would list but
+ * never render.
+ */
+export const isReservedThemeName = (name: string) =>
+  name === SYSTEM_THEME || name === AUTO_THEME || renamedThemes.has(name);
+
+/** A theme's current name: a former built-in name (`dark`) maps to its new one, anything else is unchanged. */
+export const canonicalThemeName = (name: string) =>
+  renamedThemes.get(name) ?? name;
+
+const pickName = (selection: ThemeSelection, appearance: "dark" | "light") => {
   if (selection === undefined) {
-    return appearance;
+    return readRegistry().has(SYSTEM_THEME)
+      ? SYSTEM_THEME
+      : `stet-${appearance}`;
   }
 
   return Predicate.isString(selection) ? selection : selection[appearance];
 };
 
-export interface ResolvedThemes {
-  themes: Map<string, RegisteredTheme>;
-  issues: string[];
-}
-
-const decodeTheme = Schema.decodeUnknownResult(ThemeSchema);
-
 /**
- * Resolve raw config theme entries into validated themes, applying `base` merges with cycle
- * detection. Anything wrong (invalid entry, unknown base or syntax theme, cycle) is reported in
- * `issues` rather than thrown, so one bad theme never sinks the rest.
+ * The theme name a selection picks for an appearance. No selection follows the terminal: its own
+ * palette (`system`) when it reported one, else stet's pair for the appearance.
  */
-export const resolveThemes = (raw: Schema.JsonObject): ResolvedThemes => {
-  const resolved = new Map<string, RegisteredTheme>();
-  const failed = new Set<string>();
-  const issues: string[] = [];
-
-  const tokensOf = (name: string, candidate: Schema.Json) =>
-    Result.match(decodeTheme(candidate), {
-      onFailure: (error) => {
-        issues.push(`theme "${name}": ${String(error)}`);
-      },
-      onSuccess: (theme) => theme,
-    });
-
-  const bundledOr = (name: string, value: string) => {
-    const known = bundledThemeIds.has(value);
-
-    if (!known) {
-      issues.push(
-        `theme "${name}": unknown syntax theme ${JSON.stringify(value)}`
-      );
-    }
-
-    return known ? value : undefined;
-  };
-
-  /**
-   * A `syntax` names a bundled theme, overrides the base's syntax tokens, or is absent and
-   * inherits the base's bundled theme.
-   */
-  const syntaxOf = (
-    name: string,
-    value: Schema.Json | undefined,
-    inherited: string | undefined
-  ) => {
-    if (Predicate.isString(value)) {
-      return { overrides: {}, syntaxTheme: bundledOr(name, value) };
-    }
-
-    if (value === undefined) {
-      return { overrides: {}, syntaxTheme: inherited };
-    }
-
-    if (isJsonObject(value)) {
-      return { overrides: value, syntaxTheme: undefined };
-    }
-
-    issues.push(
-      `theme "${name}": syntax must be a bundled theme name or a token map`
-    );
-
-    return { overrides: {}, syntaxTheme: undefined };
-  };
-
-  const resolve = (
-    name: string,
-    stack: string[]
-  ): RegisteredTheme | undefined => {
-    const cached = resolved.get(name);
-
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    if (failed.has(name)) {
-      return undefined;
-    }
-
-    if (!Object.hasOwn(raw, name)) {
-      // Not a user theme: a built-in is the only other source (used by `base`).
-      return builtins.get(name);
-    }
-
-    const entry = raw[name];
-
-    if (stack.includes(name)) {
-      issues.push(`theme "${name}" has a circular base`);
-      failed.add(name);
-
-      return undefined;
-    }
-
-    if (!isJsonObject(entry)) {
-      // Decode reports why a non-object entry isn't a theme
-      tokensOf(name, entry);
-      failed.add(name);
-
-      return undefined;
-    }
-
-    const { base: baseName, syntax: syntaxValue, ...uiTokens } = entry;
-
-    const base = Predicate.isString(baseName)
-      ? resolve(baseName, [...stack, name])
-      : undefined;
-
-    if (Predicate.isString(baseName) && base === undefined) {
-      issues.push(`theme "${name}": base "${baseName}" not found`);
-      failed.add(name);
-
-      return undefined;
-    }
-
-    const { overrides, syntaxTheme } = syntaxOf(
-      name,
-      syntaxValue,
-      base?.syntaxTheme
-    );
-
-    const mergedUi =
-      base === undefined ? uiTokens : mergeDeep(base.tokens, uiTokens);
-
-    const syntax = mergeDeep(
-      base?.tokens.syntax ?? darkTheme.syntax,
-      overrides
-    );
-
-    const candidate = isJsonObject(mergedUi)
-      ? Object.fromEntries([...Object.entries(mergedUi), ["syntax", syntax]])
-      : mergedUi;
-
-    const tokens = tokensOf(name, candidate);
-
-    if (tokens === undefined) {
-      failed.add(name);
-
-      return undefined;
-    }
-
-    const record: RegisteredTheme = { syntaxTheme, tokens };
-    resolved.set(name, record);
-
-    return record;
-  };
-
-  for (const name of Object.keys(raw)) {
-    resolve(name, []);
-  }
-
-  return { issues, themes: resolved };
-};
-
-export const registerThemes = (resolved: Map<string, RegisteredTheme>) => {
-  for (const [name, theme] of resolved) {
-    registry.set(name, theme);
-  }
-
-  bumpRegistry();
-};
+export const selectThemeName = (
+  selection: ThemeSelection,
+  appearance: "dark" | "light"
+) => canonicalThemeName(pickName(selection, appearance));

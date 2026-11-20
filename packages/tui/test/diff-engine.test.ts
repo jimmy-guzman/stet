@@ -5,7 +5,8 @@ import { isLineRow } from "@/diff/rows";
 import { resolveFileSupportConfig } from "@/file-support/config";
 import { registerFileSupport } from "@/file-support/registry";
 import { setSelection } from "@/theme/active";
-import { registerThemes, resolveThemes } from "@/theme/registry";
+import { ansiFromSlots, paletteTheme } from "@/theme/palette";
+import { loadTheme, registerSystemTheme } from "@/theme/registry";
 
 const patch = `diff --git a/foo.ts b/foo.ts
 index 1111111..2222222 100644
@@ -231,6 +232,23 @@ index 1111111..2222222 100644
   });
 });
 
+/** A `system` theme whose terminal green, and so its string color, is `green`. */
+const terminal = (green: string) =>
+  paletteTheme("system", "dark", {
+    ansi: ansiFromSlots([
+      "#000000",
+      "#ff0000",
+      green,
+      "#ffff00",
+      "#0000ff",
+      "#ff00ff",
+      "#00ffff",
+      "#c0c0c0",
+    ]),
+    background: "#101010",
+    foreground: "#eeeeee",
+  });
+
 const addedColors = async () => {
   const render = await renderDiff({ full: false, maxLines: 1600, patch });
 
@@ -265,23 +283,32 @@ describe("renderDiff file associations", () => {
 });
 
 describe("renderDiff theme attach", () => {
-  test("colors a diff under a second token theme", async () => {
-    setSelection("light");
+  test("colors a diff under a second built-in theme", async () => {
+    setSelection("stet-light");
 
     const colors = await addedColors();
 
     expect(new Set(colors).size).toBeGreaterThan(1);
   });
 
-  test("colors a diff under a bundled syntax theme with that theme's colors", async () => {
+  test("re-colors code when a theme is replaced under the same name", async () => {
+    registerSystemTheme(terminal("#00ff00"));
+    setSelection("system");
+    const before = await addedColors();
+
+    registerSystemTheme(terminal("#ff8800"));
+    const after = await addedColors();
+
+    expect(before).toContain("#00ff00");
+    expect(after).toContain("#ff8800");
+    expect(after).not.toContain("#00ff00");
+  });
+
+  test("colors a diff under a bundled theme with that theme's colors", async () => {
     const tokenColors = await addedColors();
 
-    registerThemes(
-      resolveThemes({
-        "test-catppuccin": { base: "dark", syntax: "catppuccin-mocha" },
-      }).themes
-    );
-    setSelection("test-catppuccin");
+    await loadTheme("catppuccin-mocha");
+    setSelection("catppuccin-mocha");
 
     const bundledColors = await addedColors();
 

@@ -1,6 +1,7 @@
 import { Predicate, Result, Schema } from "effect";
 import { createScanner, ScanError, SyntaxKind } from "jsonc-parser";
 
+import { themesDir } from "./paths";
 import { emptyConfig, UserConfigSchema } from "./schema";
 import type { UserConfig } from "./schema";
 
@@ -74,8 +75,8 @@ const formatIssue = (error: Schema.SchemaError) => {
 };
 
 // The decode strips unknown keys inside a typed section, so diffing the raw
-// Keys against the kept ones reports them; a raw registry (glyphs, themes,
-// Files...) decodes verbatim, diffs empty, and stays its resolver's job.
+// Keys against the kept ones reports them; a raw registry (`files`, `icons.glyphs`, `keybindings`)
+// Decodes verbatim, diffs empty, and stays its resolver's job.
 const unknownSectionKeys = (
   section: string,
   rawValue: Schema.Json,
@@ -120,7 +121,11 @@ export const loadConfigText = (text: string): LoadedConfig =>
 const decodeConfig = (raw: Schema.JsonObject): LoadedConfig => {
   const issues = Object.keys(raw)
     .filter((key) => !knownKeys.has(key))
-    .map((key) => `config: unknown key "${key}"`);
+    .map((key) =>
+      key === "themes"
+        ? `config: "themes" was removed; themes are now Zed theme files in ${themesDir()}`
+        : `config: unknown key "${key}"`
+    );
 
   let config: UserConfig = emptyConfig;
 

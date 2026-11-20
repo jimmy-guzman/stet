@@ -8,8 +8,7 @@ const ThemeSelection = Schema.Union([
 ]);
 
 // Registries stay raw JSON; each resolver decodes entries only after merging them
-// Over their built-in (a `{ base, ...overrides }` partial is only a valid theme
-// Once merged over its base, and the same holds for files and glyphs).
+// Over their built-in (a partial `files` or `glyphs` entry is only valid once merged).
 const RawRegistry = Schema.JsonObject;
 
 // Built from the layout model's own tuple: `Schema.Literals` infers `L[number]`, so the schema
@@ -49,7 +48,6 @@ export const UserConfigSchema = Schema.Struct({
     })
   ),
   theme: Schema.optionalKey(ThemeSelection),
-  themes: Schema.optionalKey(RawRegistry),
   update: Schema.optionalKey(
     Schema.Struct({ check: Schema.optionalKey(Schema.Boolean) })
   ),

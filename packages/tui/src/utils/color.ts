@@ -13,3 +13,11 @@ export const lerpHex = (from: string, to: string, t: number) => {
 
   return `#${channel(1)}${channel(3)}${channel(5)}`;
 };
+
+/** Whether a `#rrggbb` color reads as light (Rec. 601 luminance above half). */
+export const isLightHex = (hex: string) => {
+  const channel = (offset: number) =>
+    Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+
+  return 0.299 * channel(1) + 0.587 * channel(3) + 0.114 * channel(5) > 0.5;
+};

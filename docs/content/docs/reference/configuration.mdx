@@ -5,7 +5,7 @@ description: Configure features, themes, editors, file associations, and icons.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Configuration is optional. Without it, stet uses its built-in `dark` or `light` theme to match your terminal and reads editor commands from environment variables, with `vim` as the terminal-editor fallback.
+Configuration is optional. Without it, stet uses `system`, a theme built from your terminal's own colors (or `stet-dark`/`stet-light` to match its appearance when the terminal does not report them), and reads editor commands from environment variables, with `vim` as the terminal-editor fallback.
 
 ## Location
 
@@ -83,26 +83,57 @@ The `O` key opens the current file in your OS default app (`open` on macOS, `xdg
 
 ## Themes
 
-Define themes under `themes` and pick one with `theme`. `theme` is either a single theme name, or a `{ "dark": ..., "light": ... }` pair that follows the terminal live: flip your terminal's appearance and stet re-themes.
-
-A theme is a full set of `#rrggbb` tokens, or `{ "base": <name>, ... }` that inherits another theme and overrides only the tokens you name. Its `"syntax"` is a bundled [highlights](https://diffs.com/highlights) theme name (the familiar Shiki theme names plus the `pierre-*` themes), or an object overriding individual tokens (`keyword`, `string`, and so on).
-
-The dynamic `icon` token map colors named icons. It accepts built-in and user-defined icon names. The built-in themes color recognizable file types while structural and generic icons stay muted; an icon with no color entry falls back to `text.muted`.
+Pick a theme with `theme`: a single name, or a `{ "dark": ..., "light": ... }` pair that follows the terminal live, so flipping your terminal's appearance re-themes stet. With no `theme`, stet uses `system`, a theme built from your terminal's own background, foreground, and 16 colors, so it matches the terminal it runs in. A terminal that does not report its palette gets `stet-dark` or `stet-light` to match its appearance.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
-  // follow the terminal, with a custom theme on each side
-  "theme": { "dark": "my-dark", "light": "my-light" },
-  "themes": {
-    "my-dark": { "base": "dark", "accent": { "primary": "#ffa7d9" } },
-    "my-light": { "base": "light", "accent": { "primary": "#b4267a" } },
-    "mocha": { "base": "dark", "syntax": "catppuccin-mocha" }, // stet chrome, Catppuccin code
-    "tweaked": { "base": "dark", "syntax": { "keyword": "#ff8800" } }, // one token changed
-  },
+  // follow the terminal, with a different theme on each side
+  "theme": { "dark": "catppuccin-mocha", "light": "catppuccin-latte" },
 }
 ```
 
-The built-in themes are `dark`, `light`, and a monochrome pair, `mono-dark` and `mono-light`, where every token is a pure grey. When `NO_COLOR` is non-empty ([no-color.org](https://no-color.org)), stet ignores the configured `theme` and starts on the monochrome pair; change indicators keep working without hue (the diff's change bar renders `+`/`-` under any all-grey theme), and an explicit pick in the theme switcher still applies. Press `t` in the app to open the theme switcher and try any theme without editing the config: filter by name, move or hover to preview the whole UI live, `enter` (or click) to apply, `esc` to revert. The switch lasts the session; `ctrl-s` makes it permanent, writing the previewed theme (with any other changed settings) to the config. When the file holds a `{ "dark": ..., "light": ... }` pair, only the current appearance's half is rewritten, and saving `auto` removes the `theme` key.
+The built-in themes are:
+
+- `system`, from the terminal's palette (listed when the terminal reports one)
+- `stet-dark` and `stet-light`, stet's own
+- `opencode-dark` and `opencode-light`, after opencode's default theme
+- `cmux-dark` and `cmux-light`, after cmux's default theme
+- `mono-dark` and `mono-light`, where every color is a pure grey
+- every theme bundled with [highlights](https://diffs.com/highlights): the familiar editor themes (`catppuccin-mocha`, `dracula`, `github-dark`, `gruvbox-dark-medium`, `nord`, `rose-pine`, `tokyo-night`, and so on) plus the `pierre-*` themes
+
+A theme only supplies a palette, and stet derives every UI color from it the way cmux does: borders, text tiers, and the cursor row are blends of the foreground into the background, and the panel is the background darkened toward black; change kinds, stage colors, and severities come from the terminal red, green, and yellow, with renames in magenta and the untracked mark in muted text; file icons take the terminal hue that suits them; and the accent is the theme's `text.accent`, or its magenta when it has none. Code colors come from the theme's own `syntax`, so code and chrome always agree.
+
+To add your own, drop a [Zed theme](https://zed.dev/docs/extensions/themes) file into `~/.config/stet/themes/` (under `$XDG_CONFIG_HOME` when it is set). Each theme in the file is listed under its name in lowercase with dashes (`My Ocean` becomes `my-ocean`), and a name that matches a built-in replaces it. stet reads `editor.background`, `editor.foreground`, `text.accent`, the six `terminal.ansi` hues (`red`, `green`, `yellow`, `blue`, `magenta`, `cyan`), and `syntax`; a file that is not a Zed theme is reported in the status bar. Files load in name order; when two themes share a name, the first is kept and the other is reported in the status bar, as is a theme whose name has no letters or digits or is one stet reserves: `system` (the terminal's palette), `auto` (the switcher's follow-the-terminal row), and `dark` and `light` (the former names of `stet-dark` and `stet-light`).
+
+```json title="~/.config/stet/themes/ocean.json"
+{
+  "name": "Ocean",
+  "themes": [
+    {
+      "name": "My Ocean",
+      "appearance": "dark",
+      "style": {
+        "editor.background": "#0b2433",
+        "editor.foreground": "#d0e8f2",
+        "text.accent": "#ffcc00",
+        "terminal.ansi.red": "#ff6b6b",
+        "terminal.ansi.green": "#7bd88f",
+        "terminal.ansi.yellow": "#ffcc00",
+        "terminal.ansi.blue": "#5ec4ff",
+        "terminal.ansi.magenta": "#c792ea",
+        "terminal.ansi.cyan": "#7fdbca",
+        "syntax": {
+          "keyword": { "color": "#c792ea" },
+          "string": { "color": "#7bd88f" },
+          "comment": { "color": "#577589", "font_style": "italic" }
+        }
+      }
+    }
+  ]
+}
+```
+
+When `NO_COLOR` is non-empty ([no-color.org](https://no-color.org)), stet ignores the configured `theme` and starts on the monochrome pair; change indicators keep working without hue (the diff's change bar renders `+`/`-` under any all-grey theme), and an explicit pick in the theme switcher still applies. Press `t` in the app to open the theme switcher and try any theme without editing the config: filter by name, move or hover to preview the whole UI live, `enter` (or click) to apply, `esc` to revert. The switch lasts the session; `ctrl-s` makes it permanent, writing the previewed theme (with any other changed settings) to the config. When the file holds a `{ "dark": ..., "light": ... }` pair, only the current appearance's half is rewritten, and saving `auto` removes the `theme` key.
 
 ## File support
 

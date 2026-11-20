@@ -71,4 +71,5 @@ export const builtinFiles = new Map<string, FileAssociation>([
   ["syntax-prettierrc", { filenames: [".prettierrc"], syntax: "jsonc" }],
   ["syntax-gradle", { globs: ["*.gradle"], syntax: "groovy" }],
   ["syntax-ruby-template", { globs: ["*.rb.tmpl"], syntax: "ruby" }],
+  ["syntax-svg", { extensions: ["svg"], syntax: "xml" }],
 ]);

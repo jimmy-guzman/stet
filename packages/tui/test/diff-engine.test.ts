@@ -341,6 +341,11 @@ describe("languageForPath", () => {
     expect(languageForPath("config.yaml.tmpl")).toBe("text");
   });
 
+  test("highlights SVG as XML", () => {
+    expect(languageForPath("assets/logo.svg")).toBe("xml");
+    expect(languageForPath("assets/LOGO.SVG")).toBe("xml");
+  });
+
   test("resolves config dotfiles by name in any directory", () => {
     expect(languageForPath(".env")).toBe("dotenv");
     expect(languageForPath(".ENV")).toBe("dotenv");

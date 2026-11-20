@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.11.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.2...stet-v0.11.0) (2026-11-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tree:** 💥 Folders toggle on Enter and use natural ordering. Icon defaults follow Trees; files.icon-* overrides need explicit match rules.
+* **diff:** 💥 syntax highlighting now covers the ~150 languages @pierre/highlights lexes instead of Shiki's ~240; a files association naming a language it lacks now reports an unknown syntax and drops that facet
+* **provenance:** 💥 the provenance rail is gone: the a key, the provenance config key and keybinding id, and the provenance theme tokens
+* **diagnostics:** 💥 diagnostics, the problems panel, and their marks are gone: the p, n, r, and R keys, the diagnostics, languages, schemas, and problems config keys, a file association's language field, the --no-lsp-download flag, and STET_NO_LSP_DOWNLOAD
+* **intel:** 💥 go to definition, find references, implementations, call hierarchy, hover, and the symbol outline are gone, along with their keybindings, the intel config key, and the capabilities server field
+
+### Features
+
+* **diagnostics:** ✨ remove diagnostics ([#378](https://github.com/jimmy-guzman/stet/issues/378)) ([8da4733](https://github.com/jimmy-guzman/stet/commit/8da47332cbe4cb4f4c55cc8adeca0a8a5ae8c51b))
+* **diff:** ✨ adopt pierre's highlighter and hunk renderer ([#387](https://github.com/jimmy-guzman/stet/issues/387)) ([49d1e1e](https://github.com/jimmy-guzman/stet/commit/49d1e1e0be973f8efe999d7ded1e98077d187e22))
+* **intel:** ✨ remove code intelligence ([#377](https://github.com/jimmy-guzman/stet/issues/377)) ([e0c69de](https://github.com/jimmy-guzman/stet/commit/e0c69deb6a444271c5d676b7bd88d099fe3faf2f))
+* **provenance:** ✨ remove the provenance rail ([#380](https://github.com/jimmy-guzman/stet/issues/380)) ([b7acfcf](https://github.com/jimmy-guzman/stet/commit/b7acfcfcd4ba91bfb769adba2c8288e5c16bc19c))
+* **tree:** ✨ adopt pierre trees navigation and icons ([#389](https://github.com/jimmy-guzman/stet/issues/389)) ([f259c42](https://github.com/jimmy-guzman/stet/commit/f259c42cf24e1da36c81dbf66245222b89f21158))
+* **vue:** ✨ report template, SFC, and style findings ([#373](https://github.com/jimmy-guzman/stet/issues/373)) ([52d409c](https://github.com/jimmy-guzman/stet/commit/52d409c5af8956ee38f983cd939fafedbc1a5f2f))
+
+
+### Bug Fixes
+
+* **deps:** 🐛 bump @pierre/diffs to 1.7 beta & diff with @pierre/patches ([#388](https://github.com/jimmy-guzman/stet/issues/388)) ([e439250](https://github.com/jimmy-guzman/stet/commit/e439250ba20ceb1188750cff8cc5f70dfeec3b89))
+* **deps:** 🐛 bump opentui to 0.9.0 & follow its async lifecycle ([#386](https://github.com/jimmy-guzman/stet/issues/386)) ([36abef4](https://github.com/jimmy-guzman/stet/commit/36abef49e9ef6e7e9b19711e3b61f4b60195d244))
+* **deps:** 🐛 follow the diffs theme ([#385](https://github.com/jimmy-guzman/stet/issues/385)) ([ba9d867](https://github.com/jimmy-guzman/stet/commit/ba9d8670ff50d488b0875bdbbb84191103d6d554))
+
 ## [0.10.2](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.1...stet-v0.10.2) (2026-10-08)
 
 

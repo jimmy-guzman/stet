@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 
+import { themes } from "@pierre/highlights/themes/loader";
+
 import { resolveFileSupportConfig } from "@/file-support/config";
 import {
   fileSupportForPath,
@@ -18,6 +20,8 @@ import {
 } from "@/theme/active";
 import { ansiFromSlots, paletteTheme } from "@/theme/palette";
 import {
+  hasTheme,
+  loadTheme,
   registerSystemTheme,
   registerThemes,
   themeForName,
@@ -96,6 +100,17 @@ test("a dying test leaves the active built-in theme overridden", () => {
 test("the next test still resolves the built-in theme under that name", () => {
   expect(activeTheme().colors.surface.base).toBe("#191b1d");
   expect(themeForName("stet-dark").surface.base).toBe("#191b1d");
+});
+
+test("a dying test leaves a bundled theme loader swapped", () => {
+  themes.dracula = async () => await Promise.reject(new Error("probe"));
+});
+
+test("the next test still imports that bundled theme", async () => {
+  await loadTheme("dracula");
+
+  expect(hasTheme("dracula")).toBe(true);
+  expect(themeNames()).toContain("dracula");
 });
 
 test("a dying test leaves a rebind and a file association registered", () => {

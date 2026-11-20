@@ -3,7 +3,10 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { themes } from "@pierre/highlights/themes/loader";
+
 import { builtinIcons } from "@/file-support/builtins";
+import { state } from "@/state";
 import {
   activeTheme,
   activeThemeName,
@@ -13,6 +16,10 @@ import {
 } from "@/theme/active";
 import { builtinThemes } from "@/theme/builtins";
 import {
+  canonicalThemeName,
+  hasTheme,
+  loadBundledThemes,
+  loadTheme,
   registerSystemTheme,
   registerThemes,
   selectThemeName,
@@ -243,10 +250,37 @@ describe("selectThemeName", () => {
   });
 
   test("the built-ins' former names keep resolving", () => {
+    expect(canonicalThemeName("dark")).toBe("stet-dark");
     expect(selectThemeName("dark", "light")).toBe("stet-dark");
     expect(selectThemeName({ dark: "dark", light: "light" }, "light")).toBe(
       "stet-light"
     );
+  });
+
+  test("opening the switcher on a dark/light pair keeps that theme", () => {
+    registerSystemTheme(zedThemeForName("stet-dark"));
+    setAppearance("dark");
+    setSelection({ dark: "mono-dark", light: "mono-light" });
+    state.openThemePicker();
+
+    expect(activeThemeName()).toBe("mono-dark");
+
+    state.closeThemePicker(false);
+
+    expect(selection()).toEqual({ dark: "mono-dark", light: "mono-light" });
+  });
+
+  test("opening the switcher on a former built-in name keeps that theme", () => {
+    setAppearance("light");
+    setSelection("dark");
+    state.openThemePicker();
+
+    expect(activeThemeName()).toBe("stet-dark");
+
+    state.closeThemePicker(true);
+
+    expect(activeThemeName()).toBe("stet-dark");
+    expect(selection()).toBe("stet-dark");
   });
 
   test("an unknown name renders the appearance's default and keeps the selection", () => {
@@ -264,6 +298,29 @@ describe("selectThemeName", () => {
   test("a pair follows the appearance", () => {
     expect(selectThemeName({ dark: "a", light: "b" }, "dark")).toBe("a");
     expect(selectThemeName({ dark: "a", light: "b" }, "light")).toBe("b");
+  });
+});
+
+/** Makes one bundled theme's import reject; the test preload restores every loader. */
+const failImport = (name: string) => {
+  themes[name] = async () => await Promise.reject(new Error("import failed"));
+};
+
+describe("bundled themes", () => {
+  test("a theme that fails to import is dropped from the list", async () => {
+    failImport("dracula");
+    await loadBundledThemes();
+
+    expect(themeNames()).not.toContain("dracula");
+    expect(hasTheme("dracula")).toBe(false);
+    expect(themeNames()).toContain("nord");
+  });
+
+  test("the active theme failing to import resolves to not found, never a throw", async () => {
+    failImport("dracula");
+    await loadTheme("dracula");
+
+    expect(hasTheme("dracula")).toBe(false);
   });
 });
 
@@ -288,6 +345,15 @@ describe("systemTheme", () => {
 
     expect(theme?.appearance).toBe("light");
     expect(theme?.style["terminal.ansi.green"]).toBe("#00aa00");
+  });
+
+  test("a palette reported mid-session replaces an existing system theme", () => {
+    registerSystemTheme(zedThemeForName("stet-dark"));
+    refreshTerminalPalette(colors);
+
+    expect(zedThemeForName("system").style["terminal.ansi.green"]).toBe(
+      "#00aa00"
+    );
   });
 
   test("a palette reported mid-session never introduces system on its own", () => {
@@ -320,6 +386,22 @@ describe("user themes", () => {
     expect(themeNames()).toContain("my-theme");
     expect(themeForName("my-theme").surface.base).toBe("#123456");
     expect(themeForName("my-theme").kind.added).toBe("#00aa00");
+  });
+
+  test("keeps accented and non-Latin theme names distinct", () => {
+    const parsed = parseThemeFile(
+      JSON.stringify({
+        themes: ["Rosé Pine", "夜", "朝"].map((name) => ({
+          appearance: "dark",
+          name,
+          style: { "editor.background": "#000000" },
+        })),
+      })
+    );
+
+    expect(
+      parsed._tag === "Success" ? parsed.success.map(([name]) => name) : []
+    ).toEqual(["rose-pine", "夜", "朝"]);
   });
 
   test("lists user themes after the built-ins", () => {
@@ -361,7 +443,7 @@ describe("user themes", () => {
     );
 
     expect(
-      parsed._tag === "Success" ? parsed.success.get("nulls")?.style.syntax : {}
+      parsed._tag === "Success" ? parsed.success[0]?.[1].style.syntax : {}
     ).toEqual({ comment: "#888888" });
   });
 
@@ -376,11 +458,85 @@ describe("user themes", () => {
       );
       chmodSync(path.join(dir, "locked.json"), 0o000);
 
-      const { issues, themes } = await readUserThemes(dir);
+      const { issues, themes: userThemes } = await readUserThemes(dir);
 
-      expect([...themes.keys()]).toEqual(["good"]);
+      expect([...userThemes.keys()]).toEqual(["good"]);
       expect(issues).toHaveLength(1);
       expect(issues[0]).toContain("locked.json");
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("a theme with no letters or digits in its name is an issue, not a blank row", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "stet-themes-"));
+
+    try {
+      writeFileSync(
+        path.join(dir, "symbols.json"),
+        JSON.stringify({
+          themes: ["🎨", "!!!"].map((name) => ({
+            appearance: "dark",
+            name,
+            style: { "editor.background": "#000000" },
+          })),
+        })
+      );
+
+      const { issues, themes: userThemes } = await readUserThemes(dir);
+
+      expect(userThemes.size).toBe(0);
+      expect(issues).toEqual([
+        'theme file symbols.json: theme "🎨" has no usable name',
+        'theme file symbols.json: theme "!!!" has no usable name',
+      ]);
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("a theme whose name an earlier one took is an issue, and the first one stays", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "stet-themes-"));
+
+    try {
+      writeFileSync(path.join(dir, "a.json"), themeFile("Foo Bar", "#111111"));
+      writeFileSync(path.join(dir, "b.json"), themeFile("foo-bar", "#222222"));
+
+      const { issues, themes: userThemes } = await readUserThemes(dir);
+
+      expect(userThemes.get("foo-bar")?.name).toBe("Foo Bar");
+      expect(issues).toEqual([
+        'theme file b.json: theme "foo-bar" is listed as foo-bar, which "Foo Bar" already uses',
+      ]);
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("user themes named after a name stet reserves are issues, not rows", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "stet-themes-"));
+
+    try {
+      writeFileSync(
+        path.join(dir, "c.json"),
+        JSON.stringify({
+          themes: ["System", "Auto", "Dark", "Light"].map((name) => ({
+            appearance: "dark",
+            name,
+            style: { "editor.background": "#333333" },
+          })),
+        })
+      );
+
+      const { issues, themes: userThemes } = await readUserThemes(dir);
+
+      expect(userThemes.size).toBe(0);
+      expect(issues).toEqual([
+        'theme file c.json: theme "System" uses the reserved name system',
+        'theme file c.json: theme "Auto" uses the reserved name auto',
+        'theme file c.json: theme "Dark" uses the reserved name dark',
+        'theme file c.json: theme "Light" uses the reserved name light',
+      ]);
     } finally {
       rmSync(dir, { force: true, recursive: true });
     }

@@ -1,4 +1,4 @@
-import { themes as bundledLoaders } from "@pierre/highlights/themes/loader";
+import { themes } from "@pierre/highlights/themes/loader";
 import { Predicate } from "effect";
 import { createSignal } from "solid-js";
 
@@ -19,11 +19,20 @@ export type ThemeSelection =
 /** The theme built from the terminal's own palette, registered once the terminal reports one. */
 export const SYSTEM_THEME = "system";
 
+/** The switcher row for no selection, which follows the terminal; a name no theme may take. */
+export const AUTO_THEME = "auto";
+
 const builtins = new Map(
   builtinThemes.map((theme) => [theme.name, normalizeTheme(theme)])
 );
 
-const bundledNames = Object.keys(bundledLoaders);
+const bundledNames = Object.keys(themes);
+
+/** Bundled themes whose import failed: no longer listed or selectable, so none renders a fallback. */
+const failedBundled = new Set<string>();
+
+const availableBundled = () =>
+  bundledNames.filter((name) => !failedBundled.has(name));
 
 const registry = new Map<string, ZedTheme>(builtins);
 
@@ -59,28 +68,44 @@ export const themeForName = (name: string) =>
   deriveTheme(zedThemeForName(name));
 
 export const hasTheme = (name: string) =>
-  readRegistry().has(name) || bundledNames.includes(name);
+  readRegistry().has(name) || availableBundled().includes(name);
 
 /** `system` first when present, then stet's own, the bundled themes, and user themes. */
 export const themeNames = () => [
   ...new Set([
     ...(readRegistry().has(SYSTEM_THEME) ? [SYSTEM_THEME] : []),
     ...builtins.keys(),
-    ...bundledNames,
+    ...availableBundled(),
     ...userNames,
   ]),
 ];
 
+/**
+ * One bundled theme, normalized, as a one-element list; empty when its import fails, which also
+ * drops it from the list, so it can never take the others, or a running session, down with it.
+ */
+const importTheme = async (name: string) => {
+  try {
+    const { default: theme } = await themes[name]();
+
+    return [normalizeTheme(theme)];
+  } catch {
+    failedBundled.add(name);
+
+    return [];
+  }
+};
+
 /** Import one bundled theme; a no-op for any other name or one already loaded. */
 export const loadTheme = async (name: string) => {
-  const load = bundledLoaders[name];
-
-  if (load === undefined || registry.has(name)) {
+  if (!bundledNames.includes(name) || registry.has(name)) {
     return;
   }
 
-  const { default: theme } = await load();
-  registry.set(name, normalizeTheme(theme));
+  for (const theme of await importTheme(name)) {
+    registry.set(name, theme);
+  }
+
   bumpRegistry();
 };
 
@@ -94,15 +119,9 @@ export const loadBundledThemes = async () => {
     bundledNames
       .filter((name) => !registry.has(name))
       .map(async (name) => {
-        try {
-          const { default: theme } = await bundledLoaders[name]();
+        const imported = await importTheme(name);
 
-          return [[name, normalizeTheme(theme)] as const];
-        } catch {
-          // One theme that fails to import is left out of the switcher; it must never take the
-          // Others, or a running session, down with it.
-          return [];
-        }
+        return imported.map((theme) => [name, theme] as const);
       })
   );
 
@@ -114,8 +133,10 @@ export const loadBundledThemes = async () => {
 };
 
 /** Register user themes under their file-derived names; a name may replace a built-in. */
-export const registerThemes = (themes: ReadonlyMap<string, ZedTheme>) => {
-  for (const [name, theme] of themes) {
+export const registerThemes = (
+  userThemes: Iterable<readonly [string, ZedTheme]>
+) => {
+  for (const [name, theme] of userThemes) {
     registry.set(name, normalizeTheme(theme));
     userNames.push(name);
   }
@@ -140,6 +161,7 @@ export const restoreRegistry = () => {
   }
 
   userNames.length = 0;
+  failedBundled.clear();
   bumpRegistry();
 };
 
@@ -151,6 +173,20 @@ const renamedThemes = new Map([
   ["dark", "stet-dark"],
   ["light", "stet-light"],
 ]);
+
+/**
+ * Names a user theme cannot take because stet already gives them a meaning: `system` is the
+ * terminal's palette, which any palette report overwrites (at startup or mid-session, and with none
+ * a user theme there would silently become the default); `auto` is the switcher's follow-the-terminal
+ * row; and the former built-in names always resolve to `stet-*`, so a theme under them would list but
+ * never render.
+ */
+export const isReservedThemeName = (name: string) =>
+  name === SYSTEM_THEME || name === AUTO_THEME || renamedThemes.has(name);
+
+/** A theme's current name: a former built-in name (`dark`) maps to its new one, anything else is unchanged. */
+export const canonicalThemeName = (name: string) =>
+  renamedThemes.get(name) ?? name;
 
 const pickName = (selection: ThemeSelection, appearance: "dark" | "light") => {
   if (selection === undefined) {
@@ -169,8 +205,4 @@ const pickName = (selection: ThemeSelection, appearance: "dark" | "light") => {
 export const selectThemeName = (
   selection: ThemeSelection,
   appearance: "dark" | "light"
-) => {
-  const name = pickName(selection, appearance);
-
-  return renamedThemes.get(name) ?? name;
-};
+) => canonicalThemeName(pickName(selection, appearance));

@@ -2,12 +2,10 @@ import path from "node:path";
 
 import { Option, Predicate, Result, Schema } from "effect";
 
+import { isReservedThemeName } from "./registry";
 import type { ZedTheme } from "./zed";
 
-const isJsonObject = (
-  value: Schema.Json | undefined
-): value is Schema.JsonObject =>
-  Predicate.isObject(value) && !Array.isArray(value);
+const isJsonObject = Schema.is(Schema.JsonObject);
 
 /**
  * One scope's color: a bare color, or a settings object whose `color` stet reads. Zed files write
@@ -36,8 +34,10 @@ const decodeSyntaxColor = Schema.decodeUnknownOption(SyntaxColor);
 /** `Catppuccin Mocha` -> `catppuccin-mocha`, the form theme names take everywhere else. */
 const slug = (name: string) =>
   name
+    .normalize("NFKD")
+    .replaceAll(/\p{M}/gu, "")
     .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/[^\p{L}\p{N}]+/gu, "-")
     .replaceAll(/^-|-$/gu, "");
 
 const parseJson = (text: string): Result.Result<unknown, string> => {
@@ -62,8 +62,10 @@ const syntaxColors = (syntax: Schema.Json | undefined) =>
   );
 
 /**
- * The themes in one Zed theme file, keyed by the slug of each theme's name. Only the string colors
- * and `syntax` are kept: that is everything stet derives from and the highlighter reads.
+ * The themes in one Zed theme file, each with the slug of its name, in file order. A list, not a map,
+ * so two themes sharing a slug both reach `readUserThemes`, which reports the clash. Only the
+ * string colors and `syntax` are kept: that is everything stet derives from and the highlighter
+ * reads.
  */
 export const parseThemeFile = (text: string) =>
   parseJson(text).pipe(
@@ -74,32 +76,26 @@ export const parseThemeFile = (text: string) =>
         )
       )
     ),
-    Result.map(
-      ({ themes }) =>
-        new Map(
-          themes.map(({ appearance, name, style }): [string, ZedTheme] => [
-            slug(name),
-            {
-              appearance,
-              name,
-              style: {
-                ...Object.fromEntries(
-                  Object.entries(style).filter(([, value]) =>
-                    Predicate.isString(value)
-                  )
-                ),
-                syntax: syntaxColors(style.syntax),
-              },
-            },
-          ])
-        )
+    Result.map(({ themes }) =>
+      themes.map(({ appearance, name, style }): [string, ZedTheme] => [
+        slug(name),
+        {
+          appearance,
+          name,
+          style: {
+            ...Object.fromEntries(
+              Object.entries(style).filter(([, value]) =>
+                Predicate.isString(value)
+              )
+            ),
+            syntax: syntaxColors(style.syntax),
+          },
+        },
+      ])
     )
   );
 
-/**
- * Every theme in the `*.json` files of `dir`, in file-name order, plus one issue per file that is not
- * a Zed theme. A missing directory is the common case and yields nothing.
- */
+/** The `*.json` file names in `dir`, unsorted; a missing directory yields none. */
 const listThemeFiles = async (dir: string) => {
   try {
     return await Array.fromAsync(
@@ -122,7 +118,8 @@ const readThemeFile = async (dir: string, file: string) => {
 
 /**
  * Every theme in the `*.json` files of `dir`, in file-name order, plus one issue per file that cannot
- * be read or is not a Zed theme. A missing directory is the common case and yields nothing; nothing
+ * be read or is not a Zed theme, and per theme with no usable name, a reserved name
+ * (`isReservedThemeName`), or a name an earlier one took (the first keeps it). A missing directory is the common case and yields nothing; nothing
  * here can fail startup.
  */
 export const readUserThemes = async (dir: string) => {
@@ -142,7 +139,23 @@ export const readUserThemes = async (dir: string) => {
   for (const { file, result } of parsed) {
     if (Result.isSuccess(result)) {
       for (const [name, theme] of result.success) {
-        themes.set(name, theme);
+        const taken = themes.get(name);
+
+        if (name === "") {
+          issues.push(
+            `theme file ${file}: theme ${JSON.stringify(theme.name)} has no usable name`
+          );
+        } else if (isReservedThemeName(name)) {
+          issues.push(
+            `theme file ${file}: theme ${JSON.stringify(theme.name)} uses the reserved name ${name}`
+          );
+        } else if (taken === undefined) {
+          themes.set(name, theme);
+        } else {
+          issues.push(
+            `theme file ${file}: theme ${JSON.stringify(theme.name)} is listed as ${name}, which ${JSON.stringify(taken.name)} already uses`
+          );
+        }
       }
     } else {
       issues.push(`theme file ${file}: ${result.failure}`);

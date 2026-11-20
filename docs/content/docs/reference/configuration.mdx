@@ -5,7 +5,7 @@ description: Configure features, themes, editors, file associations, and icons.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Configuration is optional. Without it, stet uses its built-in `dark` or `light` theme to match your terminal and reads editor commands from environment variables, with `vim` as the terminal-editor fallback.
+Configuration is optional. Without it, stet uses `system`, a theme built from your terminal's own colors (or `stet-dark`/`stet-light` to match its appearance when the terminal does not report them), and reads editor commands from environment variables, with `vim` as the terminal-editor fallback.
 
 ## Location
 
@@ -101,9 +101,9 @@ The built-in themes are:
 - `mono-dark` and `mono-light`, where every color is a pure grey
 - every theme bundled with [highlights](https://diffs.com/highlights): the familiar editor themes (`catppuccin-mocha`, `dracula`, `github-dark`, `gruvbox-dark-medium`, `nord`, `rose-pine`, `tokyo-night`, and so on) plus the `pierre-*` themes
 
-A theme only supplies a palette, and stet derives every UI color from it the way cmux does: surfaces, borders, and text tiers are blends of the foreground into the background; change kinds, stage colors, and severities come from the terminal red, green, and yellow; file icons take the terminal hue that suits them; and the accent is the theme's `text.accent`, or its magenta when it has none. Code colors come from the theme's own `syntax`, so code and chrome always agree.
+A theme only supplies a palette, and stet derives every UI color from it the way cmux does: borders, text tiers, and the cursor row are blends of the foreground into the background, and the panel is the background darkened toward black; change kinds, stage colors, and severities come from the terminal red, green, and yellow, with renames in magenta and the untracked mark in muted text; file icons take the terminal hue that suits them; and the accent is the theme's `text.accent`, or its magenta when it has none. Code colors come from the theme's own `syntax`, so code and chrome always agree.
 
-To add your own, drop a [Zed theme](https://zed.dev/docs/extensions/themes) file into `~/.config/stet/themes/` (under `$XDG_CONFIG_HOME` when it is set). Each theme in the file is listed under its name in lowercase with dashes (`My Ocean` becomes `my-ocean`), and a name that matches a built-in replaces it. stet reads `editor.background`, `editor.foreground`, `text.accent`, the `terminal.ansi.*` colors, and `syntax`; a file that is not a Zed theme is reported in the status bar.
+To add your own, drop a [Zed theme](https://zed.dev/docs/extensions/themes) file into `~/.config/stet/themes/` (under `$XDG_CONFIG_HOME` when it is set). Each theme in the file is listed under its name in lowercase with dashes (`My Ocean` becomes `my-ocean`), and a name that matches a built-in replaces it. stet reads `editor.background`, `editor.foreground`, `text.accent`, the six `terminal.ansi` hues (`red`, `green`, `yellow`, `blue`, `magenta`, `cyan`), and `syntax`; a file that is not a Zed theme is reported in the status bar. Files load in name order; when two themes share a name, the first is kept and the other is reported in the status bar, as is a theme whose name has no letters or digits or is one stet reserves: `system` (the terminal's palette), `auto` (the switcher's follow-the-terminal row), and `dark` and `light` (the former names of `stet-dark` and `stet-light`).
 
 ```json title="~/.config/stet/themes/ocean.json"
 {
@@ -122,7 +122,6 @@ To add your own, drop a [Zed theme](https://zed.dev/docs/extensions/themes) file
         "terminal.ansi.blue": "#5ec4ff",
         "terminal.ansi.magenta": "#c792ea",
         "terminal.ansi.cyan": "#7fdbca",
-        "terminal.ansi.bright_black": "#577589",
         "syntax": {
           "keyword": { "color": "#c792ea" },
           "string": { "color": "#7bd88f" },

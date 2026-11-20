@@ -68,7 +68,6 @@ const ICON_HUES = {
 /** VS Code's terminal colors, the same fallback the highlighter uses for a theme without them. */
 const ANSI_FALLBACK = {
   blue: "#2472c8",
-  bright_black: "#666666",
   cyan: "#11a8cd",
   green: "#0dbc79",
   magenta: "#bc3fbc",

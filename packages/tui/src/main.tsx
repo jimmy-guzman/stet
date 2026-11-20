@@ -148,10 +148,8 @@ try {
 
   await configRuntime.dispose();
 
-  // Register the configured themes and seed the theme selection *before* the
-  // Renderer enters the alt-screen, so a config-validation throw still lands on
-  // The normal terminal rather than a torn-down one. These need neither the
-  // Renderer nor the detected appearance; appearance is applied just below.
+  // Register user theme files and seed the theme selection before the renderer is created;
+  // Neither needs the renderer or the detected appearance, which is applied just below.
   const { themes, issues: themeIssues } = await readUserThemes(themesDir());
   registerThemes(themes);
 
@@ -251,10 +249,11 @@ try {
   setAppearance(appearance);
   const activeName = selectThemeName(themeSelection, appearance);
 
-  if (hasTheme(activeName)) {
-    // A bundled theme imports on demand; the active one lands before the first paint.
-    await loadTheme(activeName);
-  } else {
+  // A bundled theme imports on demand; the active one lands before the first paint. One whose
+  // Import fails is marked failed and no longer listed, so it reads as not found below.
+  await loadTheme(activeName);
+
+  if (!hasTheme(activeName)) {
     themeIssues.push(`theme "${activeName}" not found; using the default`);
   }
 

@@ -84,12 +84,13 @@ import type {
   StatusAlertSource,
 } from "./status/model";
 import {
+  activeThemeName,
   activeZedTheme,
   appearance,
   selection,
   setSelection,
 } from "./theme/active";
-import { themeNames } from "./theme/registry";
+import { AUTO_THEME, themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
 import { createTreeModel } from "./tree/model";
 import type { TreeMove } from "./tree/model";
@@ -394,7 +395,7 @@ const themeComboboxItems = (): {
   name: string;
   selection: ThemeSelection;
 }[] => [
-  { name: "auto", selection: undefined },
+  { name: AUTO_THEME, selection: undefined },
   ...themeNames().map((name) => ({ name, selection: name })),
 ];
 
@@ -1011,10 +1012,9 @@ const createState = () => {
     });
   });
 
-  // A thunk, not a memo: a memo computes eagerly at root-creation time (module
-  // Import), before startup registers user themes, and would never recompute
-  // Since the registry is not reactive. Reading per call keeps it current while
-  // Still tracking `themeComboboxQuery` for the reactive scopes that read it.
+  // `themeNames()` tracks the registry, so the list picks up themes registered
+  // After this root (user files, bundled themes landing) while still tracking
+  // `themeComboboxQuery` for the reactive scopes that read it.
   const themeComboboxResults = () => {
     const query = themeComboboxQuery().toLowerCase();
 
@@ -2911,18 +2911,23 @@ const createState = () => {
     void run();
   };
 
-  // Open the theme picker on the active selection (so it reads as "where am I
-  // Now"), capturing it as the revert target. A `{dark,light}` pair (config-only,
-  // The picker never writes one) matches no single row, so it parks on `auto`.
+  // Open the theme picker on the row of the theme rendering now (so it reads as
+  // "where am I now"), capturing the selection itself as the revert target. The
+  // Row comes from the rendered name, not the selection: a `{dark,light}` pair
+  // Or a former built-in name (`dark`) matches no row, and parking on `auto`
+  // Would let the preview switch themes before a key is pressed.
   const openThemePicker = () => {
     const current = selection();
+    const rendered = activeThemeName();
 
     const index =
       current === undefined
         ? 0
         : Math.max(
             0,
-            themeComboboxItems().findIndex((item) => item.selection === current)
+            themeComboboxItems().findIndex(
+              (item) => item.selection === rendered
+            )
           );
 
     batch(() => {

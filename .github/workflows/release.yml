@@ -166,10 +166,11 @@ jobs:
           version="${TAG#stet-v}"
           # npm finalizes an OIDC publish asynchronously: 0.11.0 became resolvable 2 to 4.5 min
           # after pnpm reported success, so a short per-package retry failed a release that landed.
+          # The deadline bounds retries, not checks: every package gets one look even past it,
+          # since failing a package unseen would fail a release that landed.
           deadline=$((SECONDS + 600))
           for name in stet-darwin-arm64 stet-darwin-x64 stet-linux-x64 stet-linux-arm64 @jimmy.codes/stet; do
             until npm view "$name@$version" version >/dev/null 2>&1; do
-              # Give up before a sleep would carry the next request past the deadline.
               if [ $((SECONDS + 15)) -gt "$deadline" ]; then
                 echo "::error::$name@$version is not resolvable on npm"
                 exit 1

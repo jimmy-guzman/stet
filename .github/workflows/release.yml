@@ -169,7 +169,8 @@ jobs:
           deadline=$((SECONDS + 600))
           for name in stet-darwin-arm64 stet-darwin-x64 stet-linux-x64 stet-linux-arm64 @jimmy.codes/stet; do
             until npm view "$name@$version" version >/dev/null 2>&1; do
-              if [ "$SECONDS" -ge "$deadline" ]; then
+              # Give up before a sleep would carry the next request past the deadline.
+              if [ $((SECONDS + 15)) -gt "$deadline" ]; then
                 echo "::error::$name@$version is not resolvable on npm"
                 exit 1
               fi

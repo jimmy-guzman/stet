@@ -81,16 +81,27 @@ export const themeNames = () => [
 ];
 
 /**
+ * Bumped by `restoreRegistry` (never zeroed, since it is only compared for equality), so an import
+ * that started before a reset lands nowhere: neither its theme nor its failure reaches the restored
+ * registry.
+ */
+let registryGeneration = 0;
+
+/**
  * One bundled theme, normalized, as a one-element list; empty when its import fails, which also
  * drops it from the list, so it can never take the others, or a running session, down with it.
  */
 const importTheme = async (name: string) => {
+  const generation = registryGeneration;
+
   try {
     const { default: theme } = await themes[name]();
 
-    return [normalizeTheme(theme)];
+    return generation === registryGeneration ? [normalizeTheme(theme)] : [];
   } catch {
-    failedBundled.add(name);
+    if (generation === registryGeneration) {
+      failedBundled.add(name);
+    }
 
     return [];
   }
@@ -162,6 +173,7 @@ export const restoreRegistry = () => {
 
   userNames.length = 0;
   failedBundled.clear();
+  registryGeneration += 1;
   bumpRegistry();
 };
 

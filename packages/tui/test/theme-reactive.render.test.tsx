@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import { RGBA } from "@opentui/core";
-import { testRender } from "@opentui/solid";
+import { createTestRenderer } from "@opentui/core/testing";
+import { render, testRender } from "@opentui/solid";
 
 import { App } from "@/app";
-import { setAppearance, setSelection } from "@/theme/active";
+import { appearance, setAppearance, setSelection } from "@/theme/active";
 import { ansiFromSlots, paletteTheme } from "@/theme/palette";
 import { registerThemes } from "@/theme/registry";
 
@@ -85,5 +86,21 @@ describe("runtime appearance follow (#101)", () => {
     expect(hasBackground(captureSpans(), DARK_BG)).toBe(false);
 
     renderer.destroy();
+  });
+
+  test("App takes the terminal's current mode when it mounts", async () => {
+    const { renderer } = await createTestRenderer({ height: 24, width: 80 });
+
+    // The test renderer cannot receive a terminal mode report (its input parser rejects the
+    // sequence), so this stands in for a terminal that flipped to light before App subscribed.
+    Object.defineProperty(renderer, "themeMode", { get: () => "light" });
+
+    try {
+      await render(() => <App />, renderer);
+
+      expect(appearance()).toBe("light");
+    } finally {
+      renderer.destroy();
+    }
   });
 });

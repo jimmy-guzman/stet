@@ -120,6 +120,16 @@ describe("normalizeTheme", () => {
     expect(opaqueHex("#ABCDEF", "#000000")).toBe("#abcdef");
   });
 
+  test("rejects a malformed or overflowing Display P3 channel", () => {
+    expect(opaqueHex("color(display-p3 0..5 0 0)", "#000000")).toBeUndefined();
+    expect(
+      opaqueHex(`color(display-p3 0 0 ${"9".repeat(400)})`, "#000000")
+    ).toBeUndefined();
+    expect(opaqueHex("color(display-p3 .5 1 0.25 / 50%)", "#000000")).toMatch(
+      HEX
+    );
+  });
+
   test("converts Display P3 colors to sRGB hex", () => {
     expect(opaqueHex("color(display-p3 1 1 1)", "#000000")).toBe("#ffffff");
     expect(opaqueHex("color(display-p3 0 0 0)", "#000000")).toBe("#000000");

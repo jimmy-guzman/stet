@@ -50,6 +50,9 @@ export const App = () => {
   });
 
   renderer.on("theme_mode", onThemeMode);
+  // Startup read the mode before its palette probe and theme import, and a flip
+  // In that window emitted with no listener, so take the current mode now.
+  onThemeMode(renderer.themeMode);
   // The renderer re-reads the terminal palette after a mode flip (and on resume)
   // And publishes it here, so `system` follows the terminal's own theme change.
   renderer.on("palette", refreshTerminalPalette);

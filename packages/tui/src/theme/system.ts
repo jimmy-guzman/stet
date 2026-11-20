@@ -40,12 +40,31 @@ const registerTerminalPalette = (colors: TerminalColors) => {
   }
 };
 
-/** Asks the terminal for its palette (a bounded OSC query) and registers `system` from the answer. */
-export const probeTerminalPalette = async (renderer: CliRenderer) => {
+/** How long the startup palette probe may hold the first paint, whatever the terminal does. */
+const PROBE_MS = 100;
+
+const expired = async () => {
+  await Bun.sleep(PROBE_MS);
+};
+
+/**
+ * Asks the terminal for its palette and registers `system` from the answer, giving up after
+ * `PROBE_MS`. OpenTUI's own `timeout` starts only once it has heard from a tmux it cannot identify,
+ * which can take its 5s startup backstop, so the deadline here bounds the whole probe. An answer
+ * after the deadline is dropped: registering it would swap the theme after the first paint.
+ */
+export const probeTerminalPalette = async (
+  renderer: Pick<CliRenderer, "getPalette">
+) => {
   try {
-    registerTerminalPalette(
-      await renderer.getPalette({ size: 16, timeout: 100 })
-    );
+    const colors = await Promise.race([
+      renderer.getPalette({ size: 16, timeout: PROBE_MS }),
+      expired(),
+    ]);
+
+    if (colors !== undefined) {
+      registerTerminalPalette(colors);
+    }
   } catch {
     // A terminal that does not answer palette queries simply has no `system` theme.
   }

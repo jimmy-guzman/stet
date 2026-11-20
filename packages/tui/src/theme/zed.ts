@@ -14,8 +14,10 @@ const P3_TO_SRGB = [
   [-0.0196376, -0.0786361, 1.0982735],
 ] as const;
 
+// Each channel and the alpha is a plain decimal (`1`, `0.5`, `.5`), so a run like `0..5` fails to
+// Match rather than reaching `Number` as NaN.
 const P3_PATTERN =
-  /^color\(display-p3\s+(?<r>[\d.]+)\s+(?<g>[\d.]+)\s+(?<b>[\d.]+)\s*(?:\/\s*(?<a>[\d.]+)(?<percent>%?)\s*)?\)$/u;
+  /^color\(display-p3\s+(?<r>\d+(?:\.\d*)?|\.\d+)\s+(?<g>\d+(?:\.\d*)?|\.\d+)\s+(?<b>\d+(?:\.\d*)?|\.\d+)\s*(?:\/\s*(?<a>\d+(?:\.\d*)?|\.\d+)(?<percent>%?)\s*)?\)$/u;
 
 const HEX = /^#[0-9a-f]{6}$/u;
 
@@ -63,13 +65,21 @@ const p3Alpha = (alpha: string | undefined, percent: string | undefined) => {
 export const opaqueHex = (value: string, under: string) => {
   const p3 = P3_PATTERN.exec(value.trim())?.groups;
 
-  return p3 === undefined
-    ? cssHex(value, under)
-    : lerpHex(
-        under,
-        p3ToHex(Number(p3.r), Number(p3.g), Number(p3.b)),
-        p3Alpha(p3.a, p3.percent)
-      );
+  if (p3 === undefined) {
+    return cssHex(value, under);
+  }
+
+  const [r, g, b, alpha] = [
+    Number(p3.r),
+    Number(p3.g),
+    Number(p3.b),
+    p3Alpha(p3.a, p3.percent),
+  ];
+
+  // A digit run long enough to overflow reads as Infinity, which the pattern cannot rule out.
+  return [r, g, b, alpha].every(Number.isFinite)
+    ? lerpHex(under, p3ToHex(r ?? 0, g ?? 0, b ?? 0), alpha ?? 1)
+    : undefined;
 };
 
 const FALLBACK_BACKGROUND = "#000000";

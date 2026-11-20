@@ -22,12 +22,17 @@ import {
   loadTheme,
   registerSystemTheme,
   registerThemes,
+  restoreRegistry,
   selectThemeName,
   themeForName,
   themeNames,
   zedThemeForName,
 } from "@/theme/registry";
-import { refreshTerminalPalette, systemTheme } from "@/theme/system";
+import {
+  probeTerminalPalette,
+  refreshTerminalPalette,
+  systemTheme,
+} from "@/theme/system";
 import { isMonochromeTheme } from "@/theme/tokens";
 import type { Theme } from "@/theme/tokens";
 import { parseThemeFile, readUserThemes } from "@/theme/user";
@@ -316,6 +321,35 @@ describe("bundled themes", () => {
     expect(themeNames()).toContain("nord");
   });
 
+  test("an import still pending when the registry resets lands nowhere", async () => {
+    const original = themes.nord;
+    themes.nord = async () => {
+      await Bun.sleep(20);
+
+      return await original();
+    };
+
+    const pending = loadTheme("nord");
+    restoreRegistry();
+    await pending;
+
+    expect(zedThemeForName("nord")).toBe(zedThemeForName("stet-dark"));
+  });
+
+  test("an import failing after the registry resets is not recorded", async () => {
+    themes.dracula = async () => {
+      await Bun.sleep(20);
+
+      return await Promise.reject(new Error("import failed"));
+    };
+
+    const pending = loadTheme("dracula");
+    restoreRegistry();
+    await pending;
+
+    expect(hasTheme("dracula")).toBe(true);
+  });
+
   test("the active theme failing to import resolves to not found, never a throw", async () => {
     failImport("dracula");
     await loadTheme("dracula");
@@ -354,6 +388,39 @@ describe("systemTheme", () => {
     expect(zedThemeForName("system").style["terminal.ansi.green"]).toBe(
       "#00aa00"
     );
+  });
+
+  test("the startup probe registers system from a prompt answer", async () => {
+    await probeTerminalPalette({
+      getPalette: async () => await Promise.resolve(colors),
+    });
+
+    expect(themeNames()).toContain("system");
+  });
+
+  test("the startup probe gives up on a terminal that never answers", async () => {
+    const started = performance.now();
+
+    await probeTerminalPalette({
+      getPalette: async () =>
+        await Promise.withResolvers<typeof colors>().promise,
+    });
+
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(themeNames()).not.toContain("system");
+  });
+
+  test("a palette answered after the startup deadline is dropped", async () => {
+    await probeTerminalPalette({
+      getPalette: async () => {
+        await Bun.sleep(300);
+
+        return colors;
+      },
+    });
+    await Bun.sleep(300);
+
+    expect(themeNames()).not.toContain("system");
   });
 
   test("a palette reported mid-session never introduces system on its own", () => {

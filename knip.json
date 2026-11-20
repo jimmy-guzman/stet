@@ -5,6 +5,7 @@
   "workspaces": {
     "packages/tui": {
       "entry": ["script/stet-launcher.cjs", "test/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["@effect/language-service"],
       "project": [
         "src/**/*.{ts,tsx}",
         "test/**/*.{ts,tsx}",

@@ -336,6 +336,23 @@ describe("bundled themes", () => {
     expect(zedThemeForName("nord")).toBe(zedThemeForName("stet-dark"));
   });
 
+  test("a batch import straddling a registry reset writes none of it", async () => {
+    const original = themes.dracula;
+    themes.dracula = async () => {
+      await Bun.sleep(50);
+
+      return await original();
+    };
+
+    const pending = loadBundledThemes();
+    await Bun.sleep(20);
+    restoreRegistry();
+    await pending;
+
+    expect(zedThemeForName("nord")).toBe(zedThemeForName("stet-dark"));
+    expect(zedThemeForName("dracula")).toBe(zedThemeForName("stet-dark"));
+  });
+
   test("an import failing after the registry resets is not recorded", async () => {
     themes.dracula = async () => {
       await Bun.sleep(20);

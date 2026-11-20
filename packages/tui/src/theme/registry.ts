@@ -81,9 +81,9 @@ export const themeNames = () => [
 ];
 
 /**
- * Bumped by `restoreRegistry` (never zeroed, since it is only compared for equality), so an import
- * that started before a reset lands nowhere: neither its theme nor its failure reaches the restored
- * registry.
+ * Bumped by `restoreRegistry` (never zeroed, since it is only compared for equality). A load
+ * captures it when it starts and writes nothing once it has moved, so an import that straddles a
+ * reset reaches neither the restored registry nor its failure set.
  */
 let registryGeneration = 0;
 
@@ -97,7 +97,7 @@ const importTheme = async (name: string) => {
   try {
     const { default: theme } = await themes[name]();
 
-    return generation === registryGeneration ? [normalizeTheme(theme)] : [];
+    return [normalizeTheme(theme)];
   } catch {
     if (generation === registryGeneration) {
       failedBundled.add(name);
@@ -113,7 +113,14 @@ export const loadTheme = async (name: string) => {
     return;
   }
 
-  for (const theme of await importTheme(name)) {
+  const generation = registryGeneration;
+  const imported = await importTheme(name);
+
+  if (generation !== registryGeneration) {
+    return;
+  }
+
+  for (const theme of imported) {
     registry.set(name, theme);
   }
 
@@ -126,6 +133,8 @@ export const loadTheme = async (name: string) => {
  * theme re-resolves once.
  */
 export const loadBundledThemes = async () => {
+  const generation = registryGeneration;
+
   const loaded = await Promise.all(
     bundledNames
       .filter((name) => !registry.has(name))
@@ -135,6 +144,12 @@ export const loadBundledThemes = async () => {
         return imported.map((theme) => [name, theme] as const);
       })
   );
+
+  // Checked once for the whole batch: one import can finish before a reset and another after
+  // It, and the batch writes only once all of them are in.
+  if (generation !== registryGeneration) {
+    return;
+  }
 
   for (const [name, theme] of loaded.flat()) {
     registry.set(name, theme);

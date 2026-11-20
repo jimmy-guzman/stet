@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
 
 import { highlightSnippet } from "@/diff/engine";
-import { activeThemeName } from "@/theme/active";
-import { themeForName } from "@/theme/registry";
 
 // The test preload initializes the shared highlighter and the active theme, so a
 // TS snippet tokenizes and colors without a network or LSP touch.
@@ -35,9 +33,8 @@ test("highlightSnippet falls back to one plain span per line for an unknown lang
   ]);
 });
 
-test("highlightSnippet colors code with the active stet theme's syntax tokens", async () => {
-  const { syntax } = themeForName(activeThemeName());
-
+test("highlightSnippet colors code with the active theme's syntax colors", async () => {
+  // Stet-dark's own code colors (`builtins.ts`), the default with no terminal palette.
   const [line] = await highlightSnippet(
     'import { x } from "y"; // note',
     "typescript"
@@ -46,7 +43,7 @@ test("highlightSnippet colors code with the active stet theme's syntax tokens", 
   const colorOf = (text: string) =>
     line?.find((span) => span.text.trim() === text)?.fg?.toLowerCase();
 
-  expect(colorOf("import")).toBe(syntax.keywordImport.toLowerCase());
-  expect(colorOf('"y"')).toBe(syntax.string.toLowerCase());
-  expect(colorOf("// note")).toBe(syntax.comment.toLowerCase());
+  expect(colorOf("import")).toBe("#c79ef7");
+  expect(colorOf('"y"')).toBe("#91d39f");
+  expect(colorOf("// note")).toBe("#707274");
 });

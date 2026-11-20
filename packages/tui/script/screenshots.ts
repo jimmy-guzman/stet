@@ -74,7 +74,7 @@ const WORKTREE_BRANCH = "feat/tidy-layout";
 
 /**
  * A throwaway config dir for the `config: true` shots: stet reads `XDG_CONFIG_HOME`, so pointing
- * those tapes here gives them named themes and a reachable context-menu binding without touching
+ * those tapes here gives them a reachable context-menu binding without touching
  * the user's real config or the other tapes. It is rewritten before every such shot, because
  * `ctrl-s` makes one of them a writer.
  */
@@ -99,35 +99,6 @@ const SCREENSHOT_CONFIG = JSON.stringify(
      * in the capture reveals this: the menu's footer hint names its own keys, never its opener.
      */
     keybindings: { "context-menu": "ctrl+n" },
-    /**
-     * Named palettes for the theme-switcher shot: each carries a distinct accent (the row swatch)
-     * and a bundled `syntax` theme (so previewing one re-themes the diff). `theme` stays unset so
-     * the app starts on `auto`, keeping the ✓ there while the highlighted row previews another.
-     * Registration (and so list) order after the built-ins, sorted: catppuccin, gruvbox,
-     * rose-pine, tokyo-night, the last of the nine rows the switcher then lists.
-     */
-    themes: {
-      catppuccin: {
-        accent: { primary: "#cba6f7" },
-        base: "dark",
-        syntax: "catppuccin-mocha",
-      },
-      gruvbox: {
-        accent: { primary: "#fabd2f" },
-        base: "dark",
-        syntax: "gruvbox-dark-medium",
-      },
-      "rose-pine": {
-        accent: { primary: "#ebbcba" },
-        base: "dark",
-        syntax: "rose-pine",
-      },
-      "tokyo-night": {
-        accent: { primary: "#7aa2f7" },
-        base: "dark",
-        syntax: "tokyo-night",
-      },
-    },
   },
   null,
   2
@@ -240,25 +211,17 @@ const screens = [
   { name: "worktree-picker", steps: ['Type "w"', "Sleep 800ms"].join("\n") },
   {
     /**
-     * Open a diff so a real code hunk sits behind the overlay, open the switcher, then arrow down
-     * to a vivid theme so the shot shows the full themed list (accent swatches, the ✓ on the active
-     * `auto`, the highlighted preview row) with the UI and diff live-re-themed to it. `Down`
-     * reaches the keymap's picker branch even with the filter input focused, same as the
-     * palette/find tapes. Needs the planted demo config.
-     *
-     * The count is positional, so it goes stale when the built-in list grows: it was 6 for a list
-     * of auto/dark/light plus the four planted palettes, and the `mono-dark`/`mono-light` pair
-     * landed between them, which quietly moved the highlight two rows short of its target. Recount
-     * it against `themeNames()` whenever a built-in theme is added.
+     * Open a diff so a real code hunk sits behind the overlay, open the switcher, then filter to a
+     * bundled theme so the shot shows the highlighted preview row with the UI and diff live-re-themed
+     * to it. Filtering by name, not arrowing a positional count, keeps the shot on its target as the
+     * built-in list grows.
      */
-    config: true,
-    launchEnv: `XDG_CONFIG_HOME=${SCREENSHOT_CONFIG_DIR} `,
     name: "theme-switcher",
     steps: [
       openHeroDiff,
       'Type "t"',
       "Sleep 700ms",
-      "Down@200ms 8",
+      'Type "catppuccin"',
       "Sleep 1200ms",
     ].join("\n"),
   },

@@ -84,7 +84,7 @@ import type {
   StatusAlertSource,
 } from "./status/model";
 import {
-  activeThemeName,
+  activeZedTheme,
   appearance,
   selection,
   setSelection,
@@ -1073,7 +1073,7 @@ const createState = () => {
   createEffect(() => {
     // Re-run on a theme change too (a runtime appearance flip), so the diff
     // Re-renders with the new palette; the engine keys its cache by the theme.
-    activeThemeName();
+    activeZedTheme();
     const src = diffSource();
 
     if (src === undefined) {

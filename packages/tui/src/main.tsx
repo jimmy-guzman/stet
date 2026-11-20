@@ -8,6 +8,7 @@ import { batch, createRoot } from "solid-js";
 import packageJson from "../package.json";
 import { App } from "./app";
 import { helpText, parseCommand } from "./cli";
+import { themesDir } from "./config/paths";
 import { configDefaults } from "./config/schema";
 import type { UserConfig } from "./config/schema";
 import { Config, ConfigLive } from "./config/service";
@@ -35,10 +36,13 @@ import { setAppearance, setSelection } from "./theme/active";
 import { prefersMonochrome } from "./theme/mono";
 import {
   hasTheme,
+  loadBundledThemes,
+  loadTheme,
   registerThemes,
-  resolveThemes,
   selectThemeName,
 } from "./theme/registry";
+import { probeTerminalPalette } from "./theme/system";
+import { readUserThemes } from "./theme/user";
 import { runUpgrade } from "./upgrade/run";
 
 const seedSidebar = (config: UserConfig) => {
@@ -148,7 +152,7 @@ try {
   // Renderer enters the alt-screen, so a config-validation throw still lands on
   // The normal terminal rather than a torn-down one. These need neither the
   // Renderer nor the detected appearance; appearance is applied just below.
-  const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
+  const { themes, issues: themeIssues } = await readUserThemes(themesDir());
   registerThemes(themes);
 
   // The prefersMonochrome check (see theme/mono.ts) replaces the configured
@@ -214,7 +218,14 @@ try {
 
   const renderer = await pendingRenderer;
 
-  const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
+  // The appearance and the terminal palette (the `system` theme) are two bounded queries, asked
+  // Together so a terminal that answers neither costs one timeout, not two.
+  const [mode] = await Promise.all([
+    renderer.waitForThemeMode(100),
+    probeTerminalPalette(renderer),
+  ]);
+
+  const appearance = mode ?? "dark";
 
   void exitOnOutputFailure(renderer);
 
@@ -240,10 +251,11 @@ try {
   setAppearance(appearance);
   const activeName = selectThemeName(themeSelection, appearance);
 
-  if (!hasTheme(activeName)) {
-    themeIssues.push(
-      `theme "${activeName}" not found; using the ${appearance} default`
-    );
+  if (hasTheme(activeName)) {
+    // A bundled theme imports on demand; the active one lands before the first paint.
+    await loadTheme(activeName);
+  } else {
+    themeIssues.push(`theme "${activeName}" not found; using the default`);
   }
 
   // The CLI- and config-derived state needs no git, so seed it before the first
@@ -287,6 +299,9 @@ try {
   // Preflight, so a failure here is a repository git can no longer read; it
   // Restores the terminal before exiting, the alt-screen now being entered.
   void render(() => <App />, renderer);
+
+  // The rest of the bundled themes, for the switcher, once the first paint is out.
+  void loadBundledThemes();
 
   createRoot(() => {
     syncTerminalTitle(renderer);

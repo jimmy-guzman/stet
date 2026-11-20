@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import { levelColor, levelGlyph } from "@/log/levels";
-import { darkTheme } from "@/theme/dark";
+import { themeForName } from "@/theme/registry";
+
+const darkTheme = themeForName("stet-dark");
 
 describe("levelColor", () => {
   test("maps each level to its semantic theme token", () => {

@@ -5,7 +5,7 @@ import { isLineRow } from "@/diff/rows";
 import { resolveFileSupportConfig } from "@/file-support/config";
 import { registerFileSupport } from "@/file-support/registry";
 import { setSelection } from "@/theme/active";
-import { registerThemes, resolveThemes } from "@/theme/registry";
+import { loadTheme } from "@/theme/registry";
 
 const patch = `diff --git a/foo.ts b/foo.ts
 index 1111111..2222222 100644
@@ -265,23 +265,19 @@ describe("renderDiff file associations", () => {
 });
 
 describe("renderDiff theme attach", () => {
-  test("colors a diff under a second token theme", async () => {
-    setSelection("light");
+  test("colors a diff under a second built-in theme", async () => {
+    setSelection("stet-light");
 
     const colors = await addedColors();
 
     expect(new Set(colors).size).toBeGreaterThan(1);
   });
 
-  test("colors a diff under a bundled syntax theme with that theme's colors", async () => {
+  test("colors a diff under a bundled theme with that theme's colors", async () => {
     const tokenColors = await addedColors();
 
-    registerThemes(
-      resolveThemes({
-        "test-catppuccin": { base: "dark", syntax: "catppuccin-mocha" },
-      }).themes
-    );
-    setSelection("test-catppuccin");
+    await loadTheme("catppuccin-mocha");
+    setSelection("catppuccin-mocha");
 
     const bundledColors = await addedColors();
 

@@ -5,8 +5,8 @@ import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
 import { setAppearance, setSelection } from "@/theme/active";
-import { darkTheme } from "@/theme/dark";
-import { registerThemes, resolveThemes } from "@/theme/registry";
+import { ansiFromSlots, paletteTheme } from "@/theme/palette";
+import { registerThemes } from "@/theme/registry";
 
 import {
   createFixtureRepo,
@@ -40,16 +40,24 @@ const hasBackground = (
 describe("runtime appearance follow (#101)", () => {
   test("flipping the terminal appearance re-themes the UI live", async () => {
     registerThemes(
-      resolveThemes({
-        "t-dark": {
-          base: "dark",
-          surface: { ...darkTheme.surface, base: DARK_BG },
-        },
-        "t-light": {
-          base: "dark",
-          surface: { ...darkTheme.surface, base: LIGHT_BG },
-        },
-      }).themes
+      new Map([
+        [
+          "t-dark",
+          paletteTheme("t-dark", "dark", {
+            ansi: ansiFromSlots([]),
+            background: DARK_BG,
+            foreground: "#eeeeee",
+          }),
+        ],
+        [
+          "t-light",
+          paletteTheme("t-light", "light", {
+            ansi: ansiFromSlots([]),
+            background: LIGHT_BG,
+            foreground: "#111111",
+          }),
+        ],
+      ])
     );
     setSelection({ dark: "t-dark", light: "t-light" });
 

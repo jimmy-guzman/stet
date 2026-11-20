@@ -64,7 +64,7 @@ describe("monochrome change bar", () => {
 
       // Switching to a known colored built-in restores the block bar live (an
       // Explicit name, so the assertion never rides on the ambient appearance).
-      setSelection("dark");
+      setSelection("stet-dark");
 
       const colored = await settleUntil("block bar restored", (current) =>
         current.includes("▎")

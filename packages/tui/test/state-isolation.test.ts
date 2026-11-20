@@ -16,10 +16,27 @@ import {
   setAppearance,
   setSelection,
 } from "@/theme/active";
-import { darkTheme } from "@/theme/dark";
-import { registerThemes, resolveThemes, themeNames } from "@/theme/registry";
+import { ansiFromSlots, paletteTheme } from "@/theme/palette";
+import {
+  registerSystemTheme,
+  registerThemes,
+  themeForName,
+  themeNames,
+} from "@/theme/registry";
 
 import { createFixtureRepo, loadModel, runGit, seedState } from "./helpers";
+
+const probeTheme = (name: string, background: string) =>
+  new Map([
+    [
+      name,
+      paletteTheme(name, "dark", {
+        ansi: ansiFromSlots([]),
+        background,
+        foreground: "#eeeeee",
+      }),
+    ],
+  ]);
 
 /**
  * Bun runs every test file in one process, so `state` outlives each of them. A test that dies on a
@@ -49,8 +66,13 @@ test("the next test still starts from the defaults", () => {
  * dead test's registered theme and selection in place for every file after it.
  */
 test("a dying test leaves a theme registered and selected", () => {
-  registerThemes(
-    resolveThemes({ "isolation-probe": { base: "light" } }).themes
+  registerThemes(probeTheme("isolation-probe", "#654321"));
+  registerSystemTheme(
+    paletteTheme("system", "dark", {
+      ansi: ansiFromSlots([]),
+      background: "#111111",
+      foreground: "#eeeeee",
+    })
   );
   setSelection("isolation-probe");
   setAppearance("light");
@@ -60,25 +82,20 @@ test("a dying test leaves a theme registered and selected", () => {
 
 test("the next test still starts from the default theme", () => {
   expect(themeNames()).not.toContain("isolation-probe");
-  expect(activeThemeName()).toBe("dark");
+  expect(themeNames()).not.toContain("system");
+  expect(activeThemeName()).toBe("stet-dark");
   expect(appearance()).toBe("dark");
 });
 
 test("a dying test leaves the active built-in theme overridden", () => {
-  registerThemes(
-    resolveThemes({
-      dark: {
-        base: "light",
-        surface: { ...darkTheme.surface, base: "#123456" },
-      },
-    }).themes
-  );
+  registerThemes(probeTheme("stet-dark", "#123456"));
 
   expect(activeTheme().colors.surface.base).toBe("#123456");
 });
 
 test("the next test still resolves the built-in theme under that name", () => {
-  expect(activeTheme().colors.surface.base).toBe(darkTheme.surface.base);
+  expect(activeTheme().colors.surface.base).toBe("#191b1d");
+  expect(themeForName("stet-dark").surface.base).toBe("#191b1d");
 });
 
 test("a dying test leaves a rebind and a file association registered", () => {

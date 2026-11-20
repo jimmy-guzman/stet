@@ -13,7 +13,7 @@ import { highlightSnippet, languageForPath } from "@/diff/engine";
 import type { RenderSpan } from "@/diff/hast";
 import { levelColor, levelGlyph } from "@/log/levels";
 import { state } from "@/state";
-import { activeThemeName } from "@/theme/active";
+import { activeZedTheme } from "@/theme/active";
 import { theme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 import { truncate } from "@/utils/text";
@@ -213,7 +213,7 @@ export const SearchPane = () => {
 
   createEffect(() => {
     state.searchResults();
-    activeThemeName();
+    activeZedTheme();
     setSpanCache(new Map());
   });
 

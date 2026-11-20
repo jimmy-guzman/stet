@@ -14,3 +14,11 @@ export const configPaths = (env: NodeJS.ProcessEnv = process.env) => {
     path.join(base, "stet", "config.json"),
   ];
 };
+
+/** The directory user themes are read from: Zed theme files, one or more themes each. */
+export const themesDir = (env: NodeJS.ProcessEnv = process.env) =>
+  path.join(
+    env.XDG_CONFIG_HOME ?? path.join(homedir(), ".config"),
+    "stet",
+    "themes"
+  );

@@ -5,8 +5,8 @@ description: Preview and switch themes live, then make one permanent in your con
 
 ## Switch themes
 
-Press `t` to open the theme switcher: filter by name and move (or hover) to preview the whole UI live, `enter` to apply, `esc` to revert. stet ships `dark` and `light` built-in themes, plus an all-grey `mono-dark` and `mono-light` pair it starts on when `NO_COLOR` is non-empty, and follows your terminal's appearance by default.
+Press `t` to open the theme switcher: filter by name and move (or hover) to preview the whole UI live, `enter` to apply, `esc` to revert. By default stet uses `system`, a theme built from your terminal's own colors, and follows your terminal's appearance. The switcher also lists stet's own `stet-dark` and `stet-light`, the `opencode-*` and `cmux-*` pairs, the editor themes bundled with highlights (Catppuccin, Dracula, GitHub, Gruvbox, Nord, Tokyo Night, and more), and an all-grey `mono-dark` and `mono-light` pair it starts on when `NO_COLOR` is non-empty.
 
 ![The theme switcher listing themes with color swatches, previewing the highlighted one live](/screenshots/theme-switcher.png)
 
-The switch lasts the session only; `ctrl-s` makes it permanent, writing the highlighted theme (with any other changed settings) to your config as targeted edits that keep your comments. To define your own theme, set it in your [configuration](/docs/reference/configuration), where a theme can inherit another with `base` and override individual tokens or its `syntax` highlighting.
+The switch lasts the session only; `ctrl-s` makes it permanent, writing the highlighted theme (with any other changed settings) to your config as targeted edits that keep your comments. To add your own, drop a Zed theme file into `~/.config/stet/themes/`; stet derives its whole UI from the theme's palette, as the [configuration reference](/docs/reference/configuration#themes) explains.

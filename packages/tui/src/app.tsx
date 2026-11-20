@@ -27,6 +27,7 @@ import { exitAfterRestore } from "./shutdown";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { theme } from "./theme/context";
+import { refreshTerminalPalette } from "./theme/system";
 import { worktreeLabel } from "./ui-helpers";
 import { formatUpdateNotice } from "./upgrade/release";
 
@@ -49,7 +50,13 @@ export const App = () => {
   });
 
   renderer.on("theme_mode", onThemeMode);
-  onCleanup(() => renderer.off("theme_mode", onThemeMode));
+  // The renderer re-reads the terminal palette after a mode flip (and on resume)
+  // And publishes it here, so `system` follows the terminal's own theme change.
+  renderer.on("palette", refreshTerminalPalette);
+  onCleanup(() => {
+    renderer.off("theme_mode", onThemeMode);
+    renderer.off("palette", refreshTerminalPalette);
+  });
 
   // A read-only TUI should not show a stray terminal cursor outside its inputs.
   // The renderer shows one by default, so hide it whenever no input overlay is

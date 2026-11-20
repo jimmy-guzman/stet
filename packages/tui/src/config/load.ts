@@ -1,6 +1,7 @@
 import { Predicate, Result, Schema } from "effect";
 import { createScanner, ScanError, SyntaxKind } from "jsonc-parser";
 
+import { themesDir } from "./paths";
 import { emptyConfig, UserConfigSchema } from "./schema";
 import type { UserConfig } from "./schema";
 
@@ -120,7 +121,11 @@ export const loadConfigText = (text: string): LoadedConfig =>
 const decodeConfig = (raw: Schema.JsonObject): LoadedConfig => {
   const issues = Object.keys(raw)
     .filter((key) => !knownKeys.has(key))
-    .map((key) => `config: unknown key "${key}"`);
+    .map((key) =>
+      key === "themes"
+        ? `config: "themes" was removed; themes are now Zed theme files in ${themesDir()}`
+        : `config: unknown key "${key}"`
+    );
 
   let config: UserConfig = emptyConfig;
 

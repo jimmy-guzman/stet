@@ -12,9 +12,8 @@ import { Context, Effect, Layer } from "effect";
 
 import { fileSupportForPath } from "@/file-support/registry";
 import type { DiffInput } from "@/git/file-patch";
-import { activeThemeName, appearance } from "@/theme/active";
-import { syntaxThemeForName, themeForName } from "@/theme/registry";
-import { STET_SYNTAX_THEME_NAME, syntaxTheme } from "@/theme/syntax";
+import { activeZedTheme } from "@/theme/active";
+import type { ZedTheme } from "@/theme/zed";
 
 import type { RenderSpan } from "./hast";
 import {
@@ -48,46 +47,39 @@ export interface DiffRender extends DiffLayout {
  */
 export type RenderInput = DiffInput & { full: boolean; maxLines: number };
 
-// The render theme for the active stet theme: a bundled theme id when the theme
-// Opted into one (`syntaxTheme`), else a per-name custom theme built from the
-// Theme's own `syntax` tokens. Per-name (not one shared "stet") so switching
-// Themes attaches another theme rather than mutating the attached one, which is
-// What lets the highlight cache key on it and re-theme cleanly. Diff/cursor/find
-// Backgrounds are still layered from stet tokens at render time.
-const diffThemeName = () => {
-  const name = activeThemeName();
+/**
+ * The highlighter's name for each theme object it has been handed. `registerCustomTheme` logs an
+ * error on a second registration of a name (which would paint over the TUI), so each object
+ * registers once, under a fresh name: a theme replaced behind the same stet name (a re-probed
+ * `system`, a reloaded user theme) gets its own entry, and the highlight cache, keyed by this name,
+ * never serves the old colors.
+ */
+const registeredThemes = new WeakMap<ZedTheme, string>();
+let themeCount = 0;
 
-  return syntaxThemeForName(name) ?? `${STET_SYNTAX_THEME_NAME}:${name}`;
+const highlighterThemeName = (theme: ZedTheme) => {
+  const registered = registeredThemes.get(theme);
+
+  if (registered !== undefined) {
+    return registered;
+  }
+
+  themeCount += 1;
+  const name = `stet:${themeCount}:${theme.name}`;
+  registeredThemes.set(theme, name);
+  registerCustomTheme(name, async () => await Promise.resolve(theme), "zed");
+
+  return name;
 };
 
 /**
- * Names already handed to `registerCustomTheme`, which logs an error on a second registration (that
- * would paint over the TUI), so each token theme registers once.
- */
-const registeredThemes = new Set<string>();
-
-/**
- * The shared highlighter with the active render theme attached, plus that theme's name. The
- * `highlights` backend bundles every lexer, so there is no grammar to load or warm: the library
- * memoizes the instance and dedupes concurrent theme resolution. Called before every render so a
- * theme switch attaches on demand.
+ * The shared highlighter with the active theme attached, plus that theme's name. The `highlights`
+ * backend bundles every lexer, so there is no grammar to load or warm: the library memoizes the
+ * instance and dedupes concurrent theme resolution. Called before every render so a theme switch
+ * attaches on demand.
  */
 const highlighter = async () => {
-  const name = activeThemeName();
-  const themeName = diffThemeName();
-
-  if (
-    syntaxThemeForName(name) === undefined &&
-    !registeredThemes.has(themeName)
-  ) {
-    const theme = Promise.resolve({
-      ...syntaxTheme(themeForName(name), appearance()),
-      name: themeName,
-    });
-
-    registeredThemes.add(themeName);
-    registerCustomTheme(themeName, async () => await theme, "zed");
-  }
+  const themeName = highlighterThemeName(activeZedTheme());
 
   const hl = await getSharedHighlighter({
     langs: [],
@@ -152,7 +144,7 @@ export const preloadDiffHighlighter = async () => {
 // Part of the key so a theme switch never serves a stale-colored render.
 const fingerprint = (input: RenderInput) =>
   [
-    diffThemeName(),
+    highlighterThemeName(activeZedTheme()),
     input.full ? 1 : 0,
     input.maxLines,
     ...("patch" in input

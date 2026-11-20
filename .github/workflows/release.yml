@@ -164,16 +164,18 @@ jobs:
             exit 1
           fi
           version="${TAG#stet-v}"
+          # npm finalizes an OIDC publish asynchronously: 0.11.0 became resolvable 2 to 4.5 min
+          # after pnpm reported success, so a short per-package retry failed a release that landed.
+          deadline=$((SECONDS + 600))
           for name in stet-darwin-arm64 stet-darwin-x64 stet-linux-x64 stet-linux-arm64 @jimmy.codes/stet; do
-            for attempt in 1 2 3 4 5; do
-              if npm view "$name@$version" version >/dev/null 2>&1; then
-                echo "$name@$version is live"
-                continue 2
+            until npm view "$name@$version" version >/dev/null 2>&1; do
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "::error::$name@$version is not resolvable on npm"
+                exit 1
               fi
-              sleep 10
+              sleep 15
             done
-            echo "::error::$name@$version is not resolvable on npm"
-            exit 1
+            echo "$name@$version is live"
           done
 
   homebrew:

@@ -19,6 +19,18 @@ const baseName = (path: string) => {
   return slash === -1 ? path : path.slice(slash + 1);
 };
 
+/**
+ * The viewer title's tone, which is the viewer's focus mark when it has no caret line: full strength
+ * while the viewer holds focus, a step down otherwise. The lone-path title and the active tab share it.
+ */
+export const titleColor = () =>
+  state.focusedPane() === "diff"
+    ? theme.colors.text.primary
+    : theme.colors.text.secondary;
+
+const activeColor = (active: boolean) =>
+  active ? titleColor() : theme.colors.text.muted;
+
 const tabLabel = (path: string | undefined, active: boolean) => {
   if (path === undefined) {
     return "·";
@@ -137,11 +149,7 @@ export const Tabs = () => {
               ref={(el) => {
                 el.selectable = false;
               }}
-              fg={
-                cell().active
-                  ? theme.colors.text.primary
-                  : theme.colors.text.muted
-              }
+              fg={activeColor(cell().active)}
               attributes={createTextAttributes({ italic: cell().preview })}
             >
               {` ${cell().label} `}

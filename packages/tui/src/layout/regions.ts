@@ -24,9 +24,14 @@ interface Rect {
   height: number;
 }
 
-/** A bordered pane: its outer frame, plus the area inside the single-cell border. */
+/**
+ * A pane: its outer rect, plus the area its content may paint. The viewer has no frame, so the two
+ * match; the tree gives up the one cell where its divider is drawn.
+ */
 interface PaneRect extends Rect {
   content: Rect;
+  /** The side the tree draws its divider on, facing the viewer; undefined when nothing faces it. */
+  divider: Dock | undefined;
 }
 
 export interface DockedPane {
@@ -50,6 +55,8 @@ export interface Layout {
   sidebar: PaneRect;
   viewer: PaneRect;
   status: Rect;
+  /** The column where a side-docked tree's divider meets the header and status rules. */
+  junction: number | undefined;
 }
 
 const HEADER_ROWS = 1;
@@ -64,8 +71,8 @@ export const PANE_MIN_HEIGHT = 5;
 /** Columns the viewer is guaranteed, capping how wide a side dock can grow. */
 const VIEWER_MIN_WIDTH = 28;
 
-/** Rows the viewer is guaranteed: its border, its title row, and one line of content. */
-const VIEWER_MIN_HEIGHT = 4;
+/** Rows the viewer is guaranteed: its title row and one line of content. */
+const VIEWER_MIN_HEIGHT = 2;
 
 /**
  * Rows a top- or bottom-docked pane takes without a manual size; the vertical peer of
@@ -73,26 +80,45 @@ const VIEWER_MIN_HEIGHT = 4;
  */
 export const PANE_DEFAULT_HEIGHT = 10;
 
-const EMPTY: Rect = { height: 0, width: 0, x: 0, y: 0 };
-const EMPTY_PANE: PaneRect = { ...EMPTY, content: EMPTY };
+/** Whether an edge sizes in columns; a top or bottom dock sizes in rows. */
+export const horizontalDock = (position: Dock) =>
+  position === "left" || position === "right";
 
-const withContent = (rect: Rect): PaneRect => ({
+const EMPTY: Rect = { height: 0, width: 0, x: 0, y: 0 };
+const EMPTY_PANE: PaneRect = { ...EMPTY, content: EMPTY, divider: undefined };
+
+const OPPOSITE = {
+  bottom: "top",
+  left: "right",
+  right: "left",
+  top: "bottom",
+} as const satisfies Record<Dock, Dock>;
+
+const unframed = (rect: Rect): PaneRect => ({
   ...rect,
-  content: {
-    height: Math.max(0, rect.height - 2),
-    width: Math.max(0, rect.width - 2),
-    x: rect.x + 1,
-    y: rect.y + 1,
-  },
+  content: rect,
+  divider: undefined,
 });
+
+/** The tree's rect with one cell given to the divider on the side facing the viewer. */
+const divided = (rect: Rect, position: Dock): PaneRect => {
+  const divider = OPPOSITE[position];
+
+  return {
+    ...rect,
+    content: {
+      height: Math.max(0, rect.height - (horizontalDock(position) ? 0 : 1)),
+      width: Math.max(0, rect.width - (horizontalDock(position) ? 1 : 0)),
+      x: rect.x + (divider === "left" ? 1 : 0),
+      y: rect.y + (divider === "top" ? 1 : 0),
+    },
+    divider,
+  };
+};
 
 /** A side dock's default: a third of what it is carving from, held between 34 and 54 columns. */
 const responsiveWidth = (available: number) =>
   Math.max(34, Math.min(54, Math.floor(available * 0.34)));
-
-/** Whether an edge sizes in columns; a top or bottom dock sizes in rows. */
-export const horizontalDock = (position: Dock) =>
-  position === "left" || position === "right";
 
 // A manual extent is stored raw and only clamped here, so it never overflows a
 // Shrunken terminal yet is restored intact when the terminal grows back. The
@@ -141,12 +167,15 @@ const carve = (band: Rect, pane: DockedPane) => {
         width: band.width - extent,
         x: leading ? band.x + extent : band.x,
       },
-      rect: withContent({
-        height: band.height,
-        width: extent,
-        x: leading ? band.x : band.x + band.width - extent,
-        y: band.y,
-      }),
+      rect: divided(
+        {
+          height: band.height,
+          width: extent,
+          x: leading ? band.x : band.x + band.width - extent,
+          y: band.y,
+        },
+        pane.position
+      ),
     };
   }
 
@@ -165,13 +194,25 @@ const carve = (band: Rect, pane: DockedPane) => {
       height: band.height - extent,
       y: leading ? band.y + extent : band.y,
     },
-    rect: withContent({
-      height: extent,
-      width: band.width,
-      x: band.x,
-      y: leading ? band.y : band.y + band.height - extent,
-    }),
+    rect: divided(
+      {
+        height: extent,
+        width: band.width,
+        x: band.x,
+        y: leading ? band.y : band.y + band.height - extent,
+      },
+      pane.position
+    ),
   };
+};
+
+/** The column a vertical divider occupies; a top or bottom dock's divider meets no rule. */
+const junctionOf = (pane: PaneRect) => {
+  if (pane.divider === "right") {
+    return pane.x + pane.width - 1;
+  }
+
+  return pane.divider === "left" ? pane.x : undefined;
 };
 
 /**
@@ -206,9 +247,10 @@ export const computeLayout = (input: LayoutInput): Layout => {
   if (input.zoom !== undefined) {
     return {
       header,
-      sidebar: input.zoom === "tree" ? withContent(band) : EMPTY_PANE,
+      junction: undefined,
+      sidebar: input.zoom === "tree" ? unframed(band) : EMPTY_PANE,
       status,
-      viewer: input.zoom === "viewer" ? withContent(band) : EMPTY_PANE,
+      viewer: input.zoom === "viewer" ? unframed(band) : EMPTY_PANE,
     };
   }
 
@@ -216,8 +258,9 @@ export const computeLayout = (input: LayoutInput): Layout => {
 
   return {
     header,
+    junction: junctionOf(sidebar.rect),
     sidebar: sidebar.rect,
     status,
-    viewer: withContent(sidebar.band),
+    viewer: unframed(sidebar.band),
   };
 };

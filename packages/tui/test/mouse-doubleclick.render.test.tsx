@@ -14,15 +14,15 @@ import {
   seedState,
 } from "./helpers";
 
-// The left (sidebar) and right (viewer/search) panes share a `││` seam, and the same file
+// The left (sidebar) and right (viewer/search) panes share a `│` seam, and the same file
 // Name appears in both, so scope the frame scan to one pane before locating a row.
 const paneRowOf = (frame: string, side: "left" | "right", text: string) =>
   frame
     .split("\n")
     .map((line) => {
-      const parts = line.split("││");
+      const parts = line.split("│");
 
-      return side === "left" ? (parts[0] ?? "") : parts.slice(1).join("││");
+      return side === "left" ? (parts[0] ?? "") : parts.slice(1).join("│");
     })
     .findIndex((cell) => cell.includes(text));
 

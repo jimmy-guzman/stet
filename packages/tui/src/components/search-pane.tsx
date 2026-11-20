@@ -71,8 +71,12 @@ const statusColor = () =>
     ? levelColor(theme.colors, "error")
     : theme.colors.text.muted;
 
+// Like every pane's cursor, the selected result shows only while the search view holds focus.
+const isSelected = (index: number) =>
+  state.focusedPane() === "search" && index === state.searchIndex();
+
 const rowBackground = (item: SearchItem, index: number) => {
-  const selected = index === state.searchIndex();
+  const selected = isSelected(index);
 
   if (item.kind === "line" && item.match !== undefined) {
     return selected ? theme.rgba.findMatchBgActive : theme.colors.find.matchBg;
@@ -130,7 +134,7 @@ const emptyText = () => {
 };
 
 /**
- * The full-view project search pane: it swaps in for the file view inside the Viewer's border
+ * The full-view project search pane: it swaps in for the file view inside the Viewer
  * (`mainView === "search"`). Chrome rows (query, filter, summary, footer) are fixed-height in every
  * state, so idle/searching/ready/ error swaps never shift layout; the results band windows over the
  * flat `searchItems` list, one terminal row per item.
@@ -488,7 +492,7 @@ export const SearchPane = () => {
                         <box flexDirection="row">
                           <text
                             fg={
-                              row().index === state.searchIndex()
+                              isSelected(row().index)
                                 ? theme.colors.text.selected
                                 : theme.colors.text.strong
                             }
@@ -498,7 +502,7 @@ export const SearchPane = () => {
                           <FileIcon path={header().path} />
                           <text
                             fg={
-                              row().index === state.searchIndex()
+                              isSelected(row().index)
                                 ? theme.colors.text.selected
                                 : theme.colors.text.strong
                             }

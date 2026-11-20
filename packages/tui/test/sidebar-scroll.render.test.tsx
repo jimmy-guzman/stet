@@ -52,7 +52,7 @@ describe("sidebar scroll follow", () => {
     // The viewer pane echoes the selected file name, so scope to the sidebar.
     const sidebar = captureCharFrame()
       .split("\n")
-      .map((line) => line.split("││")[0])
+      .map((line) => line.split("│")[0])
       .join("\n");
 
     const focusedPath = state.focusedTreeRow().node.path;

@@ -20,7 +20,7 @@ const thumbRowAnywhere = (frame: string) =>
 const thumbRow = (frame: string) =>
   frame
     .split("\n")
-    .map((line) => line.split("││")[0])
+    .map((line) => line.split("│")[0])
     .findIndex((line) => line.includes("▐"));
 
 // The windowed lists mount only their visible slice, so the scroll indicator is

@@ -80,18 +80,52 @@ test("the default arrangement docks the tree left beside the viewer", () => {
   expect(result.sidebar.width).toBe(34);
   expect(result.sidebar.x).toBe(0);
   expect(result.sidebar.height).toBe(result.viewer.height);
-  expect(result.viewer.content.height).toBe(24 - 4);
+  // Only the two bars are chrome; the viewer has no frame of its own.
+  expect(result.viewer.content.height).toBe(24 - 2);
 });
 
-test("content is the frame inside its single-cell border", () => {
-  const result = layout();
+test("the tree gives one cell to a divider facing the viewer, for every dock", () => {
+  const expected = {
+    bottom: { divider: "top", height: -1, width: 0, x: 0, y: 1 },
+    left: { divider: "right", height: 0, width: -1, x: 0, y: 0 },
+    right: { divider: "left", height: 0, width: -1, x: 1, y: 0 },
+    top: { divider: "bottom", height: -1, width: 0, x: 0, y: 0 },
+  } as const;
 
-  expect(result.sidebar.content).toEqual({
-    height: result.sidebar.height - 2,
-    width: result.sidebar.width - 2,
-    x: result.sidebar.x + 1,
-    y: result.sidebar.y + 1,
-  });
+  for (const position of DOCKS) {
+    const { sidebar } = layout({
+      sidebar: pane({ position }),
+      terminalHeight: 40,
+    });
+
+    const want = expected[position];
+
+    expect({ divider: sidebar.divider, position, ...sidebar.content }).toEqual({
+      divider: want.divider,
+      height: sidebar.height + want.height,
+      position,
+      width: sidebar.width + want.width,
+      x: sidebar.x + want.x,
+      y: sidebar.y + want.y,
+    });
+  }
+});
+
+test("a side divider meets the bar rules at its own column; a stacked one meets none", () => {
+  expect(layout().junction).toBe(33);
+  expect(layout({ sidebar: pane({ position: "right" }) }).junction).toBe(46);
+  expect(
+    layout({ sidebar: pane({ position: "top" }), terminalHeight: 40 }).junction
+  ).toBeUndefined();
+  expect(layout({ sidebar: pane({ open: false }) }).junction).toBeUndefined();
+});
+
+test("the viewer has no frame, so its content is its whole rect", () => {
+  const { viewer } = layout();
+  const { content, divider, ...rect } = viewer;
+
+  expect(content).toEqual(rect);
+  expect(divider).toBeUndefined();
 });
 
 test("a closed pane is a zero rect and yields its space to the viewer", () => {
@@ -99,6 +133,7 @@ test("a closed pane is a zero rect and yields its space to the viewer", () => {
 
   expect(result.sidebar).toEqual({
     content: { height: 0, width: 0, x: 0, y: 0 },
+    divider: undefined,
     height: 0,
     width: 0,
     x: 0,
@@ -130,7 +165,8 @@ test("a docked pane never squeezes the viewer out of the terminal", () => {
   });
 
   expect(result.sidebar.height).toBeLessThan(PANE_DEFAULT_HEIGHT);
-  expect(result.viewer.height).toBeGreaterThanOrEqual(4);
+  // The viewer keeps its title row and one line of content.
+  expect(result.viewer.height).toBeGreaterThanOrEqual(2);
 });
 
 test("the right dock swaps the columns and changes no width", () => {
@@ -196,7 +232,12 @@ test("zoom gives one pane the band without touching the open flags", () => {
   expect(zoomed.sidebar.width).toBe(0);
 
   expect(layout({ ...open, zoom: "tree" }).sidebar.width).toBe(80);
+  // With the viewer gone nothing faces the tree, so it draws no divider.
+  expect(layout({ ...open, zoom: "tree" }).sidebar.divider).toBeUndefined();
+  expect(layout({ ...open, zoom: "tree" }).sidebar.content.width).toBe(80);
   expect(layout({ ...open, zoom: "tree" }).viewer.width).toBe(0);
   // The header and status rows are never zoomed away.
   expect(layout({ ...open, zoom: "tree" }).header.height).toBe(1);
+  // With one pane on screen there is no divider to join to the rules.
+  expect(layout({ ...open, zoom: "viewer" }).junction).toBeUndefined();
 });

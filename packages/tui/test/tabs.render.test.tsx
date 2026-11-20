@@ -266,7 +266,7 @@ describe("tabs strip", () => {
       const frame = await settleUntil("tree", (f) => f.includes("b.ts"));
 
       // Locate the b.ts row in the sidebar (left of the pane border).
-      const sidebar = frame.split("\n").map((line) => line.split("││")[0]);
+      const sidebar = frame.split("\n").map((line) => line.split("│")[0]);
       const rowIndex = sidebar.findIndex((line) => line.includes("b.ts"));
       const column = sidebar[rowIndex].indexOf("b.ts");
       expect(column).toBeGreaterThan(0);

@@ -7,6 +7,9 @@ import { state } from "@/state";
 import { theme } from "@/theme/context";
 import { truncate } from "@/utils/text";
 
+import { BAR_EDGE, BAR_SEP, ISLAND_PAD } from "./bar";
+import { Island } from "./island";
+
 // Nerd Font (Material Design) glyphs for the header's git identity, code points verbatim from the
 // Official Nerd Fonts glyphnames.json (never hand-guessed). Repo is md-source_repository (U+F0CCF),
 // Worktree is md-file_tree (U+F0645), branch is md-source_branch (U+F062C). Decorative only: gated
@@ -15,13 +18,8 @@ const REPO_GLYPH = "\u{F0CCF}";
 const WORKTREE_GLYPH = "\u{F0645}";
 const BRANCH_GLYPH = "\u{F062C}";
 
-// A shown glyph occupies a fixed 2-cell box; ` · ` joins the identity and the right-side fields.
+// A shown glyph occupies a fixed 2-cell box.
 const GLYPH_CELLS = 2;
-const SEP = " · ";
-
-// The row's own horizontal inset, on both edges. `available()` budgets against it, so the two must
-// Move together or the line is measured wider than it paints.
-const PADDING = 1;
 
 // Floors so a squeezed line degrades to a readable stub rather than a lone ellipsis, and so a branch
 // With almost no room is dropped outright instead of shown as `…`.
@@ -60,7 +58,10 @@ const rawBranch = () => {
 };
 
 const glyphCells = () => (state.iconsEnabled() ? GLYPH_CELLS : 0);
-const available = () => Math.max(0, state.terminalWidth() - PADDING * 2);
+
+const available = () =>
+  // A rule cell at each edge, and the identity and stats islands' padding.
+  Math.max(0, state.terminalWidth() - BAR_EDGE * 2 - ISLAND_PAD * 4);
 
 // The right-side field that is never truncated: the changed count.
 const tail = () => `${state.gitModel().changed.length} changed`;
@@ -68,7 +69,8 @@ const tail = () => `${state.gitModel().changed.length} changed`;
 // A commit fills the left slot (where identity sits otherwise) and spans the width up to the tail,
 // Truncating with an ellipsis only when the full subject genuinely does not fit.
 const commitSubject = () => {
-  const budget = available() - Bun.stringWidth(tail()) - SEP.length;
+  const budget =
+    available() - Bun.stringWidth(tail()) - Bun.stringWidth(BAR_SEP);
 
   return truncate(state.commitScopeLabel(), Math.max(MIN_SCOPE, budget));
 };
@@ -79,7 +81,11 @@ const scopeText = () => {
   const leftFloor =
     glyphCells() + Math.min(Bun.stringWidth(primary()), MIN_PRIMARY);
 
-  const budget = available() - Bun.stringWidth(tail()) - SEP.length - leftFloor;
+  const budget =
+    available() -
+    Bun.stringWidth(tail()) -
+    Bun.stringWidth(BAR_SEP) -
+    leftFloor;
 
   return truncate(
     scopeLabel(state.scope(), state.emptyTree()),
@@ -87,7 +93,7 @@ const scopeText = () => {
   );
 };
 
-const rightText = () => `${scopeText()}${SEP}${tail()}`;
+const rightText = () => `${scopeText()}${BAR_SEP}${tail()}`;
 
 // The primary name takes whatever the right side leaves, so a long repo or worktree folder name
 // Truncates with an ellipsis instead of pushing the line past the terminal edge.
@@ -101,7 +107,10 @@ const primaryText = () =>
 // Below the floor the whole branch group is dropped rather than shown as a stub.
 const fitBranch = (branch: string) => {
   const leftFixed =
-    glyphCells() + Bun.stringWidth(primaryText()) + SEP.length + glyphCells();
+    glyphCells() +
+    Bun.stringWidth(primaryText()) +
+    Bun.stringWidth(BAR_SEP) +
+    glyphCells();
 
   const budget = available() - Bun.stringWidth(rightText()) - leftFixed;
 
@@ -119,42 +128,47 @@ export const HeaderBar = () => (
     height={1}
     flexDirection="row"
     justifyContent="space-between"
-    paddingLeft={PADDING}
-    paddingRight={PADDING}
-    backgroundColor={theme.colors.surface.base}
+    paddingLeft={BAR_EDGE}
+    paddingRight={BAR_EDGE}
   >
-    <Show
-      when={isCommit()}
-      fallback={
-        <box flexDirection="row">
-          <Show when={state.iconsEnabled()}>
-            <box width={GLYPH_CELLS} overflow="hidden">
-              <text fg={theme.colors.text.muted}>
-                {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
-              </text>
-            </box>
-          </Show>
-          <text fg={theme.colors.text.strong}>{primaryText()}</text>
-          <Show when={branchText()}>
-            {(branch) => (
-              <box flexDirection="row">
-                <text fg={theme.colors.text.secondary}>{SEP}</text>
-                <Show when={state.iconsEnabled()}>
-                  <box width={GLYPH_CELLS} overflow="hidden">
-                    <text fg={theme.colors.text.muted}>{BRANCH_GLYPH}</text>
-                  </box>
-                </Show>
-                <text fg={theme.colors.text.secondary}>{branch()}</text>
+    <Island>
+      <Show
+        when={isCommit()}
+        fallback={
+          <box flexDirection="row">
+            <Show when={state.iconsEnabled()}>
+              <box width={GLYPH_CELLS} overflow="hidden">
+                <text fg={theme.colors.text.muted}>
+                  {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
+                </text>
               </box>
-            )}
-          </Show>
-        </box>
-      }
-    >
-      <text fg={theme.colors.text.secondary}>{commitSubject()}</text>
-    </Show>
-    <text fg={theme.colors.text.secondary}>
-      {isCommit() ? tail() : rightText()}
-    </text>
+            </Show>
+            <text fg={theme.colors.text.secondary}>{primaryText()}</text>
+            <Show when={branchText()}>
+              {(branch) => (
+                <box flexDirection="row">
+                  <text fg={theme.colors.border.unfocused}>{BAR_SEP}</text>
+                  <Show when={state.iconsEnabled()}>
+                    <box width={GLYPH_CELLS} overflow="hidden">
+                      <text fg={theme.colors.text.muted}>{BRANCH_GLYPH}</text>
+                    </box>
+                  </Show>
+                  <text fg={theme.colors.text.muted}>{branch()}</text>
+                </box>
+              )}
+            </Show>
+          </box>
+        }
+      >
+        <text fg={theme.colors.text.muted}>{commitSubject()}</text>
+      </Show>
+    </Island>
+    <Island>
+      <Show when={!isCommit()}>
+        <text fg={theme.colors.text.muted}>{scopeText()}</text>
+        <text fg={theme.colors.border.unfocused}>{BAR_SEP}</text>
+      </Show>
+      <text fg={theme.colors.text.muted}>{tail()}</text>
+    </Island>
   </box>
 );

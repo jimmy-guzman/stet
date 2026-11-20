@@ -12,7 +12,7 @@ const baseInput = {
   activity: undefined,
   alert: undefined,
   foregroundProgress: undefined,
-  guidance: "? help · q quit",
+  guidance: "? help ─ q quit",
   notification: undefined,
   width: 80,
 } satisfies StatusBarModelInput;
@@ -28,14 +28,14 @@ describe("status bar guidance", () => {
     expect(buildStatusBarModel(baseInput)).toEqual({
       category: "guidance",
       kind: "guidance",
-      text: "? help · q quit",
+      text: "? help ─ q quit",
     });
   });
 
   test("guidance renders whatever mode text it is handed", () => {
     expect(
-      buildStatusBarModel({ ...baseInput, guidance: "enter find · esc cancel" })
-    ).toMatchObject({ kind: "guidance", text: "enter find · esc cancel" });
+      buildStatusBarModel({ ...baseInput, guidance: "enter find ─ esc cancel" })
+    ).toMatchObject({ kind: "guidance", text: "enter find ─ esc cancel" });
   });
 
   test("live content displaces guidance, and clearing it restores guidance", () => {
@@ -166,8 +166,9 @@ describe("status bar fitting", () => {
       throw new Error("expected a message");
     }
 
-    // The glyph, its space, and both paddings all come out of the same 30 cells.
-    expect(Bun.stringWidth(`✖ ${model.message}`)).toBeLessThanOrEqual(28);
+    // The glyph, its space, the two edge rule cells, and the island's padding all come out of the
+    // Same 30 cells.
+    expect(Bun.stringWidth(`✖ ${model.message}`)).toBe(26);
     expect(model.message.startsWith("couldn't list")).toBe(true);
   });
 
@@ -187,20 +188,28 @@ describe("status bar fitting", () => {
 
     expect(model.activity.path).toStartWith("…");
     expect(model.activity.path).toEndWith("DiffView.tsx");
-    expect(Bun.stringWidth(`● ${model.activity.path}`)).toBeLessThanOrEqual(38);
+    expect(Bun.stringWidth(`● ${model.activity.path}`)).toBe(36);
   });
 
   // A path cut down to the ellipsis alone names no file, so it has nothing to say that guidance
-  // Does not say better. Five cells is where the budget collapses that far: two go to the row's
-  // Padding and two to the recency dot, leaving one.
+  // Does not say better. Seven cells is where the budget collapses that far: four go to the edge
+  // Rule cells and the island's padding and two to the recency dot, leaving one.
   test("an activity path with no room left yields the row to guidance", () => {
     expect(
       buildStatusBarModel({
         ...baseInput,
         activity: { ...activity, path: "src/components/StatusBar.tsx" },
-        width: 5,
+        width: 7,
       })
     ).toMatchObject({ kind: "guidance" });
+    // One more cell gives the path a character beside the ellipsis, so the activity keeps the row.
+    expect(
+      buildStatusBarModel({
+        ...baseInput,
+        activity: { ...activity, path: "src/components/StatusBar.tsx" },
+        width: 8,
+      })
+    ).toMatchObject({ kind: "ambient" });
   });
 
   test("fit is measured in terminal cells, not string length", () => {
@@ -215,14 +224,14 @@ describe("status bar fitting", () => {
     }
 
     // Each bug is two cells wide but one code point; a length-based budget would overflow the row.
-    expect(Bun.stringWidth(`● ${model.activity.path}`)).toBeLessThanOrEqual(18);
+    expect(Bun.stringWidth(`● ${model.activity.path}`)).toBe(16);
   });
 
   test("guidance itself truncates rather than overflowing a narrow row", () => {
     const model = buildStatusBarModel({ ...baseInput, width: 10 });
 
-    expect(
-      Bun.stringWidth(model.kind === "guidance" ? model.text : "")
-    ).toBeLessThanOrEqual(8);
+    expect(Bun.stringWidth(model.kind === "guidance" ? model.text : "")).toBe(
+      6
+    );
   });
 });

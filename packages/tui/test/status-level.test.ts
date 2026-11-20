@@ -36,21 +36,21 @@ test("an error notice carries the error level", () => {
 test("an idle bar shows guidance", () => {
   expect(state.statusBarModel()).toMatchObject({
     kind: "guidance",
-    text: "? help · q quit",
+    text: "? help ─ q quit",
   });
 });
 
 test("the find modes carry their own guidance", () => {
   state.setFindOpen(true);
   expect(state.statusBarModel()).toMatchObject({
-    text: "enter find · esc cancel",
+    text: "enter find ─ esc cancel",
   });
 
   // Committing the find closes the input and leaves the matches navigable.
   state.setFindOpen(false);
   state.setFindActive(true);
   expect(state.statusBarModel()).toMatchObject({
-    text: "n/N next/prev · esc clear",
+    text: "n/N next/prev ─ esc clear",
   });
 });
 

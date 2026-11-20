@@ -51,7 +51,7 @@ export const TreeRow = (props: {
   </>
 );
 
-const contentWidth = () => state.layout().sidebar.content.width - 3;
+const contentWidth = () => state.layout().sidebar.content.width - 2;
 
 const DirectoryRow = (props: {
   node: DirectoryNode;
@@ -137,7 +137,6 @@ const DirectoryRow = (props: {
       flexDirection="row"
       justifyContent="space-between"
       paddingLeft={1}
-      paddingRight={1}
       backgroundColor={background()}
       onMouseDown={onMouseDown}
     >
@@ -256,7 +255,6 @@ const FileRow = (props: {
       flexDirection="row"
       justifyContent="space-between"
       paddingLeft={1}
-      paddingRight={1}
       backgroundColor={background()}
       onMouseDown={onMouseDown}
     >

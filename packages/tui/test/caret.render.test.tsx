@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { MouseButton, RGBA } from "@opentui/core";
 import { createMockMouse } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
 import { state } from "@/state";
+import { theme } from "@/theme/context";
 
 import {
   createFixtureRepo,
@@ -15,7 +17,92 @@ import {
   seedState,
 } from "./helpers";
 
+const near = (a: number, b: number) => Math.abs(a - b) < 0.01;
+
+const hasBackground = (
+  frame: { lines: { spans: { bg: RGBA }[] }[] },
+  hex: string
+) => {
+  const want = RGBA.fromHex(hex);
+
+  return frame.lines.some((line) =>
+    line.spans.some(
+      (span) =>
+        near(span.bg.r, want.r) &&
+        near(span.bg.g, want.g) &&
+        near(span.bg.b, want.b)
+    )
+  );
+};
+
 describe("word caret", () => {
+  // Neither pane has a frame, so the lit cursor is the focus mark: the viewer paints its caret
+  // Only while it holds focus, as the tree paints its cursor row.
+  test("the caret shows only while the viewer is focused", async () => {
+    const repoRoot = createFixtureRepo("stet-caret-focus-", {
+      "src/a.ts": "const a = 1\n",
+    });
+
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+
+    const {
+      renderer,
+      renderOnce,
+      captureCharFrame,
+      captureSpans,
+      mockInput,
+      mockMouse,
+    } = await testRender(() => <App />, {
+      height: 20,
+      width: 100,
+    });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    const caretShown = () =>
+      hasBackground(captureSpans(), theme.colors.caret.wordBg);
+
+    try {
+      await settleUntil("diff loaded", (frame) => /ln 1:1\b/u.test(frame));
+      expect(state.focusedPane()).toBe("tree");
+      expect(caretShown()).toBe(false);
+
+      mockInput.pressTab();
+      const focused = await settleUntil("caret lit on focus", caretShown);
+      expect(state.focusedPane()).toBe("diff");
+
+      // The find bar and the context menu act on the viewer, so they keep its focus and its caret.
+      mockInput.pressKey("/");
+      await settleUntil("find bar open", () => state.findOpen());
+      expect(caretShown()).toBe(true);
+      mockInput.pressEscape();
+      await settleUntil("find bar closed", () => !state.findOpen());
+
+      const lineRow = focused
+        .split("\n")
+        .findIndex((line) => line.includes("const a = 2"));
+
+      await mockMouse.click(
+        state.layout().viewer.x + 6,
+        lineRow,
+        MouseButton.RIGHT
+      );
+      await settleUntil("menu open", () => state.commandMenuOpen());
+      expect(caretShown()).toBe(true);
+      mockInput.pressEscape();
+      await settleUntil("menu closed", () => !state.commandMenuOpen());
+
+      mockInput.pressTab();
+      await settleUntil("caret hidden on blur", () => !caretShown());
+      expect(state.focusedPane()).toBe("tree");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
   test("h/l hop the caret word to word and wrap across lines, shown as ln L:C", async () => {
     // Two changed lines so the line number distinguishes a wrap; "const a = 1"
     // Has words at columns 1 (const), 7 (a), 11 (1).

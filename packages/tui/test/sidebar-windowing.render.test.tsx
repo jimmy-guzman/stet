@@ -44,7 +44,7 @@ describe("sidebar windowing", () => {
     const sidebarFrame = () =>
       captureCharFrame()
         .split("\n")
-        .map((line) => line.split("││")[0])
+        .map((line) => line.split("│")[0])
         .join("\n");
 
     // Navigate far past the first window; the focused row must stay visible and

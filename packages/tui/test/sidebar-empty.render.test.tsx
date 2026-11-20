@@ -21,7 +21,7 @@ const allScope = { kind: "all", ref: "HEAD" } as const;
 const sidebarOf = (frame: string) =>
   frame
     .split("\n")
-    .map((line) => line.split("││")[0])
+    .map((line) => line.split("│")[0])
     .join("\n");
 
 // A clean repo under the changes-only filter has zero rows. The sidebar must

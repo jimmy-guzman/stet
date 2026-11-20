@@ -12,9 +12,9 @@ import {
 
 import { BinaryPreview } from "./binary-preview";
 import { DiffView } from "./diff/diff-view";
-import { PaneFrame } from "./pane-frame";
+import { emptyStateTone } from "./focus-tone";
 import { SearchPane } from "./search-pane";
-import { Tabs } from "./tabs";
+import { Tabs, titleColor } from "./tabs";
 
 // The caret offset for a 1-based jump column: snap to the word that owns it, else
 // Land on the raw (clamped) offset so a jump into a gap still lands precisely.
@@ -50,9 +50,6 @@ const cursorLabel = () => {
 
   return column === undefined ? `ln ${line}` : `ln ${line}:${column}`;
 };
-
-const focused = () =>
-  state.focusedPane() === "diff" || state.focusedPane() === "search";
 
 const displayedFile = () => {
   const view = state.diffView();
@@ -325,10 +322,10 @@ export const Viewer = () => {
   );
 
   return (
-    <PaneFrame
-      focused={focused()}
+    <box
       width="100%"
       height="100%"
+      flexDirection="column"
       onMouseDown={() => {
         state.setFocusedPane(state.viewerFocus());
       }}
@@ -356,9 +353,7 @@ export const Viewer = () => {
                 <Show
                   when={state.tabItems().some((tab) => !tab.preview)}
                   fallback={
-                    <text fg={theme.colors.text.primary}>
-                      {state.selectedPath() ?? ""}
-                    </text>
+                    <text fg={titleColor()}>{state.selectedPath() ?? ""}</text>
                   }
                 >
                   <Tabs />
@@ -401,7 +396,16 @@ export const Viewer = () => {
               paddingRight={1}
               backgroundColor={theme.colors.surface.panel}
             >
-              <text fg={theme.colors.accent.primary}>{"/ "}</text>
+              {/* The find bar replaces the title row, so its prompt carries the focus mark. */}
+              <text
+                fg={
+                  state.focusedPane() === "diff"
+                    ? theme.colors.accent.primary
+                    : theme.colors.text.muted
+                }
+              >
+                {"/ "}
+              </text>
               <box flexGrow={1}>
                 <input
                   ref={(el: InputRenderable) => {
@@ -437,9 +441,13 @@ export const Viewer = () => {
                 justifyContent="center"
                 alignItems="center"
               >
-                <text fg={theme.colors.text.muted}>nothing to inspect</text>
+                {/* With nothing selected there is no title or caret to mark focus, so this
+                line carries it. */}
+                <text fg={emptyStateTone("diff")}>nothing to inspect</text>
+                {/* An empty list during the deferred load is not yet an empty repository. */}
                 <text fg={theme.colors.text.faint}>
-                  {state.gitModel().repoFiles.length === 0
+                  {state.gitModel().repoFiles.length === 0 &&
+                  !state.repoFilesLoading()
                     ? "this repository has no files yet"
                     : "select a file to inspect"}
                 </text>
@@ -507,6 +515,6 @@ export const Viewer = () => {
           </Show>
         </Match>
       </Switch>
-    </PaneFrame>
+    </box>
   );
 };

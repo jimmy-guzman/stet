@@ -31,6 +31,19 @@ import { refreshTerminalPalette, syncTerminalPalette } from "./theme/system";
 import { worktreeLabel } from "./ui-helpers";
 import { formatUpdateNotice } from "./upgrade/release";
 
+/**
+ * A bar's backdrop: a rule across its row, with a tee where a side-docked divider meets it. The bar's
+ * text paints over it on its own surface, so the bar is the border and costs no row of its own (a
+ * rule in a row of its own always shows a blank strip beside the line, since a glyph fills its cell).
+ */
+const ruleLine = (width: number, tee: string) => {
+  const { junction } = state.layout();
+
+  return junction === undefined
+    ? "─".repeat(width)
+    : `${"─".repeat(junction)}${tee}${"─".repeat(Math.max(0, width - junction - 1))}`;
+};
+
 // Follow the terminal's appearance at runtime: when the OS flips dark/light
 // Mid-session, the renderer emits theme_mode and the reactive theme state
 // Re-themes the UI and re-renders the diff with the new palette.
@@ -188,6 +201,15 @@ export const App = () => {
         width={state.layout().header.width}
         height={state.layout().header.height}
       >
+        <text
+          position="absolute"
+          left={0}
+          top={0}
+          wrapMode="none"
+          fg={theme.colors.border.unfocused}
+        >
+          {ruleLine(state.layout().header.width, "┬")}
+        </text>
         <HeaderBar />
       </box>
       <Show when={state.layout().sidebar.width > 0}>
@@ -223,6 +245,15 @@ export const App = () => {
         width={state.layout().status.width}
         height={state.layout().status.height}
       >
+        <text
+          position="absolute"
+          left={0}
+          top={0}
+          wrapMode="none"
+          fg={theme.colors.border.unfocused}
+        >
+          {ruleLine(state.layout().status.width, "┴")}
+        </text>
         <StatusBar />
       </box>
       <Show when={state.fileComboboxOpen()}>

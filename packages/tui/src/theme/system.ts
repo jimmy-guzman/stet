@@ -80,3 +80,21 @@ export const refreshTerminalPalette = (colors: TerminalColors) => {
     registerTerminalPalette(colors);
   }
 };
+
+/**
+ * Re-reads the palette for an existing `system` theme. App calls it once it listens: a mode flip
+ * during startup cleared OpenTUI's palette cache without refreshing it (no `palette` listener
+ * existed yet), so `system` could still hold the palette from before the flip. A cached palette
+ * comes back as is, and a terminal that reported none at startup still gains no `system`.
+ */
+export const syncTerminalPalette = async (
+  renderer: Pick<CliRenderer, "getPalette">
+) => {
+  try {
+    refreshTerminalPalette(
+      await renderer.getPalette({ size: 16, timeout: PROBE_MS })
+    );
+  } catch {
+    // A terminal that does not answer palette queries keeps whatever `system` it has.
+  }
+};

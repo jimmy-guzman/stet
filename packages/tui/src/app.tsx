@@ -27,7 +27,7 @@ import { exitAfterRestore } from "./shutdown";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { theme } from "./theme/context";
-import { refreshTerminalPalette } from "./theme/system";
+import { refreshTerminalPalette, syncTerminalPalette } from "./theme/system";
 import { worktreeLabel } from "./ui-helpers";
 import { formatUpdateNotice } from "./upgrade/release";
 
@@ -55,7 +55,10 @@ export const App = () => {
   onThemeMode(renderer.themeMode);
   // The renderer re-reads the terminal palette after a mode flip (and on resume)
   // And publishes it here, so `system` follows the terminal's own theme change.
+  // A flip during startup found no listener and left the palette unread, so read
+  // It once now.
   renderer.on("palette", refreshTerminalPalette);
+  void syncTerminalPalette(renderer);
   onCleanup(() => {
     renderer.off("theme_mode", onThemeMode);
     renderer.off("palette", refreshTerminalPalette);

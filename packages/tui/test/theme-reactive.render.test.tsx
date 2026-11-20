@@ -7,7 +7,11 @@ import { render, testRender } from "@opentui/solid";
 import { App } from "@/app";
 import { appearance, setAppearance, setSelection } from "@/theme/active";
 import { ansiFromSlots, paletteTheme } from "@/theme/palette";
-import { registerThemes } from "@/theme/registry";
+import {
+  registerSystemTheme,
+  registerThemes,
+  zedThemeForName,
+} from "@/theme/registry";
 
 import {
   createFixtureRepo,
@@ -99,6 +103,45 @@ describe("runtime appearance follow (#101)", () => {
       await render(() => <App />, renderer);
 
       expect(appearance()).toBe("light");
+    } finally {
+      renderer.destroy();
+    }
+  });
+
+  test("App re-reads the palette of the terminal's system theme when it mounts", async () => {
+    registerSystemTheme(
+      paletteTheme("system", "dark", {
+        ansi: ansiFromSlots([]),
+        background: DARK_BG,
+        foreground: "#eeeeee",
+      })
+    );
+
+    const { renderer } = await createTestRenderer({ height: 24, width: 80 });
+
+    // The test renderer has no terminal to query, so this stands in for a terminal that flipped
+    // to light during startup and now reports its light palette.
+    renderer.getPalette = async () =>
+      await Promise.resolve({
+        cursorColor: null,
+        defaultBackground: LIGHT_BG,
+        defaultForeground: "#111111",
+        highlightBackground: null,
+        highlightForeground: null,
+        mouseBackground: null,
+        mouseForeground: null,
+        palette: Array.from({ length: 16 }, () => "#777777"),
+        tekBackground: null,
+        tekForeground: null,
+      });
+
+    try {
+      await render(() => <App />, renderer);
+      await Bun.sleep(0);
+
+      expect(zedThemeForName("system").style["editor.background"]).toBe(
+        LIGHT_BG
+      );
     } finally {
       renderer.destroy();
     }

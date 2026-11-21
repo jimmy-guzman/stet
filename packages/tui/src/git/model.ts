@@ -86,20 +86,14 @@ export const assembleChanged = (
       ? []
       : parseUntrackedFiles(untrackedOutput);
 
-  const numstat = parseNumstat(numstatOutput);
-  const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]));
-
-  // With diff.autoRefreshIndex off (see `Process`), --name-status reports a stat-only change as
-  // `M`; --numstat compares content and omits it, while every real modification (mode, binary,
-  // symlink, submodule, conflict) keeps a numstat record.
-  const nameStatus = parseNameStatus(nameStatusOutput).filter(
-    (entry) => entry.kind !== "modified" || numstatByPath.has(entry.path)
-  );
+  const nameStatus = parseNameStatus(nameStatusOutput);
 
   const statusByPath = new Map(
     [...nameStatus, ...untracked].map((entry) => [entry.path, entry])
   );
 
+  const numstat = parseNumstat(numstatOutput);
+  const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]));
   const stageByPath = parsePorcelainStatus(porcelainOutput);
   const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()]);
 

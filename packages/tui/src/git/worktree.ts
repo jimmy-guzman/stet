@@ -1,4 +1,5 @@
 import { readFileSync, statSync } from "node:fs";
+import nodePath from "node:path";
 
 import { fileMtime } from "./model";
 
@@ -149,9 +150,10 @@ export const parseWorktreeStatusPaths = (output: string) => {
 
 /**
  * A worktree's git dir, without spawning git: it is `<worktree>/.git` in the main worktree, and in
- * a linked one that `.git` is a file naming the real dir (`<main>/.git/worktrees/<name>`).
+ * a linked one that `.git` is a file naming the real dir (`<main>/.git/worktrees/<name>`). The name
+ * is relative to the worktree when git wrote it under `worktree.useRelativePaths`.
  */
-const gitDirOf = (worktreePath: string): string | undefined => {
+export const gitDirOf = (worktreePath: string): string | undefined => {
   const dotGit = `${worktreePath}/.git`;
 
   try {
@@ -162,7 +164,7 @@ const gitDirOf = (worktreePath: string): string | undefined => {
     const pointer = readFileSync(dotGit, "utf-8").trim();
 
     return pointer.startsWith("gitdir: ")
-      ? pointer.slice("gitdir: ".length)
+      ? nodePath.resolve(worktreePath, pointer.slice("gitdir: ".length))
       : undefined;
   } catch {
     return undefined;

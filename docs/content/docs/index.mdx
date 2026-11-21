@@ -1,6 +1,6 @@
 ---
 title: Getting started
-description: stet is a read-only companion TUI for inspecting an agent's changes from the next terminal pane.
+description: stet is a read-only companion TUI. It shows the changes of a coding agent in the next terminal pane.
 ---
 
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
@@ -16,9 +16,9 @@ import {
 
 ## Introduction
 
-`stet` is a read-only companion TUI for inspecting an agent's changes. The agent runs in one terminal pane; stet sits in the next one and answers the questions you would otherwise open an editor for: what files are in this repo, what changed, and what was touched most recently.
+`stet` is a read-only companion TUI. You use it to inspect the changes that a coding agent makes. The agent runs in one terminal pane, and stet runs in the next pane. stet answers the questions that you otherwise open an editor for: which files are in the repository, what changed, and what changed most recently.
 
-It shows you the repo and the diff. It never reviews, approves, or talks to the agent. You decide what to say next.
+stet shows you the repository and the diff. It does not review the changes, approve them, or talk to the agent. You decide what to tell the agent next.
 
 ![stet showing the repository tree beside a diff of a changed file](/screenshots/stet.png)
 
@@ -28,33 +28,32 @@ It shows you the repo and the diff. It never reviews, approves, or talks to the 
     title="Panes & layout"
     href="/docs/guides/panes-and-layout"
   >
-    Move between the tree and viewer, then resize, dock, and zoom them.
+    Move between the tree and the viewer. Resize, dock, and zoom them.
   </Card>
   <Card
     icon={<FileText />}
     title="Reading files & diffs"
     href="/docs/guides/reading-files-and-diffs"
   >
-    Read any file, view changes as diffs, preview images and binaries, fold by
-    structure, and keep your place across tabs.
+    Read any file, view changes as diffs, and preview images and binary files.
+    Fold code by structure, and keep your place across tabs.
   </Card>
   <Card
     icon={<Search />}
     title="Search & navigation"
     href="/docs/guides/search-and-navigation"
   >
-    Jump to any file, find within the open file, and search the whole repo.
+    Open any file, find text in the open file, and search the whole repository.
   </Card>
   <Card
     icon={<GitBranch />}
     title="Scopes & worktrees"
     href="/docs/guides/scopes-and-worktrees"
   >
-    Choose what the diff compares, and see which worktree an agent is working
-    in.
+    Choose what the diff compares, and see which worktree an agent works in.
   </Card>
   <Card icon={<Palette />} title="Themes" href="/docs/guides/themes">
-    Preview and switch themes live, then make one permanent in your config.
+    Preview and change themes live, then save one in your configuration.
   </Card>
 </Cards>
 
@@ -62,7 +61,7 @@ It shows you the repo and the diff. It never reviews, approves, or talks to the 
 
 <Tabs items={["curl", "npm", "homebrew"]}>
   <Tab value="curl">
-    A standalone binary for macOS and Linux. No runtime needed.
+    A standalone binary for macOS and Linux. It needs no runtime.
 
     ```sh
     curl -fsSL https://stet.jimmy.codes/install | bash
@@ -70,7 +69,7 @@ It shows you the repo and the diff. It never reviews, approves, or talks to the 
 
   </Tab>
   <Tab value="npm">
-    Works with `npm`, `bun`, `pnpm`, and `yarn`. Pulls a prebuilt binary.
+    Works with `npm`, `bun`, `pnpm`, and `yarn`. It installs a prebuilt binary.
 
     ```sh
     npm i -g @jimmy.codes/stet
@@ -84,7 +83,7 @@ It shows you the repo and the diff. It never reviews, approves, or talks to the 
   </Tab>
 </Tabs>
 
-Verify the installation:
+Make sure that stet is installed:
 
 ```sh
 stet --version
@@ -94,7 +93,7 @@ The command prints the installed release number in `X.Y.Z` form.
 
 ## Usage
 
-Run `stet` inside any Git repository. Without arguments, `stet` compares your uncommitted changes with the current commit (`HEAD`). Pass a Git ref, such as a branch, tag, or commit hash, to compare against another point in history.
+Run `stet` in a Git repository. Without arguments, stet compares your uncommitted changes with the current commit (`HEAD`). To compare against a different point in history, pass a Git ref. A Git ref is a name for a commit, such as a branch, a tag, or a commit hash.
 
 ```sh
 stet            # uncommitted changes vs the current commit
@@ -109,26 +108,26 @@ stet --ide    "code {repo} --goto {file}:{line}" # GUI/IDE for the o key
 
 The repository tree opens beside the file viewer. Changed files open as diffs.
 
-A repository with no commits yet has no `HEAD` to compare against, so `stet` compares against the empty tree instead: staged files read as added, and untracked files read as untracked the way they always do. The scope shows `uncommitted vs no commits yet` until the first commit, after which it compares against `HEAD` like any other repository.
+A new repository with no commits has no `HEAD` to compare against. In that case, stet compares against the empty tree. Staged files show as added, and untracked files show as untracked, as usual. Until the first commit, the scope (what the diff compares) shows `uncommitted vs no commits yet`. After the first commit, stet compares against `HEAD`, as in any other repository.
 
 <Callout title="Nerd Font icons">
-  The tree shows a file-type icon next to each file. These are [Nerd
-  Font](https://www.nerdfonts.com/) glyphs and only render with a Nerd Font
-  selected in your terminal; without one they appear as empty boxes, so pass
-  `--no-icons` to fall back to a plain tree.
+  The tree shows a file-type icon next to each file. These icons are [Nerd
+  Font](https://www.nerdfonts.com/) glyphs. They show correctly only when your
+  terminal uses a Nerd Font. Without one, they show as empty boxes. If your
+  terminal has no Nerd Font, pass `--no-icons` to get a plain tree.
 </Callout>
 
-Press `?` at any time to see every keybinding and the legend for the marks in the tree and the gutter, or read the [keybindings reference](/docs/reference/keybindings).
+Press `?` at any time to see each keybinding and the legend for the marks in the tree and the gutter. You can also read the [keybindings reference](/docs/reference/keybindings).
 
 ## Configure it
 
-stet runs with no configuration. When you do want one, you do not have to write it: set things up the way you like them in the app, then press `ctrl-s`.
+stet runs without a configuration file. You do not have to write one by hand. Set up the app the way that you like it, then press `ctrl-s`.
 
-![The status bar confirming ctrl-s saved the changed settings to the config file](/screenshots/save-settings.png)
+![The status bar confirming ctrl-s saved the changed settings to the configuration file](/screenshots/save-settings.png)
 
-That saves the session you already have, the theme, wrap, the sidebar, and the search toggles, to `~/.config/stet/config.jsonc`. Only the settings that differ from the file are written, as targeted edits that keep your comments, and the status bar names what changed.
+`ctrl-s` saves your current session settings to your configuration file, `~/.config/stet/config.jsonc` by default. If only `config.json` exists, stet writes to that file. If `$XDG_CONFIG_HOME` is set, the file is under that folder. The saved settings are the theme, icons, line wrap, the sidebar, the search toggles, and any `--editor` or `--ide` flag. If no file exists and all settings are at their defaults, `ctrl-s` writes no file. To edit the file yourself in that case, create it first. stet writes only the settings that differ from the file. Each write is a small edit that keeps your comments, and the status bar names what changed.
 
-The file is yours to edit too, and it does more than the keys can reach:
+You can also edit the file yourself. The file has more settings than the keys can change:
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -139,7 +138,7 @@ The file is yours to edit too, and it does more than the keys can reach:
 }
 ```
 
-Themes, editors, keybindings, file associations, and icons all live there. The [configuration reference](/docs/reference/configuration) covers every key.
+The file holds themes, editors, keybindings, file associations, and icons. The [configuration reference](/docs/reference/configuration) describes each key.
 
 ## Upgrade
 
@@ -147,12 +146,18 @@ Themes, editors, keybindings, file associations, and icons all live there. The [
 stet upgrade
 ```
 
-Updates stet to the latest release using whichever channel it was installed through: a standalone install re-runs the install script, an `npm` install runs `npm`, and a Homebrew install runs `brew upgrade`. It checks the latest GitHub release first and reports `stet X.Y.Z is already up to date` without running anything when you are current.
+`stet upgrade` updates stet to the latest release through the channel that installed it:
 
-stet also checks for a newer release in the background while it runs, and prints a one-line notice on clean exit when one is available. The check is non-blocking and never interrupts the session.
+- A standalone install runs the install script again.
+- An `npm` install runs `npm`.
+- A Homebrew install runs `brew upgrade`.
+
+First, the command reads the latest release from GitHub. If your version is the same or newer, it prints `stet X.Y.Z is already up to date` and runs nothing. If the request to GitHub fails, the command runs the update anyway.
+
+While stet runs, it also looks for a newer release in the background. If one is available, stet prints a one-line notice when it exits normally. This background request does not block or interrupt the session.
 
 ## Requirements
 
 - `git`
-- a clipboard tool for copy (`y`): `pbcopy` on macOS (built in), or `wl-copy`, `xclip`, or `xsel` on Linux
-- a Nerd Font for the tree's file-type icons (optional; use `--no-icons` without one)
+- A clipboard tool for copy (`y`): `pbcopy` on macOS (built in), or `wl-copy`, `xclip`, or `xsel` on Linux
+- A Nerd Font for the file-type icons in the tree. This is optional. Without one, use `--no-icons`.

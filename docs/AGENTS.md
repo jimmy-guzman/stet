@@ -43,6 +43,7 @@ The mechanics:
 - Keep control-heavy instructions scannable. Use short paragraphs for state and cause, and a compact control/action table when a paragraph would enumerate several keys or fields.
 - Make headings match the section's job. Use "Introduction" for product orientation, action-oriented headings for workflows, and "inspect" only for content that describes inspection.
 - Prefer direct, active, specific prose. Remove promotional adjectives, metaphors that replace behavior, formulaic negative lists, and claims such as "works out of the box" or "sensible defaults" that do not name what happens.
+- Write plain English in the spirit of ASD-STE100: sentences up to 20 words for steps and 25 for explanation, active voice, simple tenses, no semicolons or contractions, and only can, will, and must as modals. Use one term per concept ("configuration", "repository", "folder", "caret" for the position in the viewer, "cursor row" for the highlighted tree row), and define each concept term at its first use on a page. A section with fewer than three sentences of prose joins its neighbor, unless a link targets its heading.
 - Prefer a self-explaining interface over a doc. Before a page explains what the UI shows, ask whether the UI should say it itself: a legend, a label, an actionable empty or error state. A page earns its place for what the UI cannot say, the concepts, the workflow, and the why; it does not exist to translate glyphs the UI could label. The `?` marks legend is the pattern, it closed the interface guide the Coverage list once planned to write.
 
 ### Keeping docs in sync with code
@@ -94,3 +95,15 @@ Not every gap is a page. Per the self-explaining-interface standard above, a gap
 
 - `bun run typecheck` (from `docs/`) runs `fumadocs-mdx && tsc --noEmit`. From the repo root, `bun run docs:check` runs `gen:keys --check` then the same, `bun run docs:build` is the `next build` smoke check, and full-repo format/lint (including `docs/`) is covered by the root `bun run check`.
 - `bun install` at the repo root after any dependency or lockfile change (the workspace uses the hoisted linker).
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
+
+The workspace uses Bun's hoisted linker, so `docs/node_modules` does not exist. The Next.js guides that the block above names are in the repo root, at `node_modules/next/dist/docs/`.

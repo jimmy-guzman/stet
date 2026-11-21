@@ -15,15 +15,15 @@ stet reads its configuration once, at startup, from this file:
 ~/.config/stet/config.jsonc
 ```
 
-If `$XDG_CONFIG_HOME` is set, stet uses it in place of `~/.config`. stet also reads `config.json`. It reads both files as JSONC, which is JSON with comments and trailing commas.
+If `$XDG_CONFIG_HOME` is set, stet uses it in place of `~/.config`. If `config.jsonc` does not exist, stet reads `config.json` in the same folder. It reads either file as JSONC, which is JSON with comments and trailing commas.
 
 <Callout>
   A problem in the configuration never stops stet from starting. An invalid
-  value disables only its own section, and the rest of the configuration still
-  applies. stet shows the problem in a notice. It also reports unknown keys, so
-  a misspelled key does not fail silently. If the file is not valid JSONC, stet
-  cannot read any of it. In that case, stet uses its built-in defaults and
-  reports the parse error in the same way.
+  value affects only its own section, which falls back to its defaults. The rest
+  of the configuration still applies. stet shows the problem in a notice. It
+  also reports unknown keys, so a misspelled key does not fail silently. If the
+  file is not valid JSONC, stet cannot read any of it. In that case, stet uses
+  its built-in defaults and reports the parse error in the same way.
 </Callout>
 
 ## Features
@@ -184,7 +184,7 @@ This example highlights `.lua` files as Lua and gives them their own icon:
 ```jsonc title="~/.config/stet/config.jsonc"
 {
   "icons": {
-    "glyphs": { "lua": "" },
+    "glyphs": { "lua": "\ue620" },
   },
   "files": {
     "lua": { "extensions": ["lua"], "syntax": "lua", "icon": "lua" },

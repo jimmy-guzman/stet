@@ -23,7 +23,7 @@ A terminal cannot show an image. Instead of the raw bytes, stet shows a card wit
 
 Press `z` in the viewer to fold the block at the caret (the current position in the viewer). The folded block shows as a `▸ N lines folded` marker. Code folds by indentation, and Markdown folds by heading section.
 
-A diff also hides the unchanged lines between changes in a gap row, `⋯ N unmodified lines`. This includes the lines after the last change. Press `z` on a gap to show its unchanged lines, highlighted like the rest of the file. Press `z` on its `hide` marker to collapse it again. You can also click any marker to toggle it.
+A diff also hides the unchanged lines between changes in a gap row, `⋯ N unmodified lines`. This includes the lines after the last change. If the caret is not in a block that can fold, `z` expands the gap nearest to the caret. The gap then shows its unchanged lines, highlighted like the rest of the file, below a `hide` marker. Press `z` again to collapse it. You can also click any marker to toggle it.
 
 A gap expands only in a diff that stet computes itself. For some files, stet uses the diff from Git instead. An example is a file with CRLF line endings on only one side. In that diff, the gap stays a plain `⋯ N unmodified lines` row.
 

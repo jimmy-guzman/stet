@@ -75,7 +75,7 @@ const WORKTREE_BRANCH = "feat/tidy-layout";
 /**
  * A throwaway config dir that every shot reads: stet reads `XDG_CONFIG_HOME`, so pointing each tape
  * here pins the theme and gives the context menu a reachable binding without reading or touching
- * the user's real config. It is rewritten before every shot, because `ctrl-s` makes one of them a
+ * the user's real stet config. It is rewritten before every shot, because `ctrl-s` makes one of them a
  * writer.
  */
 const SCREENSHOT_CONFIG_DIR = path.resolve(tmpdir(), "stet-screenshots-config");

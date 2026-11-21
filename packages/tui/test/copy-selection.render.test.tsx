@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { createMockMouse } from "@opentui/core/testing";
@@ -114,7 +114,6 @@ describe("line selection copy", () => {
     } finally {
       state.copySelection = realCopySelection;
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -185,7 +184,6 @@ describe("line selection copy", () => {
       });
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -255,7 +253,6 @@ describe("line selection copy", () => {
       expect(state.viewerScrollTop()).toBe(releasedAt);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -347,7 +344,6 @@ describe("line selection copy", () => {
       expect(state.selectionRange()).toEqual([1, 3]);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -391,7 +387,6 @@ describe("line selection copy", () => {
       expect(state.selectionRange()).toBeUndefined();
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -440,7 +435,6 @@ describe("line selection copy", () => {
       );
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

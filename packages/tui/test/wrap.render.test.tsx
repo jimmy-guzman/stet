@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
@@ -49,7 +48,6 @@ describe("word wrap toggle", () => {
       expect(scrolled).toContain("wrap off");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

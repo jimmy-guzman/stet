@@ -25,22 +25,18 @@ const revParse = (repo: string, ref: string) =>
 test("Git.loadModel reports a modified file with churn counts", async () => {
   const repo = createFixtureRepo("git-service-modified-", { "a.txt": "one\n" });
 
-  try {
-    writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
+  writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
 
-    const model = await Effect.runPromise(
-      Git.pipe(
-        Effect.flatMap((git) => git.loadModel(repo, allScope)),
-        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
-      )
-    );
+  const model = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.loadModel(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
 
-    const file = model.changed.find((entry) => entry.path === "a.txt");
-    expect(file?.kind).toBe("modified");
-    expect(file?.additions).toBe(1);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  const file = model.changed.find((entry) => entry.path === "a.txt");
+  expect(file?.kind).toBe("modified");
+  expect(file?.additions).toBe(1);
 });
 
 test("Git.changedFiles includes an untracked file", async () => {
@@ -48,22 +44,18 @@ test("Git.changedFiles includes an untracked file", async () => {
     "tracked.txt": "x\n",
   });
 
-  try {
-    writeFileSync(path.join(repo, "new.txt"), "fresh\n");
+  writeFileSync(path.join(repo, "new.txt"), "fresh\n");
 
-    const result = await Effect.runPromise(
-      Git.pipe(
-        Effect.flatMap((git) => git.changedFiles(repo, allScope)),
-        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
-      )
-    );
+  const result = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.changedFiles(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
 
-    expect(result.changed.find((entry) => entry.path === "new.txt")?.kind).toBe(
-      "untracked"
-    );
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(result.changed.find((entry) => entry.path === "new.txt")?.kind).toBe(
+    "untracked"
+  );
 });
 
 // The caller substitutes this repository's empty tree; the service only reports that there is no
@@ -73,58 +65,46 @@ test("Git.parentRef reports no parent on a root commit", async () => {
     "a.txt": "one\n",
   });
 
-  try {
-    const parent = await Effect.runPromise(
-      Git.pipe(
-        Effect.flatMap((git) => git.parentRef(repo)),
-        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
-      )
-    );
+  const parent = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.parentRef(repo)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
 
-    expect(parent).toBeUndefined();
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(parent).toBeUndefined();
 });
 
 test("Git.parentRef returns the prior commit's SHA when one exists", async () => {
   const repo = createFixtureRepo("git-service-parent-", { "a.txt": "one\n" });
 
-  try {
-    const first = revParse(repo, "HEAD");
-    writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
-    runGit(repo, ["commit", "-am", "second"]);
+  const first = revParse(repo, "HEAD");
+  writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
+  runGit(repo, ["commit", "-am", "second"]);
 
-    const parent = await Effect.runPromise(
-      Git.pipe(
-        Effect.flatMap((git) => git.parentRef(repo)),
-        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
-      )
-    );
+  const parent = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.parentRef(repo)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
 
-    expect(parent).toBe(first);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(parent).toBe(first);
 });
 
 test("Git.headRef returns the current HEAD SHA", async () => {
   const repo = createFixtureRepo("git-service-headref-", { "a.txt": "one\n" });
 
-  try {
-    const head = revParse(repo, "HEAD");
+  const head = revParse(repo, "HEAD");
 
-    const resolved = await Effect.runPromise(
-      Git.pipe(
-        Effect.flatMap((git) => git.headRef(repo)),
-        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
-      )
-    );
+  const resolved = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.headRef(repo)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
 
-    expect(resolved).toBe(head);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(resolved).toBe(head);
 });
 
 // The signal selectScope relies on to block last-commit when HEAD is unborn: a real repo always
@@ -211,22 +191,18 @@ test("Git.loadModel against the empty tree lists a commitless repo's tracked fil
 test("Git.repoContext resolves the repo root, main worktree, and empty tree", async () => {
   const repo = createFixtureRepo("git-service-context-", { "a.txt": "one\n" });
 
-  try {
-    const context = await Effect.runPromise(
-      Git.pipe(
-        Effect.flatMap((git) => git.repoContext(repo)),
-        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
-      )
-    );
+  const context = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.repoContext(repo)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
 
-    expect(context).toEqual({
-      emptyTree: emptyTreeForFormat("sha1"),
-      mainWorktreePath: repo,
-      repoRoot: repo,
-    });
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(context).toEqual({
+    emptyTree: emptyTreeForFormat("sha1"),
+    mainWorktreePath: repo,
+    repoRoot: repo,
+  });
 });
 
 test("Git.repoContext names the directory when it is not a repository", async () => {
@@ -273,43 +249,39 @@ test("Git.repoContext reports a bare repository as having no working tree", asyn
 test("Git.refIsDiffable separates the sides git diff can take", async () => {
   const repo = createFixtureRepo("git-service-diffable-", { "a.txt": "one\n" });
 
-  try {
-    const blob = execFileSync("git", ["rev-parse", "HEAD:a.txt"], {
-      cwd: repo,
-      encoding: "utf-8",
-      env: stripGitEnv(process.env),
-    }).trim();
+  const blob = execFileSync("git", ["rev-parse", "HEAD:a.txt"], {
+    cwd: repo,
+    encoding: "utf-8",
+    env: stripGitEnv(process.env),
+  }).trim();
 
-    runGit(repo, ["branch", "other"]);
+  runGit(repo, ["branch", "other"]);
 
-    const answers = await Effect.runPromise(
-      Git.pipe(
-        Effect.flatMap((git) =>
-          Effect.all(
-            [
-              "HEAD",
-              "other",
-              "other...HEAD",
-              "nosuchref",
-              blob,
-              "HEAD@{500}",
-            ].map((ref) => git.refIsDiffable(repo, ref))
-          )
-        ),
-        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
-      )
-    );
+  const answers = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) =>
+        Effect.all(
+          [
+            "HEAD",
+            "other",
+            "other...HEAD",
+            "nosuchref",
+            blob,
+            "HEAD@{500}",
+          ].map((ref) => git.refIsDiffable(repo, ref))
+        )
+      ),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
 
-    // A range is a whole `git diff` takes and `rev-parse` cannot resolve, so it is exempt rather
-    // Than rejected: unsure never becomes an accusation.
-    expect(answers.slice(0, 3)).toEqual([true, true, true]);
-    // A blob resolves as an object but has no tree, and a reflog index past the end is a revision
-    // Git refuses to evaluate; `git diff` rejects both (verified: exit 129 and 128), so naming them
-    // Is right where quoting stet's own invocation would not be.
-    expect(answers.slice(3)).toEqual([false, false, false]);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  // A range is a whole `git diff` takes and `rev-parse` cannot resolve, so it is exempt rather
+  // Than rejected: unsure never becomes an accusation.
+  expect(answers.slice(0, 3)).toEqual([true, true, true]);
+  // A blob resolves as an object but has no tree, and a reflog index past the end is a revision
+  // Git refuses to evaluate; `git diff` rejects both (verified: exit 129 and 128), so naming them
+  // Is right where quoting stet's own invocation would not be.
+  expect(answers.slice(3)).toEqual([false, false, false]);
 });
 
 // GIT_DIR overrides cwd-based repo discovery for any git invocation that inherits it, even
@@ -353,7 +325,6 @@ test("an inherited GIT_DIR silently redirects an unsanitized git invocation", ()
     // Commit landed in `decoy` because GIT_DIR was inherited unsanitized.
     expect(revParse(decoy, "HEAD")).not.toBe(before);
   } finally {
-    rmSync(decoy, { force: true, recursive: true });
     rmSync(other, { force: true, recursive: true });
   }
 });
@@ -388,7 +359,6 @@ test("stripGitEnv neutralizes that same inherited GIT_DIR", () => {
     expect(revParse(decoy, "HEAD")).toBe(before);
     expect(revParse(other, "HEAD")).not.toBe("");
   } finally {
-    rmSync(decoy, { force: true, recursive: true });
     rmSync(other, { force: true, recursive: true });
   }
 });

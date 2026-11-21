@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { testRender } from "@opentui/solid";
@@ -73,7 +73,6 @@ describe("gap expansion", () => {
       expect(expanded).toMatch(/ln 20:\d/u);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

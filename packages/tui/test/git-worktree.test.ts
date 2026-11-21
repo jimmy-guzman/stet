@@ -157,30 +157,26 @@ describe("summarizeWorktree", () => {
       "a.ts": "const a = 1\n",
     });
 
-    try {
-      writeFileSync(path.join(repoRoot, "old.ts"), "const old = 1\n");
-      writeFileSync(path.join(repoRoot, "new.ts"), "const fresh = 1\n");
-      utimesSync(
-        path.join(repoRoot, "old.ts"),
-        new Date(2_000_000_000_000),
-        new Date(2_000_000_000_000)
-      );
-      utimesSync(
-        path.join(repoRoot, "new.ts"),
-        new Date(2_100_000_000_000),
-        new Date(2_100_000_000_000)
-      );
+    writeFileSync(path.join(repoRoot, "old.ts"), "const old = 1\n");
+    writeFileSync(path.join(repoRoot, "new.ts"), "const fresh = 1\n");
+    utimesSync(
+      path.join(repoRoot, "old.ts"),
+      new Date(2_000_000_000_000),
+      new Date(2_000_000_000_000)
+    );
+    utimesSync(
+      path.join(repoRoot, "new.ts"),
+      new Date(2_100_000_000_000),
+      new Date(2_100_000_000_000)
+    );
 
-      const result = summarizeWorktree(
-        repoRoot,
-        "?? old.ts\0?? new.ts\0",
-        undefined
-      );
+    const result = summarizeWorktree(
+      repoRoot,
+      "?? old.ts\0?? new.ts\0",
+      undefined
+    );
 
-      expect(result.lastActivityAt).toBe(2_100_000_000_000);
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
+    expect(result.lastActivityAt).toBe(2_100_000_000_000);
   });
 
   // The bug this whole model exists to fix: edits alone go to zero the moment an agent commits,
@@ -195,26 +191,22 @@ describe("summarizeWorktree", () => {
       "a.ts": "const a = 1\n",
     });
 
-    try {
-      writeFileSync(path.join(repoRoot, "edit.ts"), "const edited = 1\n");
-      utimesSync(
-        path.join(repoRoot, "edit.ts"),
-        new Date(2_000_000_000_000),
-        new Date(2_000_000_000_000)
-      );
+    writeFileSync(path.join(repoRoot, "edit.ts"), "const edited = 1\n");
+    utimesSync(
+      path.join(repoRoot, "edit.ts"),
+      new Date(2_000_000_000_000),
+      new Date(2_000_000_000_000)
+    );
 
-      // A commit newer than the edit wins, and an older one loses to it.
-      expect(
-        summarizeWorktree(repoRoot, "?? edit.ts\0", 2_100_000_000_000)
-          .lastActivityAt
-      ).toBe(2_100_000_000_000);
-      expect(
-        summarizeWorktree(repoRoot, "?? edit.ts\0", 1_000_000_000_000)
-          .lastActivityAt
-      ).toBe(2_000_000_000_000);
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
+    // A commit newer than the edit wins, and an older one loses to it.
+    expect(
+      summarizeWorktree(repoRoot, "?? edit.ts\0", 2_100_000_000_000)
+        .lastActivityAt
+    ).toBe(2_100_000_000_000);
+    expect(
+      summarizeWorktree(repoRoot, "?? edit.ts\0", 1_000_000_000_000)
+        .lastActivityAt
+    ).toBe(2_000_000_000_000);
   });
 
   test("reads the reflog, so a checkout or rebase counts even with nothing uncommitted", () => {
@@ -222,14 +214,10 @@ describe("summarizeWorktree", () => {
       "a.ts": "const a = 1\n",
     });
 
-    try {
-      // The fixture's own commit wrote logs/HEAD moments ago; no commit time is passed, so the
-      // Reflog is the only signal left and it must still register the worktree as freshly touched.
-      const result = summarizeWorktree(repoRoot, "", undefined);
-      expect(result.lastActivityAt).toBeGreaterThan(Date.now() - 60_000);
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
+    // The fixture's own commit wrote logs/HEAD moments ago; no commit time is passed, so the
+    // Reflog is the only signal left and it must still register the worktree as freshly touched.
+    const result = summarizeWorktree(repoRoot, "", undefined);
+    expect(result.lastActivityAt).toBeGreaterThan(Date.now() - 60_000);
   });
 
   test("reports no activity when there is nothing to read at all", () => {
@@ -302,26 +290,22 @@ describe("worktrees in a fixture repo", () => {
       "a.ts": "const a = 1\n",
     });
 
-    try {
-      runGit(repoRoot, [
-        "worktree",
-        "add",
-        "-b",
-        "side",
-        path.join(repoRoot, ".wt"),
-      ]);
-      const worktrees = await loadWorktrees(repoRoot);
-      expect(worktrees).toHaveLength(2);
-      expect(worktrees[1]).toMatchObject({
-        bare: false,
-        branch: "side",
-        detached: false,
-      });
-      expect(worktrees[1]?.path.endsWith(".wt")).toBe(true);
-      expect(worktrees[0]?.branch).toBeDefined();
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
+    runGit(repoRoot, [
+      "worktree",
+      "add",
+      "-b",
+      "side",
+      path.join(repoRoot, ".wt"),
+    ]);
+    const worktrees = await loadWorktrees(repoRoot);
+    expect(worktrees).toHaveLength(2);
+    expect(worktrees[1]).toMatchObject({
+      bare: false,
+      branch: "side",
+      detached: false,
+    });
+    expect(worktrees[1]?.path.endsWith(".wt")).toBe(true);
+    expect(worktrees[0]?.branch).toBeDefined();
   });
 
   test("summarizes every worktree, and skips one whose directory is gone", async () => {
@@ -350,7 +334,6 @@ describe("worktrees in a fixture repo", () => {
         expect(entry.lastActivityAt).toBeGreaterThan(Date.now() - 60_000);
       }
     } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
       rmSync(linkedRoot, { force: true, recursive: true });
     }
   });
@@ -392,7 +375,6 @@ describe("worktrees in a fixture repo", () => {
         byPath.get(committedRoot)?.lastActivityAt ?? 0
       );
     } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
       rmSync(staleRoot, { force: true, recursive: true });
       rmSync(committedRoot, { force: true, recursive: true });
     }

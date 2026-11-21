@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
@@ -67,7 +66,6 @@ describe("quit confirm", () => {
       expect(dismissed).toContain("? help ─ q quit");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   });
 
@@ -125,7 +123,6 @@ describe("quit confirm", () => {
       expect(state.selectedPath()).toBe("src/a.ts");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   });
 });

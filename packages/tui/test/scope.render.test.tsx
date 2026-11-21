@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { testRender } from "@opentui/solid";
@@ -53,7 +53,6 @@ describe("scope switching", () => {
       expect(menu).toContain("commits");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -110,7 +109,6 @@ describe("scope switching", () => {
       expect(after).not.toContain("+1 -1");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -160,7 +158,6 @@ describe("scope switching", () => {
       expect(closed).not.toContain("since session start");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -212,7 +209,6 @@ describe("scope switching", () => {
       expect(after).toContain("+1 -1");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -265,7 +261,6 @@ describe("scope switching", () => {
       expect(after).toContain("+1 -1");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });
@@ -294,40 +289,36 @@ test("a root commit holds its last-commit scope across refresh drains", async ()
     ref: emptyTreeForFormat("sha1"),
   } as const;
 
+  seedState(await loadModel(repoRoot, scope), scope);
+
+  const { renderer, renderOnce, captureCharFrame } = await testRender(
+    () => <App />,
+    {
+      height: 24,
+      width: 100,
+    }
+  );
+
+  const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
   try {
-    seedState(await loadModel(repoRoot, scope), scope);
-
-    const { renderer, renderOnce, captureCharFrame } = await testRender(
-      () => <App />,
-      {
-        height: 24,
-        width: 100,
-      }
+    await settleUntil("the root commit renders as all-added", (frame) =>
+      frame.includes("+3 -0")
     );
+    const before = state.scope();
 
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-
-    try {
-      await settleUntil("the root commit renders as all-added", (frame) =>
-        frame.includes("+3 -0")
+    // Two drains, so a scope re-set has to survive being wrong twice rather than once.
+    for (const branch of ["drain-one", "drain-two"]) {
+      runGit(repoRoot, ["branch", "-m", branch]);
+      // oxlint-disable-next-line no-await-in-loop -- each drain must land before the next rename
+      await settleUntil(`the drain that picked up ${branch}`, (frame) =>
+        frame.includes(branch)
       );
-      const before = state.scope();
-
-      // Two drains, so a scope re-set has to survive being wrong twice rather than once.
-      for (const branch of ["drain-one", "drain-two"]) {
-        runGit(repoRoot, ["branch", "-m", branch]);
-        // oxlint-disable-next-line no-await-in-loop -- each drain must land before the next rename
-        await settleUntil(`the drain that picked up ${branch}`, (frame) =>
-          frame.includes(branch)
-        );
-        // Identity, not equality: a re-set carrying the same ref is still a new object, and a new
-        // Object is what re-keys the diff pipeline.
-        expect(state.scope()).toBe(before);
-      }
-    } finally {
-      renderer.destroy();
+      // Identity, not equality: a re-set carrying the same ref is still a new object, and a new
+      // Object is what re-keys the diff pipeline.
+      expect(state.scope()).toBe(before);
     }
   } finally {
-    rmSync(repoRoot, { force: true, recursive: true });
+    renderer.destroy();
   }
 }, 20_000);

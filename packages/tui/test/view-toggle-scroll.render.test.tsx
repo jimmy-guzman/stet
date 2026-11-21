@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { ScrollBoxRenderable } from "@opentui/core";
@@ -120,7 +120,6 @@ describe("view toggle scroll", () => {
       expect(box.scrollTop).toBeGreaterThan(50);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

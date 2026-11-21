@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { testRender } from "@opentui/solid";
@@ -75,7 +75,6 @@ describe("status bar changed-file cue", () => {
       expect(dot).toBe(true);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -115,7 +114,6 @@ describe("status bar changed-file cue", () => {
       expect(statusLine).not.toContain("? help ─ q quit");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -187,7 +185,6 @@ describe("status bar changed-file cue", () => {
       expect(statusRow(restored)).not.toContain("StatusBar.tsx");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

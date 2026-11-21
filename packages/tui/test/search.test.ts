@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Effect, Layer } from "effect";
@@ -171,19 +171,15 @@ test("Git.search finds tracked and untracked content repo-wide", async () => {
     "src/a.ts": "const needle = 1\n",
   });
 
-  try {
-    writeFileSync(path.join(repo, "src", "b.ts"), "return needle\n");
+  writeFileSync(path.join(repo, "src", "b.ts"), "return needle\n");
 
-    const matches = await runSearch(repo, "needle", undefined);
+  const matches = await runSearch(repo, "needle", undefined);
 
-    expect(matches.map((match) => match.path).toSorted()).toEqual([
-      "src/a.ts",
-      "src/b.ts",
-    ]);
-    expect(matches.every((match) => match.column > 0)).toBe(true);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(matches.map((match) => match.path).toSorted()).toEqual([
+    "src/a.ts",
+    "src/b.ts",
+  ]);
+  expect(matches.every((match) => match.column > 0)).toBe(true);
 });
 
 test("Git.search limits to the changed pathspec and is smart-case", async () => {
@@ -192,15 +188,11 @@ test("Git.search limits to the changed pathspec and is smart-case", async () => 
     "src/c.ts": "const needle = 2\n",
   });
 
-  try {
-    const changed = await runSearch(repo, "needle", ["src/a.ts"]);
-    expect(changed.map((match) => match.path)).toEqual(["src/a.ts"]);
+  const changed = await runSearch(repo, "needle", ["src/a.ts"]);
+  expect(changed.map((match) => match.path)).toEqual(["src/a.ts"]);
 
-    const cased = await runSearch(repo, "NEEDLE", undefined);
-    expect(cased).toEqual([]);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  const cased = await runSearch(repo, "NEEDLE", undefined);
+  expect(cased).toEqual([]);
 });
 
 test("Git.search subtracts exclude pathspecs, including an exclude-only list", async () => {
@@ -209,22 +201,16 @@ test("Git.search subtracts exclude pathspecs, including an exclude-only list", a
     "src/a.ts": "const needle = 2\n",
   });
 
-  try {
-    const mixed = await runSearch(repo, "needle", [
-      "src/",
-      ":(exclude)*.test.ts",
-    ]);
+  const mixed = await runSearch(repo, "needle", [
+    "src/",
+    ":(exclude)*.test.ts",
+  ]);
 
-    expect(mixed.map((match) => match.path)).toEqual(["src/a.ts"]);
+  expect(mixed.map((match) => match.path)).toEqual(["src/a.ts"]);
 
-    const excludeOnly = await runSearch(repo, "needle", [
-      ":(exclude)*.test.ts",
-    ]);
+  const excludeOnly = await runSearch(repo, "needle", [":(exclude)*.test.ts"]);
 
-    expect(excludeOnly.map((match) => match.path)).toEqual(["src/a.ts"]);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(excludeOnly.map((match) => match.path)).toEqual(["src/a.ts"]);
 });
 
 test("Git.search matches extended regex when the toggle is on", async () => {
@@ -232,14 +218,10 @@ test("Git.search matches extended regex when the toggle is on", async () => {
     "src/a.ts": "const needle = 1\nconst noodle = 2\n",
   });
 
-  try {
-    const matches = await runSearch(repo, "n(ee|oo)dle", undefined, {
-      caseSensitive: false,
-      regex: true,
-    });
+  const matches = await runSearch(repo, "n(ee|oo)dle", undefined, {
+    caseSensitive: false,
+    regex: true,
+  });
 
-    expect(matches.map((match) => match.line)).toEqual([1, 2]);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(matches.map((match) => match.line)).toEqual([1, 2]);
 });

@@ -95,7 +95,6 @@ describe("worktree picker", () => {
       expect(switched).toContain("uncommitted vs HEAD");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -153,7 +152,6 @@ describe("worktree picker", () => {
       }
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
       rmSync(linkedRoot, { force: true, recursive: true });
     }
   }, 20_000);
@@ -209,7 +207,6 @@ describe("worktree picker", () => {
       expect(onLinked).toContain(linkedName);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
       rmSync(linkedRoot, { force: true, recursive: true });
     }
   }, 20_000);
@@ -278,7 +275,6 @@ describe("worktree picker", () => {
       expect(ageStarts.size).toBe(1);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
 
       for (const root of [busyRoot, lockedRoot, quietRoot]) {
         rmSync(root, { force: true, recursive: true });
@@ -346,7 +342,6 @@ describe("worktree picker", () => {
       expect(empty).toContain("no matches");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

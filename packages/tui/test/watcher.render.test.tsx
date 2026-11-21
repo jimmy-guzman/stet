@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { testRender } from "@opentui/solid";
@@ -22,41 +22,37 @@ const allScope = { kind: "all", ref: "HEAD" } as const;
 test("the tree reflects an on-disk edit", async () => {
   const repo = createFixtureRepo("watcher-render-", { "watched.txt": "one\n" });
 
-  try {
-    seedState(await loadModel(repo, allScope), allScope);
+  seedState(await loadModel(repo, allScope), allScope);
 
-    const { renderer, renderOnce, captureCharFrame } = await testRender(
-      () => <App />,
-      {
-        height: 24,
-        width: 100,
-      }
-    );
+  const { renderer, renderOnce, captureCharFrame } = await testRender(
+    () => <App />,
+    {
+      height: 24,
+      width: 100,
+    }
+  );
 
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+  const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-    const before = await settleUntil("clean tree", (frame) =>
-      frame.includes("watched.txt")
-    );
+  const before = await settleUntil("clean tree", (frame) =>
+    frame.includes("watched.txt")
+  );
 
-    expect(before).not.toContain("+1 -0");
+  expect(before).not.toContain("+1 -0");
 
-    // Let the fs.watch subscription arm so the watcher catches the edit on the
-    // Fast path; if it still misses, the safety poll backstops within the window.
-    await Bun.sleep(200);
-    writeFileSync(path.join(repo, "watched.txt"), "one\ntwo\n");
+  // Let the fs.watch subscription arm so the watcher catches the edit on the
+  // Fast path; if it still misses, the safety poll backstops within the window.
+  await Bun.sleep(200);
+  writeFileSync(path.join(repo, "watched.txt"), "one\ntwo\n");
 
-    const after = await settleUntil(
-      "churn badge after edit",
-      (frame) => frame.includes("+1 -0"),
-      1,
-      400
-    );
+  const after = await settleUntil(
+    "churn badge after edit",
+    (frame) => frame.includes("+1 -0"),
+    1,
+    400
+  );
 
-    expect(after).toContain("watched.txt");
+  expect(after).toContain("watched.txt");
 
-    renderer.destroy();
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  renderer.destroy();
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { testRender } from "@opentui/solid";
@@ -43,6 +43,5 @@ test("a repo name wider than the header truncates and keeps the changed count", 
     expect(header).toContain("…");
   } finally {
     renderer.destroy();
-    rmSync(repoRoot, { force: true, recursive: true });
   }
 }, 20_000);

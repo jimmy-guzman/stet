@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { MouseButton } from "@opentui/core";
@@ -78,7 +78,6 @@ describe("context command menu", () => {
       expect(frame).toContain("↑↓ navigate");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -124,7 +123,6 @@ describe("context command menu", () => {
       expect(frame).toContain("↑↓ navigate");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -177,7 +175,6 @@ describe("context command menu", () => {
       expect(state.sidebarOpen()).toBe(before);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -220,7 +217,6 @@ describe("context command menu", () => {
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -268,7 +264,6 @@ describe("context command menu", () => {
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -309,7 +304,6 @@ describe("context command menu", () => {
       expect(active?.preview).toBe(false);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -366,7 +360,6 @@ describe("context command menu", () => {
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

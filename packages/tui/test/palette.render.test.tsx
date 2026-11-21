@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
@@ -84,7 +83,6 @@ describe("go-to-file palette", () => {
       expect(after).not.toContain("go to file");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -128,7 +126,6 @@ describe("go-to-file palette", () => {
       expect(results).toContain("…");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

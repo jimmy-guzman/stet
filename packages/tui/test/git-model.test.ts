@@ -295,24 +295,20 @@ describe("loadModel in a fixture repo", () => {
       "a.ts": "const a = 1\n",
     });
 
-    try {
-      symlinkSync("/nonexistent-target", path.join(repoRoot, "broken-link"));
-      const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-      // Git stores the link's target path as its content, so it counts as 1 addition
-      expect(loaded.changedByPath.get("broken-link")).toMatchObject({
-        additions: 1,
-        binary: false,
-        kind: "untracked",
-      });
-      expect(
-        loaded.repoFiles.find((repoFile) => repoFile.path === "broken-link")
-      ).toMatchObject({
-        symlink: true,
-        tracked: false,
-      });
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
+    symlinkSync("/nonexistent-target", path.join(repoRoot, "broken-link"));
+    const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    // Git stores the link's target path as its content, so it counts as 1 addition
+    expect(loaded.changedByPath.get("broken-link")).toMatchObject({
+      additions: 1,
+      binary: false,
+      kind: "untracked",
+    });
+    expect(
+      loaded.repoFiles.find((repoFile) => repoFile.path === "broken-link")
+    ).toMatchObject({
+      symlink: true,
+      tracked: false,
+    });
   });
 
   test("flags a tracked symlink from its git mode", async () => {
@@ -320,27 +316,23 @@ describe("loadModel in a fixture repo", () => {
       "target.ts": "const a = 1\n",
     });
 
-    try {
-      symlinkSync("target.ts", path.join(repoRoot, "link.ts"));
-      runGit(repoRoot, ["add", "link.ts"]);
-      runGit(repoRoot, ["commit", "-m", "add link"]);
-      const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    symlinkSync("target.ts", path.join(repoRoot, "link.ts"));
+    runGit(repoRoot, ["add", "link.ts"]);
+    runGit(repoRoot, ["commit", "-m", "add link"]);
+    const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
 
-      expect(
-        loaded.repoFiles.find((repoFile) => repoFile.path === "link.ts")
-      ).toMatchObject({
-        symlink: true,
-        tracked: true,
-      });
-      expect(
-        loaded.repoFiles.find((repoFile) => repoFile.path === "target.ts")
-      ).toMatchObject({
-        symlink: false,
-        tracked: true,
-      });
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
+    expect(
+      loaded.repoFiles.find((repoFile) => repoFile.path === "link.ts")
+    ).toMatchObject({
+      symlink: true,
+      tracked: true,
+    });
+    expect(
+      loaded.repoFiles.find((repoFile) => repoFile.path === "target.ts")
+    ).toMatchObject({
+      symlink: false,
+      tracked: true,
+    });
   });
 
   test("re-resolves an untracked file's symlink flag when its type flips", async () => {
@@ -348,28 +340,24 @@ describe("loadModel in a fixture repo", () => {
       "a.ts": "const a = 1\n",
     });
 
-    try {
-      // Same path and identical git output both times, so only the on-disk type
-      // Changes: the repo-file cache must not mask the flip behind a stale flag.
-      writeFileSync(path.join(repoRoot, "link"), "plain\n");
-      const before = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-      expect(
-        before.repoFiles.find((repoFile) => repoFile.path === "link")
-      ).toMatchObject({
-        symlink: false,
-      });
+    // Same path and identical git output both times, so only the on-disk type
+    // Changes: the repo-file cache must not mask the flip behind a stale flag.
+    writeFileSync(path.join(repoRoot, "link"), "plain\n");
+    const before = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    expect(
+      before.repoFiles.find((repoFile) => repoFile.path === "link")
+    ).toMatchObject({
+      symlink: false,
+    });
 
-      rmSync(path.join(repoRoot, "link"));
-      symlinkSync("a.ts", path.join(repoRoot, "link"));
-      const after = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-      expect(
-        after.repoFiles.find((repoFile) => repoFile.path === "link")
-      ).toMatchObject({
-        symlink: true,
-      });
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
-    }
+    rmSync(path.join(repoRoot, "link"));
+    symlinkSync("a.ts", path.join(repoRoot, "link"));
+    const after = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    expect(
+      after.repoFiles.find((repoFile) => repoFile.path === "link")
+    ).toMatchObject({
+      symlink: true,
+    });
   });
 
   test("keeps non-ascii filenames literal end to end", async () => {
@@ -377,33 +365,29 @@ describe("loadModel in a fixture repo", () => {
       "src/café.ts": "const a = 1\n",
     });
 
-    try {
-      writeFileSync(path.join(repoRoot, "src", "café.ts"), "const a = 2\n");
-      const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-      const changed = loaded.changedByPath.get("src/café.ts");
-      expect(changed).toMatchObject({
-        additions: 1,
-        deletions: 1,
-        kind: "modified",
-      });
-      expect(loaded.changed).toHaveLength(1);
+    writeFileSync(path.join(repoRoot, "src", "café.ts"), "const a = 2\n");
+    const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    const changed = loaded.changedByPath.get("src/café.ts");
+    expect(changed).toMatchObject({
+      additions: 1,
+      deletions: 1,
+      kind: "modified",
+    });
+    expect(loaded.changed).toHaveLength(1);
 
-      if (changed === undefined) {
-        throw new Error("unicode file missing from model");
-      }
-
-      expect(
-        await changedLines(
-          await loadFileDiff(
-            loaded.repoRoot,
-            { kind: "all", ref: "HEAD" },
-            changed
-          )
-        )
-      ).toEqual(["-const a = 1", "+const a = 2"]);
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
+    if (changed === undefined) {
+      throw new Error("unicode file missing from model");
     }
+
+    expect(
+      await changedLines(
+        await loadFileDiff(
+          loaded.repoRoot,
+          { kind: "all", ref: "HEAD" },
+          changed
+        )
+      )
+    ).toEqual(["-const a = 1", "+const a = 2"]);
   });
 
   test("forces canonical a//b/ prefixes despite hostile diff config", async () => {
@@ -411,32 +395,28 @@ describe("loadModel in a fixture repo", () => {
       "src/a.ts": "const a = 1\n",
     });
 
-    try {
-      runGit(repoRoot, ["config", "diff.noprefix", "true"]);
-      runGit(repoRoot, ["config", "diff.mnemonicPrefix", "true"]);
-      // One-sided CRLF sends the file to git's own pathspec diff, the path the
-      // Prefix flags protect.
-      writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\r\n");
+    runGit(repoRoot, ["config", "diff.noprefix", "true"]);
+    runGit(repoRoot, ["config", "diff.mnemonicPrefix", "true"]);
+    // One-sided CRLF sends the file to git's own pathspec diff, the path the
+    // Prefix flags protect.
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\r\n");
 
-      const scope = { kind: "all", ref: "HEAD" } as const;
-      const loaded = await loadModel(repoRoot, scope);
-      const changed = loaded.changedByPath.get("src/a.ts");
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    const loaded = await loadModel(repoRoot, scope);
+    const changed = loaded.changedByPath.get("src/a.ts");
 
-      if (changed === undefined) {
-        throw new Error("changed file missing from model");
-      }
-
-      const diff = await loadFileDiff(loaded.repoRoot, scope, changed);
-
-      if (!("patch" in diff)) {
-        throw new Error("expected git's fallback patch");
-      }
-
-      expect(diff.patch).toContain("--- a/src/a.ts");
-      expect(diff.patch).toContain("+++ b/src/a.ts");
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
+    if (changed === undefined) {
+      throw new Error("changed file missing from model");
     }
+
+    const diff = await loadFileDiff(loaded.repoRoot, scope, changed);
+
+    if (!("patch" in diff)) {
+      throw new Error("expected git's fallback patch");
+    }
+
+    expect(diff.patch).toContain("--- a/src/a.ts");
+    expect(diff.patch).toContain("+++ b/src/a.ts");
   });
 
   test("diffs a rename as a rename, not a whole-file add", async () => {
@@ -449,32 +429,28 @@ describe("loadModel in a fixture repo", () => {
       "src/old.ts": `${content}\n`,
     });
 
-    try {
-      renameSync(
-        path.join(repoRoot, "src", "old.ts"),
-        path.join(repoRoot, "src", "new.ts")
-      );
-      writeFileSync(
-        path.join(repoRoot, "src", "new.ts"),
-        `${content}\nconst added = true\n`
-      );
-      runGit(repoRoot, ["add", "-A"]);
+    renameSync(
+      path.join(repoRoot, "src", "old.ts"),
+      path.join(repoRoot, "src", "new.ts")
+    );
+    writeFileSync(
+      path.join(repoRoot, "src", "new.ts"),
+      `${content}\nconst added = true\n`
+    );
+    runGit(repoRoot, ["add", "-A"]);
 
-      const scope = { kind: "all", ref: "HEAD" } as const;
-      const loaded = await loadModel(repoRoot, scope);
-      const renamed = loaded.changedByPath.get("src/new.ts");
-      expect(renamed).toMatchObject({ kind: "renamed", oldPath: "src/old.ts" });
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    const loaded = await loadModel(repoRoot, scope);
+    const renamed = loaded.changedByPath.get("src/new.ts");
+    expect(renamed).toMatchObject({ kind: "renamed", oldPath: "src/old.ts" });
 
-      if (renamed === undefined) {
-        throw new Error("renamed file missing from model");
-      }
-
-      expect(
-        await changedLines(await loadFileDiff(loaded.repoRoot, scope, renamed))
-      ).toEqual(["+const added = true"]);
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
+    if (renamed === undefined) {
+      throw new Error("renamed file missing from model");
     }
+
+    expect(
+      await changedLines(await loadFileDiff(loaded.repoRoot, scope, renamed))
+    ).toEqual(["+const added = true"]);
   });
 
   test("a commit scope loads exactly the files that commit introduced", async () => {
@@ -482,45 +458,41 @@ describe("loadModel in a fixture repo", () => {
       "a.txt": "one\n",
     });
 
-    try {
-      writeFileSync(path.join(repoRoot, "b.txt"), "two\n");
-      runGit(repoRoot, ["add", "."]);
-      runGit(repoRoot, ["commit", "-m", "add b"]);
-      writeFileSync(path.join(repoRoot, "c.txt"), "three\n");
-      runGit(repoRoot, ["add", "."]);
-      runGit(repoRoot, ["commit", "-m", "add c"]);
+    writeFileSync(path.join(repoRoot, "b.txt"), "two\n");
+    runGit(repoRoot, ["add", "."]);
+    runGit(repoRoot, ["commit", "-m", "add b"]);
+    writeFileSync(path.join(repoRoot, "c.txt"), "three\n");
+    runGit(repoRoot, ["add", "."]);
+    runGit(repoRoot, ["commit", "-m", "add c"]);
 
-      const commits = await loadRecentCommits(repoRoot, 30);
-      const middle = commits.find((commit) => commit.subject === "add b");
+    const commits = await loadRecentCommits(repoRoot, 30);
+    const middle = commits.find((commit) => commit.subject === "add b");
 
-      if (middle?.parent === undefined) {
-        throw new Error(
-          "middle commit missing, or missing the parent it was committed onto"
-        );
-      }
-
-      const scope = {
-        headRef: middle.sha,
-        kind: "commit",
-        ref: middle.parent,
-      } as const;
-
-      const loaded = await loadModel(repoRoot, scope);
-
-      expect(loaded.changed.map((entry) => entry.path)).toEqual(["b.txt"]);
-
-      const added = loaded.changedByPath.get("b.txt");
-
-      if (added === undefined) {
-        throw new Error("b.txt missing from the commit model");
-      }
-
-      expect(
-        await changedLines(await loadFileDiff(loaded.repoRoot, scope, added))
-      ).toEqual(["+two"]);
-    } finally {
-      rmSync(repoRoot, { force: true, recursive: true });
+    if (middle?.parent === undefined) {
+      throw new Error(
+        "middle commit missing, or missing the parent it was committed onto"
+      );
     }
+
+    const scope = {
+      headRef: middle.sha,
+      kind: "commit",
+      ref: middle.parent,
+    } as const;
+
+    const loaded = await loadModel(repoRoot, scope);
+
+    expect(loaded.changed.map((entry) => entry.path)).toEqual(["b.txt"]);
+
+    const added = loaded.changedByPath.get("b.txt");
+
+    if (added === undefined) {
+      throw new Error("b.txt missing from the commit model");
+    }
+
+    expect(
+      await changedLines(await loadFileDiff(loaded.repoRoot, scope, added))
+    ).toEqual(["+two"]);
   });
 });
 

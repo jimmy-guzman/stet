@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { testRender } from "@opentui/solid";
@@ -78,7 +78,6 @@ describe("double-click tracker resets on an intervening row click", () => {
       expect(state.tabItems()[0]?.preview).toBe(true);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   });
 
@@ -128,7 +127,6 @@ describe("double-click tracker resets on an intervening row click", () => {
       expect(state.mainView()).toBe("search");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

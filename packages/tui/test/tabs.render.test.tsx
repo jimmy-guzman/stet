@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { createTextAttributes } from "@opentui/core";
@@ -105,7 +105,6 @@ describe("tabs strip", () => {
       expect(collapsed).toMatch(/\+\d+ -\d+ · ln \d+/u);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -182,7 +181,6 @@ describe("tabs strip", () => {
       expect(renderer.getSelection()).toBeNull();
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -238,7 +236,6 @@ describe("tabs strip", () => {
       expect(bTab()?.preview).toBe(false);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -282,7 +279,6 @@ describe("tabs strip", () => {
       expect(tab?.preview).toBe(false);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -343,7 +339,6 @@ describe("tabs strip", () => {
       expect(isItalicAt(pinnedCol, row)).toBe(false);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

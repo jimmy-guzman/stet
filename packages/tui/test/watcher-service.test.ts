@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
@@ -18,41 +18,37 @@ const WatcherTest = WatcherLive.pipe(
 test("Watcher.changes ticks when a worktree file changes", async () => {
   const repo = createFixtureRepo("watcher-service-", { "a.txt": "one\n" });
 
-  try {
-    let writes = 0;
+  let writes = 0;
 
-    const first = await Effect.runPromise(
-      Effect.gen(function* program() {
-        const watcher = yield* Watcher;
+  const first = await Effect.runPromise(
+    Effect.gen(function* program() {
+      const watcher = yield* Watcher;
 
-        const collecting = yield* Effect.forkChild(
-          watcher.changes(repo).pipe(Stream.runHead)
-        );
+      const collecting = yield* Effect.forkChild(
+        watcher.changes(repo).pipe(Stream.runHead)
+      );
 
-        // The watcher attaches fs.watch only after a git-dir subprocess resolves.
-        // A fixed arm delay can't cover that on a loaded runner.
-        // So nudge repeatedly (interval > debounce, varied content) until a tick lands.
-        const writing = yield* Effect.forkChild(
-          Effect.suspend(() => {
-            writes += 1;
-            writeFileSync(path.join(repo, "a.txt"), `one\n${writes}\n`);
+      // The watcher attaches fs.watch only after a git-dir subprocess resolves.
+      // A fixed arm delay can't cover that on a loaded runner.
+      // So nudge repeatedly (interval > debounce, varied content) until a tick lands.
+      const writing = yield* Effect.forkChild(
+        Effect.suspend(() => {
+          writes += 1;
+          writeFileSync(path.join(repo, "a.txt"), `one\n${writes}\n`);
 
-            return Effect.void;
-          }).pipe(Effect.delay("150 millis"), Effect.forever)
-        );
+          return Effect.void;
+        }).pipe(Effect.delay("150 millis"), Effect.forever)
+      );
 
-        const collected = yield* Fiber.join(collecting).pipe(
-          Effect.timeout("3 seconds")
-        );
+      const collected = yield* Fiber.join(collecting).pipe(
+        Effect.timeout("3 seconds")
+      );
 
-        yield* Fiber.interrupt(writing);
+      yield* Fiber.interrupt(writing);
 
-        return collected;
-      }).pipe(Effect.provide(WatcherTest))
-    );
+      return collected;
+    }).pipe(Effect.provide(WatcherTest))
+  );
 
-    expect(Option.isSome(first)).toBe(true);
-  } finally {
-    rmSync(repo, { force: true, recursive: true });
-  }
+  expect(Option.isSome(first)).toBe(true);
 });

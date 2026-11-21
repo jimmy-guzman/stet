@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { MouseButton, RGBA } from "@opentui/core";
@@ -160,7 +160,6 @@ describe("word caret", () => {
       expect(back).toMatch(/ln 1:11\b/u);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -227,7 +226,6 @@ describe("word caret", () => {
     } finally {
       state.copy = realCopy;
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -301,7 +299,6 @@ describe("word caret", () => {
       expect(state.cursorColumn()).toBe(content.indexOf("targetword"));
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -360,7 +357,6 @@ describe("word caret", () => {
       expect(state.selectedPath()).toBe("src/a.ts");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

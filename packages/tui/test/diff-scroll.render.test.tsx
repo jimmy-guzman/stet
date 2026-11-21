@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
@@ -70,7 +69,6 @@ describe("diff viewer vertical scroll", () => {
       expect(numbers.length).toBeGreaterThan(20);
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -109,7 +107,6 @@ describe("diff viewer vertical scroll", () => {
       expect(top).toContain("line_1 =");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -146,7 +143,6 @@ describe("diff viewer vertical scroll", () => {
       }
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

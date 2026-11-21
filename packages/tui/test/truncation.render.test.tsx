@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
@@ -58,7 +57,6 @@ describe("truncation footer", () => {
       expect(loaded).not.toContain("f to load");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

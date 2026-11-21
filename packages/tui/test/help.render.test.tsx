@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
@@ -114,7 +113,6 @@ describe("help overlay", () => {
       expect(closed).toContain("? help ─ q quit");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 
@@ -164,7 +162,6 @@ describe("help overlay", () => {
       expect(back).not.toContain("staged and unstaged");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 
 import { testRender } from "@opentui/solid";
 
@@ -61,6 +60,5 @@ test("last line stays reachable past emoji rows that render two terminal rows", 
     expect(frame).toMatch(/line_40 /u);
   } finally {
     renderer.destroy();
-    rmSync(repoRoot, { force: true, recursive: true });
   }
 }, 20_000);

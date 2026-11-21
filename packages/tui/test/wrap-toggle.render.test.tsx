@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { testRender } from "@opentui/solid";
@@ -77,7 +77,6 @@ describe("long-line wrap toggle", () => {
       expect(reScrolled).not.toContain("ENDMARKER");
     } finally {
       renderer.destroy();
-      rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
 });

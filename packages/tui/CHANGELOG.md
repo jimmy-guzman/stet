@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.12.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.11.0...stet-v0.12.0) (2026-11-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **theme:** 💥 The "themes" config key, base merging, token overrides, and the "syntax" theme option are removed. Themes are Zed theme files in ~/.config/stet/themes/, and the built-ins are now stet-dark and stet-light (dark and light still resolve).
+
+### Features
+
+* **file-support:** ✨ highlight .svg files as XML ([#395](https://github.com/jimmy-guzman/stet/issues/395)) ([da0939d](https://github.com/jimmy-guzman/stet/commit/da0939df888ef00b769865a9cfb01a503f5b3185))
+* **theme:** ✨ derive every theme from a palette ([#393](https://github.com/jimmy-guzman/stet/issues/393)) ([e425a45](https://github.com/jimmy-guzman/stet/commit/e425a45d157564c900c4a950dc71380e7cb83bb9))
+* **ui:** ✨ replace pane boxes w/ a divider & ruled bars ([#394](https://github.com/jimmy-guzman/stet/issues/394)) ([e69fe26](https://github.com/jimmy-guzman/stet/commit/e69fe26a00f0d48264e8f6f6dffcd387b3b520d9))
+
+
+### Bug Fixes
+
+* **deps:** 🐛 bump deps to typescript 7 & move to @effect/tsgo ([#391](https://github.com/jimmy-guzman/stet/issues/391)) ([3cafd5d](https://github.com/jimmy-guzman/stet/commit/3cafd5d4cec3cb752e1be788f35584eed15fbbec))
+
 ## [0.11.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.10.2...stet-v0.11.0) (2026-11-16)
 
 

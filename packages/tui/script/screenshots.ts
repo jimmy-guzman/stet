@@ -402,9 +402,18 @@ const tapeFor = (screen: (typeof screens)[number]) =>
     "",
   ].join("\n\n");
 
+// The pinned theme holds only if the caller's shell cannot force monochrome: `prefersMonochrome`
+// Lets `NO_COLOR` or `FORCE_COLOR=0` replace it, and VHS hands this env down to the stet it launches.
+const {
+  FORCE_COLOR: _forceColor,
+  NO_COLOR: _noColor,
+  ...captureEnv
+} = process.env;
+
 const run = async (cmd: string, cmdArgs: string[], cwd = TAPES) => {
   const proc = Bun.spawn([cmd, ...cmdArgs], {
     cwd,
+    env: captureEnv,
     stdio: ["inherit", "inherit", "inherit"],
   });
 

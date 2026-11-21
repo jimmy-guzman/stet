@@ -60,7 +60,7 @@ You set keyboard shortcuts in the same way. The `keybindings` section maps actio
 
 You do not have to edit the file by hand for these settings. Press `ctrl-s` in any view to save your current session settings to the configuration. The saved settings are the theme, icons, wrap, the sidebar, changes-only, and the search toggles. stet also saves any `--editor` or `--ide` flag that you passed for this run.
 
-stet writes only the keys that differ from the file. Each write is a small edit that keeps your comments, and the notice names what changed. stet never writes an editor that it found in `$EDITOR` or a similar environment variable. It writes only a literal flag. If no configuration file exists, `ctrl-s` creates one.
+stet writes only the keys that differ from the file. Each write is a small edit that keeps your comments, and the notice names what changed. stet never writes an editor that it found in `$EDITOR` or a similar environment variable. It writes only a literal flag. If no configuration file exists and at least one setting differs from its default, `ctrl-s` creates the file. If all settings match their defaults, `ctrl-s` writes no file.
 
 ![The status bar confirming ctrl-s saved the changed settings to the configuration file](/screenshots/save-settings.png)
 
@@ -159,7 +159,7 @@ stet loads the files in name order. If two themes have the same name, stet keeps
 }
 ```
 
-If `NO_COLOR` has a non-empty value ([no-color.org](https://no-color.org)), stet ignores the `theme` key and starts on the monochrome pair. Change marks still work without color. For example, the change bar of the diff shows `+` and `-` under any all-grey theme. A theme that you pick in the theme switcher still applies.
+If `NO_COLOR` has a non-empty value ([no-color.org](https://no-color.org)) and `FORCE_COLOR` is not set, stet ignores the `theme` key and starts on the monochrome pair. Change marks still work without color. For example, the change bar of the diff shows `+` and `-` under any all-grey theme. A theme that you pick in the theme switcher still applies.
 
 Press `t` in the app to open the theme switcher. You can try a theme there without editing the configuration. Type to filter by name. Move to a theme, or hover over it, to preview it on the whole UI. Press `enter` or click to apply it, or press `esc` to go back.
 

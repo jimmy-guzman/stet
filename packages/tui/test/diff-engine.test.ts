@@ -204,6 +204,36 @@ index 1111111..2222222 100644
     expect(new Set(added.spans.map((span) => span.fg)).size).toBeGreaterThan(1);
   });
 
+  test("renders an .svg with syntax highlighting", async () => {
+    const svgPatch = `diff --git a/logo.svg b/logo.svg
+index 1111111..2222222 100644
+--- a/logo.svg
++++ b/logo.svg
+@@ -1,1 +1,1 @@
+-<rect width="10" height="10"/>
++<rect width="20" height="20"/>
+`;
+
+    const render = await renderDiff({
+      full: false,
+      maxLines: 1600,
+      patch: svgPatch,
+    });
+
+    const added = render.rows
+      .filter(isLineRow)
+      .find((row) => row.type === "add");
+
+    if (added === undefined) {
+      throw new Error("expected an addition row");
+    }
+
+    expect(added.spans.map((span) => span.text).join("")).toBe(
+      '<rect width="20" height="20"/>'
+    );
+    expect(new Set(added.spans.map((span) => span.fg)).size).toBeGreaterThan(1);
+  });
+
   test("renders an unknown extension as plain text without throwing", async () => {
     const unknownPatch = `diff --git a/notes.zzzz b/notes.zzzz
 index 1111111..2222222 100644
@@ -339,6 +369,11 @@ describe("languageForPath", () => {
     expect(languageForPath("script/STET.RB.TMPL")).toBe("ruby");
     expect(languageForPath("a/b/Formula.rb")).toBe("ruby");
     expect(languageForPath("config.yaml.tmpl")).toBe("text");
+  });
+
+  test("highlights SVG as XML", () => {
+    expect(languageForPath("assets/logo.svg")).toBe("xml");
+    expect(languageForPath("assets/LOGO.SVG")).toBe("xml");
   });
 
   test("resolves config dotfiles by name in any directory", () => {

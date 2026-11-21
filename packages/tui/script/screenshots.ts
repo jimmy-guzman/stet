@@ -305,11 +305,15 @@ const screens = [
     ].join("\n"),
   },
   {
-    // Open an unchanged file: plain syntax-highlighted source, no diff gutters.
+    /**
+     * Open an unchanged file: plain syntax-highlighted source, no diff gutters. The file must stay
+     * unchanged in the `BASE_REF..HEAD` window; `process.ts` used to be one and drifted into it, so
+     * this shot silently became a diff. Almost every source file has changed in the window since.
+     */
     name: "read-only",
     steps: [
       "Ctrl+P",
-      'Type "process"',
+      'Type "relative-time.test"',
       "Sleep 400ms",
       "Enter",
       "Sleep 800ms",
@@ -350,7 +354,7 @@ const screens = [
       "Sleep 1500ms",
       'Type "/"',
       "Sleep 300ms",
-      'Type "function computeLayout"',
+      'Type "computeLayout = ("',
       "Sleep 500ms",
       "Enter",
       "Sleep 500ms",

@@ -1,9 +1,9 @@
 ---
 title: Keybindings
-description: Every rebindable stet shortcut, grouped by what it acts on. Press ? in the app for the same list.
+description: Each stet shortcut that you can rebind, grouped by what it acts on. Press ? in the app for the same list.
 ---
 
-The keyboard drives everything in stet. Press `?` at any time to see this list inside the app. Overlays (pickers, menus, the quit confirm) carry their own keys in a hint row along their bottom edge, so those are not repeated here.
+You can do everything in stet with the keyboard. Press `?` at any time to see this list in the app. Overlays (pickers, menus, and the quit confirmation) show their own keys in a hint row at their bottom edge. This page does not repeat those keys.
 
 {/* GENERATED-KEYS: edit src/help/keys.ts then run bun run gen:keys */}
 
@@ -81,7 +81,7 @@ The keyboard drives everything in stet. Press `?` at any time to see this list i
 
 ## Custom keybindings
 
-Every key above is rebindable through the `keybindings` section of your [configuration](/docs/reference/configuration): map a rebind id from the tables to a combo, a list of combos, or `false` to unbind it.
+You can rebind each key above in the `keybindings` section of your [configuration](/docs/reference/configuration). Map a rebind id from the tables to a combo, to a list of combos, or to `false` to remove the binding.
 
 ```jsonc title="~/.config/stet/config.jsonc"
 {
@@ -93,20 +93,37 @@ Every key above is rebindable through the `keybindings` section of your [configu
 }
 ```
 
-A combo is optional `ctrl`/`shift` modifiers joined by `+` or `-`, then a key: a letter, a symbol (`?`, `[`), an arrow (`↑` or `up`), an F-key, or one of `tab`, `enter`, `return`, `esc`, `space`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup`, `pagedown`. A single uppercase letter means shift (`"G"` is `"shift+g"`). Modifiers match exactly, so binding `"s"` never fires on `ctrl+s`; the one exception is shift on a symbol key, which is ignored.
+A combo is optional `ctrl` or `shift` modifiers, joined by `+` or `-`, then a key. The key is one of these:
 
-The tables list each action's primary combo. Several movement actions keep an arrow as a second default: `↑` / `↓` beside `j` / `k`, and `←` / `→` beside `h` / `l`.
+- A letter
+- A symbol, such as `?` or `[`
+- An arrow, such as `↑` or `up`
+- An F-key
+- One of `tab`, `enter`, `return`, `esc`, `space`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup`, or `pagedown`
 
-An unknown id, or a combo that does not parse, keeps the default. Binding one combo to two actions leaves both registered, and which of them fires follows stet's internal dispatch order rather than the order of these tables, so unbind the one you do not want with `false` rather than relying on the winner. Startup surfaces only the first configuration problem it finds, so a keybinding issue can sit behind an unrelated one; `?` and `--help` always show the bindings actually in effect.
+A single uppercase letter means shift, so `"G"` is the same as `"shift+g"`. Modifiers must match exactly, so a binding of `"s"` never fires on `ctrl+s`. The one exception is shift on a symbol key, which stet ignores.
 
-Keys inside overlays (pickers, menus, the quit confirm, the search pane) and `ctrl+c` are fixed. A committed find also holds `n` and `N` to cycle its matches until `esc` clears it.
+The tables show the primary combo of each action. Some movement actions also keep an arrow as a second default: `↑` / `↓` beside `j` / `k`, and `←` / `→` beside `h` / `l`.
+
+If an id is unknown, or a combo does not parse, stet keeps the default. If you bind one combo to two actions, stet registers both. The internal dispatch order of stet decides which one fires, not the order of these tables. Do not rely on that order. Set the action that you do not want to `false`.
+
+At startup, stet shows only the first configuration problem that it finds, so a different problem can hide a keybinding problem. `?` and `--help` always show the bindings that are in effect.
+
+Keys in overlays (pickers, menus, the quit confirmation, and the search pane) and `ctrl+c` are fixed. After you press `enter` in a find, `n` and `N` move between its matches until `esc` clears it.
 
 ## Mouse
 
-The keyboard drives everything, but the mouse works too. Click a file to open it, a folder to expand or collapse it, or a diff line to move the cursor there. Double-click a file in the tree, or a tab in the strip, to pin it as a tab. Clicks also work in the overlays and the search pane, and hovering a theme in the switcher previews it live. Clicking a pane focuses it, and the wheel scrolls whichever pane the pointer is over. Right-click a tree row or a viewer line for a context menu of the actions that apply there, the same menu `Shift+F10` opens on the focused pane.
+You can also use the mouse:
+
+- Click a file to open it, a folder to expand or collapse it, or a diff line to move the caret there.
+- Double-click a file in the tree, or a tab in the tab strip, to pin it as a tab.
+- Click items in the overlays and the search pane.
+- Hover over a theme in the switcher to preview it live.
+- Click a pane to focus it. The wheel scrolls the pane under the pointer.
+- Right-click a tree row or a viewer line to open a context menu of the actions that apply there. `Shift+F10` opens the same menu on the focused pane.
 
 ![The viewer's context menu listing its copy and open actions](/screenshots/context-menu.png)
 
-The menu carries whatever applies where you opened it, so it is shorter elsewhere: a directory in the tree offers only Copy path. Nothing in it is shown greyed out.
+The menu shows only the actions that apply where you open it, so it can be shorter. For example, a folder in the tree offers only Copy path. The menu shows no disabled items.
 
-Drag across diff lines to select a range. Holding the pointer at the top or bottom edge scrolls the viewer and continues the selection. Shift-click extends the range when the terminal forwards `Shift+mouse`; some terminals reserve that gesture for native text selection, so drag or `Shift+↑` / `Shift+↓` is portable.
+Drag across diff lines to select a range. If you hold the pointer at the top or bottom edge, the viewer scrolls and the selection continues. If the terminal forwards `Shift+mouse`, a shift-click extends the range. Some terminals keep that gesture for their own text selection. `Shift+↑` / `Shift+↓` always work, and drag works where the terminal reports the mouse.

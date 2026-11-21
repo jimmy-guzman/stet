@@ -1,9 +1,9 @@
 ---
 title: Languages
-description: The highlighting, folding, and icons stet gives every language.
+description: The highlighting, folding, and icons that stet gives each language.
 ---
 
-Language support is layered. Named file associations select syntax and icons independently. Highlighting, folding, and icon coverage depend on their respective libraries. You can change any layer through [your config](/docs/reference/configuration#file-support).
+Language support has layers. Named file associations select the syntax and the icon of a file separately. The coverage of highlighting, folding, and icons depends on the library for each one. You can change each layer in [your configuration](/docs/reference/configuration#file-support).
 
 | Language                | Highlighting | Folding    |
 | ----------------------- | ------------ | ---------- |
@@ -19,18 +19,18 @@ Language support is layered. Named file associations select syntax and icons ind
 | Markdown                | yes          | by heading |
 | 140+ others             | yes          | indent     |
 
+Press `z` to fold the block at the caret (the current position in the viewer). Code folds by indentation in each language, and Markdown folds by heading section. [Reading files and diffs](/docs/guides/reading-files-and-diffs#fold-code) describes folding.
+
 ## Syntax highlighting
 
-stet highlights with [`@pierre/highlights`](https://diffs.com/highlights), which bundles lexers for more than 150 languages. stet picks the language from the file's name, including exact names such as `Dockerfile`. The diff, full-file view, and search results share the same highlighter and theme. An unrecognized file type falls back to plain text.
+stet highlights code with [`@pierre/highlights`](https://diffs.com/highlights), which bundles lexers for more than 150 languages. A lexer splits the code of one language into tokens for color. stet selects the language from the file name, including exact names such as `Dockerfile`. The diff, the full-file view, and the search results use the same highlighter and theme. A file type that stet does not know shows as plain text.
 
-Config dotfiles carry no extension to pick a language from, so they resolve by name: `.npmrc` highlights as INI and `.prettierrc` as JSONC, so a comment in it reads as a comment. Their extension variants, such as `.prettierrc.json` and `.prettierrc.yaml`, already resolve on the extension.
-
-## Folding
-
-Press `z` to fold the block at the caret: code folds by indentation in every language, markdown folds by heading section. See [reading files and diffs](/docs/guides/reading-files-and-diffs#fold-code).
+A dotfile is a file whose name starts with a dot. Configuration dotfiles have no extension to select a language from, so stet resolves them by name. `.npmrc` highlights as INI, and `.prettierrc` highlights as JSONC, so a comment in it shows as a comment. Their extension variants, such as `.prettierrc.json` and `.prettierrc.yaml`, already resolve by their extension.
 
 ## File icons
 
-Recognized file types use restrained colored Nerd Font icons; structural and generic icons remain muted. Recognizable brands keep their identity, while unbranded formats reuse stet's palette. The same named icon and theme color appears in every file-list surface. Default file matching comes from Trees' `complete` icon set, with its categories mapped to terminal glyphs and colors. For example, `package.json` uses the JSON icon and test files retain their language icon. User associations override these defaults. `--no-icons` hides glyphs while keeping the layout stable if your terminal font lacks them.
+Known file types use colored Nerd Font icons. Structural and generic icons stay muted. Well-known brands keep their own look, and formats without a brand use the palette of stet. A file shows the same named icon and theme color in each file list.
 
-To add a file type, map it to a syntax and an icon with a `files` association. See [configuration](/docs/reference/configuration#file-support) for matching rules and overriding or disabling built-ins.
+The default file matching comes from the `complete` icon set of Trees, which stet maps to terminal glyphs and colors. For example, `package.json` uses the JSON icon, and test files keep the icon of their language. User associations override these defaults. If your terminal font has no Nerd Font glyphs, `--no-icons` hides them and keeps the layout stable.
+
+To add a file type, map it to a syntax and an icon with a `files` association. [Configuration](/docs/reference/configuration#file-support) describes the matching rules and how to override or disable a built-in entry.

@@ -1,12 +1,21 @@
 ---
 title: Themes
-description: Preview and switch themes live, then make one permanent in your config.
+description: Preview and change themes live, then save one in your configuration.
 ---
 
 ## Switch themes
 
-Press `t` to open the theme switcher: filter by name and move (or hover) to preview the whole UI live, `enter` to apply, `esc` to revert. By default stet uses `system`, a theme built from your terminal's own colors, and follows your terminal's appearance. The switcher also lists stet's own `stet-dark` and `stet-light`, the `opencode-*` and `cmux-*` pairs, the editor themes bundled with highlights (Catppuccin, Dracula, GitHub, Gruvbox, Nord, Tokyo Night, and more), and an all-grey `mono-dark` and `mono-light` pair it starts on when `NO_COLOR` is non-empty.
+Press `t` to open the theme switcher. Type to filter by name. Move to a theme, or hover over it, to preview it on the whole UI. Press `enter` to apply the theme, or press `esc` to go back to the previous theme.
+
+By default, stet uses `system`, a theme that it builds from the colors of your terminal. This theme follows the light or dark appearance of your terminal. The switcher also lists these themes:
+
+- `stet-dark` and `stet-light`, the themes of stet
+- The `opencode-*` and `cmux-*` pairs
+- The editor themes bundled with highlights, such as Catppuccin, Dracula, GitHub, Gruvbox, Nord, and Tokyo Night
+- `mono-dark` and `mono-light`, all grey. stet starts on this pair when `NO_COLOR` has a non-empty value.
 
 ![The theme switcher listing themes with color swatches, previewing the highlighted one live](/screenshots/theme-switcher.png)
 
-The switch lasts the session only; `ctrl-s` makes it permanent, writing the highlighted theme (with any other changed settings) to your config as targeted edits that keep your comments. To add your own, drop a Zed theme file into `~/.config/stet/themes/` (or `$XDG_CONFIG_HOME/stet/themes/` when that is set); stet derives its whole UI from the theme's palette, as the [configuration reference](/docs/reference/configuration#themes) explains.
+A theme change lasts for the session only. To keep it, press `ctrl-s`. stet writes the highlighted theme and any other changed settings to your configuration. Each write is a small edit that keeps your comments.
+
+To add your own theme, put a Zed theme file in `~/.config/stet/themes/`. If `$XDG_CONFIG_HOME` is set, use `$XDG_CONFIG_HOME/stet/themes/`. stet makes all its UI colors from the palette of the theme. The [configuration reference](/docs/reference/configuration#themes) explains how.

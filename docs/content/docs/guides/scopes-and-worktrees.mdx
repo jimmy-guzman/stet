@@ -1,22 +1,26 @@
 ---
 title: Scopes & worktrees
-description: Choose what the diff compares, and see which worktree an agent is working in.
+description: Choose what the diff compares, and see which worktree an agent works in.
 ---
 
 ## Switch scope
 
-Press `s` to pick what the diff compares. The scopes group into changes (uncommitted, staged, or unstaged) and history (everything since stet launched, or just the last commit). The picker also drills into recent commits (`commits →`), so you can view any of them as its own diff.
+A scope is the pair of points that the diff compares. Press `s` to choose a scope. The scopes are in two groups. The changes group has uncommitted, staged, and unstaged changes. The history group has everything since stet started, and the last commit. The picker also lists recent commits (`commits →`), so you can view any of them as its own diff.
 
 ![The scope picker grouping the diff scopes under changes and history](/screenshots/scope-picker.png)
 
-You can also start in a scope from the command line with `stet --staged` or `stet --unstaged`. To compare against a branch, tag, or commit, pass its Git ref as `stet <ref>`.
+To start in a scope from the command line, run `stet --staged` or `stet --unstaged`. To compare against a branch, tag, or commit, run `stet <ref>` with its Git ref.
 
 ## Switch worktrees
 
-Press `w` to jump between git worktrees without leaving the view. The list is ranked by how recently each worktree was touched, so the one an agent is working in sits at the top, with its age beside it (`now`, `5m`, `3h`). Type to filter by branch or by the worktree's own folder, `↑`/`↓` to move, `⏎` to switch. The directory prefix every worktree shares is not matched, since it is the same text in every row and would only ever match all of them at once. The tree, diffs, polling, and checks all re-point at the chosen worktree. The full path of the highlighted worktree reads out below the list.
+A Git worktree is an extra checkout in its own folder. Press `w` to change to a different worktree without leaving stet. The list puts the most recently touched worktree first, so the worktree that an agent works in is at the top. Each row shows its age (`now`, `5m`, `3h`).
+
+Type to filter by branch or by the folder name of the worktree. Press `↑`/`↓` to move and `⏎` to switch. The filter ignores the folder path that all worktrees share. That text is the same in each row, so it always matches all rows at once.
+
+After the switch, the tree, the diffs, polling, and checks use the selected worktree. Below the list, stet shows the full path of the highlighted worktree.
 
 ![The worktree picker, worktrees ranked by how recently each was touched, each with its age, and the highlighted one's full path below the list](/screenshots/worktree-picker.png)
 
-Touched means anything an agent or git did there, such as an uncommitted edit, a commit, a checkout, a rebase, or creating the worktree. Committing counts, so a worktree does not drop down the list the moment an agent finishes its work there.
+Touched means any work by an agent or by Git in that worktree. Examples are an uncommitted edit, a commit, a checkout, a rebase, or the creation of the worktree. A commit counts too, so a worktree does not drop down the list when an agent finishes its work.
 
-Each age is tinted by how recently the worktree was touched, fading toward the background over five minutes of quiet. That window is longer than the 30 seconds a changed file stays marked, because an agent can pause for minutes and still be working. The age ranks recency, not live presence: a recent age means work landed there recently, not that something is running now.
+The color of each age shows how recently the worktree was touched. It fades toward the background over five minutes without activity. A changed file stays marked for 30 seconds. A worktree uses a longer window, because an agent can pause for minutes and still be at work. The age shows recency, not live presence. A recent age means that work landed there recently. It does not mean that something runs there now.

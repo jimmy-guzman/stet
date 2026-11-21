@@ -1,56 +1,56 @@
 ---
 title: Reading files & diffs
-description: Open any file read-only, view changes as diffs, fold by structure, and keep your place across tabs.
+description: Open any file read-only, view changes as diffs, fold code by structure, and keep your place across tabs.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-stet opens every file read-only. Unchanged files show as plain source; changed files show as diffs. Nothing here ever writes to the repo.
-
-## Read any file
-
-Open any file and read it with syntax highlighting for [every supported language](/docs/reference/languages). Unchanged files open with no diff gutters, just the source.
+stet opens each file read-only. It never writes to the repository. An unchanged file opens as plain source, with syntax highlighting for [each supported language](/docs/reference/languages) and no diff gutter. A changed file opens as a diff.
 
 ![A source file open in stet with syntax highlighting and no diff gutters](/screenshots/read-only.png)
 
 ## Diffs and the full-file toggle
 
-A changed file opens as a diff. Within a modified line, the words that changed carry a stronger tint of the line's add or remove color, so a one-word edit in a long line stands out. Press `v` to toggle between the diff and the full file, and `f` to load the full content when a large file is truncated.
+A changed file opens as a diff. In a modified line, the words that changed have a stronger tint of the add or remove color. A one-word edit in a long line is easy to see. Press `v` to switch between the diff and the full file. If a large file is truncated, press `f` to load its full content.
 
 ## Binary and image files
 
-A terminal can't display an image, so instead of the raw bytes stet shows a card with the file's type, dimensions, and size. For a changed image, it shows the old and new values side by side. Press `O` to open the file in your OS default app, like an image viewer or PDF reader.
+A terminal cannot show an image. Instead of the raw bytes, stet shows a card with the type, the dimensions, and the size of the file. For a changed image, the card shows the old and new values side by side. Press `O` to open the file in your default app, for example an image viewer or a PDF reader.
 
 ![stet showing an image file's type, dimensions, and size instead of raw bytes](/screenshots/binary-preview.png)
 
 ## Fold code
 
-Press `z` in the viewer to fold the block at the caret behind a `▸ N lines folded` marker. Code folds by indentation, markdown by heading section. The same key expands a git-elided gap (`⋯ N unmodified lines`, including the stretch after the last change) to reveal its unchanged lines, highlighted like the rest of the file, and collapses it again from its `hide` marker. Click any marker to toggle it. A gap expands only in a diff stet computes itself: when it falls back to git's own diff, for example for a file with CRLF line endings on only one side, the gap stays a plain `⋯ N unmodified lines` row.
+Press `z` in the viewer to fold the block at the caret (the current position in the viewer). The folded block shows as a `▸ N lines folded` marker. Code folds by indentation, and Markdown folds by heading section.
+
+A diff also hides the unchanged lines between changes in a gap row, `⋯ N unmodified lines`. This includes the lines after the last change. Press `z` on a gap to show its unchanged lines, highlighted like the rest of the file. Press `z` on its `hide` marker to collapse it again. You can also click any marker to toggle it.
+
+A gap expands only in a diff that stet computes itself. For some files, stet uses the diff from Git instead. An example is a file with CRLF line endings on only one side. In that diff, the gap stays a plain `⋯ N unmodified lines` row.
 
 ![A diff with a function's body folded behind a "lines folded" marker, its signature still visible](/screenshots/folding.png)
 
 <Callout>
-  Folding is per file and resets when you switch files or change the diff scope.
-  Press `x` to wrap long lines in the viewer instead of scrolling them
-  horizontally.
+  Folds belong to one file. They reset when you change to a different file or a
+  different diff scope. To wrap long lines in the viewer instead of scrolling
+  them horizontally, press `x`.
 </Callout>
 
 ## Tabs and history
 
-Browsing the tree previews files in a single view. The italic filename marks the preview as temporary.
+When you move through the tree, each file opens in one preview view. An italic file name shows that the preview is temporary. These controls keep files open as tabs:
 
 | Control | Action |
 | --- | --- |
-| `<` / `>` | move back or forward and restore the saved cursor and scroll |
+| `<` / `>` | move back or forward and restore the saved caret and scroll |
 | `ctrl-t` | pin or unpin the current file as a tab |
 | double-click a file | pin the file as a tab |
 | `{` / `}` | switch to the previous or next tab |
 | `ctrl-w` | close the current tab |
 
-Each tab keeps its own navigation history, cursor, and scroll position.
+Each tab keeps its own navigation history, caret, and scroll position.
 
 ![The tab strip with pinned, diff-status-tinted tabs](/screenshots/tabs.png)
 
 ## Copy a reference
 
-Press `y` to copy a reference to paste back into the agent conversation: the file `path` in the tree, or `path:line:col` in the viewer. `Y` copies the whole file's contents, and `C` copies the selected lines (or the caret line).
+Press `y` to copy a reference that you can paste into the agent conversation. In the tree, `y` copies the file `path`. In the viewer, it copies `path:line:col`. `Y` copies the full contents of the file. `C` copies the selected lines, or the caret line if no lines are selected.

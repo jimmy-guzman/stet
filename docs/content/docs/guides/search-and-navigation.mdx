@@ -1,29 +1,27 @@
 ---
 title: Search & navigation
-description: Jump to any file, find within the open file, search the whole repo, and follow recent activity.
+description: Open any file, find text in the open file, search the whole repository, and follow recent activity.
 ---
 
-## Browse the tree
+## Open a file
 
-Directories appear before files. Names use natural, case-insensitive ordering, so `file2` comes before `file10`. Single-child directory chains share one row.
+The tree lists folders before files. Names use natural, case-insensitive order, so `file2` comes before `file10`. A chain of nested folders with one child each shows on one row.
 
-Moving onto a file previews it. Opening a folder toggles its children and keeps the current preview. See [navigation keybindings](/docs/reference/keybindings#navigation) for folder controls and shortcuts to the first and last visible items.
+When you move onto a file, stet previews it. When you open a folder, its children show or hide, and the current preview stays. The [navigation keybindings](/docs/reference/keybindings#navigation) list the folder controls and the keys for the first and last visible items.
 
-## Go to file
-
-Press `ctrl-p` to fuzzy-search the whole repo and open any file, tracked or untracked.
+To open any file without the tree, press `ctrl-p`. It opens a fuzzy search over the whole repository, for tracked and untracked files. A fuzzy search matches the letters that you type in order, with gaps allowed.
 
 ![The go-to-file overlay fuzzy-matching paths across the repo](/screenshots/go-to-file.png)
 
 ## Find in the viewer
 
-Press `/` to search within the open file. `n` and `N` cycle through matches, a counter tracks your place, and `esc` clears the search.
+Press `/` to search in the open file. `n` and `N` move to the next and previous match. A counter shows your position, and `esc` clears the search.
 
 ![Find-in-viewer highlighting matches in the open file with a match counter](/screenshots/find.png)
 
 ## Search file contents
 
-Press `ctrl-f` to open the project search pane. Results group by file with syntax-highlighted context around each match.
+Press `ctrl-f` to open the project search pane. The results are grouped by file, with highlighted lines around each match. A glob is a path pattern with wildcards, such as `*.ts`.
 
 | Control      | Action                                              |
 | ------------ | --------------------------------------------------- |
@@ -33,14 +31,12 @@ Press `ctrl-f` to open the project search pane. Results group by file with synta
 | `ctrl-g`     | search changed files or the whole tree              |
 | `ctrl-o`     | choose a diff scope without leaving the pane        |
 
-Open a match to jump to its file. stet keeps the query and results, so `ctrl-f` restores the same search.
+Open a match to go to its file. stet keeps the query and the results, so `ctrl-f` shows the same search again.
 
 ![Project content search listing matches for a term across several files](/screenshots/search.png)
 
 ## Follow recent activity
 
-stet marks recently changed files as the agent works. Press `.` to jump to the most recently changed file.
-
-The mark beside a file fades as the change ages, so the brightest one is the newest.
+While the agent works, stet marks the files that changed recently. Press `.` to go to the most recently changed file. The mark beside a file fades as the change ages, so the brightest mark is the newest.
 
 ![The repository tree marking three just-changed files, each dot dimmer as its change ages](/screenshots/recent-activity.png)

@@ -125,7 +125,7 @@ stet runs without a configuration file. You do not have to write one by hand. Se
 
 ![The status bar confirming ctrl-s saved the changed settings to the configuration file](/screenshots/save-settings.png)
 
-`ctrl-s` saves your current session settings to your configuration file, `~/.config/stet/config.jsonc` by default. If only `config.json` exists, stet writes to that file. If `$XDG_CONFIG_HOME` is set, the file is under that folder. The saved settings are the theme, icons, line wrap, the sidebar, the search toggles, and any `--editor` or `--ide` flag. stet writes only the settings that differ from the file. Each write is a small edit that keeps your comments, and the status bar names what changed.
+`ctrl-s` saves your current session settings to your configuration file, `~/.config/stet/config.jsonc` by default. If only `config.json` exists, stet writes to that file. If `$XDG_CONFIG_HOME` is set, the file is under that folder. The saved settings are the theme, icons, line wrap, the sidebar, the search toggles, and any `--editor` or `--ide` flag. If no file exists and all settings are at their defaults, `ctrl-s` writes no file. To edit the file yourself in that case, create it first. stet writes only the settings that differ from the file. Each write is a small edit that keeps your comments, and the status bar names what changed.
 
 You can also edit the file yourself. The file has more settings than the keys can change:
 

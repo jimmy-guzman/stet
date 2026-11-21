@@ -15,13 +15,16 @@ import process from "node:process";
 /**
  * The environment for a read that runs against a private copy of the index.
  *
- * `git status` and `git diff` stay exact only while they may refresh the index: the in-memory skip
- * of stat-only changes (`diffcore_skip_stat_unmatch`) rides on `diff.autoRefreshIndex`, and `git
- * status` persists what it hashed only under optional locks. Pointed at a copy, both write the
- * copy, so a file whose mtime moved without its content is hashed once rather than every tick and
- * no lock is ever taken on the real index. `core.splitIndex=false` keeps a split-index repository's
- * copy from being written back as a split index, which creates `sharedindex.*` files in the real
- * git dir.
+ * `git diff` stays exact only while it may refresh the index: the in-memory skip of stat-only
+ * changes (`diffcore_skip_stat_unmatch`) rides on `diff.autoRefreshIndex`, and the refresh it then
+ * writes lands on the copy, never the real index. `core.splitIndex=false` keeps a split-index
+ * repository's copy from being written back as a split index, which creates `sharedindex.*` files
+ * in the real git dir.
+ *
+ * Optional locks stay off, as `Process` sets them. Git runs a nested `git status` inside each
+ * submodule and unsets `GIT_INDEX_FILE` for it, but the child inherits `GIT_OPTIONAL_LOCKS`, so
+ * turning them on here made that child rewrite the submodule's real index. What `git status`
+ * would have persisted comes from `refreshIndexArgs` instead.
  */
 export const privateIndexEnv = (copy: string) => ({
   GIT_CONFIG_COUNT: "2",
@@ -30,8 +33,15 @@ export const privateIndexEnv = (copy: string) => ({
   GIT_CONFIG_VALUE_0: "true",
   GIT_CONFIG_VALUE_1: "false",
   GIT_INDEX_FILE: copy,
-  GIT_OPTIONAL_LOCKS: "1",
 });
+
+/**
+ * Records the stat of every unchanged file in the copy, run before each read so `git status` (which
+ * persists nothing with optional locks off) finds a fresh copy and hashes a touched file once.
+ * It writes only `GIT_INDEX_FILE` and compares a submodule by its HEAD without running git inside
+ * it. `-q` keeps a file that really changed from failing the refresh.
+ */
+export const refreshIndexArgs = ["git", "update-index", "-q", "--refresh"];
 
 /**
  * One private copy per real index, under a directory of this process's own that is removed on

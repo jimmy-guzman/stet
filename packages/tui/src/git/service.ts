@@ -33,7 +33,11 @@ import {
   untrackedDiffArgs,
 } from "./model";
 import type { ChangedFile, GitModel } from "./model";
-import { createIndexCopies, privateIndexEnv } from "./private-index";
+import {
+  createIndexCopies,
+  privateIndexEnv,
+  refreshIndexArgs,
+} from "./private-index";
 import {
   bareCheckArgs,
   classifyRepoFailure,
@@ -166,14 +170,25 @@ export const GitLive = Layer.effect(
         try: () => {
           const gitDir = gitDirOf(worktree);
 
-          const copy =
-            gitDir === undefined
-              ? undefined
-              : copies.copyFor(path.join(gitDir, "index"));
-
-          return copy === undefined ? {} : privateIndexEnv(copy);
+          return gitDir === undefined
+            ? undefined
+            : copies.copyFor(path.join(gitDir, "index"));
         },
-      });
+      }).pipe(
+        Effect.flatMap((copy) => {
+          if (copy === undefined) {
+            return Effect.succeed({});
+          }
+
+          const env = privateIndexEnv(copy);
+
+          // A refresh that cannot run (another read of the same worktree holds the copy's lock)
+          // only leaves the copy stale, which costs speed and never correctness.
+          return process
+            .run(refreshIndexArgs, worktree, { env })
+            .pipe(Effect.ignore, Effect.as(env));
+        })
+      );
 
     const fetchSide = (
       repoRoot: string,

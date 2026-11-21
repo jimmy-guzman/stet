@@ -207,6 +207,42 @@ test("Git.changedFiles reads a linked worktree whose .git names its git dir rela
   }
 });
 
+test("Git.changedFiles leaves a submodule's index untouched and still reports its edits", async () => {
+  const source = createFixtureRepo("git-service-subsource-", {
+    "edited.txt": "one\n",
+    "touched.txt": "one\n",
+  });
+
+  const repo = createFixtureRepo("git-service-super-", { "a.txt": "one\n" });
+  runGit(repo, [
+    "-c",
+    "protocol.file.allow=always",
+    "submodule",
+    "add",
+    source,
+    "sub",
+  ]);
+  runGit(repo, ["commit", "-m", "add sub"]);
+  const sub = path.join(repo, "sub");
+  // Git runs a nested `git status` inside the submodule to tell whether it is dirty, against the
+  // submodule's own real index: the stat-only change is what would make that child rewrite it.
+  writeFileSync(path.join(sub, "edited.txt"), "one\ntwo\n");
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(path.join(sub, "touched.txt"), later, later);
+  const subIndex = path.join(repo, ".git", "modules", "sub", "index");
+  const index = readFileSync(subIndex);
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.changedFiles(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(readFileSync(subIndex)).toEqual(index);
+  expect(changed.changed.map((entry) => entry.path)).toEqual(["sub"]);
+});
+
 test("Git.changedFiles adds no file to a split index's git dir", async () => {
   const repo = createFixtureRepo("git-service-split-", {
     "edited.txt": "one\n",

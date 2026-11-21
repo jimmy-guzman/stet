@@ -5,6 +5,7 @@ import path from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
+import { state } from "@/state";
 
 import {
   createFixtureRepo,
@@ -124,6 +125,13 @@ describe("worktree picker", () => {
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
 
+      // The picker orders its rows once, on open, by the summaries the background poll has
+      // landed, and its ages read the same map: wait for them, as a user opening it a moment
+      // after launch would.
+      await settleUntil(
+        "worktree summaries",
+        () => state.worktreeSummaries().size === 2
+      );
       mockInput.pressKey("w");
 
       // Loose on purpose, and load-bearing: this stops on the first frame carrying a row, and both
@@ -177,6 +185,13 @@ describe("worktree picker", () => {
 
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
+      // The picker orders its rows once, on open, by the summaries the background poll has
+      // landed, and its ages read the same map: wait for them, as a user opening it a moment
+      // after launch would.
+      await settleUntil(
+        "worktree summaries",
+        () => state.worktreeSummaries().size === 2
+      );
       mockInput.pressKey("w");
       await settleUntil("worktree rows", (frame) =>
         frame.includes("other-branch")
@@ -245,6 +260,13 @@ describe("worktree picker", () => {
 
     try {
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
+      // The picker orders its rows once, on open, by the summaries the background poll has
+      // landed, and its ages read the same map: wait for them, as a user opening it a moment
+      // after launch would.
+      await settleUntil(
+        "worktree summaries",
+        () => state.worktreeSummaries().size === 4
+      );
       mockInput.pressKey("w");
 
       const frame = await settleUntil(

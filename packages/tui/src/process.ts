@@ -14,6 +14,8 @@ export interface CommandResult {
 
 interface RunOptions {
   allowedExitCodes?: readonly number[];
+  /** Variables laid over the default child environment, for a call that needs git configured differently. */
+  env?: Readonly<Record<string, string>>;
   stdin?: string;
 }
 
@@ -61,12 +63,24 @@ export const ProcessLive = Layer.succeed(Process)({
           return Bun.spawn({
             cmd: [...command],
             cwd,
-            // GIT_OPTIONAL_LOCKS=0 stops git status/diff from refreshing the index
-            // (which takes .git/index.lock) and racing a concurrent agent commit.
-            // Non-git children ignore the unknown variable, so it is safe globally.
-            // StripGitEnv drops any inherited GIT_DIR/GIT_WORK_TREE/etc (e.g. from a
-            // Launching shell or git hook), so cwd always governs repo discovery.
-            env: { ...stripGitEnv(Bun.env), GIT_OPTIONAL_LOCKS: "0" },
+            // No git child may write the real index: holding .git/index.lock fails an
+            // agent's concurrent `git commit`. GIT_OPTIONAL_LOCKS=0 covers `git status`,
+            // but `git diff` refreshes the index after a stat-only change regardless of
+            // it (refresh_index_quietly), so diff.autoRefreshIndex=false turns that off.
+            // Reads that need the refresh run against stet's own copy of the index
+            // instead (`privateIndexEnv`), passed through `options.env`. GIT_CONFIG_*
+            // needs git 2.31, the floor `--path-format` already sets. Non-git children
+            // ignore these. `stripGitEnv` drops any inherited GIT_DIR/GIT_WORK_TREE/etc
+            // (e.g. from a launching shell or git hook), so cwd always governs repo
+            // discovery.
+            env: {
+              ...stripGitEnv(Bun.env),
+              GIT_CONFIG_COUNT: "1",
+              GIT_CONFIG_KEY_0: "diff.autoRefreshIndex",
+              GIT_CONFIG_VALUE_0: "false",
+              GIT_OPTIONAL_LOCKS: "0",
+              ...options?.env,
+            },
             stderr: "pipe",
             stdin:
               options?.stdin === undefined

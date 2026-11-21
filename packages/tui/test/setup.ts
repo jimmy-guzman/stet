@@ -1,4 +1,4 @@
-import { afterEach, beforeEach } from "bun:test";
+import { afterAll, afterEach, beforeEach } from "bun:test";
 
 import { themes } from "@pierre/highlights/themes/loader";
 
@@ -9,6 +9,7 @@ import {
 } from "@/file-support/registry";
 import { registerKeybindings } from "@/keys/registry";
 import { defaultKeybindings } from "@/keys/resolve";
+import { runtime } from "@/runtime";
 import { state } from "@/state";
 import { setAppearance, setSelection } from "@/theme/active";
 import { restoreRegistry } from "@/theme/registry";
@@ -42,6 +43,14 @@ beforeEach(() => {
  * file whatever order the files import the helpers module in.
  */
 afterEach(sweepFixtureRepos);
+
+/**
+ * `bun test` ends without an `exit` event, so the app runtime's scoped resources (the Git service's
+ * private index copies) are released here instead of by the exit hook a real run relies on.
+ */
+afterAll(async () => {
+  await runtime.dispose();
+});
 
 /**
  * A production exit must become a test failure, never a successful early exit that lets Bun report

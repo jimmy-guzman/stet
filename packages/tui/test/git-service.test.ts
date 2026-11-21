@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -58,8 +67,214 @@ test("Git.changedFiles includes an untracked file", async () => {
   );
 });
 
+test("Git.changedFiles leaves the index untouched", async () => {
+  const repo = createFixtureRepo("git-service-index-", {
+    "edited.txt": "one\n",
+    "mode.bin": "one\0two",
+    "mode.txt": "one\n",
+    "touched.bin": "one\0two",
+    "touched.txt": "one\n",
+  });
+
+  writeFileSync(path.join(repo, "edited.txt"), "one\ntwo\n");
+  // A mode change has no churn, so only its numstat record keeps it in the set.
+  chmodSync(path.join(repo, "mode.txt"), 0o755);
+  chmodSync(path.join(repo, "mode.bin"), 0o755);
+  // A metadata-only change is what makes `git diff` refresh, and so rewrite, the index.
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(path.join(repo, "touched.txt"), later, later);
+  // Numstat prints a binary pair whatever its content, so only git's own content check drops it.
+  utimesSync(path.join(repo, "touched.bin"), later, later);
+  const index = readFileSync(path.join(repo, ".git", "index"));
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.changedFiles(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(readFileSync(path.join(repo, ".git", "index"))).toEqual(index);
+  expect(changed.changed.map((file) => file.path)).toEqual([
+    "edited.txt",
+    "mode.bin",
+    "mode.txt",
+  ]);
+});
+
+test("Git.changedFiles answers while another git process holds index.lock", async () => {
+  const repo = createFixtureRepo("git-service-locked-", { "a.txt": "one\n" });
+
+  writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
+  writeFileSync(path.join(repo, ".git", "index.lock"), "");
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.changedFiles(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(changed.changed.map((file) => file.path)).toEqual(["a.txt"]);
+  expect(existsSync(path.join(repo, ".git", "index.lock"))).toBe(true);
+});
+
+test("Git.changedFiles reports an edit made in the same second as the staging before it", async () => {
+  const repo = createFixtureRepo("git-service-racy-", { "a.txt": "aaaa\n" });
+  const file = path.join(repo, "a.txt");
+  // With ctime ignored, only mtime and size can tell git the file moved on since `git add`, and both
+  // match: git catches the edit only because the entry is as new as the index file itself.
+  runGit(repo, ["config", "core.trustctime", "false"]);
+  const second = new Date(Math.floor(Date.now() / 1000) * 1000 - 10_000);
+
+  writeFileSync(file, "bbbb\n");
+  utimesSync(file, second, second);
+  runGit(repo, ["add", "a.txt"]);
+  writeFileSync(file, "cccc\n");
+  utimesSync(file, second, second);
+  utimesSync(path.join(repo, ".git", "index"), second, second);
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) =>
+        git.changedFiles(repo, { kind: "unstaged", ref: "HEAD" })
+      ),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(changed.changed.map((entry) => entry.path)).toEqual(["a.txt"]);
+});
+
+test("Git.changedFiles follows staging done between two reads", async () => {
+  const repo = createFixtureRepo("git-service-restage-", { "a.txt": "one\n" });
+
+  writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
+
+  const [before, after] = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) =>
+        git.changedFiles(repo, allScope).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              runGit(repo, ["add", "a.txt"]);
+            })
+          ),
+          Effect.flatMap((first) =>
+            git
+              .changedFiles(repo, allScope)
+              .pipe(Effect.map((second) => [first, second] as const))
+          )
+        )
+      ),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(before.changedByPath.get("a.txt")?.stage).toBe("unstaged");
+  expect(after.changedByPath.get("a.txt")?.stage).toBe("staged");
+});
+
+test("Git.changedFiles reads a linked worktree whose .git names its git dir relatively", async () => {
+  const repo = createFixtureRepo("git-service-relative-", {
+    "edited.txt": "one\n",
+    "touched.txt": "one\n",
+  });
+
+  const linked = `${repo}-linked`;
+  runGit(repo, ["worktree", "add", "-b", "linked", linked]);
+  // The pointer git writes under `worktree.useRelativePaths`, written by hand so the case holds on
+  // a git that predates the setting.
+  writeFileSync(
+    path.join(linked, ".git"),
+    `gitdir: ../${path.basename(repo)}/.git/worktrees/${path.basename(linked)}\n`
+  );
+  writeFileSync(path.join(linked, "edited.txt"), "one\ntwo\n");
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(path.join(linked, "touched.txt"), later, later);
+
+  try {
+    const changed = await Effect.runPromise(
+      Git.pipe(
+        Effect.flatMap((git) => git.changedFiles(linked, allScope)),
+        Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+      )
+    );
+
+    expect(changed.changed.map((entry) => entry.path)).toEqual(["edited.txt"]);
+  } finally {
+    rmSync(linked, { force: true, recursive: true });
+  }
+});
+
+test("Git.changedFiles leaves a submodule's index untouched and still reports its edits", async () => {
+  const source = createFixtureRepo("git-service-subsource-", {
+    "edited.txt": "one\n",
+    "touched.txt": "one\n",
+  });
+
+  const repo = createFixtureRepo("git-service-super-", { "a.txt": "one\n" });
+  runGit(repo, [
+    "-c",
+    "protocol.file.allow=always",
+    "submodule",
+    "add",
+    source,
+    "sub",
+  ]);
+  runGit(repo, ["commit", "-m", "add sub"]);
+  const sub = path.join(repo, "sub");
+  // Git runs a nested `git status` inside the submodule to tell whether it is dirty, against the
+  // submodule's own real index: the stat-only change is what would make that child rewrite it.
+  writeFileSync(path.join(sub, "edited.txt"), "one\ntwo\n");
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(path.join(sub, "touched.txt"), later, later);
+  const subIndex = path.join(repo, ".git", "modules", "sub", "index");
+  const index = readFileSync(subIndex);
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.changedFiles(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(readFileSync(subIndex)).toEqual(index);
+  expect(changed.changed.map((entry) => entry.path)).toEqual(["sub"]);
+});
+
+test("Git.changedFiles adds no file to a split index's git dir", async () => {
+  const repo = createFixtureRepo("git-service-split-", {
+    "edited.txt": "one\n",
+    "touched.txt": "one\n",
+  });
+
+  // A zero threshold makes every write of a split index write a new shared index beside it.
+  runGit(repo, ["config", "core.splitIndex", "true"]);
+  runGit(repo, ["config", "splitIndex.maxPercentChange", "0"]);
+  runGit(repo, ["update-index", "--split-index"]);
+  writeFileSync(path.join(repo, "edited.txt"), "one\ntwo\n");
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(path.join(repo, "touched.txt"), later, later);
+  const before = readdirSync(path.join(repo, ".git")).toSorted();
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) =>
+        git
+          .changedFiles(repo, allScope)
+          .pipe(Effect.flatMap(() => git.changedFiles(repo, allScope)))
+      ),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(readdirSync(path.join(repo, ".git")).toSorted()).toEqual(before);
+  expect(changed.changed.map((entry) => entry.path)).toEqual(["edited.txt"]);
+});
+
 // The caller substitutes this repository's empty tree; the service only reports that there is no
-// Parent, since only the caller knows which empty tree this repository uses.
+// parent, since only the caller knows which empty tree this repository uses.
 test("Git.parentRef reports no parent on a root commit", async () => {
   const repo = createFixtureRepo("git-service-rootcommit-", {
     "a.txt": "one\n",

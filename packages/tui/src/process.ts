@@ -61,12 +61,22 @@ export const ProcessLive = Layer.succeed(Process)({
           return Bun.spawn({
             cmd: [...command],
             cwd,
-            // GIT_OPTIONAL_LOCKS=0 stops git status/diff from refreshing the index
-            // (which takes .git/index.lock) and racing a concurrent agent commit.
-            // Non-git children ignore the unknown variable, so it is safe globally.
-            // StripGitEnv drops any inherited GIT_DIR/GIT_WORK_TREE/etc (e.g. from a
-            // Launching shell or git hook), so cwd always governs repo discovery.
-            env: { ...stripGitEnv(Bun.env), GIT_OPTIONAL_LOCKS: "0" },
+            // No git child may take .git/index.lock, or an agent's concurrent
+            // `git commit` fails on it. GIT_OPTIONAL_LOCKS=0 covers `git status`, but
+            // `git diff` refreshes the index after any stat-only change regardless of
+            // It (refresh_index_quietly), so diff.autoRefreshIndex=false turns that off;
+            // AssembleChanged drops the stat-only entries it then reports. GIT_CONFIG_*
+            // Needs git 2.31, the floor `--path-format` already sets. Non-git children
+            // Ignore these. StripGitEnv drops any inherited GIT_DIR/GIT_WORK_TREE/etc
+            // (e.g. from a launching shell or git hook), so cwd always governs repo
+            // Discovery.
+            env: {
+              ...stripGitEnv(Bun.env),
+              GIT_CONFIG_COUNT: "1",
+              GIT_CONFIG_KEY_0: "diff.autoRefreshIndex",
+              GIT_CONFIG_VALUE_0: "false",
+              GIT_OPTIONAL_LOCKS: "0",
+            },
             stderr: "pipe",
             stdin:
               options?.stdin === undefined

@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -60,6 +67,46 @@ test("Git.changedFiles includes an untracked file", async () => {
 
 // The caller substitutes this repository's empty tree; the service only reports that there is no
 // Parent, since only the caller knows which empty tree this repository uses.
+test("Git.changedFiles leaves the index untouched", async () => {
+  const repo = createFixtureRepo("git-service-index-", {
+    "edited.txt": "one\n",
+    "touched.txt": "one\n",
+  });
+
+  writeFileSync(path.join(repo, "edited.txt"), "one\ntwo\n");
+  // A metadata-only change is what makes `git diff` refresh, and so rewrite, the index.
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(path.join(repo, "touched.txt"), later, later);
+  const index = readFileSync(path.join(repo, ".git", "index"));
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.changedFiles(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(readFileSync(path.join(repo, ".git", "index"))).toEqual(index);
+  expect(changed.changed.map((file) => file.path)).toEqual(["edited.txt"]);
+});
+
+test("Git.changedFiles answers while another git process holds index.lock", async () => {
+  const repo = createFixtureRepo("git-service-locked-", { "a.txt": "one\n" });
+
+  writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n");
+  writeFileSync(path.join(repo, ".git", "index.lock"), "");
+
+  const changed = await Effect.runPromise(
+    Git.pipe(
+      Effect.flatMap((git) => git.changedFiles(repo, allScope)),
+      Effect.provide(GitLive.pipe(Layer.provide(ProcessLive)))
+    )
+  );
+
+  expect(changed.changed.map((file) => file.path)).toEqual(["a.txt"]);
+  expect(existsSync(path.join(repo, ".git", "index.lock"))).toBe(true);
+});
+
 test("Git.parentRef reports no parent on a root commit", async () => {
   const repo = createFixtureRepo("git-service-rootcommit-", {
     "a.txt": "one\n",

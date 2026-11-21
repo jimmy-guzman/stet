@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schedule } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { constVoid } from "effect/Function";
 
 import type { DiffScope } from "@/cli";
@@ -56,19 +56,6 @@ import type { Worktree, WorktreeSummary } from "./worktree";
 
 const toGitError = (error: CommandError) =>
   new GitError({ message: error.message });
-
-const isTransientGit = (error: CommandError) =>
-  // An index.lock (an agent mid-commit) clears on a quick retry
-  /index\.lock|unable to create/iu.test(error.stderr);
-
-const retryTransient = <A>(effect: Effect.Effect<A, CommandError>) =>
-  effect.pipe(
-    Effect.retry({
-      schedule: Schedule.spaced("50 millis"),
-      times: 2,
-      while: isTransientGit,
-    })
-  );
 
 export class Git extends Context.Service<
   Git,
@@ -157,8 +144,6 @@ export const GitLive = Layer.effect(
   Effect.gen(function* gitLive() {
     const process = yield* Process;
 
-    // No retryTransient on `git show`: a bad spec (submodule gitlink, ref gone
-    // Mid-flight) should fail fast into the fallback, not retry.
     const fetchSide = (
       repoRoot: string,
       side: PatchSide,
@@ -213,7 +198,6 @@ export const GitLive = Layer.effect(
           ],
           { concurrency: "unbounded" }
         ).pipe(
-          retryTransient,
           Effect.map(([untracked, nameStatus, numstat, porcelain]) =>
             assembleChanged(
               repoRoot,
@@ -297,7 +281,6 @@ export const GitLive = Layer.effect(
       // Watches it as a second root to catch staging/commit/checkout there.
       gitDir: (repoRoot) =>
         process.run(["git", "rev-parse", "--absolute-git-dir"], repoRoot).pipe(
-          retryTransient,
           Effect.map((result) => result.stdout.trim()),
           Effect.mapError(toGitError)
         ),
@@ -310,7 +293,6 @@ export const GitLive = Layer.effect(
             allowedExitCodes: [0, 128],
           })
           .pipe(
-            retryTransient,
             Effect.map((result) => result.stdout.trim() || undefined),
             Effect.mapError(toGitError)
           ),
@@ -331,7 +313,6 @@ export const GitLive = Layer.effect(
           ],
           { concurrency: "unbounded" }
         ).pipe(
-          retryTransient,
           Effect.map(([tracked, untracked, nameStatus, numstat, porcelain]) =>
             assembleModel(
               repoRoot,
@@ -354,7 +335,6 @@ export const GitLive = Layer.effect(
             allowedExitCodes: [0, 128],
           })
           .pipe(
-            retryTransient,
             Effect.map((result) => result.stdout.trim() || undefined),
             Effect.mapError(toGitError)
           ),
@@ -365,7 +345,6 @@ export const GitLive = Layer.effect(
         process
           .run(logArgs(limit), repoRoot, { allowedExitCodes: [0, 128] })
           .pipe(
-            retryTransient,
             Effect.map((result) => parseLog(result.stdout)),
             Effect.mapError(toGitError)
           ),
@@ -442,7 +421,6 @@ export const GitLive = Layer.effect(
           ],
           { concurrency: "unbounded" }
         ).pipe(
-          retryTransient,
           Effect.map(([tracked, untracked]) =>
             parseRepoFiles(repoRoot, tracked.stdout, untracked.stdout)
           ),
@@ -455,7 +433,6 @@ export const GitLive = Layer.effect(
             allowedExitCodes: [0, 1],
           })
           .pipe(
-            retryTransient,
             // Bytes, not the decoded stdout: the parse converts git's byte columns
             // Against the raw line, immune to replacement-char width drift.
             Effect.map((result) => parseSearchOutput(result.stdoutBytes)),
@@ -482,7 +459,6 @@ export const GitLive = Layer.effect(
             Effect.all(
               worktrees.map((worktree) =>
                 process.run(worktreeStatusArgs, worktree.path).pipe(
-                  retryTransient,
                   Effect.map((result) =>
                     summarizeWorktree(
                       worktree.path,
@@ -505,7 +481,6 @@ export const GitLive = Layer.effect(
         process
           .run(["git", "worktree", "list", "--porcelain", "-z"], repoRoot)
           .pipe(
-            retryTransient,
             Effect.map((result) => parseWorktreeList(result.stdout)),
             Effect.mapError(toGitError)
           ),

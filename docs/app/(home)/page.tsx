@@ -77,11 +77,11 @@ export default function Page() {
         />
       </section>
 
-      <section className="border-fd-border bg-fd-border mx-auto grid w-full max-w-6xl grid-cols-1 gap-px overflow-hidden rounded-xl border px-0 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="border-fd-border bg-fd-border mx-auto grid w-full max-w-6xl grid-cols-1 gap-px overflow-hidden rounded-xl border px-0 sm:grid-cols-2">
         {features.map((feature) => (
           <div
             key={feature.title}
-            className="bg-fd-background hover:bg-fd-muted flex flex-col gap-3 p-6 transition-colors sm:last:col-span-2"
+            className="bg-fd-background hover:bg-fd-muted flex flex-col gap-3 p-6 transition-colors"
           >
             <feature.icon className="text-fd-primary size-5" />
             <h2 className="font-mono text-base font-semibold">

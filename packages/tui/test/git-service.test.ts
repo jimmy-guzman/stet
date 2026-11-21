@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -65,15 +66,16 @@ test("Git.changedFiles includes an untracked file", async () => {
   );
 });
 
-// The caller substitutes this repository's empty tree; the service only reports that there is no
-// Parent, since only the caller knows which empty tree this repository uses.
 test("Git.changedFiles leaves the index untouched", async () => {
   const repo = createFixtureRepo("git-service-index-", {
     "edited.txt": "one\n",
+    "mode.txt": "one\n",
     "touched.txt": "one\n",
   });
 
   writeFileSync(path.join(repo, "edited.txt"), "one\ntwo\n");
+  // A mode change has no churn, so only its numstat record keeps it in the set.
+  chmodSync(path.join(repo, "mode.txt"), 0o755);
   // A metadata-only change is what makes `git diff` refresh, and so rewrite, the index.
   const later = new Date(Date.now() + 60_000);
   utimesSync(path.join(repo, "touched.txt"), later, later);
@@ -87,7 +89,10 @@ test("Git.changedFiles leaves the index untouched", async () => {
   );
 
   expect(readFileSync(path.join(repo, ".git", "index"))).toEqual(index);
-  expect(changed.changed.map((file) => file.path)).toEqual(["edited.txt"]);
+  expect(changed.changed.map((file) => file.path)).toEqual([
+    "edited.txt",
+    "mode.txt",
+  ]);
 });
 
 test("Git.changedFiles answers while another git process holds index.lock", async () => {
@@ -107,6 +112,8 @@ test("Git.changedFiles answers while another git process holds index.lock", asyn
   expect(existsSync(path.join(repo, ".git", "index.lock"))).toBe(true);
 });
 
+// The caller substitutes this repository's empty tree; the service only reports that there is no
+// parent, since only the caller knows which empty tree this repository uses.
 test("Git.parentRef reports no parent on a root commit", async () => {
   const repo = createFixtureRepo("git-service-rootcommit-", {
     "a.txt": "one\n",

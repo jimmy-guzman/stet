@@ -91,7 +91,7 @@ export const assembleChanged = (
 
   // With diff.autoRefreshIndex off (see `Process`), --name-status reports a stat-only change as
   // `M`; --numstat compares content and omits it, while every real modification (mode, binary,
-  // Symlink, submodule, conflict) keeps a numstat record.
+  // symlink, submodule, conflict) keeps a numstat record.
   const nameStatus = parseNameStatus(nameStatusOutput).filter(
     (entry) => entry.kind !== "modified" || numstatByPath.has(entry.path)
   );

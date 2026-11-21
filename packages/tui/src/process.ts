@@ -64,12 +64,12 @@ export const ProcessLive = Layer.succeed(Process)({
             // No git child may take .git/index.lock, or an agent's concurrent
             // `git commit` fails on it. GIT_OPTIONAL_LOCKS=0 covers `git status`, but
             // `git diff` refreshes the index after any stat-only change regardless of
-            // It (refresh_index_quietly), so diff.autoRefreshIndex=false turns that off;
-            // AssembleChanged drops the stat-only entries it then reports. GIT_CONFIG_*
-            // Needs git 2.31, the floor `--path-format` already sets. Non-git children
-            // Ignore these. StripGitEnv drops any inherited GIT_DIR/GIT_WORK_TREE/etc
+            // it (refresh_index_quietly), so diff.autoRefreshIndex=false turns that off;
+            // `assembleChanged` drops the stat-only entries it then reports. GIT_CONFIG_*
+            // needs git 2.31, the floor `--path-format` already sets. Non-git children
+            // ignore these. `stripGitEnv` drops any inherited GIT_DIR/GIT_WORK_TREE/etc
             // (e.g. from a launching shell or git hook), so cwd always governs repo
-            // Discovery.
+            // discovery.
             env: {
               ...stripGitEnv(Bun.env),
               GIT_CONFIG_COUNT: "1",

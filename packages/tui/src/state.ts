@@ -2565,6 +2565,27 @@ const createState = () => {
     return false;
   };
 
+  const revealRestoreTarget = (pending: PendingRestore, full: boolean) => {
+    if (pending.jump !== undefined) {
+      return revealJumpTarget(pending.jump, full);
+    }
+
+    if (pending.cursorLine === undefined || pending.cursorSide === "old") {
+      return false;
+    }
+
+    const gap = diffView()?.render.gapAtLine(pending.cursorLine);
+    const gaps = expandedGaps();
+
+    if (gap === undefined || gaps.has(gap)) {
+      return false;
+    }
+
+    setExpandedGaps(new Set(gaps).add(gap));
+
+    return true;
+  };
+
   // Open the context menu on a pane. A right-click passes its exact cell as `anchor`;
   // The keyboard trigger omits it, so the tree menu falls back to the focused row and
   // The viewer menu derives its anchor from the caret (stored as none). A no-op when
@@ -3749,7 +3770,7 @@ const createState = () => {
     resetFind,
     resetPane,
     resetState,
-    revealJumpTarget,
+    revealRestoreTarget,
     scope,
     scopeMenuIndex,
     scopeMenuOpen,

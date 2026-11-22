@@ -179,11 +179,7 @@ export const Viewer = () => {
     const lines = state.navigableLines();
     const found = findRestoreIndex(lines, pending);
 
-    if (
-      found === -1 &&
-      pending.jump !== undefined &&
-      state.revealJumpTarget(pending.jump, view.full)
-    ) {
+    if (found === -1 && state.revealRestoreTarget(pending, view.full)) {
       return;
     }
 

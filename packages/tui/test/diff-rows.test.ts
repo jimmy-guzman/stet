@@ -94,6 +94,7 @@ describe("diff rows", () => {
       kind: "separator",
       text: "1 unmodified line",
     });
+    expect(render.gapAtLine(1)).toBeUndefined();
   });
 
   test("with both sides, every gap (the trailing one too) is a collapsed marker keyed by the hunk it precedes", async () => {
@@ -117,6 +118,13 @@ describe("diff rows", () => {
       "context:14/14",
       "gap:gap:1:16",
     ]);
+    expect(render.gapAtLine(1)).toBe("gap:0");
+    expect(render.gapAtLine(7)).toBe("gap:0");
+    expect(render.gapAtLine(8)).toBeUndefined();
+    expect(render.gapAtLine(14)).toBeUndefined();
+    expect(render.gapAtLine(15)).toBe("gap:1");
+    expect(render.gapAtLine(30)).toBe("gap:1");
+    expect(render.gapAtLine(31)).toBeUndefined();
   });
 
   test("expanding a gap reveals its lines highlighted behind a hide marker, with contiguous navIndex", async () => {
@@ -175,6 +183,7 @@ describe("diff rows", () => {
 
     expect(capped.hiddenLines).toBe(5);
     expect(capped.navigable).toHaveLength(3);
+    expect(capped.gapAtLine(15)).toBeUndefined();
 
     // Revealing the gap above the cap shows its lines but pulls in nothing below it.
     const expanded = capped.expand(new Set(["gap:0"]));

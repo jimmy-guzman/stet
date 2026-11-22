@@ -9,6 +9,7 @@ import {
 } from "@pierre/diffs";
 import type { HunkExpansionRegion, HunksRenderResult } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
+import { constUndefined } from "effect/Function";
 
 import { fileSupportForPath } from "@/file-support/registry";
 import type { DiffInput } from "@/git/file-patch";
@@ -18,6 +19,7 @@ import type { ZedTheme } from "@/theme/zed";
 import type { RenderSpan } from "./hast";
 import {
   capCutoff,
+  collapsedGapAtLine,
   gapIndexOf,
   navigableLinesFromRows,
   rowsFromHunks,
@@ -39,6 +41,7 @@ export interface DiffRender extends DiffLayout {
    * caret remap that follows it.
    */
   expand: (gaps: ReadonlySet<string>) => DiffLayout;
+  gapAtLine: (line: number) => string | undefined;
 }
 
 /**
@@ -97,7 +100,12 @@ const MAX_CACHE = 40;
 // Backstop for many tiny renders.
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 const EMPTY_LAYOUT: DiffLayout = { hiddenLines: 0, navigable: [], rows: [] };
-const EMPTY: DiffRender = { ...EMPTY_LAYOUT, expand: () => EMPTY_LAYOUT };
+
+const EMPTY: DiffRender = {
+  ...EMPTY_LAYOUT,
+  expand: () => EMPTY_LAYOUT,
+  gapAtLine: constUndefined,
+};
 
 const cache = new Map<string, { render: DiffRender; bytes: number }>();
 let cacheBytes = 0;
@@ -301,6 +309,7 @@ const compute = async (
       ...base,
       expand: (gaps) =>
         gaps.size === 0 ? base : layout(renderWith(gaps) ?? collapsed, gaps),
+      gapAtLine: (line) => collapsedGapAtLine(meta, base.rows, line),
     },
     retained:
       (meta.additionCharacterCount + meta.deletionCharacterCount) *

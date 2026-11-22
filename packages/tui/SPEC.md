@@ -92,7 +92,7 @@ Refresh the tree, diff, and file content while the user watches. A debounced fil
 The viewer opens one file at a time. History stores the path, diff side, file line, caret column, scroll, and the mode selected with `v`. The pure model lives in `src/viewer/navigation.ts`. State captures the live viewer position on leave. If a jump is still loading, its requested line and column stay with the visit. Back, Forward, and reopening the file can finish it. Pressing `f` loads full content for that path until the worktree changes.
 
 - **Browsing and jumps.** Continuous tree browsing coalesces into one entry at the end of history. A deliberate jump adds an entry and discards forward history. A jump to the current visible location updates that entry in place and preserves forward history. Reopening the current file without a line target preserves its live position and forward history.
-- **Back and forward.** `<` and `>` restore the location recorded at each entry. Reopening a file directly restores its last remembered caret and scroll position. The caret uses a file line so it can survive refreshes. Scroll restoration is best-effort.
+- **Back and forward.** `<` and `>` restore the location recorded at each entry. Reopening a file directly restores its last remembered caret and scroll position. A saved caret inside an expandable git gap reopens that gap in diff mode. The caret uses a file line so it can survive refreshes. Scroll restoration is best-effort.
 - **Scopes and worktrees.** The current diff scope applies to every location. Refreshes and scope changes preserve history. A worktree switch starts a fresh history seeded with the new worktree's selected file.
 
 ## Content search

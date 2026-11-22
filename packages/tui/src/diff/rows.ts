@@ -83,6 +83,31 @@ const gapIndexFor = (meta: FileDiffMetadata, newLine: number) => {
   return index === -1 ? meta.hunks.length : index;
 };
 
+/** Locate the expandable gap that contains a saved new-side line. */
+export const collapsedGapAtLine = (
+  meta: FileDiffMetadata,
+  rows: readonly DiffRow[],
+  line: number
+) =>
+  rows
+    .values()
+    .filter((row) => row.kind === "marker")
+    .find((row) => {
+      if (row.regionKind !== "gap" || !row.collapsed) {
+        return false;
+      }
+
+      const nextHunk = meta.hunks[gapIndexOf(row.key)];
+
+      // An empty new side starts at the boundary before the hunk.
+      const lastLine =
+        nextHunk === undefined
+          ? meta.additionLines.length
+          : nextHunk.additionStart - (nextHunk.additionCount === 0 ? 0 : 1);
+
+      return line <= lastLine && line > lastLine - row.count;
+    })?.key;
+
 const separatorRow = (data: HunkData): DiffRow =>
   data.expandable === undefined
     ? { glyph: "⋯", kind: "separator", text: unmodifiedLabel(data.lines) }

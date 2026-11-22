@@ -15,7 +15,7 @@ import {
 } from "./helpers";
 
 describe("gap expansion", () => {
-  test("z reveals the git-elided unmodified lines nearest the caret", async () => {
+  test("z reveals an unchanged gap and Back restores a saved line inside it", async () => {
     // Twenty flat lines (no indentation, so nothing folds); changing only the first
     // And last leaves a wide unchanged middle that git elides into one gap.
     const lines = Array.from(
@@ -28,6 +28,7 @@ describe("gap expansion", () => {
     const repoRoot = createFixtureRepo("stet-gap-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
       "src/mod.ts": source,
+      "src/other.ts": "export const other = true;\n",
     });
 
     const edited = source
@@ -39,7 +40,7 @@ describe("gap expansion", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
 
-    const { renderer, renderOnce, captureCharFrame, mockInput } =
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
       await testRender(() => <App />, {
         height: 30,
         width: 110,
@@ -73,6 +74,33 @@ describe("gap expansion", () => {
 
       expect(expanded).toContain("const l10 = 10");
       expect(state.cursorLineNumber()).toBe(20);
+
+      const lineY = expanded
+        .split("\n")
+        .findIndex((line) => line.includes("const l10 = 10"));
+
+      await mockMouse.click(state.layout().viewer.x + 14, lineY);
+      expect(state.cursorLineNumber()).toBe(10);
+
+      const savedColumn = state.caretColumn();
+      state.selectFile("src/other.ts");
+      await settleUntil(
+        "second file opened",
+        () => state.diffView()?.path === "src/other.ts"
+      );
+      mockInput.pressKey("<");
+
+      const restored = await settleUntil(
+        "returned to the diff",
+        () =>
+          state.diffView()?.path === "src/mod.ts" &&
+          state.pendingRestore() === undefined
+      );
+
+      expect(state.fileView()).toBe(false);
+      expect(state.cursorLineNumber()).toBe(10);
+      expect(state.caretColumn()).toBe(savedColumn);
+      expect(restored).toContain("const l10 = 10");
     } finally {
       renderer.destroy();
     }

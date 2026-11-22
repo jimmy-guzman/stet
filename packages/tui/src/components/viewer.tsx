@@ -1,6 +1,7 @@
 import type { InputRenderable } from "@opentui/core";
 import { batch, createEffect, Match, on, Show, Switch } from "solid-js";
 
+import type { NavigableLine } from "@/diff/rows";
 import { firstWord, wordAt } from "@/diff/words";
 import { state } from "@/state";
 import { theme } from "@/theme/context";
@@ -10,19 +11,36 @@ import {
   viewerStats,
 } from "@/ui-helpers";
 import { truncateLeft } from "@/utils/text";
+import type { Position } from "@/viewer/navigation";
 
 import { BinaryPreview } from "./binary-preview";
 import { DiffView } from "./diff/diff-view";
 import { emptyStateTone } from "./focus-tone";
 import { SearchPane } from "./search-pane";
-import { Tabs, titleColor } from "./tabs";
 
-// The caret offset for a 1-based jump column: snap to the word that owns it, else
-// Land on the raw (clamped) offset so a jump into a gap still lands precisely.
-const caretForColumn = (content: string, column: number) => {
-  const index = Math.max(0, Math.min(column - 1, content.length));
+const restoreColumn = (
+  content: string,
+  savedColumn: number | undefined,
+  jumpColumn: number | undefined
+) => {
+  if (jumpColumn === undefined) {
+    return savedColumn ?? firstWord(content);
+  }
+
+  // A jump into a gap keeps the requested offset.
+  const index = Math.max(0, Math.min(jumpColumn - 1, content.length));
 
   return wordAt(content, index)?.start ?? index;
+};
+
+const findRestoreIndex = (lines: NavigableLine[], position: Position) => {
+  if (position.cursorLine === undefined) {
+    return lines.findIndex((line) => line.type !== "context");
+  }
+
+  const side = position.cursorSide === "old" ? "oldLine" : "newLine";
+
+  return lines.findIndex((line) => line[side] === position.cursorLine);
 };
 
 /** A restore without a line match homes to the nearest navigable line, or the top on a fresh open. */
@@ -139,12 +157,8 @@ const onFindSubmit = () => {
 export const Viewer = () => {
   let findInputRef: InputRenderable | undefined;
 
-  // Apply a navigation's pending restore once the target diff has loaded under the
-  // Matching view intent (the same async-coherence guard a jump uses). A fresh
-  // Open carries `cursorLine: undefined` -> first change and a zero viewport, so
-  // "reset on file switch" is just restore-to-default; back/forward and revisits
-  // Carry a remembered line and viewport. This replaces the old per-path cursor
-  // Reset and DiffView's scrollX reset with one path.
+  // Resolve the current request against the loaded view. Navigation replaces the
+  // request, so completion cannot consume an older jump after a new one arrives.
   createEffect(() => {
     const pending = state.pendingRestore();
 
@@ -156,21 +170,22 @@ export const Viewer = () => {
 
     if (
       view?.path !== pending.path ||
-      view.showFileContent !== state.showFileContent()
+      view.showFileContent !== state.showFileContent() ||
+      view.full !== state.fullContentPaths().has(pending.path)
     ) {
       return;
     }
 
     const lines = state.navigableLines();
+    const found = findRestoreIndex(lines, pending);
 
-    const found =
-      pending.cursorLine === undefined
-        ? lines.findIndex((line) => line.type !== "context")
-        : lines.findIndex(
-            (line) =>
-              line.newLine === pending.cursorLine ||
-              line.oldLine === pending.cursorLine
-          );
+    if (
+      found === -1 &&
+      pending.jump !== undefined &&
+      state.revealJumpTarget(pending.jump, view.full)
+    ) {
+      return;
+    }
 
     // A fresh open homes to the first change. When the file has line changes yet
     // This snapshot shows none, the diff is still loading (an interrupted git read
@@ -196,11 +211,11 @@ export const Viewer = () => {
 
     const index = restoreIndex(lines, found, pending.cursorLine);
 
-    // The caret restores to its remembered offset (already a word start), or the
-    // New line's first word on a fresh open; the clamp effect below corrects an
-    // Offset that no longer fits if the content changed under it.
-    const column =
-      pending.cursorColumn ?? firstWord(lines[index]?.content ?? "");
+    const column = restoreColumn(
+      lines[index]?.content ?? "",
+      pending.cursorColumn,
+      found === -1 ? undefined : pending.jump?.column
+    );
 
     batch(() => {
       state.setCaretLineLevel(false);
@@ -235,87 +250,6 @@ export const Viewer = () => {
       }
     )
   );
-
-  // Deferred jumps (problem/recency navigation): land on the line, un-truncate,
-  // Or escalate to file view to find it. A jump sets both `jumpTarget` and (via
-  // SelectFile) `pendingRestore`; this effect must stay declared after the restore
-  // Effect above so it runs last and the jump's line wins over the restored cursor.
-  createEffect(() => {
-    const jump = state.jumpTarget();
-
-    if (jump === undefined || jump.path !== state.selectedPath()) {
-      return;
-    }
-
-    // Only resolve once the loaded snapshot matches the current target AND view
-    // Intent. `selectedPath`/`fileView` update synchronously, but `diffView`
-    // (which feeds `navigableLines`) loads async; acting on a stale snapshot
-    // Consumes the jump against the wrong content and never lands on the line.
-    // The `showFileContent` check is what makes escalation work: after the jump
-    // Flips to file view, it waits for the full content instead of clearing
-    // Itself against the still-loaded diff.
-    const view = state.diffView();
-
-    if (
-      view?.path !== jump.path ||
-      view.showFileContent !== state.showFileContent()
-    ) {
-      return;
-    }
-
-    const lines = state.navigableLines();
-    const index = lines.findIndex((line) => line.newLine === jump.line);
-
-    if (index !== -1) {
-      const content = lines[index]?.content ?? "";
-      batch(() => {
-        state.setCaretLineLevel(false);
-        state.setCursorIndex(index);
-        state.setCursorColumn(
-          jump.column === undefined
-            ? firstWord(content)
-            : caretForColumn(content, jump.column)
-        );
-        // A jump's explicit line:col supersedes any remembered restore for the same
-        // Target; consume both so a later restore pass can't overwrite the caret
-        // (their effect ordering is not guaranteed once folds churn navigableLines).
-        state.setPendingRestore(undefined);
-        state.setJumpTarget(undefined);
-      });
-
-      return;
-    }
-
-    // A fold may be hiding the target line; clearing it re-runs this effect (which
-    // Reads `navigableLines`) so the now-visible line is found on the next pass.
-    if (state.revealLineForJump(jump.line)) {
-      return;
-    }
-
-    if (state.truncated() && !state.fullContentPaths().has(jump.path)) {
-      state.setFullContentPaths((current) => new Set(current).add(jump.path));
-
-      return;
-    }
-
-    if (
-      jump.escalate &&
-      state.selectedFile() !== undefined &&
-      !state.fileView()
-    ) {
-      state.setFileView(true);
-
-      return;
-    }
-
-    const nearest = nearestNavigableIndex(lines, jump.line);
-
-    if (nearest >= 0) {
-      state.setCursorRow(nearest);
-    }
-
-    state.setJumpTarget(undefined);
-  });
 
   // The input stays mounted whenever the bar shows so a committed (blurred) find
   // Never captures the n/N cycle keys; `focused` follows findOpen. Each open
@@ -358,18 +292,16 @@ export const Viewer = () => {
                 paddingLeft={1}
                 paddingRight={1}
               >
-                {/* The strip earns the row only once a tab is pinned; a lone preview
-                shows the path as before. */}
-                <Show
-                  when={state.tabItems().some((tab) => !tab.preview)}
-                  fallback={
-                    <text fg={titleColor()} wrapMode="none">
-                      {truncateLeft(state.selectedPath() ?? "", titleBudget())}
-                    </text>
+                <text
+                  fg={
+                    state.focusedPane() === "diff"
+                      ? theme.colors.text.primary
+                      : theme.colors.text.secondary
                   }
+                  wrapMode="none"
                 >
-                  <Tabs budget={titleBudget()} />
-                </Show>
+                  {truncateLeft(state.selectedPath() ?? "", titleBudget())}
+                </text>
                 <text fg={theme.colors.text.muted} flexShrink={0}>
                   {titleStats()}
                 </text>
@@ -475,8 +407,6 @@ export const Viewer = () => {
           key. */}
           <Show when={state.truncated()}>
             <box
-              // Non-selectable so a click/double-click on the row never starts a text
-              // Selection (a stray highlight); it is chrome, not content (mirrors Tabs).
               ref={(el) => {
                 el.selectable = false;
               }}

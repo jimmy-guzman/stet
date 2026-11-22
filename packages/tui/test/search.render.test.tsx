@@ -15,7 +15,7 @@ import {
 } from "./helpers";
 
 describe("project content search", () => {
-  test("ctrl-f searches changed files, ctrl-a widens, enter jumps, reopening restores", async () => {
+  test("search jumps enter viewer history and reopening search restores results", async () => {
     const repoRoot = createFixtureRepo("stet-search-", {
       "src/a.ts": "const x = 1\n",
       // Lib.ts stays unchanged (only under whole-repo scope); needle is on line 3.
@@ -39,8 +39,11 @@ describe("project content search", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      // The seeded file is a.ts, so selecting lib.ts below is a cross-file jump.
-      await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
+      await settleUntil(
+        "caret in the initial file",
+        () =>
+          state.selectedPath() === "src/a.ts" && state.cursorLineNumber() === 2
+      );
 
       mockInput.pressKey("f", { ctrl: true });
       await settleUntil("search pane", (frame) => frame.includes("search…"));
@@ -83,6 +86,22 @@ describe("project content search", () => {
       );
 
       expect(jumped).not.toContain("g/G ends");
+
+      mockInput.pressKey("<");
+      await settleUntil(
+        "back on a.ts",
+        () =>
+          state.diffView()?.path === "src/a.ts" &&
+          state.cursorLineNumber() === 2
+      );
+      mockInput.pressKey(">");
+      await settleUntil(
+        "forward to the search match",
+        () =>
+          state.diffView()?.path === "src/lib.ts" &&
+          state.cursorLineNumber() === 3 &&
+          state.caretColumn() === 14
+      );
 
       // Reopening restores the query and the result set without retyping.
       mockInput.pressKey("f", { ctrl: true });
@@ -143,11 +162,15 @@ describe("project content search", () => {
     }
   }, 20_000);
 
-  test("jumps to a match outside the diff hunk by escalating to full file", async () => {
+  test("off-hunk search matches restore in full-file view and preserve Forward on reselection", async () => {
     // A 60-line zzz.ts with needle on line 50; editing line 1 puts the only diff
     // Hunk far from the match, so the jump must escalate to full-file view.
+    const matchLine = 50;
+
     const lines = Array.from({ length: 60 }, (_, index) =>
-      index === 49 ? "const needle = 1" : `const x${index} = ${index}`
+      index === matchLine - 1
+        ? "const needle = 1"
+        : `const x${index} = ${index}`
     );
 
     const repoRoot = createFixtureRepo("stet-search-escalate-", {
@@ -172,6 +195,14 @@ describe("project content search", () => {
 
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
+    const matchIsOpen = () =>
+      state.mainView() === "file" &&
+      state.diffView()?.path === "src/zzz.ts" &&
+      state.fileView() &&
+      state.diffView()?.showFileContent === true &&
+      state.cursorLineNumber() === matchLine &&
+      state.caretColumn() === 7;
+
     try {
       // Seeded on aaa.ts; the only needle match is line 50 of the changed zzz.ts.
       await settleUntil("app chrome", (frame) => frame.includes("q quit"), 5);
@@ -185,10 +216,34 @@ describe("project content search", () => {
       // Enter from the query submits the highlighted (first) match directly.
       mockInput.pressEnter();
 
+      await settleUntil("jumped to zzz.ts line 50", matchIsOpen);
+
+      mockInput.pressKey("<");
       await settleUntil(
-        "jumped to zzz.ts line 50",
-        () => state.mainView() === "file" && state.cursorLineNumber() === 50
+        "back on aaa.ts",
+        () => state.diffView()?.path === "src/aaa.ts"
       );
+      mockInput.pressKey(">");
+      await settleUntil("forward to the match in full-file view", matchIsOpen);
+
+      state.selectFile("src/aaa.ts");
+      await settleUntil(
+        "opened aaa.ts after the match",
+        () => state.diffView()?.path === "src/aaa.ts"
+      );
+      mockInput.pressKey("<");
+      await settleUntil("back to the match in full-file view", matchIsOpen);
+      expect(state.canGoForward()).toBe(true);
+
+      mockInput.pressKey("f", { ctrl: true });
+      await settleUntil("search results reopened", (frame) =>
+        frame.includes("1 match in 1 file")
+      );
+      mockInput.pressEnter();
+      await settleUntil("same match reopened", matchIsOpen);
+
+      mockInput.pressKey(">");
+      expect(state.selectedPath()).toBe("src/aaa.ts");
     } finally {
       renderer.destroy();
     }

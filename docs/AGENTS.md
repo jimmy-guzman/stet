@@ -27,7 +27,7 @@ Check the capture against the sentence next to it, not just against the app. A s
 
 The mechanics:
 
-- Screenshots are generated, never hand-captured: `bun run screenshots` from the repo root drives the real binary through VHS (`packages/tui/script/screenshots.ts`). Pass names to shoot a subset, e.g. `bun run screenshots find tabs`. Adding one means adding an entry to that file's `screens` array; do not drop a PNG into `public/screenshots/` by hand.
+- Screenshots are generated, never hand-captured: `bun run screenshots` from the repo root drives the real binary through VHS (`packages/tui/script/screenshots.ts`). Pass names to shoot a subset, e.g. `bun run screenshots find folding`. Adding one means adding an entry to that file's `screens` array; do not drop a PNG into `public/screenshots/` by hand.
 - Capture against a clean checkout, or point `STET_SCREENSHOT_REPO` at one, since uncommitted files show up in the captured tree and changed count.
 - They live in `public/screenshots/` as lowercase kebab-case PNGs named for their screen, and embed as plain markdown images. A custom component would bypass `remarkAbsoluteImages` in `lib/llm-image.ts` and leave a site-relative path in `/llms-full.txt` and the `.md` routes.
 - Alt text is sentence case, describes the state captured, and never starts with "Screenshot of". Do not quote a number the capture produces (a fold marker's line count), which the next regeneration invalidates.

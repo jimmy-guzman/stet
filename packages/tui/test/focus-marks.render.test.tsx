@@ -91,51 +91,6 @@ describe("focus marks", () => {
     }
   }, 20_000);
 
-  test("the active tab takes the same focus tone as the lone title", async () => {
-    const repoRoot = createFixtureRepo("stet-focus-tab-", {
-      "src/a.ts": "const a = 1\n",
-    });
-
-    writeFileSync(path.join(repoRoot, "src", "a.ts"), "const a = 2\n");
-
-    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
-    seedState(model, { kind: "all", ref: "HEAD" });
-
-    const { renderer, renderOnce, captureCharFrame, captureSpans, mockInput } =
-      await testRender(() => <App />, { height: 16, width: 100 });
-
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-    const tabFg = () => spanWith(captureSpans(), " src/a.ts ")?.fg;
-
-    try {
-      await settleUntil("title shown", (frame) => frame.includes("src/a.ts"));
-      mockInput.pressKey("t", { ctrl: true });
-      await settleUntil("tab pinned", () =>
-        state.tabItems().some((tab) => !tab.preview)
-      );
-      await renderOnce();
-      expect(state.focusedPane()).toBe("tree");
-      expect(
-        sameColor(
-          tabFg() ?? RGBA.fromHex("#000"),
-          RGBA.fromHex(theme.colors.text.secondary)
-        )
-      ).toBe(true);
-
-      mockInput.pressTab();
-      await settleUntil("viewer focused", () => state.focusedPane() === "diff");
-      await renderOnce();
-      expect(
-        sameColor(
-          tabFg() ?? RGBA.fromHex("#000"),
-          RGBA.fromHex(theme.colors.text.primary)
-        )
-      ).toBe(true);
-    } finally {
-      renderer.destroy();
-    }
-  }, 20_000);
-
   test("an empty pane marks focus on its empty-state line", async () => {
     // A repository with no files and no commits: the tree has no rows and nothing is selected.
     const repoRoot = createFixtureRepo(

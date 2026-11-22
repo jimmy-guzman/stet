@@ -191,29 +191,6 @@ describe("createKeyHandler", () => {
     expect(state.sidebarOpen()).toBe(true);
   });
 
-  test("ctrl-t pins; a later navigation opens a fresh preview; { } cycle; ctrl-w closes", () => {
-    state.selectFile("a.ts");
-    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
-
-    // Pin a.ts (no new tab yet)
-    handle(keyEvent({ ctrl: true, name: "t" }));
-    expect(state.tabItems().length).toBe(1);
-    expect(state.tabItems()[0].preview).toBe(false);
-
-    // Fresh preview -> two tabs
-    state.selectFile("b.ts");
-    expect(state.tabItems().length).toBe(2);
-
-    const activeBefore = state.tabItems().findIndex((tab) => tab.active);
-    handle(keyEvent({ name: "{" }));
-    expect(state.tabItems().findIndex((tab) => tab.active)).not.toBe(
-      activeBefore
-    );
-
-    handle(keyEvent({ ctrl: true, name: "w" }));
-    expect(state.tabItems().length).toBe(1);
-  });
-
   test("ctrl-t does not fall through to the theme picker", () => {
     state.selectFile("a.ts");
     const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });

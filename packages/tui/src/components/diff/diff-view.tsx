@@ -306,6 +306,9 @@ export const DiffView = () => {
   const scrollX = state.viewerScrollX;
   const setScrollX = state.setViewerScrollX;
 
+  // Search unmounts this view. On return, keep its viewport until the caret or layout moves.
+  const followOnMount = untrack(state.pendingRestore) !== undefined;
+
   const rows = createMemo<DiffRow[]>(() => state.viewerRows());
 
   // Mouse capture belongs to one stable viewer-sized interaction layer, never a
@@ -616,15 +619,15 @@ export const DiffView = () => {
   // Never when scrollTop itself changes. Tracking scrollTop would make it re-run
   // On every wheel tick and snap the off-screen cursor back into view, so free
   // Wheel scrolling could never leave the cursor's screen.
-  createEffect(() => {
+  createEffect((follow: boolean) => {
     const cursorRow = lineRowIndices()[state.cursorIndex()];
 
     if (dragActive) {
-      return;
+      return true;
     }
 
     if (cursorRow === undefined || scrollRef === undefined) {
-      return;
+      return true;
     }
 
     const rowHeights = heights();
@@ -640,10 +643,12 @@ export const DiffView = () => {
       viewport: state.viewerHeight(),
     });
 
-    if (next !== current) {
+    if (follow && next !== current) {
       setScrollTop(next);
     }
-  });
+
+    return true;
+  }, followOnMount);
 
   // The caret word's display-column range on the cursor line, derived from the
   // Caret offset; undefined when the caret sits in a gap (no word to highlight).
@@ -707,11 +712,11 @@ export const DiffView = () => {
   // Wrap mode has no horizontal scroll). Reads scrollX untracked, like the vertical
   // Follow, so free horizontal wheel scrolling is never snapped back.
   const CARET_SCROLL_MARGIN = 4;
-  createEffect(() => {
+  createEffect((follow: boolean) => {
     const range = caretRange();
 
     if (range === undefined || wrap()) {
-      return;
+      return true;
     }
 
     const current = untrack(scrollX);
@@ -725,10 +730,12 @@ export const DiffView = () => {
       viewport: contentWidth(),
     });
 
-    if (next !== current) {
+    if (follow && next !== current) {
       setScrollX(next);
     }
-  });
+
+    return true;
+  }, followOnMount);
 
   // Each line's background: a find match wins, else a faint add/remove tint (the change
   // Bar and colored number carry the diff state; this is just a subtle block cue). The

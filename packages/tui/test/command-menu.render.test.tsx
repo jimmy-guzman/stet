@@ -58,19 +58,14 @@ describe("context command menu", () => {
 
       const frame = await settleUntil(
         "menu opens with its actions",
-        (current) => current.includes("Pin as tab")
+        (current) => current.includes("Copy path")
       );
 
       expect(state.commandMenuOpen()).toBe(true);
       expect(state.commandMenuContext()).toBe("tree");
 
       // Every file action, the selection caret, and the shared footer hint render.
-      for (const label of [
-        "Pin as tab",
-        "Copy path",
-        "Open in editor",
-        "Open in IDE",
-      ]) {
+      for (const label of ["Copy path", "Open in editor", "Open in IDE"]) {
         expect(frame).toContain(label);
       }
 
@@ -150,7 +145,7 @@ describe("context command menu", () => {
       // Open the menu on the second row (its menu box sits below, leaving the first
       // Row clickable).
       await mockMouse.click(5, treeRowOf(tree, "b.txt"), MouseButton.RIGHT);
-      await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
+      await settleUntil("menu open", (frame) => frame.includes("Copy path"));
       expect(state.commandMenuOpen()).toBe(true);
 
       // Click a different tree row: the focused node drifts, so the menu must close
@@ -159,7 +154,7 @@ describe("context command menu", () => {
 
       const dismissed = await settleUntil(
         "menu closed",
-        (frame) => !frame.includes("Pin as tab")
+        (frame) => !frame.includes("Copy path")
       );
 
       expect(state.commandMenuOpen()).toBe(false);
@@ -205,16 +200,13 @@ describe("context command menu", () => {
       );
 
       await mockMouse.click(5, treeRowOf(tree, "f01.txt"), MouseButton.RIGHT);
-      await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
+      await settleUntil("menu open", (frame) => frame.includes("Copy path"));
       expect(state.commandMenuOpen()).toBe(true);
 
       // Scrolling the sidebar moves the anchored row while the focused node stays the
       // Same, so the menu (pinned at a now-stale screen cell) must dismiss.
       state.setSidebarScrollTop(3);
-      await settleUntil(
-        "menu closed",
-        (frame) => !frame.includes("Pin as tab")
-      );
+      await settleUntil("menu closed", (frame) => !frame.includes("Copy path"));
       expect(state.commandMenuOpen()).toBe(false);
     } finally {
       renderer.destroy();
@@ -269,8 +261,8 @@ describe("context command menu", () => {
     }
   }, 20_000);
 
-  test("tree Pin as tab opens and pins the right-clicked file, not the viewed one", async () => {
-    const repoRoot = createFixtureRepo("stet-cmd-pin-", {
+  test("right-click focuses a tree file and a left click opens it", async () => {
+    const repoRoot = createFixtureRepo("stet-cmd-tree-open-", {
       "a.txt": "alpha\n",
       "b.txt": "beta\n",
     });
@@ -289,21 +281,23 @@ describe("context command menu", () => {
         frame.includes("b.txt")
       );
 
-      // The seeded selection is the first file, so the viewer shows a.txt.
+      const row = treeRowOf(tree, "b.txt");
+      await mockMouse.click(5, row, MouseButton.RIGHT);
+      await settleUntil("menu open", (frame) => frame.includes("Copy path"));
+
+      expect(state.commandMenuItems()[0]?.action).toMatchObject({
+        kind: "copyReference",
+        path: "b.txt",
+      });
       expect(state.selectedPath()).toBe("a.txt");
 
-      // Right-click b.txt and run its first item, "Pin as tab".
-      await mockMouse.click(5, treeRowOf(tree, "b.txt"), MouseButton.RIGHT);
-      await settleUntil("menu open", (frame) => frame.includes("Pin as tab"));
-      expect(state.commandMenuItems()[0]?.label).toBe("Pin as tab");
-      mockInput.pressEnter();
-
-      await settleUntil("b.txt opened", () => state.selectedPath() === "b.txt");
-      // The right-clicked file was opened and pinned, not the previously-viewed a.txt.
+      mockInput.pressEscape();
+      await settleUntil("menu closed", (frame) => !frame.includes("Copy path"));
+      await mockMouse.click(5, row);
       expect(state.selectedPath()).toBe("b.txt");
-      const active = state.tabItems().find((tab) => tab.active);
-      expect(active?.path).toBe("b.txt");
-      expect(active?.preview).toBe(false);
+
+      mockInput.pressKey("<");
+      expect(state.selectedPath()).toBe("a.txt");
     } finally {
       renderer.destroy();
     }

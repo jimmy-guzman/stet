@@ -8,7 +8,7 @@
  * up in the captured tree. By default that's this repo; set `STET_SCREENSHOT_REPO` to point stet at
  * another checkout (e.g. a clean main worktree) while the images still land in THIS repo's docs.
  * Requires `vhs` on PATH (brew install vhs) and a Nerd Font installed for the file-type icons. Pass
- * screen names to shoot a subset, e.g. `bun run screenshots find tabs`.
+ * screen names to shoot a subset, e.g. `bun run screenshots find folding`.
  *
  * Screens marked `worktree: true` launch from a throwaway linked worktree instead, so the header
  * renders its worktree identity rather than the main checkout's. Screens marked `recentEdits: true`
@@ -179,37 +179,6 @@ const screens = [
     name: "stet",
     steps: [openHeroDiff, "Sleep 1500ms"].join("\n"),
     worktree: true,
-  },
-  {
-    /**
-     * Pin two files into tabs (`ctrl-t`), then land on a third as the active preview, so the strip
-     * shows the two pinned tabs (muted) beside the active preview tab (full-strength, italic). All
-     * three carry a diff so the tabs show their status tint; `diff/DiffView`, `git/model`, and
-     * `components/HeaderBar` all sit in the captured `BASE_REF..HEAD` window, and their basenames
-     * stay distinct so the strip reads at a glance.
-     */
-    name: "tabs",
-    steps: [
-      "Ctrl+P",
-      'Type "diff/DiffView"',
-      "Sleep 400ms",
-      "Enter",
-      "Sleep 700ms",
-      "Ctrl+T",
-      "Sleep 300ms",
-      "Ctrl+P",
-      'Type "git/model"',
-      "Sleep 400ms",
-      "Enter",
-      "Sleep 700ms",
-      "Ctrl+T",
-      "Sleep 300ms",
-      "Ctrl+P",
-      'Type "components/HeaderBar"',
-      "Sleep 400ms",
-      "Enter",
-      "Sleep 900ms",
-    ].join("\n"),
   },
   { name: "scope-picker", steps: ['Type "s"', "Sleep 800ms"].join("\n") },
   { name: "worktree-picker", steps: ['Type "w"', "Sleep 800ms"].join("\n") },

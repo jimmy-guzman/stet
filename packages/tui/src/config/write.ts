@@ -9,7 +9,7 @@ import type { UserConfig } from "./schema";
 
 /**
  * The session values `ctrl-s` can persist: exactly the signals whose keys the config schema owns,
- * never transient view state (folds, tabs, open overlays). `theme` may hold a `{ dark, light }`
+ * never transient view state (folds, open overlays). `theme` may hold a `{ dark, light }`
  * pair only when it came from the config untouched, so a pair never diverges and is never written
  * back wholesale.
  */

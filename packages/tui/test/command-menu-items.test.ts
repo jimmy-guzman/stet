@@ -99,9 +99,8 @@ describe("buildCommandMenuItems", () => {
     );
   });
 
-  test("tree file node lists pin, copy path, and editor opens (opening is the row click's job)", () => {
+  test("tree file node offers copy path and external opens", () => {
     expect(labels(tree())).toEqual([
-      "Pin as tab",
       "Copy path",
       "Open in editor",
       "Open in IDE",
@@ -137,12 +136,6 @@ describe("buildCommandMenuItems", () => {
       kind: "openEditor",
       line: undefined,
       mode: "terminal",
-      path: "src/foo.ts",
-    });
-    // Pin as tab carries the node's own path so it opens+pins that file, not the
-    // Currently-viewed one.
-    expect(items.find((item) => item.label === "Pin as tab")?.action).toEqual({
-      kind: "pinTab",
       path: "src/foo.ts",
     });
   });

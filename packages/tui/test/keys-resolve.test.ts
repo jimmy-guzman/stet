@@ -65,6 +65,16 @@ describe("resolveKeybindings", () => {
     expect(set.texts.get("toggle-sidebar")).toEqual(["ctrl-b"]);
   });
 
+  test("retired tab actions do not block valid overrides", () => {
+    const { issues, set } = resolveKeybindings({
+      "pin-tab": "ctrl+e",
+      "toggle-sidebar": "ctrl+e",
+    });
+
+    expect(issues).toEqual(['keybinding "pin-tab": unknown action']);
+    expect(set.texts.get("toggle-sidebar")).toEqual(["ctrl+e"]);
+  });
+
   test("an invalid combo is reported and the default retained", () => {
     const { issues, set } = resolveKeybindings({ "toggle-sidebar": "meta+e" });
 

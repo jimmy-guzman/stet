@@ -14,73 +14,13 @@ import {
   seedState,
 } from "./helpers";
 
-// The left (sidebar) and right (viewer/search) panes share a `│` seam, and the same file
-// Name appears in both, so scope the frame scan to one pane before locating a row.
-const paneRowOf = (frame: string, side: "left" | "right", text: string) =>
+// File names also appear in the tree, so look to the right of the pane divider.
+const searchRowOf = (frame: string, text: string) =>
   frame
     .split("\n")
-    .map((line) => {
-      const parts = line.split("│");
+    .findIndex((line) => line.split("│").slice(1).join("│").includes(text));
 
-      return side === "left" ? (parts[0] ?? "") : parts.slice(1).join("│");
-    })
-    .findIndex((cell) => cell.includes(text));
-
-// The double-click guard reads only the clicks its pane forwards to it, so a click on a
-// Row the pane otherwise ignores (a directory in the tree, a file header in search) must
-// Still reach the guard, or a slow-but-in-window sequence of three separate single clicks
-// (target -> other row -> same target) reads as a double and fires the navigating action.
-describe("double-click tracker resets on an intervening row click", () => {
-  test("a directory click between two clicks on the same file does not pin it as a tab", async () => {
-    const repoRoot = createFixtureRepo("stet-tree-dblclick-", {
-      "a.txt": "alpha\n",
-      "pkg/inner.ts": "export const inner = 1;\n",
-    });
-
-    const scope = { kind: "all", ref: "HEAD" } as const;
-    const model = await loadModel(repoRoot, scope);
-    seedState(model, scope);
-
-    const { renderer, mockMouse, renderOnce, captureCharFrame } =
-      await testRender(() => <App />, {
-        height: 24,
-        width: 100,
-      });
-
-    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-
-    try {
-      await settleUntil(
-        "tree rendered",
-        (frame) => frame.includes("a.txt") && frame.includes("pkg")
-      );
-
-      // Directories sort above files, so `pkg` is above `a.txt`; expanding it pushes
-      // `a.txt` down, so the file row is re-located before the second click on it.
-      const fileY = paneRowOf(captureCharFrame(), "left", "a.txt");
-      const dirY = paneRowOf(captureCharFrame(), "left", "pkg");
-      expect(fileY).toBeGreaterThanOrEqual(0);
-      expect(dirY).toBeGreaterThanOrEqual(0);
-      expect(dirY).not.toBe(fileY);
-
-      // File -> directory -> same file, back to back so the two file clicks land inside
-      // The double-click window. The directory click must break the sequence.
-      await mockMouse.click(5, fileY);
-      await mockMouse.click(5, dirY);
-      await renderOnce();
-      const fileYAgain = paneRowOf(captureCharFrame(), "left", "a.txt");
-      await mockMouse.click(5, fileYAgain);
-      await renderOnce();
-
-      // Still a single preview tab, never pinned (a false double-click would pin it).
-      expect(state.selectedPath()).toBe("a.txt");
-      expect(state.tabItems()).toHaveLength(1);
-      expect(state.tabItems()[0]?.preview).toBe(true);
-    } finally {
-      renderer.destroy();
-    }
-  });
-
+describe("search double-click", () => {
   test("a file-header click between two clicks on the same match does not open it", async () => {
     const repoRoot = createFixtureRepo("stet-search-dblclick-", {
       "src/a.ts": "const seed = 0\n",
@@ -111,8 +51,8 @@ describe("double-click tracker resets on an intervening row click", () => {
 
       // `src/b.ts`'s group is below `src/a.ts`'s, so collapsing it never shifts the
       // Match-a row above it. Both names also appear in the sidebar, hence the scope.
-      const matchY = paneRowOf(captureCharFrame(), "right", "needleA");
-      const headerBY = paneRowOf(captureCharFrame(), "right", "src/b.ts");
+      const matchY = searchRowOf(captureCharFrame(), "needleA");
+      const headerBY = searchRowOf(captureCharFrame(), "src/b.ts");
       expect(matchY).toBeGreaterThanOrEqual(0);
       expect(headerBY).toBeGreaterThanOrEqual(0);
       expect(headerBY).not.toBe(matchY);

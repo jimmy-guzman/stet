@@ -114,17 +114,6 @@ const KEY_HELP_GROUPS: {
   {
     entries: [
       {
-        actions: ["pin-tab"],
-        description: "pin / unpin the current file as a tab",
-      },
-      { actions: ["close-tab"], description: "close the active tab" },
-      { actions: ["prev-tab", "next-tab"], description: "previous / next tab" },
-    ],
-    heading: "tabs",
-  },
-  {
-    entries: [
-      {
         actions: ["scope"],
         description: "scope picker: kinds, or drill into recent commits",
       },

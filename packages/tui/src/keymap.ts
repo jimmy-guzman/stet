@@ -752,34 +752,6 @@ const globalBindings: readonly Binding[] = [
       state.setHelpDialogOpen(true);
     },
   },
-  // Tabs gate on the file view: they mutate a tab strip the search view hides
-  // (the pure navigations prev/next stay live, since cycling reveals the file view).
-  {
-    id: "pin-tab",
-    run: () => {
-      state.togglePinActiveTab();
-    },
-    when: fileViewShowing,
-  },
-  {
-    id: "close-tab",
-    run: () => {
-      state.closeActiveTab();
-    },
-    when: fileViewShowing,
-  },
-  {
-    id: "prev-tab",
-    run: () => {
-      state.cycleTab(-1);
-    },
-  },
-  {
-    id: "next-tab",
-    run: () => {
-      state.cycleTab(1);
-    },
-  },
   {
     id: "worktrees",
     run: ({ key }) => {
@@ -868,20 +840,7 @@ const handleSelectedFile = (
   selectedPath: string
 ) => {
   if (pressed("toggle-view") && state.selectedFile() !== undefined) {
-    const lineNumber = caretLineNumber();
-
-    if (lineNumber !== undefined) {
-      state.setJumpTarget({
-        escalate: false,
-        line: lineNumber,
-        path: selectedPath,
-      });
-    }
-
-    // Diff and file views have different line lists, so a selection anchored in
-    // One is meaningless in the other; drop it as this toggle re-homes the caret.
-    state.setSelectionAnchor(undefined);
-    state.setFileView(!state.fileView());
+    state.toggleFileView();
 
     return true;
   }

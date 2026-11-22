@@ -76,7 +76,8 @@ describe("help overlay", () => {
       // Entry count alone clipped wrapped rows off the bottom. The terminal has to be
       // Tall enough for the whole list (`listHeight` caps at `terminalHeight - 7`), so
       // A key added to the registry raises the height here rather than weakening this.
-      expect(help).toContain("pin / unpin the current file as a tab");
+      expect(help).toContain("back / forward through viewer history");
+      expect(help).not.toContain("pin / unpin the current file as a tab");
       expect(help).toContain("quit (confirm with y)");
 
       // Ctrl-b must be swallowed: no sidebar toggle, overlay stays

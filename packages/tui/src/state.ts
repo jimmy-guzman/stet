@@ -1805,7 +1805,7 @@ const createState = () => {
     caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn())
   );
 
-  // The exact 1-based column the caret points at, for `:col` in copy/stats. Driven
+  // The exact 1-based column the caret points at, for `:col` in copy. Driven
   // By line-level alone (not `caretWord`), so a search jump that lands in a gap
   // Still reports its precise column instead of falling back to line-only.
   const caretColumn = createMemo(() =>

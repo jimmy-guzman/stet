@@ -29,7 +29,15 @@ export const viewerStats = (
     return `binary${warnings}`;
   }
 
-  return `+${selectedFile.additions} -${selectedFile.deletions}${warnings}`;
+  // A zero side says nothing, so an added file reads `+38`, not `+38 -0`.
+  const counts = [
+    selectedFile.additions === 0 ? "" : `+${selectedFile.additions}`,
+    selectedFile.deletions === 0 ? "" : `-${selectedFile.deletions}`,
+  ]
+    .filter((part) => part !== "")
+    .join(" ");
+
+  return `${counts}${warnings}`.trim();
 };
 
 export const worktreeLabel = (worktree: Worktree) =>

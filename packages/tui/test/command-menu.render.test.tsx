@@ -105,8 +105,9 @@ describe("context command menu", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("caret on the added line", (frame) =>
-        /ln 2:1\b/u.test(frame)
+      await settleUntil(
+        "caret on the added line",
+        () => state.cursorLineNumber() === 2 && state.caretColumn() === 1
       );
       mockInput.pressTab();
       // A line-level caret, as a gutter click leaves.
@@ -244,8 +245,9 @@ describe("context command menu", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("caret on the added line", (frame) =>
-        /ln 2:1\b/u.test(frame)
+      await settleUntil(
+        "caret on the added line",
+        () => state.cursorLineNumber() === 2 && state.caretColumn() === 1
       );
       mockInput.pressTab();
       state.openCommandMenu("viewer");

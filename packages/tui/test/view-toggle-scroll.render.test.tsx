@@ -7,6 +7,7 @@ import type { Renderable } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
+import { state } from "@/state";
 
 import {
   createFixtureRepo,
@@ -88,7 +89,10 @@ describe("view toggle scroll", () => {
       // The diff lands with the cursor on the low change.
       await settleUntil(
         "diff view",
-        (frame) => /-\d+ · ln 110/u.test(frame),
+        (frame) =>
+          /[+-]\d+\s*$/u.test(
+            frame.split("\n")[state.layout().viewer.y] ?? ""
+          ) && state.cursorLineNumber() === 110,
         5
       );
 
@@ -102,7 +106,7 @@ describe("view toggle scroll", () => {
       const frame = await settleUntil(
         "low change visible in file view",
         (current) => {
-          if (!current.includes("lines · ln 110")) {
+          if (!/\d+ lines/u.test(current) || state.cursorLineNumber() !== 110) {
             return false;
           }
 

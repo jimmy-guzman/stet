@@ -14,14 +14,6 @@ import {
   seedState,
 } from "./helpers";
 
-const lnOf = (frame: string) => {
-  const match = /ln (?<line>\d+)/u.exec(frame);
-
-  return match?.groups?.line === undefined
-    ? undefined
-    : Number(match.groups.line);
-};
-
 describe("back / forward navigation", () => {
   test("restores the file and the cursor line you left", async () => {
     const body = Array.from(
@@ -57,55 +49,63 @@ describe("back / forward navigation", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => lnOf(frame) !== undefined, 5);
+      await settleUntil(
+        "diff view",
+        () => state.cursorLineNumber() !== undefined,
+        5
+      );
 
       // Open a.ts and move the cursor down inside it, away from the first change.
       state.selectFile("src/a.ts");
 
-      const onA = await settleUntil(
+      await settleUntil(
         "a.ts open",
-        (frame) => frame.includes("src/a.ts") && lnOf(frame) !== undefined
+        (frame) =>
+          frame.includes("src/a.ts") && state.cursorLineNumber() !== undefined
       );
 
-      const startLn = lnOf(onA);
+      const startLn = state.cursorLineNumber();
       state.setFocusedPane("diff");
       mockInput.pressKey("j");
       await renderOnce();
       mockInput.pressKey("j");
 
-      const moved = await settleUntil(
+      await settleUntil(
         "cursor moved",
         (frame) =>
           frame.includes("src/a.ts") &&
-          lnOf(frame) !== undefined &&
-          lnOf(frame) !== startLn
+          state.cursorLineNumber() !== undefined &&
+          state.cursorLineNumber() !== startLn
       );
 
-      const movedLn = lnOf(moved);
+      const movedLn = state.cursorLineNumber();
       expect(movedLn).not.toBe(startLn);
 
       // Jump away to b.ts (records a.ts's cursor on leave).
       state.selectFile("src/b.ts");
       await settleUntil(
         "b.ts open",
-        (frame) => frame.includes("src/b.ts") && lnOf(frame) !== undefined
+        (frame) =>
+          frame.includes("src/b.ts") && state.cursorLineNumber() !== undefined
       );
 
       // Back returns to a.ts at the exact line we left.
       state.goBack();
 
-      const back = await settleUntil(
+      await settleUntil(
         "back on a.ts",
-        (frame) => frame.includes("src/a.ts") && lnOf(frame) === movedLn
+        (frame) =>
+          frame.includes("src/a.ts") && state.cursorLineNumber() === movedLn
       );
 
-      expect(lnOf(back)).toBe(movedLn);
+      expect(state.cursorLineNumber()).toBe(movedLn);
 
       // Forward returns to b.ts.
       state.goForward();
       await settleUntil(
         "forward on b.ts",
-        (frame) => frame.includes("src/b.ts") && lnOf(frame) !== undefined
+        (frame) =>
+          frame.includes("src/b.ts") && state.cursorLineNumber() !== undefined
       );
     } finally {
       renderer.destroy();
@@ -149,29 +149,33 @@ describe("back / forward navigation", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => lnOf(frame) !== undefined, 5);
+      await settleUntil(
+        "diff view",
+        () => state.cursorLineNumber() !== undefined,
+        5
+      );
 
       // Jump to line 2, then jump to line 27 in the same file (a distinct entry).
       state.selectFile("src/c.ts", { escalate: true, line: 2 });
       await settleUntil(
         "first jump",
-        (frame) => frame.includes("src/c.ts") && lnOf(frame) === 2
+        (frame) => frame.includes("src/c.ts") && state.cursorLineNumber() === 2
       );
       state.selectFile("src/c.ts", { escalate: true, line: 27 });
       await settleUntil(
         "second jump",
-        (frame) => frame.includes("src/c.ts") && lnOf(frame) === 27
+        (frame) => frame.includes("src/c.ts") && state.cursorLineNumber() === 27
       );
 
       // Back must land on the first jump's line (2), not the file's first change.
       state.goBack();
 
-      const back = await settleUntil(
+      await settleUntil(
         "back to first jump line",
-        (frame) => frame.includes("src/c.ts") && lnOf(frame) === 2
+        (frame) => frame.includes("src/c.ts") && state.cursorLineNumber() === 2
       );
 
-      expect(lnOf(back)).toBe(2);
+      expect(state.cursorLineNumber()).toBe(2);
     } finally {
       renderer.destroy();
     }

@@ -5,6 +5,7 @@ import path from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
+import { state } from "@/state";
 
 import {
   createFixtureRepo,
@@ -59,8 +60,9 @@ describe("gap expansion", () => {
       // Shift up by the number of revealed lines.
       mockInput.pressTab();
       mockInput.pressKey("G");
-      await settleUntil("caret on last line", (frame) =>
-        /ln 20:\d/u.test(frame)
+      await settleUntil(
+        "caret on last line",
+        () => state.cursorLineNumber() === 20
       );
       mockInput.pressKey("z");
 
@@ -70,7 +72,7 @@ describe("gap expansion", () => {
       const expanded = captureCharFrame();
 
       expect(expanded).toContain("const l10 = 10");
-      expect(expanded).toMatch(/ln 20:\d/u);
+      expect(state.cursorLineNumber()).toBe(20);
     } finally {
       renderer.destroy();
     }

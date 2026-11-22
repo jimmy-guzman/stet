@@ -52,7 +52,11 @@ describe("tabs strip", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
+      await settleUntil(
+        "diff view",
+        () => state.cursorLineNumber() !== undefined,
+        5
+      );
 
       // One preview tab: no strip, just the path on the left.
       state.selectFile("src/a.ts");
@@ -80,7 +84,9 @@ describe("tabs strip", () => {
       // ...not its full path
       expect(twoTabs).not.toContain("src/a.ts");
       // Stats stay on the right, and the diff/file word is gone.
-      expect(twoTabs).toMatch(/\+\d+ -\d+ · ln \d+/u);
+      expect(twoTabs.split("\n")[state.layout().viewer.y]).toMatch(
+        /\+\d+ -\d+\s*$/u
+      );
       expect(twoTabs).not.toContain("· diff");
 
       // Cycle to the pinned tab: the viewer swaps to a.ts.
@@ -102,7 +108,9 @@ describe("tabs strip", () => {
       );
 
       expect(state.tabItems().length).toBe(1);
-      expect(collapsed).toMatch(/\+\d+ -\d+ · ln \d+/u);
+      expect(collapsed.split("\n")[state.layout().viewer.y]).toMatch(
+        /\+\d+ -\d+\s*$/u
+      );
     } finally {
       renderer.destroy();
     }
@@ -142,7 +150,11 @@ describe("tabs strip", () => {
     const mouse = createMockMouse(renderer);
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
+      await settleUntil(
+        "diff view",
+        () => state.cursorLineNumber() !== undefined,
+        5
+      );
       // Pin a.ts, then preview b.ts -> strip shows [a.ts][src/b.ts].
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
@@ -214,7 +226,11 @@ describe("tabs strip", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
+      await settleUntil(
+        "diff view",
+        () => state.cursorLineNumber() !== undefined,
+        5
+      );
       // Pin a.ts, then preview b.ts so the strip shows [a.ts][src/b.ts].
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });
@@ -304,7 +320,11 @@ describe("tabs strip", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      await settleUntil("diff view", (frame) => /ln \d/u.test(frame), 5);
+      await settleUntil(
+        "diff view",
+        () => state.cursorLineNumber() !== undefined,
+        5
+      );
       // Pin a.ts, preview b.ts -> strip shows the pinned a.ts and the preview b.ts.
       state.selectFile("src/a.ts");
       mockInput.pressKey("t", { ctrl: true });

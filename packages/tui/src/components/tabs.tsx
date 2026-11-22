@@ -6,12 +6,12 @@ import { theme } from "@/theme/context";
 import { createDoubleClickGuard } from "@/utils/double-click";
 import { truncateLeft, truncateName } from "@/utils/text";
 
-// The active tab shows its path (truncated from the left to keep the filename);
-// Inactive tabs show just the basename. RIGHT_RESERVE keeps room for the status
-// Segment (scope · stats · ln N) so the strip never shoves it off the row.
-const PATH_MAX = 40;
+// An inactive tab's basename cap; the active tab's path takes the strip's budget instead.
 const TAB_MAX = 24;
-const RIGHT_RESERVE = 18;
+
+// Each label's pad on either side; the rendered cell, its measured width, and
+// The active label's budget all read it, so they cannot drift apart.
+const LABEL_PAD = " ";
 
 const baseName = (path: string) => {
   const slash = path.lastIndexOf("/");
@@ -31,59 +31,72 @@ export const titleColor = () =>
 const activeColor = (active: boolean) =>
   active ? titleColor() : theme.colors.text.muted;
 
-const tabLabel = (path: string | undefined, active: boolean) => {
+const tabLabel = (
+  path: string | undefined,
+  active: boolean,
+  budget: number
+) => {
   if (path === undefined) {
     return "·";
   }
 
+  // The budget already excludes the strip's ‹ › markers, so taking off the pad
+  // Leaves exactly the room the active tab has on its own. No fixed cap: SPEC has
+  // The active tab show its full path, so a path as wide as the strip leaves the
+  // Neighbours to their markers rather than cutting a path that would fit.
   return active
-    ? truncateLeft(path, PATH_MAX)
+    ? truncateLeft(path, budget - 2 * Bun.stringWidth(LABEL_PAD))
     : truncateName(baseName(path), TAB_MAX);
 };
 
-// The inline tab strip: it replaces the viewer title when more than one tab is
-// Open, reusing the existing title row (zero extra rows). The visible tabs are a
-// Window centered on the active one, with ‹ › when more are clipped, so the
-// Active tab is always shown however narrow the viewer.
-export const Tabs = () => {
+/**
+ * The inline tab strip: it replaces the viewer title when more than one tab is open, reusing the
+ * existing title row (zero extra rows). The visible tabs are a window centered on the active one,
+ * with ‹ › when more are clipped, so the active tab is always shown however narrow the viewer.
+ *
+ * @param props.budget The cells the strip may take, after the viewer's stats.
+ */
+export const Tabs = (props: { budget: number }) => {
   const isDoubleClick = createDoubleClickGuard();
 
   const layout = createMemo(() => {
-    const cells = state.tabItems().map((tab) => {
-      const label = tabLabel(tab.path, tab.active);
-
-      return {
-        active: tab.active,
-        id: tab.id,
-        label,
-        preview: tab.preview,
-        // Display columns (a label can hold a wide glyph), plus the 1-col pad
-        // Each side; the overflow window budgets against this.
-        width: Bun.stringWidth(label) + 2,
-      };
-    });
-
-    if (cells.length === 0) {
-      return { cells, moreLeft: false, moreRight: false };
-    }
+    const items = state.tabItems();
+    const { budget } = props;
+    const last = items.length - 1;
 
     const active = Math.max(
       0,
-      cells.findIndex((cell) => cell.active)
+      items.findIndex((tab) => tab.active)
     );
-
-    const budget = Math.max(
-      8,
-      state.layout().viewer.content.width - 2 - RIGHT_RESERVE
-    );
-
-    const last = cells.length - 1;
 
     // A clipped side shows a ‹ / › glyph (one column each), so a candidate window
     // Must fit its own width plus the markers it would still leave on; expanding to
     // An edge drops that side's marker and frees its column.
     const markers = (from: number, to: number) =>
       (from > 0 ? 1 : 0) + (to < last ? 1 : 0);
+
+    // The markers a lone active tab would show come out of its own room too.
+    const cells = items.map((tab) => {
+      const label = tabLabel(
+        tab.path,
+        tab.active,
+        budget - markers(active, active)
+      );
+
+      return {
+        active: tab.active,
+        id: tab.id,
+        label,
+        preview: tab.preview,
+        // Display columns (a label can hold a wide glyph), plus the pad each
+        // Side; the overflow window budgets against this.
+        width: Bun.stringWidth(`${LABEL_PAD}${label}${LABEL_PAD}`),
+      };
+    });
+
+    if (cells.length === 0) {
+      return { cells, moreLeft: false, moreRight: false };
+    }
 
     let start = active;
     let end = active;
@@ -152,7 +165,7 @@ export const Tabs = () => {
               fg={activeColor(cell().active)}
               attributes={createTextAttributes({ italic: cell().preview })}
             >
-              {` ${cell().label} `}
+              {`${LABEL_PAD}${cell().label}${LABEL_PAD}`}
             </text>
           </box>
         )}

@@ -29,7 +29,23 @@ describe("viewerStats", () => {
         false,
         undefined
       )
-    ).toBe("+1 -0 !crlf");
+    ).toBe("+1 !crlf");
+  });
+
+  test("diff view leaves out a side that is zero", () => {
+    expect(viewerStats(changed({ additions: 38 }), false, undefined)).toBe(
+      "+38"
+    );
+    expect(viewerStats(changed({ deletions: 12 }), false, undefined)).toBe(
+      "-12"
+    );
+  });
+
+  test("diff view with no line changes shows only its warnings", () => {
+    expect(viewerStats(changed(), false, undefined)).toBe("");
+    expect(viewerStats(changed({ warnings: ["mode"] }), false, undefined)).toBe(
+      "!mode"
+    );
   });
 
   test("file view shows the line count", () => {

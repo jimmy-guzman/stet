@@ -75,10 +75,14 @@ describe("project content search", () => {
 
       const jumped = await settleUntil(
         "jumped to lib.ts line 3",
-        (frame) => frame.includes("ln 3:14") && !frame.includes("g/G ends")
+        (frame) =>
+          !frame.includes("g/G ends") &&
+          state.selectedPath() === "src/lib.ts" &&
+          state.cursorLineNumber() === 3 &&
+          state.caretColumn() === 14
       );
 
-      expect(jumped).toContain("ln 3:14");
+      expect(jumped).not.toContain("g/G ends");
 
       // Reopening restores the query and the result set without retyping.
       mockInput.pressKey("f", { ctrl: true });
@@ -181,11 +185,10 @@ describe("project content search", () => {
       // Enter from the query submits the highlighted (first) match directly.
       mockInput.pressEnter();
 
-      const jumped = await settleUntil("jumped to zzz.ts line 50", (frame) =>
-        frame.includes("ln 50")
+      await settleUntil(
+        "jumped to zzz.ts line 50",
+        () => state.mainView() === "file" && state.cursorLineNumber() === 50
       );
-
-      expect(jumped).toContain("ln 50");
     } finally {
       renderer.destroy();
     }
@@ -257,8 +260,9 @@ describe("project content search", () => {
       await settleUntil("double-click window elapsed", () => true, 45);
       await mockMouse.click(state.layout().viewer.x + 10, matchRowY);
       await mockMouse.click(state.layout().viewer.x + 10, matchRowY);
-      await settleUntil("double click opens", (frame) =>
-        frame.includes("ln 2:7")
+      await settleUntil(
+        "double click opens",
+        () => state.cursorLineNumber() === 2 && state.caretColumn() === 7
       );
 
       // Back into the pane for the states below.

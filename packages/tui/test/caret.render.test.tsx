@@ -66,7 +66,10 @@ describe("word caret", () => {
       hasBackground(captureSpans(), theme.colors.caret.wordBg);
 
     try {
-      await settleUntil("diff loaded", (frame) => /ln 1:1\b/u.test(frame));
+      await settleUntil(
+        "diff loaded",
+        () => state.cursorLineNumber() === 1 && state.caretColumn() === 1
+      );
       expect(state.focusedPane()).toBe("tree");
       expect(caretShown()).toBe(false);
 
@@ -103,7 +106,7 @@ describe("word caret", () => {
     }
   }, 20_000);
 
-  test("h/l hop the caret word to word and wrap across lines, shown as ln L:C", async () => {
+  test("h/l hop the caret word to word and wrap across lines, landing on the right line and column", async () => {
     // Two changed lines so the line number distinguishes a wrap; "const a = 1"
     // Has words at columns 1 (const), 7 (a), 11 (1).
     const repoRoot = createFixtureRepo("stet-caret-", {
@@ -128,36 +131,39 @@ describe("word caret", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      // The caret homes to the first line's first word: ln 1, column 1.
-      await settleUntil("caret at first word", (frame) =>
-        /ln 1:1\b/u.test(frame)
+      // The caret homes to the first line's first word: line 1, column 1.
+      await settleUntil(
+        "caret at first word",
+        () => state.cursorLineNumber() === 1 && state.caretColumn() === 1
       );
 
       mockInput.pressTab();
       mockInput.pressKey("l");
-      await settleUntil("caret on the second word", (frame) =>
-        /ln 1:7\b/u.test(frame)
+      await settleUntil(
+        "caret on the second word",
+        () => state.cursorLineNumber() === 1 && state.caretColumn() === 7
       );
 
       mockInput.pressKey("l");
-      await settleUntil("caret on the third word", (frame) =>
-        /ln 1:11\b/u.test(frame)
+      await settleUntil(
+        "caret on the third word",
+        () => state.cursorLineNumber() === 1 && state.caretColumn() === 11
       );
 
       // Past the last word, l wraps to the next line's first word.
       mockInput.pressKey("l");
-      await settleUntil("caret wraps to the next line", (frame) =>
-        /ln 2:1\b/u.test(frame)
+      await settleUntil(
+        "caret wraps to the next line",
+        () => state.cursorLineNumber() === 2 && state.caretColumn() === 1
       );
 
       // H past the first word wraps back to the previous line's last word.
       mockInput.pressKey("h");
 
-      const back = await settleUntil("caret wraps back", (frame) =>
-        /ln 1:11\b/u.test(frame)
+      await settleUntil(
+        "caret wraps back",
+        () => state.cursorLineNumber() === 1 && state.caretColumn() === 11
       );
-
-      expect(back).toMatch(/ln 1:11\b/u);
     } finally {
       renderer.destroy();
     }
@@ -193,9 +199,10 @@ describe("word caret", () => {
     };
 
     try {
-      // The caret homes to a symbol, so the stats line carries a column.
-      const frame = await settleUntil("caret on a symbol", (current) =>
-        /ln \d+:\d+/u.test(current)
+      // The caret homes to a symbol, so it carries a column.
+      const frame = await settleUntil(
+        "caret on a symbol",
+        () => state.caretColumn() !== undefined
       );
 
       const rows = frame.split("\n");
@@ -203,23 +210,24 @@ describe("word caret", () => {
       expect(rowIndex).toBeGreaterThan(-1);
 
       // Click the gutter (just past the sidebar, before the content): line-level,
-      // So the stats line drops the column and `y` copies path:line.
+      // So the caret drops the column and `y` copies path:line.
       await mouse.click(state.layout().viewer.x + 2, rowIndex);
 
-      const onLine = await settleUntil(
+      await settleUntil(
         "line-level selection",
-        (current) => /ln \d+(?!:)/u.test(current) && !/ln \d+:\d/u.test(current)
+        () =>
+          state.cursorLineNumber() !== undefined &&
+          state.caretColumn() === undefined
       );
-
-      expect(onLine).not.toMatch(/ln \d+:\d/u);
       mockInput.pressKey("y");
       expect(copied.at(-1)).toBe("src/a.ts:1");
 
       // Clicking the content word re-selects a symbol, so `y` copies path:line:col.
       const wordColumn = rows[rowIndex].indexOf("alpha");
       await mouse.click(wordColumn + 1, rowIndex);
-      await settleUntil("symbol re-selected", (current) =>
-        /ln \d+:\d+/u.test(current)
+      await settleUntil(
+        "symbol re-selected",
+        () => state.caretColumn() !== undefined
       );
       mockInput.pressKey("y");
       expect(copied.at(-1)).toMatch(/^src\/a\.ts:1:\d+$/u);
@@ -329,15 +337,13 @@ describe("word caret", () => {
       state.selectFile("src/a.ts");
       await settleUntil(
         "file a caret home",
-        (current) => /ln \d+:1\b/u.test(current) && current.includes("alpha")
+        (current) => current.includes("alpha") && state.caretColumn() === 1
       );
 
       // Move the caret off the first word so the column is non-default, then leave.
       mockInput.pressTab();
       mockInput.pressKey("l");
-      await settleUntil("caret moved on a", (current) =>
-        /ln \d+:7\b/u.test(current)
-      );
+      await settleUntil("caret moved on a", () => state.caretColumn() === 7);
 
       state.selectFile("src/b.ts");
       await settleUntil("file b active", (current) => current.includes("beta"));
@@ -348,12 +354,12 @@ describe("word caret", () => {
 
       const restored = await settleUntil(
         "a active and caret restored",
-        (current) => current.includes("alpha") && /ln \d+:7\b/u.test(current)
+        (current) => current.includes("alpha") && state.caretColumn() === 7
       );
 
       expect(restored).toContain("alpha");
       expect(restored).not.toContain("beta");
-      expect(restored).toMatch(/ln \d+:7\b/u);
+      expect(state.caretColumn()).toBe(7);
       expect(state.selectedPath()).toBe("src/a.ts");
     } finally {
       renderer.destroy();

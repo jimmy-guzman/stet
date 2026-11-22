@@ -5,6 +5,7 @@ import path from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
+import { state } from "@/state";
 
 import {
   createFixtureRepo,
@@ -41,9 +42,11 @@ describe("in-buffer find", () => {
       // Wait for the diff to load so the find bar has content to search.
       await settleUntil("diff content", (frame) => frame.includes("needle"), 5);
 
-      // The viewer title row shows the line indicator before searching.
+      // The viewer title row shows the path before searching.
       const before = captureCharFrame();
-      expect(before).toContain("· ln");
+      expect(before.split("\n")[state.layout().viewer.y]).toContain(
+        "src/sample.ts"
+      );
 
       // `/` opens the find bar; typing must feed the input, not run global commands.
       mockInput.pressKey("/");
@@ -54,8 +57,10 @@ describe("in-buffer find", () => {
       );
 
       expect(matching).toContain("1/2");
-      // The find bar replaces the title row, so the line indicator is gone while open.
-      expect(matching).not.toContain("· ln");
+      // The find bar replaces the title row, so the path is gone while open.
+      expect(matching.split("\n")[state.layout().viewer.y]).not.toContain(
+        "src/sample.ts"
+      );
 
       // Enter commits; n cycles to the second match, then wraps back to the first.
       mockInput.pressEnter();
@@ -84,8 +89,10 @@ describe("in-buffer find", () => {
       );
 
       expect(cleared).not.toContain("1/2");
-      // The title row (line indicator) returns once the find clears.
-      expect(cleared).toContain("· ln");
+      // The title row returns once the find clears.
+      expect(cleared.split("\n")[state.layout().viewer.y]).toContain(
+        "src/sample.ts"
+      );
     } finally {
       renderer.destroy();
     }

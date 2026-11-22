@@ -9,6 +9,7 @@ import {
   placeholderText,
   viewerStats,
 } from "@/ui-helpers";
+import { truncateLeft } from "@/utils/text";
 
 import { BinaryPreview } from "./binary-preview";
 import { DiffView } from "./diff/diff-view";
@@ -39,24 +40,33 @@ const restoreIndex = (
     : Math.max(0, nearestNavigableIndex(lines, cursorLine));
 };
 
-const cursorLabel = () => {
-  const line = state.cursorLineNumber();
-
-  if (line === undefined) {
-    return "";
-  }
-
-  const column = state.caretColumn();
-
-  return column === undefined ? `ln ${line}` : `ln ${line}:${column}`;
-};
-
 const displayedFile = () => {
   const view = state.diffView();
 
   return view === undefined
     ? undefined
     : state.gitModel().changedByPath.get(view.path);
+};
+
+const titleStats = () =>
+  viewerStats(
+    displayedFile(),
+    state.diffView()?.showFileContent ?? false,
+    state.diffView()?.fileContent
+  );
+
+// The stats never shrink, so the title side gets what they leave: the row's
+// Padding (2) plus one gap cell between the two sides. Truncating to this, rather
+// Than letting flex clip, keeps the filename end of the path and every stat.
+const titleBudget = () => {
+  const stats = titleStats();
+
+  return Math.max(
+    1,
+    state.layout().viewer.content.width -
+      2 -
+      (stats === "" ? 0 : Bun.stringWidth(stats) + 1)
+  );
 };
 
 const isPlaceholder = () => {
@@ -353,38 +363,16 @@ export const Viewer = () => {
                 <Show
                   when={state.tabItems().some((tab) => !tab.preview)}
                   fallback={
-                    <text fg={titleColor()}>{state.selectedPath() ?? ""}</text>
+                    <text fg={titleColor()} wrapMode="none">
+                      {truncateLeft(state.selectedPath() ?? "", titleBudget())}
+                    </text>
                   }
                 >
-                  <Tabs />
+                  <Tabs budget={titleBudget()} />
                 </Show>
-                <box flexDirection="row">
-                  {/* Keep the active scope legible at the diff, so a staged/unstaged
-                  view is never misread as the whole change. */}
-                  <Show when={state.scope().kind !== "all"}>
-                    <text
-                      fg={
-                        state.scope().kind === "staged"
-                          ? theme.colors.stage.staged
-                          : theme.colors.stage.unstaged
-                      }
-                    >
-                      {`${state.scope().kind} · `}
-                    </text>
-                  </Show>
-                  <text fg={theme.colors.text.muted}>
-                    {[
-                      viewerStats(
-                        displayedFile(),
-                        state.diffView()?.showFileContent ?? false,
-                        state.diffView()?.fileContent
-                      ),
-                      cursorLabel(),
-                    ]
-                      .filter((part) => part !== "")
-                      .join(" · ")}
-                  </text>
-                </box>
+                <text fg={theme.colors.text.muted} flexShrink={0}>
+                  {titleStats()}
+                </text>
               </box>
             }
           >

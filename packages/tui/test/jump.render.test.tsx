@@ -5,6 +5,7 @@ import path from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
+import { state } from "@/state";
 
 import {
   createFixtureRepo,
@@ -43,30 +44,36 @@ describe("view toggle jumps", () => {
 
     try {
       // Diff view shows the add/remove stats; full-file view shows "N lines".
-      await settleUntil("diff view", (frame) => /-\d+ · ln \d/u.test(frame), 5);
+      await settleUntil(
+        "diff view",
+        (frame) =>
+          /[+-]\d+\s*$/u.test(frame.split("\n")[state.layout().viewer.y] ?? ""),
+        5
+      );
 
       // Focus the viewer, switch to file view, and move far away from the hunk
       mockInput.pressTab();
       mockInput.pressKey("v");
-      await settleUntil("file view", (frame) => /lines · ln \d/u.test(frame));
+      await settleUntil("file view", (frame) => /\d+ lines/u.test(frame));
 
       // Plain j presses: ctrl-d (0x04) is not delivered on every platform
       for (const _ of lines) {
         mockInput.pressKey("j");
       }
 
-      await settleUntil("cursor at end of file", (frame) =>
-        frame.includes("lines · ln 30")
+      await settleUntil(
+        "cursor at end of file",
+        (frame) => /\d+ lines/u.test(frame) && state.cursorLineNumber() === 30
       );
 
       // Toggling back must land on the nearest hunk line, not bounce to file view
       mockInput.pressKey("v");
 
       const after = await settleUntil("diff view again", (frame) =>
-        /-\d+ · ln \d/u.test(frame)
+        /[+-]\d+\s*$/u.test(frame.split("\n")[state.layout().viewer.y] ?? "")
       );
 
-      expect(after).not.toMatch(/lines · ln/u);
+      expect(after.split("\n")[state.layout().viewer.y]).not.toMatch(/lines/u);
     } finally {
       renderer.destroy();
     }

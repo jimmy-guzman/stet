@@ -260,4 +260,51 @@ describe("viewer title row", () => {
       renderer.destroy();
     }
   }, 20_000);
+
+  test("a middle tab keeps its label when the strip cannot also fit its markers", async () => {
+    const repoRoot = createFixtureRepo("stet-title-tiny-middle-", {
+      "README.md": "# Fixture\n",
+    });
+
+    writeFileSync(path.join(repoRoot, "a.ts"), "const a = 1\n");
+    writeFileSync(path.join(repoRoot, "b.ts"), "const b = 1\n");
+    writeFileSync(path.join(repoRoot, "c.ts"), "const c = 1\n");
+    runGit(repoRoot, ["add", "."]);
+
+    const scope = { kind: "staged", ref: "HEAD" } as const;
+    const model = await loadModel(repoRoot, scope);
+    seedState(model, scope);
+
+    // Width 7 with the tree collapsed leaves the strip 2 cells beside `+1`.
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      { height: 20, width: 7 }
+    );
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.collapseSidebar();
+      state.selectFile("a.ts");
+      state.togglePinActiveTab();
+      state.selectFile("b.ts");
+      state.togglePinActiveTab();
+      state.selectFile("c.ts");
+      state.togglePinActiveTab();
+      state.cycleTab(-1);
+
+      const frame = await settleUntil(
+        "b.ts active between two pinned tabs",
+        (current) =>
+          state.tabItems().length === 3 &&
+          state.tabItems()[1]?.active &&
+          titleRow(current).includes("+1")
+      );
+
+      // The label takes its cell before the markers, so b.ts still reads `…s`.
+      expect(titleRow(frame)).toContain("…s +1");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
 });

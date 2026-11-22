@@ -70,8 +70,11 @@ export const Tabs = (props: { budget: number }) => {
     const markers = (from: number, to: number) =>
       (from > 0 ? 1 : 0) + (to < last ? 1 : 0);
 
-    // The markers a lone active tab would show come out of its own room too.
-    const room = budget - markers(active, active);
+    // The strip spends its cells in one order: one for the active label, then
+    // The markers a lone active tab would show, then the pads. A budget too small
+    // For the label and its markers shows the label alone, unmarked.
+    const marked = budget - markers(active, active) >= 1;
+    const room = marked ? budget - markers(active, active) : budget;
 
     const cells = items.map((tab) => {
       // A strip too narrow for both pads and one label cell drops the pads, so
@@ -132,8 +135,8 @@ export const Tabs = (props: { budget: number }) => {
 
     return {
       cells: cells.slice(start, end + 1),
-      moreLeft: start > 0,
-      moreRight: end < cells.length - 1,
+      moreLeft: marked && start > 0,
+      moreRight: marked && end < cells.length - 1,
     };
   });
 

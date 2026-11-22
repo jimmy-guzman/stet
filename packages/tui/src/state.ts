@@ -839,12 +839,15 @@ const createState = () => {
   );
 
   const treeFiles = createMemo(() => {
-    const paths = changesOnly() ? changedPaths() : stagedDeletionPaths();
+    // With nothing changed, changes-only would leave an empty tree, so it shows every file
+    // Until a change lands; the header's changed count says why.
+    const narrowed = changesOnly() && changedPaths().size > 0;
+    const paths = narrowed ? changedPaths() : stagedDeletionPaths();
 
     const files = new Map(
       repoFiles()
         .values()
-        .filter((file) => !changesOnly() || paths.has(file.path))
+        .filter((file) => !narrowed || paths.has(file.path))
         .map((file) => [file.path, file] as const)
     );
 
@@ -956,8 +959,7 @@ const createState = () => {
   // RepoFiles poll fills it. parseRepoFiles always folds repoRoot into the key, so
   // A loaded 0-file repo has a non-empty key: an empty key means "not loaded yet"
   // (including the pre-startup empty model), and the default tree reserves blank
-  // Space for that window instead of flashing the empty state. Changes-only rows come
-  // From the changed set, so that mode shows its empty state once the startup load lands.
+  // Space for that window instead of flashing the empty state.
   const repoFilesLoading = createMemo(() => gitModel().repoFilesKey === "");
   const recencyByPath = createMemo(() => lastChangedAt(activityLog()));
 

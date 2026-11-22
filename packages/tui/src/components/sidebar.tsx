@@ -71,16 +71,11 @@ export const Sidebar = () => {
             fallback={
               // No rows yet. During the deferred repoFiles load, render no text: the
               // Window is already a fixed viewport, so the pane stays reserved on its
-              // Own. Only a genuinely empty tree gets the real empty state: a loaded,
-              // File-less repo, or changes-only once the startup load has landed, since
-              // Changes-only rows come from the changed set and never wait on repoFiles.
+              // Own. Only a loaded, file-less repo gets the real empty state.
               // A focused tree still shows an empty cursor band on its first row as its
               // Focus mark until the rows load.
               <Show
-                when={
-                  !state.repoFilesLoading() ||
-                  (state.changesOnly() && state.gitModel().repoRoot !== "")
-                }
+                when={!state.repoFilesLoading()}
                 fallback={
                   <Show when={state.focusedPane() === "tree"}>
                     <box
@@ -102,13 +97,9 @@ export const Sidebar = () => {
                   backgroundColor={theme.colors.surface.base}
                 >
                   {/* With no rows there is no cursor row to mark focus, so this line carries it. */}
-                  <text fg={emptyStateTone("tree")}>
-                    {state.changesOnly() ? "no changes" : "no files"}
-                  </text>
+                  <text fg={emptyStateTone("tree")}>no files</text>
                   <text fg={theme.colors.text.faint}>
-                    {state.changesOnly()
-                      ? "press c to show all"
-                      : "this repository has no files yet"}
+                    this repository has no files yet
                   </text>
                 </box>
               </Show>

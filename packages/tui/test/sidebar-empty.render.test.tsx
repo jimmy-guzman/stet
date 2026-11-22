@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
@@ -24,11 +25,14 @@ const sidebarOf = (frame: string) =>
     .map((line) => line.split("│")[0])
     .join("\n");
 
-// A clean repo under the changes-only filter has zero rows. The sidebar must
-// Author that empty state rather than render a blank pane, and tell the user how
-// To leave it.
-test("shows the changes-only empty state when nothing changed", async () => {
-  const repoRoot = createFixtureRepo("stet-empty-changes-", { "a.txt": "a\n" });
+// A clean repo under the changes-only filter would have zero rows, so the tree shows every
+// File until a change lands, then narrows to the changed set.
+test("changes-only shows every file until something changes", async () => {
+  const repoRoot = createFixtureRepo("stet-empty-changes-", {
+    "a.txt": "a\n",
+    "b.txt": "b\n",
+  });
+
   const model = await loadModel(repoRoot, allScope);
   seedState(model, allScope);
   state.setChangesOnly(true);
@@ -44,20 +48,32 @@ test("shows the changes-only empty state when nothing changed", async () => {
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-    const frame = await settleUntil("empty sidebar", (current) =>
-      sidebarOf(current).includes("no changes")
+    await settleUntil("full tree", (current) => {
+      const sidebar = sidebarOf(current);
+
+      return sidebar.includes("a.txt") && sidebar.includes("b.txt");
+    });
+
+    await Bun.write(path.join(repoRoot, "a.txt"), "changed\n");
+    state.setGitModel(await loadModel(repoRoot, allScope));
+
+    const narrowed = sidebarOf(
+      await settleUntil("narrowed tree", (current) => {
+        const sidebar = sidebarOf(current);
+
+        return sidebar.includes("a.txt") && !sidebar.includes("b.txt");
+      })
     );
 
-    const sidebar = sidebarOf(frame);
-    expect(sidebar).toContain("no changes");
-    expect(sidebar).toContain("press c to show all");
+    expect(narrowed).toContain("a.txt");
+    expect(narrowed).not.toContain("b.txt");
   } finally {
     renderer.destroy();
   }
 });
 
-// An empty repository (no files at all) is the other path to zero rows; with the
-// Filter off the headline names that distinct cause. The pre-load empty model now
+// An empty repository (no files at all) is the one loaded state with zero rows, so it
+// Gets the real empty state. The pre-load empty model now
 // Reads as still-loading (empty key), so seed a loaded-and-empty model: a non-empty
 // RepoFilesKey with zero files, repoRoot signal zeroed so the poll can't race it.
 const loadedEmptyModel: GitModel = {

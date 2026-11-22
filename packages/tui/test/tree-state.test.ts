@@ -171,34 +171,28 @@ test("folder activation toggles expansion and only file activation records a vie
   ]);
 });
 
-test.each([false, true])(
-  "filtering retains a collapsed parent and its expanded child (other change: %s)",
-  (hasOtherChange) => {
-    seedFiles(
-      ["src/deep/a", "src/b", "other/a"],
-      hasOtherChange ? [change("other/a")] : []
-    );
-    state.selectFile("src/deep/a");
-    state.focusTreeNode("dir:src");
-    state.moveFocus("left");
-    expect(state.focusedTreeRow()?.node).toMatchObject({
-      path: "src",
-      expanded: false,
-    });
-    const navigation = state.navState();
-    state.setChangesOnly(true);
-    expect(paths()).not.toContain("src");
-    state.setChangesOnly(false);
-    expect(state.focusedTreeRow()?.node).toMatchObject({
-      path: "src",
-      expanded: false,
-    });
-    expect(paths()).not.toContain("src/deep/a");
-    expect(state.navState()).toBe(navigation);
-    state.moveFocus("right");
-    expect(paths()).toContain("src/deep/a");
-  }
-);
+test("filtering retains a collapsed parent and its expanded child", () => {
+  seedFiles(["src/deep/a", "src/b", "other/a"], [change("other/a")]);
+  state.selectFile("src/deep/a");
+  state.focusTreeNode("dir:src");
+  state.moveFocus("left");
+  expect(state.focusedTreeRow()?.node).toMatchObject({
+    path: "src",
+    expanded: false,
+  });
+  const navigation = state.navState();
+  state.setChangesOnly(true);
+  expect(paths()).not.toContain("src");
+  state.setChangesOnly(false);
+  expect(state.focusedTreeRow()?.node).toMatchObject({
+    path: "src",
+    expanded: false,
+  });
+  expect(paths()).not.toContain("src/deep/a");
+  expect(state.navState()).toBe(navigation);
+  state.moveFocus("right");
+  expect(paths()).toContain("src/deep/a");
+});
 
 test("filtering retains an opened flattened directory chain", () => {
   seedFiles(["src/deep/a", "other/a"], [change("other/a")]);

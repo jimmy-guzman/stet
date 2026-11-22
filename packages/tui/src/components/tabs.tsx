@@ -31,21 +31,16 @@ export const titleColor = () =>
 const activeColor = (active: boolean) =>
   active ? titleColor() : theme.colors.text.muted;
 
-const tabLabel = (
-  path: string | undefined,
-  active: boolean,
-  budget: number
-) => {
+const tabLabel = (path: string | undefined, active: boolean, room: number) => {
   if (path === undefined) {
     return "·";
   }
 
-  // The budget already excludes the strip's ‹ › markers, so taking off the pad
-  // Leaves exactly the room the active tab has on its own. No fixed cap: SPEC has
-  // The active tab show its full path, so a path as wide as the strip leaves the
-  // Neighbours to their markers rather than cutting a path that would fit.
+  // No fixed cap on the active path: SPEC has the active tab show its full path,
+  // So a path as wide as the strip leaves the neighbours to their markers rather
+  // Than cutting a path that would fit.
   return active
-    ? truncateLeft(path, budget - 2 * Bun.stringWidth(LABEL_PAD))
+    ? truncateLeft(path, room)
     : truncateName(baseName(path), TAB_MAX);
 };
 
@@ -76,21 +71,31 @@ export const Tabs = (props: { budget: number }) => {
       (from > 0 ? 1 : 0) + (to < last ? 1 : 0);
 
     // The markers a lone active tab would show come out of its own room too.
+    const room = budget - markers(active, active);
+
     const cells = items.map((tab) => {
+      // A strip too narrow for both pads and one label cell drops the pads, so
+      // The active tab keeps its `…` the way the unpinned title does.
+      const pad =
+        tab.active && room < 2 * Bun.stringWidth(LABEL_PAD) + 1
+          ? ""
+          : LABEL_PAD;
+
       const label = tabLabel(
         tab.path,
         tab.active,
-        budget - markers(active, active)
+        room - 2 * Bun.stringWidth(pad)
       );
 
       return {
         active: tab.active,
         id: tab.id,
         label,
+        pad,
         preview: tab.preview,
         // Display columns (a label can hold a wide glyph), plus the pad each
         // Side; the overflow window budgets against this.
-        width: Bun.stringWidth(`${LABEL_PAD}${label}${LABEL_PAD}`),
+        width: Bun.stringWidth(`${pad}${label}${pad}`),
       };
     });
 
@@ -165,7 +170,7 @@ export const Tabs = (props: { budget: number }) => {
               fg={activeColor(cell().active)}
               attributes={createTextAttributes({ italic: cell().preview })}
             >
-              {`${LABEL_PAD}${cell().label}${LABEL_PAD}`}
+              {`${cell().pad}${cell().label}${cell().pad}`}
             </text>
           </box>
         )}

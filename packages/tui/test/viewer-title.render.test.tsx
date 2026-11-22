@@ -218,4 +218,46 @@ describe("viewer title row", () => {
       renderer.destroy();
     }
   }, 20_000);
+
+  test("a pinned tab keeps its label when the strip has room for one cell or two", async () => {
+    const repoRoot = createFixtureRepo("stet-title-tiny-", {
+      "README.md": "# Fixture\n",
+    });
+
+    writeFileSync(
+      path.join(repoRoot, "abc.ts"),
+      "const a = 1\nconst b = 2\nconst c = 3\n"
+    );
+    runGit(repoRoot, ["add", "."]);
+
+    const scope = { kind: "staged", ref: "HEAD" } as const;
+    const model = await loadModel(repoRoot, scope);
+    seedState(model, scope);
+
+    // Width 7 with the tree collapsed leaves the title 2 cells beside `+3`.
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      { height: 20, width: 7 }
+    );
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.collapseSidebar();
+      state.selectFile("abc.ts");
+      await settleUntil("lone title", (current) =>
+        titleRow(current).includes("+3")
+      );
+      state.togglePinActiveTab();
+
+      const frame = await settleUntil("pinned tab shown", () =>
+        state.tabItems().some((tab) => !tab.preview)
+      );
+
+      // The pads give way, so the pinned tab still reads `…s` like the lone title.
+      expect(titleRow(frame)).toContain("…s +3");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
 });

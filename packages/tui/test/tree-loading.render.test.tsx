@@ -188,9 +188,9 @@ test("keeps changed-file rows visible during a deferred load in changes-only mod
   }
 });
 
-// Changes-only rows come from the changed set, so its empty state need not wait for the full
-// File list the way the all-files tree does.
-test("changes-only shows its empty state while the file list is still loading", async () => {
+// With nothing changed, changes-only shows every file, so a clean repo waits for the full file
+// List like the all-files tree instead of claiming it is empty.
+test("changes-only with nothing changed waits for the file list", async () => {
   const repoRoot = createFixtureRepo("stet-loading-changes-only-", {
     "a.txt": "alpha\n",
   });
@@ -208,10 +208,12 @@ test("changes-only shows its empty state while the file list is still loading", 
 
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    await settleUntil("shell", (current) => current.includes("q quit"));
 
-    await settleUntil("changes-only empty state", (current) =>
-      sidebarOf(current).includes("no changes")
-    );
+    await makeHoldFor({ captureCharFrame, renderOnce })(20, (frame) => {
+      expect(sidebarOf(frame)).not.toContain("no files");
+      expect(sidebarOf(frame)).not.toContain("no changes");
+    });
     expect(state.repoFilesLoading()).toBe(true);
   } finally {
     renderer.destroy();
@@ -237,7 +239,7 @@ test("changes-only shows no empty state before the startup load lands", async ()
     await settleUntil("shell", (current) => current.includes("q quit"));
 
     await makeHoldFor({ captureCharFrame, renderOnce })(20, (frame) => {
-      expect(sidebarOf(frame)).not.toContain("no changes");
+      expect(sidebarOf(frame)).not.toContain("no files");
     });
   } finally {
     renderer.destroy();

@@ -1,6 +1,5 @@
 import {
   columnCells,
-  DiffHunksRenderer,
   getSharedHighlighter,
   parseDiffFromFile,
   parsePatchFiles,
@@ -25,6 +24,7 @@ import {
   rowsFromHunks,
 } from "./rows";
 import type { DiffLineSide, DiffRow, NavigableLine } from "./rows";
+import { WholeLineRenderer } from "./whole-line-renderer";
 
 interface DiffLayout {
   rows: DiffRow[];
@@ -261,7 +261,7 @@ const compute = async (
 
   // Owned by this render's closure, never by app state: it caches the whole-file
   // Highlight once, so each `expand` only re-lays out rows.
-  const renderer = new DiffHunksRenderer({
+  const renderer = new WholeLineRenderer({
     collapsedContextThreshold: 1,
     diffStyle: "unified",
     hunkSeparators: "line-info",

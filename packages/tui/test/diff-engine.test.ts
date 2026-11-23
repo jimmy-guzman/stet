@@ -260,6 +260,25 @@ index 1111111..2222222 100644
 
     expect(added.spans.map((span) => span.text).join("")).toBe("new line here");
   });
+
+  test("keeps a line past the highlight limit whole", async () => {
+    const long = `const data = "${"x".repeat(6000)}";`;
+
+    const render = await renderDiff({
+      files: {
+        newFile: { contents: `const a = 1;\n${long}\n`, name: "data.ts" },
+        oldFile: { contents: "const a = 1;\n", name: "data.ts" },
+      },
+      full: false,
+      maxLines: 1600,
+    });
+
+    expect(render.navigable.at(-1)).toMatchObject({
+      content: long,
+      newLine: 2,
+      type: "add",
+    });
+  });
 });
 
 /** A `system` theme whose terminal green, and so its string color, is `green`. */

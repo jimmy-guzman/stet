@@ -32,7 +32,7 @@ import {
   foldRegionsFor,
   remapCursorAfterToggle,
 } from "./diff/regions";
-import type { DiffRow } from "./diff/rows";
+import type { DiffLineSide, DiffRow } from "./diff/rows";
 import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { openExternalCommand } from "./editor/reference";
 import { Editor } from "./editor/service";
@@ -2345,7 +2345,7 @@ const createState = () => {
     return gap?.kind === "marker" ? gap.key : undefined;
   };
 
-  const revealFoldedLine = (line: number, side: "newLine" | "oldLine") => {
+  const revealFoldedLine = (line: number, side: DiffLineSide) => {
     const folded = foldedRegions();
 
     if (folded.size === 0) {
@@ -2543,8 +2543,8 @@ const createState = () => {
     setFullContentPaths(new Set(fullContentPaths()).add(path));
   };
 
-  const revealGapAtLine = (line: number) => {
-    const gap = diffView()?.render.gapAtLine(line);
+  const revealGapAtLine = (line: number, side: DiffLineSide) => {
+    const gap = diffView()?.render.gapAtLine(line, side);
     const gaps = expandedGaps();
 
     if (gap === undefined || gaps.has(gap)) {
@@ -2571,7 +2571,7 @@ const createState = () => {
       return true;
     }
 
-    if (jump === undefined && side === "newLine" && revealGapAtLine(line)) {
+    if (jump === undefined && revealGapAtLine(line, side)) {
       return true;
     }
 

@@ -24,7 +24,7 @@ import {
   navigableLinesFromRows,
   rowsFromHunks,
 } from "./rows";
-import type { DiffRow, NavigableLine } from "./rows";
+import type { DiffLineSide, DiffRow, NavigableLine } from "./rows";
 
 interface DiffLayout {
   rows: DiffRow[];
@@ -41,7 +41,7 @@ export interface DiffRender extends DiffLayout {
    * caret remap that follows it.
    */
   expand: (gaps: ReadonlySet<string>) => DiffLayout;
-  gapAtLine: (line: number) => string | undefined;
+  gapAtLine: (line: number, side: DiffLineSide) => string | undefined;
 }
 
 /**
@@ -309,7 +309,8 @@ const compute = async (
       ...base,
       expand: (gaps) =>
         gaps.size === 0 ? base : layout(renderWith(gaps) ?? collapsed, gaps),
-      gapAtLine: (line) => collapsedGapAtLine(meta, base.rows, line),
+      gapAtLine: (line, side) =>
+        collapsedGapAtLine(meta, base.rows, line, side),
     },
     retained:
       (meta.additionCharacterCount + meta.deletionCharacterCount) *

@@ -2345,10 +2345,13 @@ const createState = () => {
     return gap?.kind === "marker" ? gap.key : undefined;
   };
 
-  // A jump (search, find) may target a line a fold is hiding.
-  // Clear the fold(s) covering it so the jump can land; the Viewer's jump effect
-  // Re-runs on the resulting navigable change and finds the now-visible line.
-  const revealLineForJump = (line: number) => {
+  const revealFoldedLine = (line: number, side: "newLine" | "oldLine") => {
+    const folded = foldedRegions();
+
+    if (folded.size === 0) {
+      return false;
+    }
+
     const expanded = expandedLayout();
 
     if (expanded === undefined) {
@@ -2356,7 +2359,7 @@ const createState = () => {
     }
 
     const rawIndex = expanded.navigable.findIndex(
-      (navigable) => navigable.newLine === line
+      (navigable) => navigable[side] === line
     );
 
     if (rawIndex === -1) {
@@ -2367,14 +2370,14 @@ const createState = () => {
       (region) =>
         region.headerNavIndex < rawIndex &&
         rawIndex <= region.endNavIndex &&
-        foldedRegions().has(region.key)
+        folded.has(region.key)
     );
 
     if (covering.length === 0) {
       return false;
     }
 
-    const next = new Set(foldedRegions());
+    const next = new Set(folded);
 
     for (const region of covering) {
       next.delete(region.key);
@@ -2540,9 +2543,35 @@ const createState = () => {
     setFullContentPaths(new Set(fullContentPaths()).add(path));
   };
 
-  // Keep the jump pending until these changes make its line available.
-  const revealJumpTarget = (jump: JumpTarget, full: boolean) => {
-    if (revealLineForJump(jump.line)) {
+  const revealGapAtLine = (line: number) => {
+    const gap = diffView()?.render.gapAtLine(line);
+    const gaps = expandedGaps();
+
+    if (gap === undefined || gaps.has(gap)) {
+      return false;
+    }
+
+    setExpandedGaps(new Set(gaps).add(gap));
+
+    return true;
+  };
+
+  // Keep the restore pending until the newly revealed or loaded rows arrive.
+  const revealRestoreTarget = (pending: PendingRestore, full: boolean) => {
+    const { jump } = pending;
+    const line = jump?.line ?? pending.cursorLine;
+
+    if (line === undefined) {
+      return false;
+    }
+
+    const side = pending.cursorSide === "old" ? "oldLine" : "newLine";
+
+    if (revealFoldedLine(line, side)) {
+      return true;
+    }
+
+    if (jump === undefined && side === "newLine" && revealGapAtLine(line)) {
       return true;
     }
 
@@ -2553,6 +2582,7 @@ const createState = () => {
     }
 
     if (
+      jump !== undefined &&
       jump.escalate !== false &&
       selectedFile() !== undefined &&
       !fileView()
@@ -2563,27 +2593,6 @@ const createState = () => {
     }
 
     return false;
-  };
-
-  const revealRestoreTarget = (pending: PendingRestore, full: boolean) => {
-    if (pending.jump !== undefined) {
-      return revealJumpTarget(pending.jump, full);
-    }
-
-    if (pending.cursorLine === undefined || pending.cursorSide === "old") {
-      return false;
-    }
-
-    const gap = diffView()?.render.gapAtLine(pending.cursorLine);
-    const gaps = expandedGaps();
-
-    if (gap === undefined || gaps.has(gap)) {
-      return false;
-    }
-
-    setExpandedGaps(new Set(gaps).add(gap));
-
-    return true;
   };
 
   // Open the context menu on a pane. A right-click passes its exact cell as `anchor`;

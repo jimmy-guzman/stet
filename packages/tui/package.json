@@ -21,7 +21,7 @@
   "dependencies": {
     "@opentui/core": "0.9.9",
     "@opentui/solid": "0.9.9",
-    "@pierre/diffs": "1.7.0-beta.4",
+    "@pierre/diffs": "1.7.1",
     "@pierre/highlights": "0.5.2",
     "@pierre/trees": "1.0.0",
     "effect": "4.1.5",

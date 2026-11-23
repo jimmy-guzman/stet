@@ -2571,7 +2571,9 @@ const createState = () => {
       return true;
     }
 
-    if (jump === undefined && revealGapAtLine(line, side)) {
+    const canEscalate = jump !== undefined && jump.escalate !== false;
+
+    if (!canEscalate && revealGapAtLine(line, side)) {
       return true;
     }
 
@@ -2581,12 +2583,7 @@ const createState = () => {
       return true;
     }
 
-    if (
-      jump !== undefined &&
-      jump.escalate !== false &&
-      selectedFile() !== undefined &&
-      !fileView()
-    ) {
+    if (canEscalate && selectedFile() !== undefined && !fileView()) {
       setFileView(true);
 
       return true;

@@ -135,6 +135,10 @@ jobs:
       # the exact vector this split closes. The generated manifests declare none, so nothing
       # that should run is suppressed. --no-git-checks: dist/ is not a git checkout, so skip
       # pnpm's clean-tree/branch guards. `npm view` is an anonymous read, so it stays.
+      # npm can hold an accepted version in automated review ("Validating" on npmjs.com) where
+      # `npm view` still 404s: 0.12.0's stet-linux-arm64 sat there ~26 min. Publishing it again
+      # then fails with 409 "previously staged version", which means npm already has it, so a
+      # rerun during review counts it as published instead of failing.
       - name: publish npm packages
         run: |
           for dir in dist/stet-*/ dist/stet/; do
@@ -144,8 +148,12 @@ jobs:
               version=$(jq -r .version package.json)
               if npm view "$name@$version" version >/dev/null 2>&1; then
                 echo "skipping $name@$version (already published)"
+              elif ! out=$(pnpm publish --access public --no-git-checks --ignore-scripts --provenance 2>&1); then
+                echo "$out"
+                grep -q 'previously staged version' <<<"$out" || exit 1
+                echo "skipping $name@$version (already staged, in npm's review)"
               else
-                pnpm publish --access public --no-git-checks --ignore-scripts --provenance
+                echo "$out"
               fi
             )
           done
@@ -167,7 +175,8 @@ jobs:
           # npm finalizes an OIDC publish asynchronously: 0.11.0 became resolvable 2 to 4.5 min
           # after pnpm reported success, so a short per-package retry failed a release that landed.
           # The deadline bounds retries, not checks: every package gets one look even past it,
-          # since failing a package unseen would fail a release that landed.
+          # since failing a package unseen would fail a release that landed. npm's review can outlast
+          # the deadline; once the version shows as published, rerunning the failed job turns it green.
           deadline=$((SECONDS + 600))
           for name in stet-darwin-arm64 stet-darwin-x64 stet-linux-x64 stet-linux-arm64 @jimmy.codes/stet; do
             until npm view "$name@$version" version >/dev/null 2>&1; do
@@ -181,9 +190,12 @@ jobs:
           done
 
   homebrew:
-    needs: [release-please, publish]
-    # `!cancelled()` would otherwise let this run past a failed publish, so require it explicitly.
-    if: ${{ !cancelled() && needs.publish.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release-please.outputs.released == 'true') }}
+    # The formula reads only the GitHub release assets, which build uploads, so it waits on build
+    # rather than publish: npm's review of a version has no fixed length (0.12.0 took ~26 min) and
+    # must not hold back a channel that never touches npm. `!cancelled()` would otherwise let this
+    # run past a failed build, so require it explicitly.
+    needs: [release-please, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release-please.outputs.released == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

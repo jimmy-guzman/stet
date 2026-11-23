@@ -91,17 +91,17 @@ describe("gap expansion", () => {
       );
       mockInput.pressKey("<");
 
-      const restored = await settleUntil(
-        "returned to the diff",
-        () =>
+      await settleUntil(
+        "restored line visible in the diff",
+        (frame) =>
           state.diffView()?.path === "src/mod.ts" &&
-          state.pendingRestore() === undefined
+          state.pendingRestore() === undefined &&
+          frame.includes("const l10 = 10")
       );
 
       expect(state.fileView()).toBe(false);
       expect(state.cursorLineNumber()).toBe(10);
       expect(state.caretColumn()).toBe(savedColumn);
-      expect(restored).toContain("const l10 = 10");
     } finally {
       renderer.destroy();
     }
@@ -166,18 +166,18 @@ describe("gap expansion", () => {
 
       mockInput.pressKey("<");
 
-      const restored = await settleUntil(
-        "returned to the diff",
-        () =>
+      await settleUntil(
+        "restored line visible in the diff",
+        (frame) =>
           state.diffView()?.path === "mod.ts" &&
-          state.pendingRestore() === undefined
+          state.pendingRestore() === undefined &&
+          frame.includes("const line10 = 10")
       );
 
       expect(state.cursorLineNumber()).toBe(22);
       expect(state.cursorLineContent()).toBe("const line10 = 10");
       expect(state.caretColumn()).toBe(savedColumn);
       expect(state.fileView()).toBe(false);
-      expect(restored).toContain("const line10 = 10");
     } finally {
       renderer.destroy();
     }

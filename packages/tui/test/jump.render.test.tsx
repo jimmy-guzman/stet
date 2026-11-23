@@ -68,15 +68,15 @@ describe("view toggle jumps", () => {
 
       mockInput.pressKey("v");
 
-      const after = await settleUntil(
+      await settleUntil(
         "diff view restored",
         (frame) =>
           state.pendingRestore() === undefined &&
+          frame.includes("const line30 = 30") &&
           /[+-]\d+\s*$/u.test(frame.split("\n")[state.layout().viewer.y] ?? "")
       );
 
       expect(state.cursorLineNumber()).toBe(30);
-      expect(after).toContain("const line30 = 30");
     } finally {
       renderer.destroy();
     }

@@ -90,14 +90,14 @@ describe("code folding", () => {
       );
       mockInput.pressKey("<");
 
-      const restored = await settleUntil(
-        "history restore complete",
-        () => state.pendingRestore() === undefined
+      await settleUntil(
+        "restored line visible after unfolding",
+        (frame) =>
+          state.pendingRestore() === undefined && frame.includes("const b = 2")
       );
 
       expect(state.cursorLineNumber()).toBe(3);
       expect(state.fileView()).toBe(false);
-      expect(restored).toContain("const b = 2");
     } finally {
       renderer.destroy();
     }

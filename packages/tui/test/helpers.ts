@@ -162,7 +162,6 @@ export const seedState = (
     state.setWorktreeSummaries(new Map());
     state.setHelpDialogOpen(false);
     state.setCursorIndex(0);
-    state.setJumpTarget(undefined);
     state.closeSearch();
     state.setSearchQuery("");
     state.setSearchGlob("");

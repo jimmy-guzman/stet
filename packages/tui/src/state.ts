@@ -32,7 +32,7 @@ import {
   foldRegionsFor,
   remapCursorAfterToggle,
 } from "./diff/regions";
-import type { DiffRow } from "./diff/rows";
+import type { DiffLineSide, DiffRow } from "./diff/rows";
 import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
 import { openExternalCommand } from "./editor/reference";
 import { Editor } from "./editor/service";
@@ -104,33 +104,22 @@ import {
   back,
   canBack,
   canForward,
-  closeTab,
   currentLocation,
   forward,
   initialNav,
   navigate,
-  nextTab,
-  openTab,
-  pinTab,
-  prevTab,
   recall,
   recordCurrent,
   remember,
-  selectTab,
-  unpinTab,
 } from "./viewer/navigation";
-import type { Location, NavState } from "./viewer/navigation";
+import type {
+  JumpTarget,
+  Location,
+  NavState,
+  Position,
+} from "./viewer/navigation";
 import { buildSearchItems, isNavigableSearchItem } from "./viewer/search-items";
 import { Watcher } from "./watcher/service";
-
-interface JumpTarget {
-  path: string;
-  line: number;
-  // 1-based column to land the caret on (snapped to the word that owns it);
-  // Undefined keeps the caret at the target line's first word.
-  column?: number;
-  escalate: boolean;
-}
 
 // The context the command menu was opened against; a clear effect closes the menu
 // The moment any of it drifts, so the open state can never outlive the anchored
@@ -151,17 +140,8 @@ interface CommandMenuGuard {
   repoRoot: string;
 }
 
-// A one-shot request to place the cursor and scroll once the diff for `path`
-// Has loaded: every navigation enqueues one (a fresh open carries
-// `cursorLine: undefined` -> first change; back/forward and revisits carry the
-// Remembered line). The Viewer applies it under the same async-coherence guard as
-// A jump, so "reset on file switch" is just restore-to-default through one path.
-interface PendingRestore {
+interface PendingRestore extends Position {
   path: string;
-  cursorLine: number | undefined;
-  // The caret's UTF-16 offset to restore; undefined → the cursor line's first word.
-  cursorColumn: number | undefined;
-  viewport: { scrollTop: number; scrollX: number };
 }
 
 // The coherent diff-pane snapshot, committed once per selection with its rows
@@ -171,6 +151,7 @@ interface PendingRestore {
 // Empty/stale/partial content.
 interface DiffView {
   path: string;
+  full: boolean;
   showFileContent: boolean;
   fileContent: FileContent | undefined;
   render: DiffRender;
@@ -238,6 +219,7 @@ const loadDiffView = (src: {
           Effect.map((render): DiffView => ({
             binary: result.binary,
             fileContent: result.fileContent,
+            full: src.full,
             path: src.path,
             render,
             showFileContent: result.showFileContent,
@@ -447,14 +429,15 @@ const readSearchLines = async (
 const isGapMarker = (row: DiffRow) =>
   row.kind === "marker" && row.regionKind === "gap";
 
-// Record the location being left into its tab and into the MRU, the shared
-// Capture-on-leave step before any tab switch / navigation.
+// Save the current history entry and remember the position for a future reopen.
 const recordLeaving = (nav: NavState, leaving: Location | undefined) =>
   leaving === undefined
     ? nav
     : remember(recordCurrent(nav, leaving), leaving.path, {
         cursorColumn: leaving.cursorColumn,
         cursorLine: leaving.cursorLine,
+        cursorSide: leaving.cursorSide,
+        jump: leaving.jump,
         viewport: leaving.viewport,
       });
 
@@ -708,26 +691,13 @@ const createState = () => {
    */
   const [viewerScrollTop, setViewerScrollTop] = tracked(0);
   const [viewerScrollX, setViewerScrollX] = tracked(0);
-  // The viewer's navigation history: tabs of visited Locations plus a per-path
-  // MRU viewport. `selectedPath`/`fileView`/the scroll signals stay the live
-  // Source of truth the viewer renders; navState records them on leave and
-  // Restores them on back/forward or a revisit (capture-on-leave, like a browser).
+  // The viewer renders the live signals. History captures them on leave so
+  // back/forward and fresh visits can restore the recorded position.
   const [navState, setNavState] = tracked<NavState>(initialNav(undefined));
 
   const [pendingRestore, setPendingRestore] = tracked<
     PendingRestore | undefined
   >(undefined);
-
-  // Monotonic tab id source (the seed tab is "0"); never reset, so ids stay unique
-  // Across a seedNav that re-collapses to one tab.
-  let nextTabId = 1;
-  onReset(() => {
-    nextTabId = 1;
-  });
-
-  const [jumpTarget, setJumpTarget] = tracked<JumpTarget | undefined>(
-    undefined
-  );
 
   // Unresolved problems, tagged by the source that owns each one's lifecycle. A single untyped
   // Status channel was why a failed worktree list and a failed switch overwrote each other, and
@@ -1367,10 +1337,6 @@ const createState = () => {
     });
   };
 
-  // Open a result row (Enter or a click): a match line lands the caret on its
-  // Exact column; a context line lands line-level. Both route through the shared
-  // JumpTarget path, whose goToLocation step closes the search view like any other
-  // Navigation.
   const jumpToSearchItem = (index: number) => {
     const item = searchItems()[index];
 
@@ -1925,25 +1891,6 @@ const createState = () => {
   const canGoBack = createMemo(() => canBack(navState()));
   const canGoForward = createMemo(() => canForward(navState()));
 
-  // The tab strip's view-model: each open tab's current file and which is active.
-  // The viewer shows the strip only when there is more than one.
-  const tabItems = createMemo(() => {
-    const nav = navState();
-
-    return nav.tabs.map((tab) => ({
-      active: tab.id === nav.activeTabId,
-      id: tab.id,
-      path: tab.entries[tab.index]?.path,
-      preview: tab.preview,
-    }));
-  });
-
-  // Snapshot the live viewer state for the path being left, so a later
-  // Back/forward restores the exact spot. Undefined when nothing is selected.
-  // A still-outstanding restore for this path means the cursor/scroll signals
-  // Have not been applied for it yet (they still hold the previous file's values
-  // While its diff loads); capture the intended restore instead of those stale
-  // Live signals, so rapid navigation never records a neighbor's position.
   const captureCurrent = (): Location | undefined => {
     const path = selectedPath();
 
@@ -1951,44 +1898,49 @@ const createState = () => {
       return undefined;
     }
 
-    const pending = pendingRestore();
-    const settled = pending === undefined || pending.path !== path;
-    const line = navigableLines()[cursorIndex()];
-
-    return {
-      cursorColumn: settled ? cursorColumn() : pending.cursorColumn,
-      cursorLine: settled
-        ? (line?.newLine ?? line?.oldLine)
-        : pending.cursorLine,
+    const context = {
       fileView: fileView(),
       fullContent: fullContentPaths().has(path),
       kind: currentLocation(navState())?.kind ?? "jump",
       path,
-      viewport: settled
-        ? { scrollTop: viewerScrollTop(), scrollX: viewerScrollX() }
-        : pending.viewport,
+    };
+
+    const pending = pendingRestore();
+
+    // While a file loads, the live caret and scroll may still belong to the last file.
+    if (pending?.path === path) {
+      return { ...pending, ...context };
+    }
+
+    const line = navigableLines()[cursorIndex()];
+
+    return {
+      ...context,
+      cursorColumn: cursorColumn(),
+      cursorLine: line?.newLine ?? line?.oldLine,
+      cursorSide:
+        line?.newLine === undefined && line?.oldLine !== undefined
+          ? "old"
+          : undefined,
+      viewport: { scrollTop: viewerScrollTop(), scrollX: viewerScrollX() },
     };
   };
 
-  // The Location to arrive at when opening `path` fresh. A jump seeds the entry
-  // With its real target line so back/forward restore it (and the dedup in
-  // `navigate` can tell one jump from another); the column stays undefined so the
-  // Async `jumpTarget` effect snaps the caret to the exact word on landing. Absent
-  // A target, a revisit restores its remembered cursor/scroll from the MRU, a first
-  // Visit defaults (first change, top). `fileView` always resets to the diff.
   const arrivingLocation = (
     path: string,
     kind: "browse" | "jump",
-    targetLine?: number
+    jump: JumpTarget | undefined
   ): Location => {
     const remembered = recall(navState(), path);
+    const target = jump ?? remembered?.jump;
 
     return {
-      cursorColumn:
-        targetLine === undefined ? remembered?.cursorColumn : undefined,
-      cursorLine: targetLine ?? remembered?.cursorLine,
+      cursorColumn: target === undefined ? remembered?.cursorColumn : undefined,
+      cursorLine: target?.line ?? remembered?.cursorLine,
+      cursorSide: target === undefined ? remembered?.cursorSide : undefined,
       fileView: false,
       fullContent: fullContentPaths().has(path),
+      jump: target,
       kind,
       path,
       viewport: remembered?.viewport ?? { scrollTop: 0, scrollX: 0 },
@@ -2017,53 +1969,53 @@ const createState = () => {
     setPendingRestore({
       cursorColumn: location.cursorColumn,
       cursorLine: location.cursorLine,
+      cursorSide: location.cursorSide,
+      jump: location.jump,
       path: location.path,
       viewport: location.viewport,
     });
   };
 
-  // All file navigation routes to the single preview tab (Zed's model): otherwise
-  // The preview tab is navigated in place (browse coalesces, jump pushes), or a
-  // Fresh preview tab is opened when none exists (e.g. right after a pin). A pinned
-  // Tab already showing `path` is the destination instead of the preview: a plain
-  // Re-focus (no line) just re-activates it, restoring where you were (no dup),
-  // While a line jump navigates within it so the target line seeds that tab's
-  // History and back/forward restore it, like any other jump.
   const navigateTo = (
     path: string,
     kind: "browse" | "jump",
-    targetLine?: number
+    jump?: JumpTarget
   ) => {
-    const nav = navState();
+    if (jump === undefined && selectedPath() === path) {
+      // A deliberate open can make a browsed file a history stop without
+      // reapplying its position or discarding the entries ahead of it.
+      batch(() => {
+        closeSearch();
 
-    const pinned = nav.tabs.find(
-      (tab) => !tab.preview && tab.entries[tab.index]?.path === path
-    );
+        if (kind === "jump") {
+          setSelectionAnchor(undefined);
+          setNavState((nav) => {
+            const current = currentLocation(nav);
 
-    if (pinned !== undefined && targetLine === undefined) {
-      activateTab(pinned.id);
+            return current?.kind === "browse"
+              ? recordCurrent(nav, { ...current, kind })
+              : nav;
+          });
+        }
+      });
 
       return;
     }
 
     const leaving = captureCurrent();
-    const arriving = arrivingLocation(path, kind, targetLine);
-    const preview = nav.tabs.find((tab) => tab.preview);
-    const openingPreview = pinned === undefined && preview === undefined;
-    const destinationId = pinned?.id ?? preview?.id ?? String(nextTabId);
 
-    if (openingPreview) {
-      nextTabId += 1;
-    }
+    // Reuse the live view for the same target line so an off-hunk jump does
+    // not register a mode change before the viewer can resolve it.
+    const arriving =
+      jump !== undefined &&
+      leaving?.path === path &&
+      leaving.cursorLine === jump.line &&
+      leaving.cursorSide === undefined
+        ? { ...leaving, cursorColumn: undefined, jump, kind }
+        : arrivingLocation(path, kind, jump);
 
     batch(() => {
-      setNavState((current) => {
-        const recorded = recordLeaving(current, leaving);
-
-        return openingPreview
-          ? openTab(recorded, arriving, destinationId, true)
-          : navigate({ ...recorded, activeTabId: destinationId }, arriving);
-      });
+      setNavState((nav) => navigate(recordLeaving(nav, leaving), arriving));
       goToLocation(arriving);
     });
   };
@@ -2106,92 +2058,7 @@ const createState = () => {
     });
   };
 
-  // Tab switches reuse back/forward's capture-on-leave / apply-on-arrive: record
-  // Where we left the active tab, transform the tab set, then restore the new
-  // Active tab's current location.
-  const switchActiveTab = (transform: (nav: NavState) => NavState) => {
-    const nav = navState();
-    const leaving = captureCurrent();
-    const recorded = leaving === undefined ? nav : recordCurrent(nav, leaving);
-
-    const remembered =
-      leaving === undefined
-        ? recorded
-        : remember(recorded, leaving.path, {
-            cursorColumn: leaving.cursorColumn,
-            cursorLine: leaving.cursorLine,
-            viewport: leaving.viewport,
-          });
-
-    const moved = transform(remembered);
-    const target = currentLocation(moved);
-    batch(() => {
-      setNavState(moved);
-
-      if (target !== undefined) {
-        goToLocation(target);
-      }
-    });
-  };
-
-  // Toggle the active tab's pin: a preview pins (persists; the next navigation
-  // Opens a fresh preview), a pinned tab unpins (reverts to the dim preview). The
-  // Viewed file is unchanged either way, so only navState moves.
-  const togglePinActiveTab = () => {
-    setNavState((nav) => {
-      const active = nav.tabs.find((tab) => tab.id === nav.activeTabId);
-
-      if (active === undefined) {
-        return nav;
-      }
-
-      return active.preview
-        ? pinTab(nav, nav.activeTabId)
-        : unpinTab(nav, nav.activeTabId);
-    });
-  };
-
-  // Pin-only (idempotent): the double-click gesture promotes the active tab and
-  // Never unpins, unlike `ctrl-t`'s toggle. Unpinning stays a keyboard action.
-  const pinActiveTab = () => {
-    setNavState((nav) => pinTab(nav, nav.activeTabId));
-  };
-
-  const cycleTab = (direction: number) => {
-    switchActiveTab((nav) => (direction > 0 ? nextTab(nav) : prevTab(nav)));
-  };
-
-  const activateTab = (id: string) => {
-    switchActiveTab((nav) => selectTab(nav, id));
-  };
-
-  // Close the active tab. Removing it activates a neighbor (restore its location);
-  // Closing the sole tab instead reverts it to the preview (same file, strip gone),
-  // So no location change and nothing to restore.
-  const closeActiveTab = () => {
-    const nav = navState();
-    const leaving = captureCurrent();
-    const moved = closeTab(recordLeaving(nav, leaving), nav.activeTabId);
-
-    if (moved.tabs.length === nav.tabs.length) {
-      setNavState(moved);
-
-      return;
-    }
-
-    const target = currentLocation(moved);
-    batch(() => {
-      setNavState(moved);
-
-      if (target !== undefined) {
-        goToLocation(target);
-      }
-    });
-  };
-
-  // Reset history to a fresh single tab seeded with `path` (startup and worktree
-  // Switch). Caller already runs inside a batch; this stays unbatched so it folds
-  // Into that one update.
+  // Startup and worktree switches start a fresh history within the caller's batch.
   const seedNav = (path: string | undefined) => {
     if (path === undefined) {
       setNavState(initialNav(undefined));
@@ -2230,26 +2097,30 @@ const createState = () => {
     }
   };
 
-  // Open a file as a jump (palette, search, a problem).
-  // A `target` line is the single source of truth for where the jump lands: it
-  // Seeds the history Location (so back/forward restore it) and the transient
-  // `jumpTarget` (which snaps the caret to the column and escalates to file view).
-  const selectFile = (
-    path: string,
-    target?: { line: number; column?: number; escalate?: boolean }
-  ) => {
+  const selectFile = (path: string, target?: JumpTarget) => {
     batch(() => {
       treeTopology().reveal(path);
-      navigateTo(path, "jump", target?.line);
+      navigateTo(path, "jump", target);
+    });
+  };
 
-      if (target !== undefined) {
-        setJumpTarget({
-          column: target.column,
-          escalate: target.escalate ?? true,
-          line: target.line,
-          path,
-        });
-      }
+  const toggleFileView = () => {
+    const location = captureCurrent();
+
+    if (location === undefined) {
+      return;
+    }
+
+    const line = location.cursorLine;
+
+    batch(() => {
+      goToLocation({
+        ...location,
+        cursorColumn: undefined,
+        cursorSide: undefined,
+        fileView: !location.fileView,
+        jump: line === undefined ? undefined : { escalate: false, line },
+      });
     });
   };
 
@@ -2474,10 +2345,13 @@ const createState = () => {
     return gap?.kind === "marker" ? gap.key : undefined;
   };
 
-  // A jump (search, find) may target a line a fold is hiding.
-  // Clear the fold(s) covering it so the jump can land; the Viewer's jump effect
-  // Re-runs on the resulting navigable change and finds the now-visible line.
-  const revealLineForJump = (line: number) => {
+  const revealFoldedLine = (line: number, side: DiffLineSide) => {
+    const folded = foldedRegions();
+
+    if (folded.size === 0) {
+      return false;
+    }
+
     const expanded = expandedLayout();
 
     if (expanded === undefined) {
@@ -2485,7 +2359,7 @@ const createState = () => {
     }
 
     const rawIndex = expanded.navigable.findIndex(
-      (navigable) => navigable.newLine === line
+      (navigable) => navigable[side] === line
     );
 
     if (rawIndex === -1) {
@@ -2496,14 +2370,14 @@ const createState = () => {
       (region) =>
         region.headerNavIndex < rawIndex &&
         rawIndex <= region.endNavIndex &&
-        foldedRegions().has(region.key)
+        folded.has(region.key)
     );
 
     if (covering.length === 0) {
       return false;
     }
 
-    const next = new Set(foldedRegions());
+    const next = new Set(folded);
 
     for (const region of covering) {
       next.delete(region.key);
@@ -2669,6 +2543,55 @@ const createState = () => {
     setFullContentPaths(new Set(fullContentPaths()).add(path));
   };
 
+  const revealGapAtLine = (line: number, side: DiffLineSide) => {
+    const gap = diffView()?.render.gapAtLine(line, side);
+    const gaps = expandedGaps();
+
+    if (gap === undefined || gaps.has(gap)) {
+      return false;
+    }
+
+    setExpandedGaps(new Set(gaps).add(gap));
+
+    return true;
+  };
+
+  // Keep the restore pending until the newly revealed or loaded rows arrive.
+  const revealRestoreTarget = (pending: PendingRestore, full: boolean) => {
+    const { jump } = pending;
+    const line = jump?.line ?? pending.cursorLine;
+
+    if (line === undefined) {
+      return false;
+    }
+
+    const side = pending.cursorSide === "old" ? "oldLine" : "newLine";
+
+    if (revealFoldedLine(line, side)) {
+      return true;
+    }
+
+    const canEscalate = jump !== undefined && jump.escalate !== false;
+
+    if (!canEscalate && revealGapAtLine(line, side)) {
+      return true;
+    }
+
+    if (truncated() && !full) {
+      loadFullContent();
+
+      return true;
+    }
+
+    if (canEscalate && selectedFile() !== undefined && !fileView()) {
+      setFileView(true);
+
+      return true;
+    }
+
+    return false;
+  };
+
   // Open the context menu on a pane. A right-click passes its exact cell as `anchor`;
   // The keyboard trigger omits it, so the tree menu falls back to the focused row and
   // The viewer menu derives its anchor from the caret (stored as none). A no-op when
@@ -2811,14 +2734,6 @@ const createState = () => {
 
       case "loadFullContent": {
         loadFullContent();
-        break;
-      }
-
-      case "pinTab": {
-        // Open the right-clicked file, then pin it (the double-click gesture): the
-        // Menu is anchored on that node, not on whatever the viewer currently shows.
-        selectFile(action.path);
-        pinActiveTab();
         break;
       }
 
@@ -3313,9 +3228,6 @@ const createState = () => {
             : expandAncestorsForPath(expanded, selected)
         );
         setFullContentPaths(new Set<string>());
-        setJumpTarget(undefined);
-        // Reset navigation: worktree A's history is meaningless in B, so collapse
-        // To one fresh tab on the new worktree's selected file.
         seedNav(selected);
         setActivityLog(emptyActivityLog);
         // The new worktree starts at the tree, but only when the tree is on screen. This has to
@@ -3768,7 +3680,6 @@ const createState = () => {
   });
 
   return {
-    activateTab,
     activateTreeNode,
     activityLog,
     availableUpdate,
@@ -3781,7 +3692,6 @@ const createState = () => {
     caretWord,
     changesOnly,
     checkForUpdate,
-    closeActiveTab,
     closeCommandMenu,
     closeSearch,
     closeThemePicker,
@@ -3803,7 +3713,6 @@ const createState = () => {
     cursorIndex,
     cursorLineContent,
     cursorLineNumber,
-    cycleTab,
     diffView,
     directoryRecencyByPath,
     dispatchCommandAction,
@@ -3835,7 +3744,6 @@ const createState = () => {
     helpView,
     iconsEnabled,
     ideTemplate,
-    jumpTarget,
     jumpToSearchItem,
     layout,
     loadCommits,
@@ -3861,7 +3769,6 @@ const createState = () => {
     pageSearchSelection,
     pendingRestore,
     persistSettings,
-    pinActiveTab,
     quitConfirmOpen,
     recencyByPath,
     repoFilesLoading,
@@ -3869,7 +3776,7 @@ const createState = () => {
     resetFind,
     resetPane,
     resetState,
-    revealLineForJump,
+    revealRestoreTarget,
     scope,
     scopeMenuIndex,
     scopeMenuOpen,
@@ -3927,7 +3834,6 @@ const createState = () => {
     setIconsEnabled,
     setIdeFlag,
     setIdeTemplate,
-    setJumpTarget,
     setLastChange,
     setMainWorktreePath,
     setNotice,
@@ -3975,7 +3881,6 @@ const createState = () => {
     sidebarScrollTop,
     statusBarModel,
     switchWorktree,
-    tabItems,
     terminalHeight,
     terminalSuspended,
     terminalWidth,
@@ -3983,9 +3888,9 @@ const createState = () => {
     themeComboboxOpen,
     themeComboboxOrigin,
     themeComboboxResults,
+    toggleFileView,
     toggleFold,
     toggleGap,
-    togglePinActiveTab,
     toggleRegionAtCaret,
     toggleSearchCase,
     toggleSearchGroup,

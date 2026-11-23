@@ -4,20 +4,13 @@ import {
   back,
   canBack,
   canForward,
-  closeTab,
   currentLocation,
   forward,
   initialNav,
   navigate,
-  nextTab,
-  openTab,
-  pinTab,
-  prevTab,
-  unpinTab,
   recall,
   recordCurrent,
   remember,
-  selectTab,
 } from "@/viewer/navigation";
 import type { Location } from "@/viewer/navigation";
 
@@ -91,7 +84,7 @@ describe("jump dedup", () => {
       })
     );
 
-    expect(again.tabs[0].entries).toHaveLength(1);
+    expect(again.entries).toHaveLength(1);
     expect(canBack(again)).toBe(false);
     // The current entry is refreshed with the new viewport rather than duplicated.
     expect(currentLocation(again)?.viewport.scrollTop).toBe(8);
@@ -145,7 +138,7 @@ describe("browse coalescing", () => {
 
   test("browse does not coalesce onto a forward-truncated middle entry", () => {
     // After going back, the head is not at the end of the stack, so a browse pushes.
-    const nav = open(open(initialNav(loc("a")), "b"), "c");
+    const nav = open(open(initialNav(loc("a")), "b", "browse"), "c");
     const browsed = open(back(nav), "d", "browse");
     expect(currentLocation(browsed)?.path).toBe("d");
     expect(currentLocation(back(browsed))?.path).toBe("b");
@@ -173,7 +166,7 @@ describe("recordCurrent", () => {
     });
   });
 
-  test("is a no-op on an empty tab", () => {
+  test("is a no-op on empty history", () => {
     const empty = initialNav(undefined);
     expect(recordCurrent(empty, loc("a"))).toEqual(empty);
     expect(currentLocation(recordCurrent(empty, loc("a")))).toBeUndefined();
@@ -212,130 +205,17 @@ describe("MRU viewports", () => {
   });
 });
 
-describe("preview / pin", () => {
-  test("the seeded tab is a preview tab", () => {
-    const nav = initialNav(loc("a"));
-    expect(nav.tabs.find((tab) => tab.preview)?.id).toBe("0");
-  });
-
-  test("pinTab clears the preview flag and is idempotent", () => {
-    const pinned = pinTab(initialNav(loc("a")), "0");
-    expect(pinned.tabs.find((tab) => tab.preview)).toBeUndefined();
-    expect(pinTab(pinned, "0")).toEqual(pinned);
-  });
-
-  test("unpinTab makes a tab the sole preview, discarding a stale preview", () => {
-    // Tab 0 pinned (active), tab 1 a leftover preview.
-    const nav = openTab(pinTab(initialNav(loc("a")), "0"), loc("b"), "1", true);
-    const unpinned = unpinTab(nav, "0");
-    expect(unpinned.tabs.find((tab) => tab.preview)?.id).toBe("0");
-    expect(unpinned.tabs.filter((tab) => tab.preview)).toHaveLength(1);
-    expect(unpinned.tabs.some((tab) => tab.id === "1")).toBe(false);
-  });
-
-  test("a freshly opened preview tab is the only preview", () => {
-    const nav = openTab(pinTab(initialNav(loc("a")), "0"), loc("b"), "1", true);
-    expect(nav.tabs.find((tab) => tab.preview)?.id).toBe("1");
-    expect(nav.tabs.filter((tab) => tab.preview)).toHaveLength(1);
-  });
-
-  test("opening a new preview replaces the existing preview", () => {
-    const nav = openTab(initialNav(loc("a")), loc("b"), "1", true);
-    expect(nav.tabs).toHaveLength(1);
-    expect(nav.tabs.find((tab) => tab.preview)?.id).toBe("1");
-  });
-
-  test("closeTab and unpinTab are no-ops for an unknown id", () => {
-    const nav = initialNav(loc("a"));
-    expect(closeTab(nav, "nope")).toEqual(nav);
-    expect(unpinTab(nav, "nope")).toEqual(nav);
-  });
-});
-
-describe("tabs", () => {
-  test("openTab appends a tab and activates it", () => {
-    const nav = openTab(initialNav(loc("a")), loc("b"), "1", false);
-    expect(nav.tabs).toHaveLength(2);
-    expect(nav.activeTabId).toBe("1");
-    expect(currentLocation(nav)?.path).toBe("b");
-  });
-
-  test("each tab keeps its own independent history", () => {
-    // Tab 0: a -> c
-    let nav = navigate(initialNav(loc("a")), loc("c", "jump"));
-    // Tab 1: b
-    nav = openTab(nav, loc("b"), "1", false);
-    nav = selectTab(nav, "0");
-    expect(currentLocation(nav)?.path).toBe("c");
-    nav = back(nav);
-    expect(currentLocation(nav)?.path).toBe("a");
-    // Tab 1 stays untouched by tab 0's back.
-    nav = selectTab(nav, "1");
-    expect(currentLocation(nav)?.path).toBe("b");
-    expect(canBack(nav)).toBe(false);
-  });
-
-  test("closeTab of the active rightmost tab activates the left neighbor", () => {
-    let nav = openTab(
-      openTab(initialNav(loc("a")), loc("b"), "1", false),
-      loc("c"),
-      "2",
-      false
-    );
-
-    nav = closeTab(nav, "2");
-    expect(nav.tabs).toHaveLength(2);
-    expect(nav.activeTabId).toBe("1");
-    expect(currentLocation(nav)?.path).toBe("b");
-  });
-
-  test("closeTab of an active middle tab activates the right neighbor", () => {
-    let nav = openTab(
-      openTab(initialNav(loc("a")), loc("b"), "1", false),
-      loc("c"),
-      "2",
-      false
-    );
-
-    nav = selectTab(nav, "1");
-    nav = closeTab(nav, "1");
-    expect(nav.activeTabId).toBe("2");
-  });
-
-  test("closeTab of the last remaining tab reverts it to a preview", () => {
-    const pinned = pinTab(initialNav(loc("a")), "0");
-    const closed = closeTab(pinned, "0");
-    expect(closed.tabs).toHaveLength(1);
-    expect(closed.tabs.find((tab) => tab.preview)?.id).toBe("0");
-  });
-
-  test("nextTab and prevTab cycle with wrap-around", () => {
-    // Active "1"
-    const two = openTab(initialNav(loc("a")), loc("b"), "1", false);
-    expect(nextTab(two).activeTabId).toBe("0");
-    expect(prevTab(two).activeTabId).toBe("0");
-    const onZero = selectTab(two, "0");
-    expect(nextTab(onZero).activeTabId).toBe("1");
-    expect(prevTab(onZero).activeTabId).toBe("1");
-  });
-
-  test("selectTab ignores an unknown id", () => {
-    const nav = initialNav(loc("a"));
-    expect(selectTab(nav, "nope")).toEqual(nav);
-  });
-});
-
 describe("initialNav", () => {
-  test("seeds a single tab with the given location", () => {
+  test("seeds history with the given location", () => {
     const nav = initialNav(loc("a"));
-    expect(nav.tabs).toHaveLength(1);
+    expect(nav.entries).toHaveLength(1);
     expect(currentLocation(nav)?.path).toBe("a");
     expect(canBack(nav)).toBe(false);
   });
 
-  test("with no location seeds an empty single tab", () => {
+  test("starts with empty history when there is no location", () => {
     const nav = initialNav(undefined);
-    expect(nav.tabs).toHaveLength(1);
+    expect(nav.entries).toEqual([]);
     expect(currentLocation(nav)).toBeUndefined();
   });
 });

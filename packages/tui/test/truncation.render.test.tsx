@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
@@ -9,6 +11,7 @@ import {
   createFixtureRepo,
   loadModel,
   makeSettleUntil,
+  runGit,
   seedState,
 } from "./helpers";
 
@@ -55,6 +58,76 @@ describe("truncation footer", () => {
       );
 
       expect(loaded).not.toContain("f to load");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("Back loads the rest of a larger diff after a scope change hides the saved line", async () => {
+    const targetLine = 1800;
+
+    const lines = Array.from(
+      { length: targetLine },
+      (_, index) => `const line${index + 1} = 0`
+    );
+
+    const repoRoot = createFixtureRepo("stet-trunc-restore-", {
+      "mod.ts": `${lines.join("\n")}\n`,
+      "other.ts": "export const other = true\n",
+    });
+
+    const file = path.join(repoRoot, "mod.ts");
+    const staged = lines.with(targetLine - 1, "const target = 1");
+    writeFileSync(file, `${staged.join("\n")}\n`);
+    runGit(repoRoot, ["add", "mod.ts"]);
+
+    // These earlier edits consume the diff's row budget in the all-changes scope.
+    const edited = staged.map((line, index) =>
+      index < 900 ? line.replace(" = 0", " = 2") : line
+    );
+
+    writeFileSync(file, `${edited.join("\n")}\n`);
+    const scope = { kind: "staged", ref: "HEAD" } as const;
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockInput } =
+      await testRender(() => <App />, { height: 30, width: 110 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.selectFile("mod.ts", { column: 7, line: targetLine });
+      await settleUntil(
+        "saved line in the staged diff",
+        () =>
+          state.cursorLineContent() === "const target = 1" &&
+          state.caretColumn() === 7
+      );
+      expect(state.truncated()).toBe(false);
+
+      state.selectFile("other.ts");
+      await settleUntil(
+        "opened another file",
+        () => state.diffView()?.path === "other.ts"
+      );
+      state.selectScope("all");
+      await settleUntil(
+        "all scope loaded",
+        () => state.gitModel().scopeKey === "all:HEAD:"
+      );
+
+      mockInput.pressKey("<");
+      await settleUntil(
+        "returned to the diff",
+        () =>
+          state.diffView()?.path === "mod.ts" &&
+          state.pendingRestore() === undefined
+      );
+
+      expect(state.cursorLineNumber()).toBe(targetLine);
+      expect(state.caretColumn()).toBe(7);
+      expect(state.fileView()).toBe(false);
+      expect(state.truncated()).toBe(false);
     } finally {
       renderer.destroy();
     }

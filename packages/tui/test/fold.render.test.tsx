@@ -5,6 +5,7 @@ import path from "node:path";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
+import { state } from "@/state";
 
 import {
   createFixtureRepo,
@@ -14,7 +15,7 @@ import {
 } from "./helpers";
 
 describe("code folding", () => {
-  test("z folds the indented block enclosing the caret and unfolds it again", async () => {
+  test("z toggles a fold and Back reveals a saved line inside it", async () => {
     const source = [
       "export function foo() {",
       "  const a = 1",
@@ -69,6 +70,34 @@ describe("code folding", () => {
       );
 
       expect(unfolded).not.toContain("lines folded");
+
+      state.selectFile("src/mod.ts", { line: 3 });
+      await settleUntil("caret inside the function", () =>
+        state.cursorLineContent().includes("const b = 2")
+      );
+      state.selectFile("src/mod.ts", { line: 5 });
+      await settleUntil(
+        "jumped outside the function",
+        () => state.cursorLineNumber() === 5
+      );
+
+      mockInput.pressKey("g");
+      mockInput.pressKey("z");
+      await settleUntil(
+        "function folded after the jump",
+        (frame) =>
+          /\d+ lines folded/u.test(frame) && !frame.includes("const b = 2")
+      );
+      mockInput.pressKey("<");
+
+      await settleUntil(
+        "restored line visible after unfolding",
+        (frame) =>
+          state.pendingRestore() === undefined && frame.includes("const b = 2")
+      );
+
+      expect(state.cursorLineNumber()).toBe(3);
+      expect(state.fileView()).toBe(false);
     } finally {
       renderer.destroy();
     }

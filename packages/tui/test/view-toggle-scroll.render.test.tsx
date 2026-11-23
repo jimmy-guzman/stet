@@ -72,7 +72,7 @@ const longFileToggleFixture = (prefix: string) => {
 };
 
 describe("view toggle scroll", () => {
-  test("toggling to file view shows a low change immediately, no navigation", async () => {
+  test("view toggle follows the caret and reopening from search preserves scroll", async () => {
     const repoRoot = longFileToggleFixture("stet-toggle-scroll-");
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
@@ -122,6 +122,31 @@ describe("view toggle scroll", () => {
       expect(box).toBeDefined();
       expect(box.scrollHeight).toBeGreaterThanOrEqual(115);
       expect(box.scrollTop).toBeGreaterThan(50);
+
+      state.setViewerScrollTop(0);
+      await settleUntil(
+        "scrolled away from the caret",
+        () => box.scrollTop === 0
+      );
+      mockInput.pressKey("f", { ctrl: true });
+      await settleUntil("search open", (current) =>
+        current.includes("search…")
+      );
+      mockInput.pressKey("p", { ctrl: true });
+      await settleUntil("file picker open", (current) =>
+        current.includes("go to file…")
+      );
+      await mockInput.typeText("long.ts");
+      mockInput.pressEnter();
+
+      const reopened = await settleUntil(
+        "same file reopened",
+        (current) => state.mainView() === "file" && /\d+ lines/u.test(current)
+      );
+
+      expect(state.cursorLineNumber()).toBe(110);
+      expect(visibleLineNumbers(reopened)).toContain(1);
+      expect(diffScrollBox(renderer.root)?.scrollTop).toBe(0);
     } finally {
       renderer.destroy();
     }

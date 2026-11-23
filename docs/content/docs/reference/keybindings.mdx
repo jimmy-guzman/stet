@@ -39,14 +39,6 @@ You can do everything in stet with the keyboard. Press `?` at any time to see th
 | `Shift+↑ / ↓` | extend a line selection (drag also selects) | `select-up`, `select-down` |
 | `C` | copy the selected lines (or the caret line) | `copy-selection` |
 
-## Tabs
-
-| Key      | Action                                | Rebind id              |
-| -------- | ------------------------------------- | ---------------------- |
-| `ctrl-t` | pin / unpin the current file as a tab | `pin-tab`              |
-| `ctrl-w` | close the active tab                  | `close-tab`            |
-| `{ / }`  | previous / next tab                   | `prev-tab`, `next-tab` |
-
 ## Workspace
 
 | Key | Action | Rebind id |
@@ -105,7 +97,7 @@ A single uppercase letter means shift, so `"G"` is the same as `"shift+g"`. Modi
 
 The tables show the primary combo of each action. Some movement actions also keep an arrow as a second default: `↑` / `↓` beside `j` / `k`, and `←` / `→` beside `h` / `l`.
 
-If an id is unknown, or a combo does not parse, stet keeps the default. If you bind one combo to two actions, stet registers both. The internal dispatch order of stet decides which one fires, not the order of these tables. Do not rely on that order. Set the action that you do not want to `false`.
+stet skips unknown action IDs and applies the other valid bindings. If a combo does not parse, that action keeps its default. If you bind one combo to two actions, stet registers both. The internal dispatch order of stet decides which one fires, not the order of these tables. Do not rely on that order. Set the action that you do not want to `false`.
 
 At startup, stet shows only the first configuration problem that it finds, so a different problem can hide a keybinding problem. `?` and `--help` always show the bindings that are in effect.
 
@@ -116,7 +108,6 @@ Keys in overlays (pickers, menus, the quit confirmation, and the search pane) an
 You can also use the mouse:
 
 - Click a file to open it, a folder to expand or collapse it, or a diff line to move the caret there.
-- Double-click a file in the tree, or a tab in the tab strip, to pin it as a tab.
 - Click items in the overlays and the search pane.
 - Hover over a theme in the switcher to preview it live.
 - Click a pane to focus it. The wheel scrolls the pane under the pointer.

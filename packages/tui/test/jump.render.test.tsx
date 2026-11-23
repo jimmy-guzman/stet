@@ -15,7 +15,7 @@ import {
 } from "./helpers";
 
 describe("view toggle jumps", () => {
-  test("v returns to the diff even from a line outside every hunk", async () => {
+  test("v reveals the caret line in a collapsed gap when returning to the diff", async () => {
     const lines = Array.from(
       { length: 30 },
       (_, index) => `const line${index + 1} = ${index + 1}`
@@ -66,14 +66,17 @@ describe("view toggle jumps", () => {
         (frame) => /\d+ lines/u.test(frame) && state.cursorLineNumber() === 30
       );
 
-      // Toggling back must land on the nearest hunk line, not bounce to file view
       mockInput.pressKey("v");
 
-      const after = await settleUntil("diff view again", (frame) =>
-        /[+-]\d+\s*$/u.test(frame.split("\n")[state.layout().viewer.y] ?? "")
+      await settleUntil(
+        "diff view restored",
+        (frame) =>
+          state.pendingRestore() === undefined &&
+          frame.includes("const line30 = 30") &&
+          /[+-]\d+\s*$/u.test(frame.split("\n")[state.layout().viewer.y] ?? "")
       );
 
-      expect(after.split("\n")[state.layout().viewer.y]).not.toMatch(/lines/u);
+      expect(state.cursorLineNumber()).toBe(30);
     } finally {
       renderer.destroy();
     }

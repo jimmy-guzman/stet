@@ -157,7 +157,7 @@ test("folder activation toggles expansion and only file activation records a vie
   state.activateTreeNode();
   expect(state.focusedTreeRow()?.node).toMatchObject({ expanded: true });
   expect(state.selectedPath()).toBe("start");
-  expect(state.navState().tabs[0].entries).toHaveLength(1);
+  expect(state.canGoBack()).toBe(false);
   state.moveFocus("right");
   state.activateTreeNode();
   expect(state.selectedPath()).toBe("start");
@@ -165,10 +165,9 @@ test("folder activation toggles expansion and only file activation records a vie
   state.activateTreeNode();
   expect(state.selectedPath()).toBe("src/deep/a");
   expect(state.focusedTreeRow()?.node.path).toBe("src/deep/a");
-  expect(state.navState().tabs[0].entries.map((entry) => entry.path)).toEqual([
-    "start",
-    "src/deep/a",
-  ]);
+  state.goBack();
+  expect(state.selectedPath()).toBe("start");
+  expect(state.canGoBack()).toBe(false);
 });
 
 test("filtering retains a collapsed parent and its expanded child", () => {

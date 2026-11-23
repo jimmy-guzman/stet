@@ -2,7 +2,6 @@ import { createMemo, Index, Show } from "solid-js";
 
 import { state } from "@/state";
 import { theme } from "@/theme/context";
-import { createDoubleClickGuard } from "@/utils/double-click";
 
 import { emptyStateTone } from "./focus-tone";
 import { ListScrollbar } from "./list-scrollbar";
@@ -18,10 +17,6 @@ const dividerBorder = () => {
 };
 
 export const Sidebar = () => {
-  // One guard for the whole tree: double-clicking a file row pins it, mirroring
-  // The tab strip. Owned here (not per row) so it outlives a row remount.
-  const isDoubleFileClick = createDoubleClickGuard();
-
   // Window the tree to its viewport, the SearchPane pattern: only ~viewport
   // TreeRow renderables ever exist, so a 100k-file repo mounts and scrolls at
   // The same cost as a small one. The cursor-follow and clamp live in state.
@@ -106,9 +101,7 @@ export const Sidebar = () => {
             }
           >
             <Index each={visibleRows()}>
-              {(row) => (
-                <TreeRow row={row()} isDoubleClick={isDoubleFileClick} />
-              )}
+              {(row) => <TreeRow row={row()} />}
             </Index>
           </Show>
         </box>

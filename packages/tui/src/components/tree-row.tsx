@@ -16,48 +16,27 @@ import { RecencyDot } from "./recency-dot";
 // Selection, or change state actually change re-evaluate. Under the sidebar's
 // Windowed <Index> a slot's row changes identity on every scroll step, and can
 // Flip between file and directory, so every read goes through props (never a
-// Setup-time capture) and the type branch is a reactive <Show> pair. The
-// Double-click guard is owned by the Sidebar and shared across rows, so it
-// Survives a row remount mid-gesture and never leaks process-wide.
+// Setup-time capture) and the type branch is a reactive <Show> pair.
 const asDirectoryNode = (row: FileTreeRow) =>
   row.node.type === "directory" ? row.node : undefined;
 
 const asFileNode = (row: FileTreeRow) =>
   row.node.type === "file" ? row.node : undefined;
 
-export const TreeRow = (props: {
-  row: FileTreeRow;
-  isDoubleClick: (id: string) => boolean;
-}) => (
+export const TreeRow = (props: { row: FileTreeRow }) => (
   <>
     <Show when={asDirectoryNode(props.row)}>
-      {(node) => (
-        <DirectoryRow
-          node={node()}
-          row={props.row}
-          isDoubleClick={props.isDoubleClick}
-        />
-      )}
+      {(node) => <DirectoryRow node={node()} row={props.row} />}
     </Show>
     <Show when={asFileNode(props.row)}>
-      {(node) => (
-        <FileRow
-          node={node()}
-          row={props.row}
-          isDoubleClick={props.isDoubleClick}
-        />
-      )}
+      {(node) => <FileRow node={node()} row={props.row} />}
     </Show>
   </>
 );
 
 const contentWidth = () => state.layout().sidebar.content.width - 2;
 
-const DirectoryRow = (props: {
-  node: DirectoryNode;
-  row: FileTreeRow;
-  isDoubleClick: (id: string) => boolean;
-}) => {
+const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
   const indent = () => " ".repeat(Math.max(0, props.row.depth) * 2);
 
   const focused = () =>
@@ -87,11 +66,6 @@ const DirectoryRow = (props: {
     batch(() => {
       state.setFocusedPane("tree");
       state.focusTreeNode(props.node.id);
-      // Advance the shared double-click tracker (its result is unused here, a directory
-      // Has no double-click action), so a directory click between two clicks on the same
-      // File registers as a distinct row and breaks the sequence, rather than being
-      // Invisible to the tracker and letting the second file click read as a double-pin.
-      props.isDoubleClick(props.node.id);
       state.toggleTreeNode(props.node.id);
     });
   };
@@ -183,11 +157,7 @@ const DirectoryRow = (props: {
   );
 };
 
-const FileRow = (props: {
-  node: FileNode;
-  row: FileTreeRow;
-  isDoubleClick: (id: string) => boolean;
-}) => {
+const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
   const indent = () => " ".repeat(Math.max(0, props.row.depth) * 2);
 
   const focused = () =>
@@ -197,11 +167,8 @@ const FileRow = (props: {
   const background = () =>
     focused() ? theme.colors.surface.cursor : theme.colors.surface.base;
 
-  // Clicking a file row reproduces the keyboard outcome: select and open (like
-  // `enter`), and double-clicking pins it as a tab. stopPropagation keeps the
-  // Sidebar's focus-only handler from also firing. A right-click instead focuses
-  // The row (without opening it) and opens the context menu at the cell.
   const onMouseDown = (event: MouseEvent) => {
+    // The row handles focus, so the sidebar's focus handler can be skipped.
     event.stopPropagation();
 
     if (isRightClick(event)) {
@@ -217,10 +184,6 @@ const FileRow = (props: {
     batch(() => {
       state.setFocusedPane("tree");
       state.selectFile(props.node.path);
-
-      if (props.isDoubleClick(props.node.path)) {
-        state.pinActiveTab();
-      }
     });
   };
 

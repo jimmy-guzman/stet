@@ -1,6 +1,6 @@
 ---
 title: Reading files & diffs
-description: Open any file read-only, view changes as diffs, fold code by structure, and keep your place across tabs.
+description: Open any file read-only, view changes as diffs, fold code by structure, and return to previous locations.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -35,21 +35,9 @@ A gap expands only in a diff that stet computes itself. For some files, stet use
   them horizontally, press `x`.
 </Callout>
 
-## Tabs and history
+## Viewer history
 
-When you move through the tree, each file opens in one preview view. An italic file name shows that the preview is temporary. These controls keep files open as tabs:
-
-| Control | Action |
-| --- | --- |
-| `<` / `>` | move back or forward and restore the saved caret and scroll |
-| `ctrl-t` | pin or unpin the current file as a tab |
-| double-click a file | pin the file as a tab |
-| `{` / `}` | switch to the previous or next tab |
-| `ctrl-w` | close the current tab |
-
-Each tab keeps its own navigation history, caret, and scroll position.
-
-![The tab strip with pinned, diff-status-tinted tabs](/screenshots/tabs.png)
+Press `<` to go back or `>` to go forward. Both restore the caret and scroll position for that visit. When you reopen a file from the tree or the file picker, stet restores your last position in that file.
 
 ## Copy a reference
 

@@ -18,7 +18,6 @@ export type CommandAction =
     }
   | { kind: "copyFileContents" }
   | { kind: "loadFullContent" }
-  | { kind: "pinTab"; path: string }
   | {
       kind: "openEditor";
       mode: "terminal" | "ide";
@@ -112,14 +111,11 @@ const treeItems = (input: CommandMenuInput): CommandMenuItem[] => {
     label: "Copy path",
   };
 
-  // A directory has no open-in-a-viewer or pin-as-tab action (expand/collapse is the
-  // Row click's job, not the menu's), so it offers only its path.
   if (node.kind === "directory") {
     return [copyPath];
   }
 
   return [
-    { action: { kind: "pinTab", path: node.path }, label: "Pin as tab" },
     copyPath,
     {
       action: {

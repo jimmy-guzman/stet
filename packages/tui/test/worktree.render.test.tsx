@@ -54,6 +54,12 @@ describe("worktree picker", () => {
       expect(initial).toContain("main-only.ts");
       expect(initial).not.toContain("side-only.ts");
 
+      state.selectFile("README.md");
+      state.selectFile("src/main-only.ts");
+      state.goBack();
+      expect(state.canGoBack()).toBe(true);
+      expect(state.canGoForward()).toBe(true);
+
       mockInput.pressKey("w");
 
       const picker = await settleUntil(
@@ -94,6 +100,8 @@ describe("worktree picker", () => {
       expect(switched).toContain("side-only.ts");
       expect(switched).toContain("side-branch");
       expect(switched).toContain("uncommitted vs HEAD");
+      expect(state.canGoBack()).toBe(false);
+      expect(state.canGoForward()).toBe(false);
     } finally {
       renderer.destroy();
     }

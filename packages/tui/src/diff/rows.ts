@@ -6,6 +6,8 @@ import type { RenderSpan } from "./hast";
 
 type DiffLineType = "context" | "add" | "remove";
 
+export type DiffLineSide = "oldLine" | "newLine";
+
 export type DiffRow =
   /**
    * A non-expandable break in the row stream: a git-elided gap the diff has no full contents for
@@ -81,6 +83,38 @@ const gapIndexFor = (meta: FileDiffMetadata, newLine: number) => {
   const index = meta.hunks.findIndex((hunk) => hunk.additionStart > newLine);
 
   return index === -1 ? meta.hunks.length : index;
+};
+
+/** Locate the expandable gap that contains a line on the given diff side. */
+export const collapsedGapAtLine = (
+  meta: FileDiffMetadata,
+  rows: readonly DiffRow[],
+  line: number,
+  side: DiffLineSide
+) => {
+  const oldSide = side === "oldLine";
+  const fileLines = oldSide ? meta.deletionLines : meta.additionLines;
+  const start = oldSide ? "deletionStart" : "additionStart";
+  const count = oldSide ? "deletionCount" : "additionCount";
+
+  return rows
+    .values()
+    .filter((row) => row.kind === "marker")
+    .find((row) => {
+      if (row.regionKind !== "gap" || !row.collapsed) {
+        return false;
+      }
+
+      const nextHunk = meta.hunks[gapIndexOf(row.key)];
+
+      // A zero-length hunk side starts at the boundary before the hunk.
+      const lastLine =
+        nextHunk === undefined
+          ? fileLines.length
+          : nextHunk[start] - (nextHunk[count] === 0 ? 0 : 1);
+
+      return line <= lastLine && line > lastLine - row.count;
+    })?.key;
 };
 
 const separatorRow = (data: HunkData): DiffRow =>

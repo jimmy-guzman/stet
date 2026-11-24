@@ -66,9 +66,13 @@ export const builtinIcons = new Map<string, string>([
 
 /**
  * Syntax overrides layered over filename inference, plus the icon rules that must beat Trees:
- * test and story files over their language icon, and ecosystem filenames Trees reads as JSON,
- * Markdown, or nothing. Extensions Trees lacks fall back in `icon-resolver.ts` instead, so they
- * never shadow a Trees filename such as `bun.lock`.
+ * test and story files over their language icon, ecosystem filenames Trees reads as JSON or
+ * nothing, and `.csv` over Trees' table icon. Readme and license documents resolve in
+ * `icon-resolver.ts`, where Trees' token can tell a document from code named after one.
+ * Single extensions Trees lacks fall back there too, so they never shadow a Trees filename
+ * such as `bun.lock`.
+ * A compound extension that fallback cannot express, such as `*.rb.tmpl`, is a narrow glob here,
+ * which shadows no Trees filename.
  */
 export const builtinFiles = new Map<string, FileAssociation>([
   ["icon-csv", { extensions: ["csv"], icon: "csv" }],
@@ -82,7 +86,6 @@ export const builtinFiles = new Map<string, FileAssociation>([
     { filenames: ["tsconfig.json"], icon: "tsconfig" },
   ],
   ["icon-makefile", { filenames: ["makefile"], icon: "make" }],
-  ["icon-readme", { filenames: ["readme.md", "readme"], icon: "readme" }],
   ["icon-codeowners", { filenames: ["codeowners"], icon: "codeowners" }],
   ["icon-procfile", { filenames: ["procfile"], icon: "heroku" }],
   [
@@ -102,28 +105,6 @@ export const builtinFiles = new Map<string, FileAssociation>([
     },
   ],
   ["icon-maven-filename", { filenames: ["pom.xml"], icon: "maven" }],
-  [
-    "icon-license",
-    {
-      filenames: [
-        "copying",
-        "unlicense",
-        "notice",
-        "mit",
-        "isc",
-        "apache-2.0",
-        "bsd-2-clause",
-        "bsd-3-clause",
-        "gpl-2.0",
-        "gpl-3.0",
-        "lgpl-3.0",
-        "agpl-3.0",
-        "mpl-2.0",
-      ],
-      globs: ["license*", "licence*", "cc-by*", "cc0*"],
-      icon: "license",
-    },
-  ],
   [
     "icon-test",
     {
@@ -146,6 +127,7 @@ export const builtinFiles = new Map<string, FileAssociation>([
   ["syntax-npmrc", { filenames: [".npmrc"], syntax: "ini" }],
   ["syntax-prettierrc", { filenames: [".prettierrc"], syntax: "jsonc" }],
   ["syntax-gradle", { globs: ["*.gradle"], syntax: "groovy" }],
+  ["icon-ruby-template", { globs: ["*.rb.tmpl"], icon: "ruby" }],
   ["syntax-ruby-template", { globs: ["*.rb.tmpl"], syntax: "ruby" }],
   ["syntax-svg", { extensions: ["svg"], syntax: "xml" }],
 ]);

@@ -217,7 +217,7 @@ Each association can set `syntax` and `icon`. Built-in and user associations sha
 
 If no association sets a syntax, stet uses its bundled file-name inference to find a language. A bare dotfile name does not count as an extension.
 
-If no association sets an icon, stet uses the `complete` icon set of Trees to match file names and extensions. It then maps the result to a Nerd Font glyph. Unknown file types use `file`. To override a default of Trees, add a `files` entry with explicit match rules. The default icon rules are no longer named `icon-*` entries in the `files` registry.
+If no association sets an icon, stet uses the `complete` icon set of Trees to match file names and extensions. It then maps the result to a Nerd Font glyph. stet's `icon-*` entries in the `files` registry, such as `icon-test` and `icon-storybook`, override Trees for some names, and an entry with the same name overrides or disables one. Where Trees has no icon, or reads a readme or license as a plain document, stet falls back to the rules in [Languages](/docs/reference/languages). Those have no name, so to change one, add a `files` entry that matches the file. Other unknown file types use `file`.
 
 <Callout>
   If an entry is not valid, stet reports it in a notice, and the rest of the

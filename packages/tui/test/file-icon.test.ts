@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { builtinIcons } from "@/file-support/builtins";
 import { fileIconForPath, namedIcon } from "@/file-support/registry";
 
 const fileIcon = (path: string) => fileIconForPath(path).glyph;
@@ -50,12 +51,115 @@ describe("fileIcon", () => {
     expect(fileIconForPath("Cargo.lock").name).toBe("lock");
     expect(fileIconForPath("Cargo.toml").name).toBe("toml");
     expect(fileIconForPath(".unknownrc").name).toBe("config");
+    expect(fileIconForPath("view.rb.tmpl").name).toBe("ruby");
+  });
+
+  test("license and readme rules match documents, not code named after them", () => {
+    expect(fileIconForPath("LICENSE.md").name).toBe("license");
+    expect(fileIconForPath("LICENSE-MIT").name).toBe("license");
+    expect(fileIconForPath("LICENSE-APACHE.txt").name).toBe("license");
+    expect(fileIconForPath("CC0-1.0.txt").name).toBe("license");
+    expect(fileIconForPath("CC0-1.0").name).toBe("license");
+    expect(fileIconForPath("LICENSE.markdown").name).toBe("license");
+    expect(fileIconForPath("LICENSE-CODE").name).toBe("license");
+    expect(fileIconForPath("LICENSE_1_0.txt").name).toBe("license");
+    expect(fileIconForPath("License.tsx").name).toBe("react");
+    expect(fileIconForPath("licenses.json").name).toBe("json");
+    expect(fileIconForPath("license-checker.config.js").name).toBe(
+      "javascript"
+    );
+    expect(fileIconForPath("README.rst").name).toBe("readme");
+    expect(fileIconForPath("Readme.adoc").name).toBe("readme");
+    expect(fileIconForPath("Readme.tsx").name).toBe("react");
+    expect(fileIconForPath("README.zh-CN.md").name).toBe("readme");
+    expect(fileIconForPath("CC-BY-SA-4.0.txt").name).toBe("license");
+    expect(fileIconForPath("COPYING.LESSER").name).toBe("license");
+    expect(fileIconForPath("license_1.tsx").name).toBe("react");
+    expect(fileIconForPath("license-gpl.ts").name).toBe("typescript");
+    expect(fileIconForPath("License.java").name).toBe("java");
+    expect(fileIconForPath("ReadmeGenerator.kt").name).toBe("kotlin");
+    expect(fileIconForPath("readmeta.txt").name).toBe("document");
+    expect(fileIconForPath("COPYING3").name).toBe("license");
+    expect(fileIconForPath("NOTICE.txt").name).toBe("license");
+    expect(fileIconForPath("gpl-3.0.txt").name).toBe("license");
   });
 
   test("keeps Trees' filename tokens over the fallback extensions", () => {
     expect(fileIconForPath("bun.lock").name).toBe("bun");
     expect(fileIconForPath(".gitignore").name).toBe("git");
-    expect(fileIconForPath(".eslintrc").name).toBe("config");
+    expect(fileIconForPath("bunfig.toml").name).toBe("bun");
+  });
+
+  test("every catalog file glyph has a rule that reaches it", () => {
+    const samples = new Map([
+      ["archive", "a.zip"],
+      ["astro", "a.astro"],
+      ["bun", "bun.lock"],
+      ["c", "a.c"],
+      ["codeowners", "CODEOWNERS"],
+      ["config", ".unknownrc"],
+      ["cpp", "a.cpp"],
+      ["css", "a.css"],
+      ["csv", "a.csv"],
+      ["database", "a.sql"],
+      ["docker", "Dockerfile"],
+      ["document", "a.txt"],
+      ["file", "a.unknown"],
+      ["font", "a.woff2"],
+      ["git", ".gitignore"],
+      ["go", "go.mod"],
+      ["gradle", "build.gradle"],
+      ["graphql", "a.graphql"],
+      ["groovy", "a.groovy"],
+      ["heroku", "Procfile"],
+      ["html", "a.html"],
+      ["http", "a.http"],
+      ["image", "a.png"],
+      ["java", "A.java"],
+      ["javascript", "a.js"],
+      ["json", "a.json"],
+      ["kotlin", "a.kt"],
+      ["license", "LICENSE"],
+      ["lock", "Cargo.lock"],
+      ["make", "Makefile"],
+      ["markdown", "a.md"],
+      ["maven", "pom.xml"],
+      ["node", "package.json"],
+      ["pdf", "a.pdf"],
+      ["profile", "a.cpuprofile"],
+      ["python", "a.py"],
+      ["react", "a.tsx"],
+      ["readme", "README.md"],
+      ["ruby", "a.rb"],
+      ["rust", "a.rs"],
+      ["sass", "a.scss"],
+      ["scala", "a.scala"],
+      ["shell", "a.sh"],
+      ["spreadsheet", "a.xlsx"],
+      ["storybook", "a.stories.tsx"],
+      ["svelte", "a.svelte"],
+      ["swift", "a.swift"],
+      ["template", "a.mako"],
+      ["test", "a.test.ts"],
+      ["toml", "Cargo.toml"],
+      ["tsconfig", "tsconfig.json"],
+      ["typescript", "a.ts"],
+      ["video", "a.mp4"],
+      ["vue", "a.vue"],
+      ["wasm", "a.wasm"],
+      ["yaml", "a.yaml"],
+      ["zig", "a.zig"],
+    ]);
+
+    const chrome = new Set(["folder", "folder-open", "symlink"]);
+
+    expect(new Set(samples.keys())).toEqual(
+      new Set(builtinIcons.keys()).difference(chrome)
+    );
+
+    for (const [name, path] of samples) {
+      expect(fileIconForPath(path).name).toBe(name);
+    }
   });
 
   test("matches names and extensions case-insensitively", () => {

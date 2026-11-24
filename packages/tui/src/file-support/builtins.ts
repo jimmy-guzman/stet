@@ -64,8 +64,84 @@ export const builtinIcons = new Map<string, string>([
   ["storybook", "\u{E8B3}"],
 ]);
 
-/** Syntax overrides layered over filename inference. Trees supplies default file icons. */
+/**
+ * Syntax overrides layered over filename inference, plus the icon rules that must beat Trees:
+ * test and story files over their language icon, and ecosystem filenames Trees reads as JSON,
+ * Markdown, or nothing. Extensions Trees lacks fall back in `icon-resolver.ts` instead, so they
+ * never shadow a Trees filename such as `bun.lock`.
+ */
 export const builtinFiles = new Map<string, FileAssociation>([
+  ["icon-csv", { extensions: ["csv"], icon: "csv" }],
+  [
+    "icon-go-filenames",
+    { filenames: ["go.mod", "go.sum", "go.work"], icon: "go" },
+  ],
+  ["icon-node-filename", { filenames: ["package.json"], icon: "node" }],
+  [
+    "icon-tsconfig-filename",
+    { filenames: ["tsconfig.json"], icon: "tsconfig" },
+  ],
+  ["icon-makefile", { filenames: ["makefile"], icon: "make" }],
+  ["icon-readme", { filenames: ["readme.md", "readme"], icon: "readme" }],
+  ["icon-codeowners", { filenames: ["codeowners"], icon: "codeowners" }],
+  ["icon-procfile", { filenames: ["procfile"], icon: "heroku" }],
+  [
+    "icon-gradle-filenames",
+    {
+      filenames: [
+        "build.gradle",
+        "settings.gradle",
+        "build.gradle.kts",
+        "settings.gradle.kts",
+        "gradle.properties",
+        "gradle-wrapper.properties",
+        "gradlew",
+        "gradlew.bat",
+      ],
+      icon: "gradle",
+    },
+  ],
+  ["icon-maven-filename", { filenames: ["pom.xml"], icon: "maven" }],
+  [
+    "icon-license",
+    {
+      filenames: [
+        "copying",
+        "unlicense",
+        "notice",
+        "mit",
+        "isc",
+        "apache-2.0",
+        "bsd-2-clause",
+        "bsd-3-clause",
+        "gpl-2.0",
+        "gpl-3.0",
+        "lgpl-3.0",
+        "agpl-3.0",
+        "mpl-2.0",
+      ],
+      globs: ["license*", "licence*", "cc-by*", "cc0*"],
+      icon: "license",
+    },
+  ],
+  [
+    "icon-test",
+    {
+      globs: [
+        "*.test.*",
+        "*.spec.*",
+        "*_test.*",
+        "*_spec.*",
+        "*.cy.*",
+        "test_*.*",
+      ],
+      icon: "test",
+    },
+  ],
+  [
+    "icon-storybook",
+    { globs: ["*.stories.*", "*.story.*"], icon: "storybook" },
+  ],
   ["syntax-env", { filenames: [".env"], syntax: "dotenv" }],
   ["syntax-npmrc", { filenames: [".npmrc"], syntax: "ini" }],
   ["syntax-prettierrc", { filenames: [".prettierrc"], syntax: "jsonc" }],

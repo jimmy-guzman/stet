@@ -18,7 +18,7 @@ describe("fileIcon", () => {
     ["font.woff2", "font", "\u{F031}"],
     ["src/.bashrc", "shell", "\u{EBCA}"],
     ["config.yaml", "yaml", "\u{E8EB}"],
-    ["data.csv", "spreadsheet", "\u{E6A6}"],
+    ["data.xlsx", "spreadsheet", "\u{E6A6}"],
     ["notes.txt", "document", "\u{F0219}"],
     ["logo.svg", "image", "\u{F1C5}"],
     ["bundle.tar.gz", "archive", "\u{F1C6}"],
@@ -34,12 +34,28 @@ describe("fileIcon", () => {
     expect(fileIconForPath("page.tsx").name).toBe("react");
   });
 
-  test("uses Trees' defaults for package files, tests, and stories", () => {
-    expect(fileIconForPath("package.json").name).toBe("json");
-    expect(fileIconForPath("README.md").name).toBe("markdown");
-    expect(fileIconForPath("main.test.ts").name).toBe("typescript");
-    expect(fileIconForPath("App.stories.tsx").name).toBe("react");
-    expect(fileIconForPath("test_main.py").name).toBe("python");
+  test("stet's rules override Trees for tests, stories, and ecosystem files", () => {
+    expect(fileIconForPath("main.test.ts").name).toBe("test");
+    expect(fileIconForPath("api.spec.tsx").name).toBe("test");
+    expect(fileIconForPath("test_main.py").name).toBe("test");
+    expect(fileIconForPath("App.stories.tsx").name).toBe("storybook");
+    expect(fileIconForPath("package.json").name).toBe("node");
+    expect(fileIconForPath("README.md").name).toBe("readme");
+    expect(fileIconForPath("LICENSE").name).toBe("license");
+    expect(fileIconForPath("data.csv").name).toBe("csv");
+  });
+
+  test("fills extensions and dotfiles Trees does not recognize", () => {
+    expect(fileIconForPath("Main.java").name).toBe("java");
+    expect(fileIconForPath("Cargo.lock").name).toBe("lock");
+    expect(fileIconForPath("Cargo.toml").name).toBe("toml");
+    expect(fileIconForPath(".unknownrc").name).toBe("config");
+  });
+
+  test("keeps Trees' filename tokens over the fallback extensions", () => {
+    expect(fileIconForPath("bun.lock").name).toBe("bun");
+    expect(fileIconForPath(".gitignore").name).toBe("git");
+    expect(fileIconForPath(".eslintrc").name).toBe("config");
   });
 
   test("matches names and extensions case-insensitively", () => {
@@ -48,10 +64,9 @@ describe("fileIcon", () => {
     expect(fileIcon("PAGE.MDX.TSX")).toBe(fileIcon("page.mdx.tsx"));
   });
 
-  test("uses the generic glyph for paths Trees does not recognize", () => {
+  test("uses the generic glyph for paths nothing recognizes", () => {
     expect(fileIconForPath("notes.unknown")).toEqual(namedIcon("file"));
-    expect(fileIconForPath("README")).toEqual(namedIcon("file"));
-    expect(fileIconForPath(".unknown")).toEqual(namedIcon("file"));
+    expect(fileIconForPath("NOTES")).toEqual(namedIcon("file"));
   });
 });
 

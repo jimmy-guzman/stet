@@ -32,8 +32,8 @@ const KEY_HELP_GROUPS: {
         description: "expand a closed folder or focus the next item",
       },
       {
-        actions: ["caret-prev", "caret-next"],
-        description: "previous / next word in the viewer",
+        actions: ["scroll-left", "scroll-right"],
+        description: "scroll long lines in the viewer",
       },
       {
         actions: ["switch-pane"],
@@ -97,16 +97,20 @@ const KEY_HELP_GROUPS: {
       {
         actions: ["copy-reference"],
         description:
-          "copy path (tree), path:line:col (viewer), or the selected result",
+          "copy a reference: the path, or path:line in the viewer and results",
       },
-      { actions: ["copy-file"], description: "copy the file" },
+      {
+        actions: ["copy-text"],
+        description: "copy the selected text, or the whole file",
+      },
       {
         actions: ["select-up", "select-down"],
-        description: "extend a line selection (drag also selects)",
+        description:
+          "select lines or extend a selection; a drag selects and copies",
       },
       {
-        actions: ["copy-selection"],
-        description: "copy the selected lines (or the caret line)",
+        actions: ["select-left", "select-right"],
+        description: "extend a selection by one character",
       },
     ],
     heading: "viewer",

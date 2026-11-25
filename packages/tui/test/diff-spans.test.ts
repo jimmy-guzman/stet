@@ -1,8 +1,24 @@
 import { describe, expect, test } from "bun:test";
 
+import { cellWidth } from "@/diff/cells";
 import { columnToIndex, markRange, sliceSpansWindow } from "@/diff/spans";
 
 describe("sliceSpansWindow", () => {
+  test("scrolls tabs by the cells they paint", () => {
+    expect(sliceSpansWindow([{ text: "\t\tcall()" }], 4, 20)).toEqual([
+      { text: "call()" },
+    ]);
+  });
+
+  test("a glyph cut by the left edge leaves its cells blank, so columns hold", () => {
+    expect(sliceSpansWindow([{ text: "你好" }], 1, 20)).toEqual([
+      { text: " 好" },
+    ]);
+    expect(sliceSpansWindow([{ text: "\tx" }], 1, 20)).toEqual([
+      { text: " x" },
+    ]);
+  });
+
   test("keeps spans that fit within the budget from column 0", () => {
     const spans = [{ fg: "#f00", text: "const" }, { text: " x" }];
     expect(sliceSpansWindow(spans, 0, 20)).toEqual(spans);
@@ -92,10 +108,37 @@ describe("columnToIndex", () => {
     expect(columnToIndex("const x", 99)).toBe(7);
   });
 
+  test("a tab is the two cells it paints", () => {
+    expect(columnToIndex("\tif", 1)).toBe(0);
+    expect(columnToIndex("\tif", 2)).toBe(1);
+    expect(columnToIndex("a\tb", 3)).toBe(2);
+  });
+
+  test("a cluster is one glyph of the cells it paints", () => {
+    expect(columnToIndex("👍🏽x", 1)).toBe(0);
+    expect(columnToIndex("👍🏽x", 2)).toBe(4);
+  });
+
   test("a column inside a wide glyph returns that glyph's start", () => {
     // "你好": each glyph is two columns wide; column 3 is inside the second glyph.
     expect(columnToIndex("你好", 0)).toBe(0);
     expect(columnToIndex("你好", 2)).toBe(1);
     expect(columnToIndex("你好", 3)).toBe(1);
+  });
+});
+
+describe("cellWidth", () => {
+  test.each([
+    ["const x", 7],
+    ["\t\tx", 5],
+    ["日本", 4],
+    ["👍🏽", 2],
+    ["\u001B[31mred", 7],
+    ["soft\u00ADhyphen", 11],
+    ["काम", 3],
+    ["a\u0007b", 2],
+    ["", 0],
+  ])("%j is %i cells, as OpenTUI paints it", (text, cells) => {
+    expect(cellWidth(text)).toBe(cells);
   });
 });

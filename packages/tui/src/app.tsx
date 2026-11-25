@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import type { ThemeMode } from "@opentui/core";
+import type { Selection, ThemeMode } from "@opentui/core";
 import {
   useKeyboard,
   useRenderer,
@@ -19,6 +19,7 @@ import { StatusBar } from "./components/status-bar";
 import { ThemeCombobox } from "./components/theme-combobox";
 import { Viewer } from "./components/viewer";
 import { WorktreeCombobox } from "./components/worktree-combobox";
+import { registerWidthMethod } from "./diff/cells";
 import { openInEditor } from "./editor/open";
 import type { Worktree } from "./git/worktree";
 import { createKeyHandler } from "./keymap";
@@ -53,6 +54,20 @@ const onThemeMode = (mode: ThemeMode | null) => {
   }
 };
 
+// Text outside the viewer is selected by OpenTUI itself (the viewer's rows are windowed, so it owns
+// Its selection); a released drag copies it, as one in the viewer does. A plain click on selectable
+// Text also lands here, with nothing selected.
+const onNativeSelection = (selection: Selection) => {
+  const text = selection.getSelectedText();
+
+  if (text === "") {
+    return;
+  }
+
+  state.clearSelection();
+  state.copyCharacters(text);
+};
+
 export const App = () => {
   const renderer = useRenderer();
   const dimensions = useTerminalDimensions();
@@ -72,7 +87,18 @@ export const App = () => {
   // It once now.
   renderer.on("palette", refreshTerminalPalette);
   void syncTerminalPalette(renderer);
+
+  // The terminal's answer about how it counts cells can land after the first paint.
+  const syncWidthMethod = () => {
+    registerWidthMethod(renderer.widthMethod);
+  };
+
+  syncWidthMethod();
+  renderer.on("capabilities", syncWidthMethod);
+  renderer.on("selection", onNativeSelection);
   onCleanup(() => {
+    renderer.off("capabilities", syncWidthMethod);
+    renderer.off("selection", onNativeSelection);
     renderer.off("theme_mode", onThemeMode);
     renderer.off("palette", refreshTerminalPalette);
   });
@@ -175,14 +201,28 @@ export const App = () => {
     });
   });
 
-  useKeyboard(
-    createKeyHandler({
-      openInEditor: async (file, line, mode) => {
-        await openInEditor(renderer, file, line, mode);
-      },
-      quit: quitWithUpdateNotice,
-    })
-  );
+  // One highlight at a time: a selection in the viewer replaces one OpenTUI holds elsewhere, as
+  // `onNativeSelection` does the other way round.
+  createEffect(() => {
+    if (state.viewerSelection() !== undefined) {
+      renderer.clearSelection();
+    }
+  });
+
+  const handleKey = createKeyHandler({
+    openInEditor: async (file, line, mode) => {
+      await openInEditor(renderer, file, line, mode);
+    },
+    quit: quitWithUpdateNotice,
+  });
+
+  useKeyboard((key) => {
+    if (key.name === "escape") {
+      renderer.clearSelection();
+    }
+
+    handleKey(key);
+  });
 
   return (
     <box
@@ -205,6 +245,7 @@ export const App = () => {
           position="absolute"
           left={0}
           top={0}
+          selectable={false}
           wrapMode="none"
           fg={theme.colors.border.unfocused}
         >
@@ -249,6 +290,7 @@ export const App = () => {
           position="absolute"
           left={0}
           top={0}
+          selectable={false}
           wrapMode="none"
           fg={theme.colors.border.unfocused}
         >

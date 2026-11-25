@@ -88,7 +88,7 @@ describe("followScrollTop", () => {
 const xBase = { margin: 3, maxScroll: 90, viewport: 10 };
 
 describe("followScrollX", () => {
-  test("does not scroll while the caret word sits inside the margins", () => {
+  test("does not scroll while the range sits inside the margins", () => {
     // Showing cols [0,10): a word at [4,6) keeps margin on both sides.
     expect(followScrollX({ ...xBase, current: 0, from: 4, to: 6 })).toBe(0);
   });

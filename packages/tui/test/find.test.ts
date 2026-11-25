@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { findMatches } from "@/utils/find";
+import { findMatches, matchColumn } from "@/utils/find";
 
 const lines = [
   "const findMatches = () => {",
@@ -28,5 +28,12 @@ describe("findMatches", () => {
 
   test("a query with no hits returns no indices", () => {
     expect(findMatches(lines, "zzz")).toEqual([]);
+  });
+});
+
+describe("matchColumn", () => {
+  test("finds where the match starts, smart-case", () => {
+    expect(matchColumn("  return MATCHES;", "matches")).toBe(9);
+    expect(matchColumn("  return matches;", "MATCHES")).toBe(-1);
   });
 });

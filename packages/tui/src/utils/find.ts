@@ -1,17 +1,18 @@
-// Smart-case substring search: case-insensitive unless the query carries an
-// Uppercase character, matching the convention every modern editor's find uses.
+/**
+ * Where a smart-case substring match starts in a line, or -1: case-insensitive unless the query
+ * carries an uppercase character, matching the convention every modern editor's find uses.
+ */
+export const matchColumn = (line: string, query: string) =>
+  query === query.toLowerCase()
+    ? line.toLowerCase().indexOf(query)
+    : line.indexOf(query);
+
 export const findMatches = (
   lines: readonly string[],
   query: string
-): number[] => {
-  if (query === "") {
-    return [];
-  }
-
-  const caseSensitive = query !== query.toLowerCase();
-  const needle = caseSensitive ? query : query.toLowerCase();
-
-  return lines.flatMap((line, index) =>
-    (caseSensitive ? line : line.toLowerCase()).includes(needle) ? [index] : []
-  );
-};
+): number[] =>
+  query === ""
+    ? []
+    : lines.flatMap((line, index) =>
+        matchColumn(line, query) === -1 ? [] : [index]
+      );

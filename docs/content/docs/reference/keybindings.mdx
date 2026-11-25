@@ -14,7 +14,7 @@ You can do everything in stet with the keyboard. Press `?` at any time to see th
 | `j / k` | move in the tree or viewer | `focus-down`, `focus-up`, `cursor-down`, `cursor-up` |
 | `h` | collapse an open folder or focus its parent | `collapse` |
 | `l` | expand a closed folder or focus the next item | `expand` |
-| `h / l` | previous / next word in the viewer | `caret-prev`, `caret-next` |
+| `h / l` | scroll long lines in the viewer | `scroll-left`, `scroll-right` |
 | `tab` | switch focus between the tree and viewer; the search pane's tab cycles its fields | `switch-pane` |
 | `enter` | open a file or toggle a folder | `open` |
 | `home / end` | jump to first / last tree item | `first-item`, `last-item` |
@@ -34,10 +34,10 @@ You can do everything in stet with the keyboard. Press `?` at any time to see th
 | `ctrl-d / u` | half-page cursor movement in the viewer | `half-page-down`, `half-page-up` |
 | `g / G` | jump to first / last line | `first-line`, `last-line` |
 | `< / >` | back / forward through viewer history | `back`, `forward` |
-| `y` | copy path (tree), path:line:col (viewer), or the selected result | `copy-reference` |
-| `Y` | copy the file | `copy-file` |
-| `Shift+↑ / ↓` | extend a line selection (drag also selects) | `select-up`, `select-down` |
-| `C` | copy the selected lines (or the caret line) | `copy-selection` |
+| `y` | copy a reference: the path, or path:line in the viewer and results | `copy-reference` |
+| `Y` | copy the selected text, or the whole file | `copy-text` |
+| `Shift+↑ / ↓` | select lines or extend a selection; a drag selects and copies | `select-up`, `select-down` |
+| `Shift+← / →` | extend a selection by one character | `select-left`, `select-right` |
 
 ## Workspace
 
@@ -107,7 +107,7 @@ Keys in overlays (pickers, menus, the quit confirmation, and the search pane) an
 
 You can also use the mouse:
 
-- Click a file to open it, a folder to expand or collapse it, or a diff line to move the caret there.
+- Click a file to open it, a folder to expand or collapse it, or a viewer line to move the caret there.
 - Click items in the overlays and the search pane.
 - Hover over a theme in the switcher to preview it live.
 - Click a pane to focus it. The wheel scrolls the pane under the pointer.
@@ -117,4 +117,4 @@ You can also use the mouse:
 
 The menu shows only the actions that apply where you open it, so it can be shorter. For example, a folder in the tree offers only Copy path. The menu shows no disabled items.
 
-Drag across diff lines to select a range. If you hold the pointer at the top or bottom edge, the viewer scrolls and the selection continues. If the terminal forwards `Shift+mouse`, a shift-click extends the range. Some terminals keep that gesture for their own text selection. `Shift+↑` / `Shift+↓` always work, and drag works where the terminal reports the mouse.
+Drag across text in the viewer to select it. stet copies it when you release the button. See [Select and copy](/docs/guides/reading-files-and-diffs#select-and-copy) for the other gestures. If you hold the pointer past the top or bottom of the viewer, the viewer scrolls and the selection continues. When long lines do not wrap, the left and right edges also scroll, except in a selection of whole lines. If the terminal forwards `Shift+mouse`, a shift-click extends the selection. Some terminals keep that gesture for their own text selection.

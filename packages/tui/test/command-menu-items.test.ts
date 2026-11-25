@@ -6,20 +6,22 @@ import type { CommandMenuInput } from "@/components/command-menu/items";
 const viewer = (
   overrides: Partial<CommandMenuInput> = {}
 ): CommandMenuInput => ({
-  caretColumn: 5,
   caretLine: 12,
   context: "viewer",
+  reference: { endLine: undefined, line: 12 },
   selectedPath: "src/foo.ts",
+  selecting: false,
   treeNode: undefined,
   truncated: false,
   ...overrides,
 });
 
 const tree = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => ({
-  caretColumn: undefined,
   caretLine: undefined,
   context: "tree",
+  reference: { endLine: undefined, line: undefined },
   selectedPath: undefined,
+  selecting: false,
   treeNode: { id: "file:src/foo.ts", kind: "file", path: "src/foo.ts" },
   truncated: false,
   ...overrides,
@@ -48,26 +50,30 @@ describe("buildCommandMenuItems", () => {
     );
   });
 
-  test("viewer copy reference carries the caret line and column", () => {
+  test("viewer copy reference carries the caret line", () => {
     const item = buildCommandMenuItems(viewer()).find(
       (entry) => entry.label === "Copy reference"
     );
 
     expect(item?.action).toEqual({
-      column: 5,
+      endLine: undefined,
       kind: "copyReference",
       line: 12,
       path: "src/foo.ts",
     });
   });
 
-  test("viewer copy reference drops the column at line level", () => {
-    const item = buildCommandMenuItems(
-      viewer({ caretColumn: undefined, caretLine: 12 })
-    ).find((entry) => entry.label === "Copy reference");
+  test("viewer with a selection copies it, and its lines as the reference", () => {
+    const items = buildCommandMenuItems(
+      viewer({ reference: { endLine: 18, line: 12 }, selecting: true })
+    );
 
-    expect(item?.action).toEqual({
-      column: undefined,
+    expect(items[0]).toEqual({
+      action: { kind: "copySelection" },
+      label: "Copy selection",
+    });
+    expect(items[1]?.action).toEqual({
+      endLine: 18,
       kind: "copyReference",
       line: 12,
       path: "src/foo.ts",
@@ -125,7 +131,6 @@ describe("buildCommandMenuItems", () => {
     const items = buildCommandMenuItems(tree());
 
     expect(items.find((item) => item.label === "Copy path")?.action).toEqual({
-      column: undefined,
       kind: "copyReference",
       line: undefined,
       path: "src/foo.ts",
@@ -145,7 +150,6 @@ describe("buildCommandMenuItems", () => {
 
     expect(labels(tree({ treeNode: node }))).toEqual(["Copy path"]);
     expect(buildCommandMenuItems(tree({ treeNode: node }))[0]?.action).toEqual({
-      column: undefined,
       kind: "copyReference",
       line: undefined,
       path: "src",

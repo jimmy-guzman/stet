@@ -11,12 +11,6 @@ interface Viewport {
 export interface Position {
   cursorLine: number | undefined;
   cursorSide?: "old";
-  // The caret's raw UTF-16 offset on the cursor line, stored and restored verbatim
-  // (usually a word start, but a search jump can land it in a gap); the
-  // Word-anchor/highlight is derived at render time, never baked into this value.
-  // Undefined means "the line's first word", mirroring how `cursorLine: undefined`
-  // Means "first change" — so a fresh open lands the caret at the first symbol.
-  cursorColumn?: number;
   // An unfinished visit can resume through history or a direct reopen.
   jump?: JumpTarget;
   viewport: Viewport;
@@ -24,8 +18,10 @@ export interface Position {
 
 export interface JumpTarget {
   line: number;
-  // One-based column. The viewer snaps it to the owning word after loading.
+  // One-based column, scrolled into view once the file loads.
   column?: number;
+  /** How far the match runs from the column; its first word when unknown. */
+  length?: number;
   escalate?: boolean;
 }
 
@@ -69,7 +65,7 @@ export const recordCurrent = (nav: NavState, location: Location): NavState =>
       };
 
 // Two entries occupy the same visible spot when they show the same line of the
-// Same file under the same view mode; column is a within-line nicety, not a move.
+// Same file under the same view mode.
 const sameVisibleLocation = (a: Location, b: Location) =>
   a.path === b.path &&
   a.cursorLine === b.cursorLine &&

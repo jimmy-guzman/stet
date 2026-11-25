@@ -5,7 +5,7 @@ import { createMemo, Index, Show } from "solid-js";
 import { openInEditor } from "@/editor/open";
 import { state } from "@/state";
 import { theme } from "@/theme/context";
-import type { CaretCell } from "@/viewer/anchor";
+import type { AnchorCell } from "@/viewer/anchor";
 import { placeCard } from "@/viewer/anchor";
 
 import type { CommandMenuItem } from "./command-menu/items";
@@ -20,13 +20,13 @@ const HINT = "↑↓ navigate · ⏎ run · esc close";
 // Row's action on click. The highlighted row carries a `▸` caret so the selection
 // Reads under `NO_COLOR`. Inapplicable actions are omitted upstream, so every row acts.
 export const CommandMenu = (props: {
-  anchor: () => CaretCell | undefined;
+  anchor: () => AnchorCell | undefined;
   viewportWidth: () => number;
   viewportHeight: () => number;
 }) => {
   const renderer = useRenderer();
 
-  const placeMenu = (anchor: CaretCell) => {
+  const placeMenu = (anchor: AnchorCell) => {
     const items = state.commandMenuItems();
 
     const inner = Math.max(
@@ -107,6 +107,7 @@ export const CommandMenu = (props: {
                   }}
                 >
                   <text
+                    selectable={false}
                     fg={
                       highlighted()
                         ? theme.colors.text.selected

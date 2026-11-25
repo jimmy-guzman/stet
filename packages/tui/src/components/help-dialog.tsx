@@ -177,7 +177,8 @@ export const HelpDialog = () => {
                     backgroundColor={theme.colors.surface.panel}
                   >
                     <box width={leftWidth()} flexShrink={0}>
-                      <text fg={entry.leftColor}>{entry.left}</text>
+                      {/* The space separates the two columns in copied text; the box has room for it. */}
+                      <text fg={entry.leftColor}>{`${entry.left} `}</text>
                     </box>
                     <box flexGrow={1}>
                       <text fg={theme.colors.text.secondary}>

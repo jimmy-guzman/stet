@@ -9,6 +9,7 @@ import { state } from "@/state";
 
 import {
   createFixtureRepo,
+  cursorLineContent,
   loadModel,
   makeSettleUntil,
   seedState,
@@ -73,7 +74,7 @@ describe("code folding", () => {
 
       state.selectFile("src/mod.ts", { line: 3 });
       await settleUntil("caret inside the function", () =>
-        state.cursorLineContent().includes("const b = 2")
+        cursorLineContent().includes("const b = 2")
       );
       state.selectFile("src/mod.ts", { line: 5 });
       await settleUntil(

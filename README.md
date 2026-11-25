@@ -27,7 +27,7 @@ Stet is the proofreader's mark for "let it stand": strike a word out, add dots b
 - Watches the filesystem and refreshes as the agent changes files, keeping the current file and selection stable.
 - Marks recent activity and lets you jump to the latest touched file.
 - Rearranges its own layout: the tree docks to any edge and resizes along it, with `d` cycling it clockwise, `m` toggling zoom on the focused pane, and `ctrl-s` persisting the arrangement.
-- Copies a reference and snippet to paste back to the agent: `path` in the tree, and `path:line:col` or the selected lines in the viewer.
+- Copies text to paste back to the agent: a drag copies what it selects, and `y` copies a reference (`path` in the tree, `path:line` or `path:line-line` in the viewer).
 
 ## Install
 
@@ -56,7 +56,6 @@ Full documentation lives at **[stet.jimmy.codes](https://stet.jimmy.codes)**:
 ## Requirements
 
 - git
-- a clipboard tool for copy (`y`): `pbcopy` on macOS (built in), or `wl-copy`, `xclip`, or `xsel` on Linux
 - a Nerd Font for the tree's file-type icons (optional; use `--no-icons` without one)
 
 ## Development

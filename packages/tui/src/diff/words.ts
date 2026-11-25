@@ -1,7 +1,5 @@
-// Pure word model over a line of source text, for the in-line caret. The caret
-// Hops word to word (identifier to identifier) rather than character by character,
-// And highlights the word it sits on. A "word" is a maximal run of identifier
-// Characters; every other character is a gap the caret skips over. Indices are
+// Pure word model over a line of source text, for a double-click and for scrolling a match into
+// View. A "word" is a maximal run of identifier characters. Indices are
 // UTF-16 string offsets, the same unit as JavaScript string indexing. No Solid/OpenTUI/Effect: unit-testable
 // Directly, like `git/tree`.
 
@@ -43,30 +41,6 @@ export const words = (line: string): Word[] => {
   return out;
 };
 
-/** Start offsets of each word; the caret always rests on one of these (or 0). */
-export const wordStarts = (line: string): number[] =>
-  words(line).map((word) => word.start);
-
 /** The word containing `index`, or undefined when `index` falls in a gap. */
 export const wordAt = (line: string, index: number): Word | undefined =>
   words(line).find((word) => index >= word.start && index < word.end);
-
-/** The next word start strictly after `index`; stays put (returns `index`) when there is none. */
-export const nextWord = (line: string, index: number): number =>
-  wordStarts(line).find((start) => start > index) ?? index;
-
-/** The previous word start strictly before `index`; stays put (returns `index`) when there is none. */
-export const prevWord = (line: string, index: number): number =>
-  wordStarts(line)
-    .toReversed()
-    .find((start) => start < index) ?? index;
-
-/** The line's first word start, or 0 for a line with no words (caret home). */
-export const firstWord = (line: string): number => wordStarts(line)[0] ?? 0;
-
-/** The line's last word start, or 0 for a line with no words. */
-export const lastWord = (line: string): number => {
-  const starts = wordStarts(line);
-
-  return starts.at(-1) ?? 0;
-};

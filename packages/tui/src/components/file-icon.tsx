@@ -15,7 +15,10 @@ export const FileIcon = (props: { path: string; symlink?: boolean }) => {
   return (
     <Show when={state.iconsEnabled()}>
       <box width={2} overflow="hidden">
-        <text fg={theme.colors.icon[model().name] ?? theme.colors.text.muted}>
+        <text
+          selectable={false}
+          fg={theme.colors.icon[model().name] ?? theme.colors.text.muted}
+        >
           {model().glyph}
         </text>
       </box>

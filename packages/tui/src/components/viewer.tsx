@@ -2,7 +2,6 @@ import type { InputRenderable } from "@opentui/core";
 import { batch, createEffect, Match, on, Show, Switch } from "solid-js";
 
 import type { NavigableLine } from "@/diff/rows";
-import { firstWord, wordAt } from "@/diff/words";
 import { state } from "@/state";
 import { theme } from "@/theme/context";
 import {
@@ -17,21 +16,6 @@ import { BinaryPreview } from "./binary-preview";
 import { DiffView } from "./diff/diff-view";
 import { emptyStateTone } from "./focus-tone";
 import { SearchPane } from "./search-pane";
-
-const restoreColumn = (
-  content: string,
-  savedColumn: number | undefined,
-  jumpColumn: number | undefined
-) => {
-  if (jumpColumn === undefined) {
-    return savedColumn ?? firstWord(content);
-  }
-
-  // A jump into a gap keeps the requested offset.
-  const index = Math.max(0, Math.min(jumpColumn - 1, content.length));
-
-  return wordAt(content, index)?.start ?? index;
-};
 
 const findRestoreIndex = (lines: NavigableLine[], position: Position) => {
   if (position.cursorLine === undefined) {
@@ -146,7 +130,7 @@ const onFindSubmit = () => {
 
     if (first !== undefined) {
       state.setFindMatchPos(0);
-      state.setCursorRow(first);
+      state.goToFindMatch(first);
       state.setFindActive(true);
     }
 
@@ -207,24 +191,21 @@ export const Viewer = () => {
 
     const index = restoreIndex(lines, found, pending.cursorLine);
 
-    const column = restoreColumn(
-      lines[index]?.content ?? "",
-      pending.cursorColumn,
-      found === -1 ? undefined : pending.jump?.column
-    );
-
     batch(() => {
-      state.setCaretLineLevel(false);
       state.setCursorIndex(index);
-      state.setCursorColumn(column);
       state.setViewerScrollTop(pending.viewport.scrollTop);
       state.setViewerScrollX(pending.viewport.scrollX);
+      state.setRevealRange(undefined);
+
+      if (found !== -1 && pending.jump?.column !== undefined) {
+        state.revealMatch(index, pending.jump.column - 1, pending.jump.length);
+      }
+
       state.setPendingRestore(undefined);
     });
   });
 
-  // Clamp the cursor when a refresh shrinks the content under it (setCursorRow also
-  // Re-homes the caret to the new line's first word).
+  // Clamp the cursor when a refresh shrinks the content under it.
   createEffect(() => {
     const last = state.navigableLines().length - 1;
 
@@ -232,20 +213,6 @@ export const Viewer = () => {
       state.setCursorRow(Math.max(0, last));
     }
   });
-
-  // Caret safety net: if the line under the caret changes length (content reload)
-  // And the caret now overflows it, re-home to the first word. Keyed on the cursor
-  // Line content; the body is untracked, so it never fights an in-range placement.
-  createEffect(
-    on(
-      () => state.cursorLineContent(),
-      (content) => {
-        if (state.cursorColumn() > content.length) {
-          state.setCursorColumn(firstWord(content));
-        }
-      }
-    )
-  );
 
   // The input stays mounted whenever the bar shows so a committed (blurred) find
   // Never captures the n/N cycle keys; `focused` follows findOpen. Each open
@@ -299,7 +266,7 @@ export const Viewer = () => {
                   {truncateLeft(state.selectedPath() ?? "", titleBudget())}
                 </text>
                 <text fg={theme.colors.text.muted} flexShrink={0}>
-                  {titleStats()}
+                  {titleStats() === "" ? "" : ` ${titleStats()}`}
                 </text>
               </box>
             }

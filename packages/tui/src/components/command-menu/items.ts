@@ -14,8 +14,9 @@ export type CommandAction =
       kind: "copyReference";
       path: string;
       line: number | undefined;
-      column: number | undefined;
+      endLine?: number;
     }
+  | { kind: "copySelection" }
   | { kind: "copyFileContents" }
   | { kind: "loadFullContent" }
   | {
@@ -35,10 +36,12 @@ export interface CommandMenuInput {
   context: "tree" | "viewer";
   /** The viewed file; the viewer menu is empty without one. */
   selectedPath: string | undefined;
-  /** The caret line (`newLine ?? oldLine`) for copy-reference and editor open. */
+  /** The caret line (`newLine ?? oldLine`), where the editor opens. */
   caretLine: number | undefined;
-  /** The caret's 1-based column, or undefined at line level (`caretColumn`). */
-  caretColumn: number | undefined;
+  /** The lines a copied reference names: the selection's, else the caret line. */
+  reference: { line: number | undefined; endLine: number | undefined };
+  /** Whether text is selected in the viewer, gating "Copy selection". */
+  selecting: boolean;
   /** The focused tree node; the tree menu is empty without one. */
   treeNode:
     | { kind: "file" | "directory"; id: string; path: string }
@@ -59,12 +62,17 @@ const viewerItems = (input: CommandMenuInput): CommandMenuItem[] => {
     return [];
   }
 
-  // Line-level (a gutter caret) has no column, so copy-reference degrades to path:line.
-  const column = input.caretLine === undefined ? undefined : input.caretColumn;
-
   return [
+    ...(input.selecting
+      ? [
+          {
+            action: { kind: "copySelection" },
+            label: "Copy selection",
+          } as const,
+        ]
+      : []),
     {
-      action: { column, kind: "copyReference", line: input.caretLine, path },
+      action: { kind: "copyReference", path, ...input.reference },
       label: "Copy reference",
     },
     { action: { kind: "copyFileContents" }, label: "Copy file contents" },
@@ -103,7 +111,6 @@ const treeItems = (input: CommandMenuInput): CommandMenuItem[] => {
 
   const copyPath: CommandMenuItem = {
     action: {
-      column: undefined,
       kind: "copyReference",
       line: undefined,
       path: node.path,

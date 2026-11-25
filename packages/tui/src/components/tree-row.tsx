@@ -116,11 +116,12 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
     >
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>
-          <text wrapMode="none" height={1} fg={nameFg()}>
+          <text selectable={false} wrapMode="none" height={1} fg={nameFg()}>
             {indent()}
           </text>
           <box width={2} overflow="hidden">
             <text
+              selectable={false}
               wrapMode="none"
               height={1}
               fg={
@@ -133,7 +134,7 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
             </text>
           </box>
         </box>
-        <text wrapMode="none" height={1} fg={nameFg()}>
+        <text selectable={false} wrapMode="none" height={1} fg={nameFg()}>
           {truncateName(props.node.name, maxNameLen())}
         </text>
         <RecencyDot at={recencyAt()} marginLeft={1} />
@@ -141,6 +142,7 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
       <box flexDirection="row">
         {props.node.changedCount > 0 ? (
           <text
+            selectable={false}
             wrapMode="none"
             height={1}
             fg={
@@ -223,12 +225,17 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
     >
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>
-          <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+          <text
+            selectable={false}
+            wrapMode="none"
+            height={1}
+            fg={theme.colors.text.muted}
+          >
             {indent()}
           </text>
           <FileIcon path={props.node.path} symlink={props.node.symlink} />
         </box>
-        <text wrapMode="none" height={1} fg={nameFg()}>
+        <text selectable={false} wrapMode="none" height={1} fg={nameFg()}>
           {truncate(props.node.name, maxNameLen())}
         </text>
         <RecencyDot
@@ -238,13 +245,19 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
       </box>
       <box flexDirection="row">
         {(changed()?.warnings.length ?? 0) > 0 ? (
-          <text wrapMode="none" height={1} fg={theme.colors.severity.warning}>
+          <text
+            selectable={false}
+            wrapMode="none"
+            height={1}
+            fg={theme.colors.severity.warning}
+          >
             !{" "}
           </text>
         ) : null}
         <Show when={changed()}>
           {(file) => (
             <text
+              selectable={false}
               wrapMode="none"
               height={1}
               fg={theme.colors.text.muted}
@@ -254,6 +267,7 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
         <Show when={changed()}>
           {(file) => (
             <text
+              selectable={false}
               wrapMode="none"
               height={1}
               fg={theme.colors.stage[file().stage]}

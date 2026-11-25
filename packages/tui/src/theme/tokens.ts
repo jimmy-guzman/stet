@@ -11,11 +11,6 @@ import type { ChangeKind, StageState } from "@/git/model";
 export interface Theme {
   accent: { primary: string };
   border: { focused: string; unfocused: string };
-  /**
-   * Background of the word under the in-line caret; reads on top of the cursor-row highlight, so it
-   * is distinct from `surface.cursor` and `find.matchBg`.
-   */
-  caret: { wordBg: string };
   diff: {
     addedBg: string;
     addedSign: string;
@@ -34,6 +29,11 @@ export interface Theme {
    * over (`rgba.transparent` at the call sites).
    */
   scrollbar: { thumb: string };
+  /**
+   * Background of selected text in the viewer. A row holding selected text drops the cursor lift from
+   * its code, so the two never stack.
+   */
+  selection: { bg: string };
   severity: { error: string; warning: string };
   stage: Record<StageState, string>;
   success: string;

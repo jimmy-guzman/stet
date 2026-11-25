@@ -13,6 +13,7 @@ import { Effect, Layer } from "effect";
 import { batch } from "solid-js";
 
 import type { DiffScope } from "@/cli";
+import { registerClipboard } from "@/clipboard/registry";
 import { File, FileLive } from "@/file/service";
 import type { ChangedFile, GitModel } from "@/git/model";
 import { emptyTreeForFormat } from "@/git/repo";
@@ -313,3 +314,25 @@ export const makeHoldFor =
       check(captureCharFrame());
     }
   };
+
+/** Take over the clipboard for one test: every copied text, in order. The preload clears it. */
+export const recordClipboard = () => {
+  const copied: string[] = [];
+
+  registerClipboard({
+    writeText: async (text) => {
+      copied.push(text);
+
+      return await Promise.resolve({
+        host: { status: "written" },
+        terminal: { capability: "unknown", status: "not-attempted" },
+      });
+    },
+  });
+
+  return copied;
+};
+
+/** The caret line's source text. */
+export const cursorLineContent = () =>
+  state.navigableLines()[state.cursorIndex()]?.content;

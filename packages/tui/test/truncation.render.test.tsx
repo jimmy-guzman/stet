@@ -9,6 +9,7 @@ import { state } from "@/state";
 
 import {
   createFixtureRepo,
+  cursorLineContent,
   loadModel,
   makeSettleUntil,
   runGit,
@@ -99,9 +100,7 @@ describe("truncation footer", () => {
       state.selectFile("mod.ts", { column: 7, line: targetLine });
       await settleUntil(
         "saved line in the staged diff",
-        () =>
-          state.cursorLineContent() === "const target = 1" &&
-          state.caretColumn() === 7
+        () => cursorLineContent() === "const target = 1"
       );
       expect(state.truncated()).toBe(false);
 
@@ -125,7 +124,6 @@ describe("truncation footer", () => {
       );
 
       expect(state.cursorLineNumber()).toBe(targetLine);
-      expect(state.caretColumn()).toBe(7);
       expect(state.fileView()).toBe(false);
       expect(state.truncated()).toBe(false);
     } finally {

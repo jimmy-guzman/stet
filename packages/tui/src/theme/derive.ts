@@ -79,11 +79,12 @@ const ANSI_FALLBACK = {
  * How far each derived color sits from the background toward its source (cmux's `color-mix`),
  * measured off stet's own palettes so `stet-dark`/`stet-light` keep their look. Light surfaces need
  * larger steps because sRGB compresses contrast near white.
+ * `selection` is measured the same way: at 0.2 it was within 1.1:1 of a find match in `stet-dark`,
+ * and at 0.3 it is 1.4:1, there and in `stet-light`.
  */
 const STEPS = {
   dark: {
     border: 0.09,
-    caret: 0.2,
     cursor: 0.09,
     faint: 0.32,
     find: 0.3,
@@ -92,12 +93,12 @@ const STEPS = {
     panel: 0.36,
     scrollbar: 0.27,
     secondary: 0.75,
+    selection: 0.3,
     strong: 0.91,
     tint: 0.1,
   },
   light: {
     border: 0.29,
-    caret: 0.2,
     cursor: 0.17,
     faint: 0.52,
     find: 0.2,
@@ -106,6 +107,7 @@ const STEPS = {
     panel: 0.07,
     scrollbar: 0.41,
     secondary: 0.84,
+    selection: 0.3,
     strong: 0.92,
     tint: 0.08,
   },
@@ -147,7 +149,6 @@ const derive = (zed: ZedTheme): Theme => {
   return {
     accent: { primary: accent },
     border: { focused: accent, unfocused: toward(fg, step.border) },
-    caret: { wordBg: toward(fg, step.caret) },
     diff: {
       addedBg: toward(hues.green, step.tint),
       addedSign: hues.green,
@@ -168,6 +169,7 @@ const derive = (zed: ZedTheme): Theme => {
     },
     recency: { aged: faint, fresh: accent },
     scrollbar: { thumb: toward(fg, step.scrollbar) },
+    selection: { bg: toward(fg, step.selection) },
     severity: { error: hues.red, warning: hues.yellow },
     stage: {
       mixed: lerpHex(hues.red, hues.yellow, 0.5),

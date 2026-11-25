@@ -368,7 +368,7 @@ export const SearchPane = () => {
             state.toggleSearchRegex();
           }}
         >
-          <text fg={toggleColor(state.searchRegex())}>
+          <text selectable={false} fg={toggleColor(state.searchRegex())}>
             {toggleCell(state.searchRegex(), ".*")}
           </text>
         </box>
@@ -381,7 +381,10 @@ export const SearchPane = () => {
             state.toggleSearchCase();
           }}
         >
-          <text fg={toggleColor(state.searchCaseSensitive())}>
+          <text
+            selectable={false}
+            fg={toggleColor(state.searchCaseSensitive())}
+          >
             {toggleCell(state.searchCaseSensitive(), "Aa")}
           </text>
         </box>
@@ -415,7 +418,10 @@ export const SearchPane = () => {
             state.toggleSearchScope();
           }}
         >
-          <text fg={theme.colors.text.muted}>{`[${scopeLabel()}]`}</text>
+          <text
+            selectable={false}
+            fg={theme.colors.text.muted}
+          >{`[${scopeLabel()}]`}</text>
         </box>
       </box>
       <box height={1} paddingLeft={1} paddingRight={1}>
@@ -491,6 +497,7 @@ export const SearchPane = () => {
                       >
                         <box flexDirection="row">
                           <text
+                            selectable={false}
                             fg={
                               isSelected(row().index)
                                 ? theme.colors.text.selected
@@ -501,6 +508,7 @@ export const SearchPane = () => {
                           </text>
                           <FileIcon path={header().path} />
                           <text
+                            selectable={false}
                             fg={
                               isSelected(row().index)
                                 ? theme.colors.text.selected
@@ -516,7 +524,7 @@ export const SearchPane = () => {
                             )}
                           </text>
                         </box>
-                        <text fg={theme.colors.text.muted}>
+                        <text selectable={false} fg={theme.colors.text.muted}>
                           {String(header().count)}
                         </text>
                       </box>
@@ -526,6 +534,7 @@ export const SearchPane = () => {
                     {(line) => (
                       <>
                         <text
+                          selectable={false}
                           fg={
                             line().match === undefined
                               ? theme.colors.text.faint
@@ -544,7 +553,9 @@ export const SearchPane = () => {
                     )}
                   </Show>
                   <Show when={row().item.kind === "gap"}>
-                    <text fg={theme.colors.text.faint}>{" ⋯"}</text>
+                    <text selectable={false} fg={theme.colors.text.faint}>
+                      {" ⋯"}
+                    </text>
                   </Show>
                 </box>
               )}

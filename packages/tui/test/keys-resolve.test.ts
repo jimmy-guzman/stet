@@ -52,6 +52,17 @@ describe("resolveKeybindings", () => {
     expect(set.texts.get("toggle-wrap")).toEqual([]);
   });
 
+  test.each([
+    ["caret-next", "scroll-right"],
+    ["caret-prev", "scroll-left"],
+    ["copy-file", "copy-text"],
+    ["copy-selection", "copy-text"],
+  ])("%s names its replacement", (id, renamed) => {
+    expect(resolveKeybindings({ [id]: "ctrl-l" }).issues).toEqual([
+      `keybinding "${id}" is now "${renamed}"`,
+    ]);
+  });
+
   test("a renamed action id reports where it went", () => {
     const { issues } = resolveKeybindings({ "grow-sidebar": "ctrl-l" });
 

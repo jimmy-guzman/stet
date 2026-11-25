@@ -39,6 +39,22 @@ A gap expands only in a diff that stet computes itself. For some files, stet use
 
 Press `<` to go back or `>` to go forward. Both restore the caret and scroll position for that visit. When you reopen a file from the tree or the file picker, stet restores your last position in that file.
 
-## Copy a reference
+## Select and copy
 
-Press `y` to copy a reference that you can paste into the agent conversation. In the tree, `y` copies the file `path`. In the viewer, it copies `path:line:col`. If you clicked the line-number gutter, it copies `path:line`, without the column. `Y` copies the full contents of the file. `C` copies the selected lines, or the caret line if no lines are selected.
+Drag across text in the viewer to select it. When you release the button, stet copies the selected text. Double-click to copy a word, or triple-click to copy a line. Drag down the line numbers to copy whole lines. You can also drag across text in other parts of the interface, for example the help overlay.
+
+From the keyboard, press `Shift+↑` or `Shift+↓` to select lines. With text selected, `Shift+↑` and `Shift+↓` move its end by a line. `Shift+←` and `Shift+→` move it by one character, except in a selection of whole lines. `esc` clears the selection.
+
+| Key | Without a selection | With a selection |
+| --- | --- | --- |
+| `y` | Copies the reference `path:line` | Copies the reference `path:line-line` |
+| `Y` | Copies the full contents of the file | Copies the selected text |
+
+Paste a reference into the agent conversation to point the agent at that code. In the tree, `y` copies the file `path`.
+
+The status bar shows `copied` when the system clipboard has the text. If stet can only send the text to your terminal, it shows `sent` instead. This occurs over SSH, for example. The terminal must support OSC 52 (the sequence that sets the clipboard through the terminal) to put that text on your clipboard.
+
+<Callout type="warn">
+  On Linux, text that you copy can be lost when you quit stet. It stays if you
+  have a clipboard manager, or if your terminal supports OSC 52.
+</Callout>

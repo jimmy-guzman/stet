@@ -221,7 +221,12 @@ export const WorktreeCombobox = () => {
                       flexDirection="row"
                     >
                       <Show when={current()}>
-                        <text wrapMode="none" height={1} fg={nameFg()}>
+                        <text
+                          selectable={false}
+                          wrapMode="none"
+                          height={1}
+                          fg={nameFg()}
+                        >
                           ●
                         </text>
                       </Show>
@@ -231,11 +236,17 @@ export const WorktreeCombobox = () => {
                       flexShrink={0}
                       flexDirection="row"
                     >
-                      <text wrapMode="none" height={1} fg={nameFg()}>
+                      <text
+                        selectable={false}
+                        wrapMode="none"
+                        height={1}
+                        fg={nameFg()}
+                      >
                         {truncate(worktreeLabel(worktree()), nameCells())}
                       </text>
                       <Show when={badges() !== ""}>
                         <text
+                          selectable={false}
                           wrapMode="none"
                           height={1}
                           marginLeft={1}
@@ -254,6 +265,7 @@ export const WorktreeCombobox = () => {
                     >
                       <Show when={ageText(activityAt()) !== ""}>
                         <text
+                          selectable={false}
                           wrapMode="none"
                           height={1}
                           fg={ageColor(activityAt())}

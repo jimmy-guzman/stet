@@ -27,7 +27,6 @@ describe("context command menu", () => {
   // Keyboard in later render tests that share that global. Reset what these open.
   afterEach(() => {
     state.closeCommandMenu();
-    state.setCaretLineLevel(false);
     state.setFocusedPane("tree");
   });
 
@@ -76,7 +75,7 @@ describe("context command menu", () => {
     }
   }, 20_000);
 
-  test("the viewer menu opens at a line-level caret", async () => {
+  test("the viewer menu opens on the caret line", async () => {
     const repoRoot = createFixtureRepo("stet-cmd-viewer-", {
       "package.json": `${JSON.stringify({ name: "cmd-fixture" })}\n`,
       "src/a.ts": "const alpha = 1\n",
@@ -102,11 +101,9 @@ describe("context command menu", () => {
     try {
       await settleUntil(
         "caret on the added line",
-        () => state.cursorLineNumber() === 2 && state.caretColumn() === 1
+        () => state.cursorLineNumber() === 2
       );
       mockInput.pressTab();
-      // A line-level caret, as a gutter click leaves.
-      state.setCaretLineLevel(true);
       state.openCommandMenu("viewer");
 
       const frame = await settleUntil("viewer menu open", (current) =>
@@ -213,7 +210,7 @@ describe("context command menu", () => {
     }
   }, 20_000);
 
-  test("the viewer menu closes when the caret moves off the symbol it opened on", async () => {
+  test("the viewer menu closes when the caret moves off the line it opened on", async () => {
     const repoRoot = createFixtureRepo("stet-cmd-drift-", {
       "package.json": `${JSON.stringify({ name: "cmd-drift" })}\n`,
       "src/a.ts": "const alpha = 1\n",
@@ -239,7 +236,7 @@ describe("context command menu", () => {
     try {
       await settleUntil(
         "caret on the added line",
-        () => state.cursorLineNumber() === 2 && state.caretColumn() === 1
+        () => state.cursorLineNumber() === 2
       );
       mockInput.pressTab();
       state.openCommandMenu("viewer");

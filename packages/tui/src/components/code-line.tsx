@@ -33,6 +33,7 @@ export const CodeLine = (props: {
       ref={(el) => {
         ref = el;
       }}
+      selectable={false}
       wrapMode="none"
       height={1}
     />

@@ -490,16 +490,16 @@ describe("mouse selection", () => {
     }
   }, 20_000);
 
-  // Each target, and the cells OpenTUI paints before it.
+  // The cells before the target depend on the terminal's width method, which the test renderer takes
+  // From the environment, so they are read from what is painted. Quoted, the target is its own span.
   test.each([
-    ["an escape", "\u001B[31mred\u001B[0m target", 11],
-    ["a soft hyphen", "soft\u00ADhyphen target", 12],
-    ["a vowel sign", "काका target", 5],
+    ["an escape", '\u001B[31mred\u001B[0m "target"'],
+    ["a soft hyphen", 'soft\u00ADhyphen "target"'],
+    ["a vowel sign", 'काका "target"'],
   ])(
     "%s before a drag leaves it on the glyphs under it",
-    async (_, line, cells) => {
+    async (_, line) => {
       const app = await mountFile(`${line}\n`);
-
       const { captureSpans, cellOf, copied, renderer, settleUntil } = app;
 
       const marked = () =>
@@ -513,8 +513,18 @@ describe("mouse selection", () => {
 
       try {
         await settleUntil("loaded", (frame) => frame.includes("target"));
-        const x = state.layout().viewer.content.x + 3 + cells;
         const { y } = cellOf("target");
+        const spans = captureSpans().lines[y]?.spans ?? [];
+        const quoted = spans.findIndex((span) => span.text === '"target"');
+        expect(quoted).toBeGreaterThan(0);
+
+        // Past the opening quote.
+        let x = 1;
+
+        for (const { width } of spans.slice(0, quoted)) {
+          x += width;
+        }
+
         await app.mockMouse.drag(x, y, x + "target".length - 1, y);
         await settleUntil("copied", () => copied.length === 1);
         expect(copied).toEqual(["target"]);

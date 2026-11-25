@@ -37,9 +37,7 @@ export const RecencyDot = (props: {
         // Drag over it (a tree row) from painting a stray highlight. Selection is stet's, and
         // Nothing here is worth selecting.
         <text
-          ref={(el) => {
-            el.selectable = false;
-          }}
+          selectable={false}
           fg={fg()}
           marginLeft={props.marginLeft}
           marginRight={props.marginRight}

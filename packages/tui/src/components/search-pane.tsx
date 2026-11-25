@@ -361,9 +361,6 @@ export const SearchPane = () => {
           />
         </box>
         <box
-          ref={(el) => {
-            el.selectable = false;
-          }}
           onMouseDown={() => {
             state.toggleSearchRegex();
           }}
@@ -374,9 +371,6 @@ export const SearchPane = () => {
         </box>
         <text> </text>
         <box
-          ref={(el) => {
-            el.selectable = false;
-          }}
           onMouseDown={() => {
             state.toggleSearchCase();
           }}
@@ -411,9 +405,6 @@ export const SearchPane = () => {
           />
         </box>
         <box
-          ref={(el) => {
-            el.selectable = false;
-          }}
           onMouseDown={() => {
             state.toggleSearchScope();
           }}
@@ -430,13 +421,7 @@ export const SearchPane = () => {
         </text>
       </box>
       <box flexGrow={1} flexDirection="row" onMouseScroll={onWheel}>
-        <box
-          ref={(el) => {
-            el.selectable = false;
-          }}
-          flexGrow={1}
-          flexDirection="column"
-        >
+        <box flexGrow={1} flexDirection="column">
           <Show
             when={state.searchItems().length > 0}
             fallback={
@@ -474,9 +459,6 @@ export const SearchPane = () => {
             <Index each={visibleItems()}>
               {(row) => (
                 <box
-                  ref={(el) => {
-                    el.selectable = false;
-                  }}
                   height={1}
                   width="100%"
                   flexDirection="row"
@@ -535,6 +517,7 @@ export const SearchPane = () => {
                       <>
                         <text
                           selectable={false}
+                          flexShrink={0}
                           fg={
                             line().match === undefined
                               ? theme.colors.text.faint
@@ -543,12 +526,7 @@ export const SearchPane = () => {
                         >
                           {` ${String(line().line).padStart(line().lineWidth)} `}
                         </text>
-                        <CodeLine
-                          spans={() => rowSpans(line(), row().index)}
-                          width={() =>
-                            Math.max(1, resultsWidth() - line().lineWidth - 2)
-                          }
-                        />
+                        <CodeLine spans={() => rowSpans(line(), row().index)} />
                       </>
                     )}
                   </Show>
@@ -566,6 +544,9 @@ export const SearchPane = () => {
           rowCount={() => state.searchItems().length}
           viewport={state.searchListHeight}
           scrollTop={state.searchScrollTop}
+          setScrollTop={(next) => {
+            state.setSearchScrollTop(next);
+          }}
         />
       </box>
       {/* Contextual per sub-focus, naming only the keys that focus honors: the

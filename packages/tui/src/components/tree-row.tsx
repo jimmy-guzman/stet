@@ -116,14 +116,13 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
     >
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>
-          <text selectable={false} wrapMode="none" height={1} fg={nameFg()}>
+          <text selectable={false} wrapMode="none" fg={nameFg()}>
             {indent()}
           </text>
           <box width={2} overflow="hidden">
             <text
               selectable={false}
               wrapMode="none"
-              height={1}
               fg={
                 state.iconsEnabled()
                   ? (theme.colors.icon[icon().name] ?? theme.colors.text.muted)
@@ -134,7 +133,7 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
             </text>
           </box>
         </box>
-        <text selectable={false} wrapMode="none" height={1} fg={nameFg()}>
+        <text selectable={false} wrapMode="none" fg={nameFg()}>
           {truncateName(props.node.name, maxNameLen())}
         </text>
         <RecencyDot at={recencyAt()} marginLeft={1} />
@@ -144,7 +143,6 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
           <text
             selectable={false}
             wrapMode="none"
-            height={1}
             fg={
               props.node.stage === undefined
                 ? theme.colors.text.muted
@@ -225,17 +223,12 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
     >
       <box flexDirection="row">
         <box flexDirection="row" flexShrink={0}>
-          <text
-            selectable={false}
-            wrapMode="none"
-            height={1}
-            fg={theme.colors.text.muted}
-          >
+          <text selectable={false} wrapMode="none" fg={theme.colors.text.muted}>
             {indent()}
           </text>
           <FileIcon path={props.node.path} symlink={props.node.symlink} />
         </box>
-        <text selectable={false} wrapMode="none" height={1} fg={nameFg()}>
+        <text selectable={false} wrapMode="none" fg={nameFg()}>
           {truncate(props.node.name, maxNameLen())}
         </text>
         <RecencyDot
@@ -248,7 +241,6 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
           <text
             selectable={false}
             wrapMode="none"
-            height={1}
             fg={theme.colors.severity.warning}
           >
             !{" "}
@@ -259,7 +251,6 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
             <text
               selectable={false}
               wrapMode="none"
-              height={1}
               fg={theme.colors.text.muted}
             >{`+${file().additions} -${file().deletions} `}</text>
           )}
@@ -269,7 +260,6 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
             <text
               selectable={false}
               wrapMode="none"
-              height={1}
               fg={theme.colors.stage[file().stage]}
             >
               {kindLetter(file().kind)}

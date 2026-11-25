@@ -8,6 +8,7 @@ import {
 } from "@opentui/solid";
 import { createEffect, onCleanup, Show } from "solid-js";
 
+import "./components/static-text";
 import { CommandMenu } from "./components/command-menu";
 import { FileCombobox } from "./components/file-combobox";
 import { HeaderBar } from "./components/header-bar";
@@ -199,6 +200,15 @@ export const App = () => {
       level: "warning",
       text: "stet: worktree deleted, nothing left to inspect",
     });
+  });
+
+  // OpenTUI inverts selected cells unless it is given colors; text outside the viewer wears the
+  // Viewer's selection, under the primary text color, since the faint tiers would vanish into it.
+  createEffect(() => {
+    renderer.setSelectionColors(
+      theme.colors.selection.bg,
+      theme.colors.text.primary
+    );
   });
 
   // One highlight at a time: a selection in the viewer replaces one OpenTUI holds elsewhere, as

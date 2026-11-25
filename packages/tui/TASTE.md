@@ -73,7 +73,7 @@ The rules are stack-agnostic. Where one is specific to a graphical or web platfo
 - Budget the critical path. The first interaction should feel immediate; the git-backed tree renders before anything heavier (highlighting) resolves.
 - Stay within the frame budget or do not animate. Drop the effect before you ship jank.
 - Reserve space for async content. No layout shift.
-- Render only what is visible plus a small overscan; window long content rather than building every row.
+- Render only what is visible; window long content rather than building every row.
 - Debounce and throttle expensive handlers. Input must never feel laggy.
 
 ## 7. Copy

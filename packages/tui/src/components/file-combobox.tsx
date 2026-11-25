@@ -83,8 +83,6 @@ export const FileCombobox = () => {
         }}
         width="100%"
         height={Math.min(12, Math.max(1, state.fileComboboxResults().length))}
-        scrollY
-        viewportCulling
         scrollbarOptions={{
           trackOptions: {
             backgroundColor: theme.rgba.transparent,
@@ -231,7 +229,6 @@ const HighlightedPath = (props: {
       }}
       selectable={false}
       wrapMode="none"
-      height={1}
     />
   );
 };

@@ -79,8 +79,6 @@ export const ScopeMenu = () => {
           }}
           width="100%"
           height={scopeKinds.length + 3}
-          scrollY
-          viewportCulling
           scrollbarOptions={scrollbarOptions}
         >
           {/* Id-by-index is required: reordering must never change a live renderable's id.
@@ -181,8 +179,6 @@ export const ScopeMenu = () => {
             }}
             width="100%"
             height={Math.min(14, Math.max(1, state.commits().length))}
-            scrollY
-            viewportCulling
             scrollbarOptions={scrollbarOptions}
           >
             <Index each={state.commits()}>
@@ -207,22 +203,18 @@ export const ScopeMenu = () => {
                       }
                     }}
                   >
-                    {/* Pinned to one line (wrapMode none + height 1): subjects run long
-                        and carry variation-selector gitmoji that would otherwise wrap a
-                        row two cells tall and mangle the list. The sha column never
-                        shrinks; the subject clips at the overlay edge. */}
+                    {/* One line: subjects run long, so the sha column never shrinks and
+                        the subject clips at the overlay edge. */}
                     <text
                       selectable={false}
                       flexShrink={0}
                       wrapMode="none"
-                      height={1}
                       fg={rowFg(active())}
                     >{`${marker(active(), current())}${commit().shortSha}`}</text>
                     <text
                       selectable={false}
                       flexGrow={1}
                       wrapMode="none"
-                      height={1}
                       fg={theme.colors.text.muted}
                     >{`  ${relativeTime(commit().authorTime, nowSeconds()).padEnd(4)}  ${commit().subject}`}</text>
                   </box>

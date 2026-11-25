@@ -4,7 +4,6 @@ import {
   cumulativeRowEnds,
   rowIndexAtOffset,
   visibleWindow,
-  visibleWindowVariable,
 } from "@/diff/windowing";
 
 describe("row offsets", () => {
@@ -29,86 +28,44 @@ describe("row offsets", () => {
   });
 });
 
-describe("visibleWindow (fixed height)", () => {
-  test("mounts only the visible slice with exact spacers", () => {
-    expect(visibleWindow(100, 10, 5)).toEqual({
-      bottomSpacer: 85,
+describe("visibleWindow", () => {
+  const fixed = cumulativeRowEnds(Array.from({ length: 100 }, () => 1));
+  // Row0 = 0..1, row1 = 1..4, row2 = 4..5, row3 = 5..7, row4 = 7..8.
+  const wrapped = cumulativeRowEnds([1, 3, 1, 2, 1]);
+
+  test("mounts exactly the rows the viewport shows", () => {
+    expect(visibleWindow(fixed, 10, 5)).toEqual({
       end: 15,
       start: 10,
-      topSpacer: 10,
+      top: 10,
     });
   });
 
-  test("clamps the window to the row range at the top and bottom", () => {
-    expect(visibleWindow(100, 0, 5)).toEqual({
-      bottomSpacer: 95,
-      end: 5,
-      start: 0,
-      topSpacer: 0,
-    });
-    expect(visibleWindow(100, 98, 5)).toEqual({
-      bottomSpacer: 0,
+  test("clamps to the row range at the top and bottom", () => {
+    expect(visibleWindow(fixed, 0, 5)).toEqual({ end: 5, start: 0, top: 0 });
+    expect(visibleWindow(fixed, 98, 5)).toEqual({
       end: 100,
       start: 98,
-      topSpacer: 98,
+      top: 98,
     });
   });
 
-  test("applies overscan on both edges without exceeding bounds", () => {
-    expect(visibleWindow(100, 20, 5, 3)).toEqual({
-      bottomSpacer: 72,
-      end: 28,
-      start: 17,
-      topSpacer: 17,
-    });
-    expect(visibleWindow(100, 0, 5, 3)).toEqual({
-      bottomSpacer: 92,
-      end: 8,
-      start: 0,
-      topSpacer: 0,
-    });
+  test("selects the wrapped rows that overlap the viewport", () => {
+    // Viewport 2..5 overlaps row1 and row2.
+    expect(visibleWindow(wrapped, 2, 3)).toEqual({ end: 3, start: 1, top: 1 });
   });
 
-  test("returns an empty window for no rows", () => {
-    expect(visibleWindow(0, 0, 10)).toEqual({
-      bottomSpacer: 0,
-      end: 0,
-      start: 0,
-      topSpacer: 0,
-    });
-  });
-});
-
-describe("visibleWindowVariable (wrap height)", () => {
-  test("selects rows overlapping the viewport and sums spacer heights", () => {
-    // Heights: row0=1 (0..1), row1=3 (1..4), row2=1 (4..5), row3=2 (5..7), row4=1 (7..8)
-    const heights = [1, 3, 1, 2, 1];
-    // Viewport [2,5): overlaps row1 (1..4) and row2 (4..5).
-    expect(visibleWindowVariable(heights, 2, 3)).toEqual({
-      bottomSpacer: 3,
-      end: 3,
-      start: 1,
-      topSpacer: 1,
-    });
+  test("leaves out a row that ends where the viewport starts", () => {
+    expect(visibleWindow(wrapped, 4, 1)).toEqual({ end: 3, start: 2, top: 4 });
   });
 
-  test("includes a tall row that straddles the viewport top", () => {
-    const heights = [5, 1, 1];
-    // Viewport [3,5): only row0 (0..5) overlaps.
-    expect(visibleWindowVariable(heights, 3, 2)).toEqual({
-      bottomSpacer: 2,
-      end: 1,
-      start: 0,
-      topSpacer: 0,
-    });
+  test("keeps a tall row that straddles the viewport top", () => {
+    const ends = cumulativeRowEnds([5, 1, 1]);
+    expect(visibleWindow(ends, 3, 2)).toEqual({ end: 1, start: 0, top: 0 });
   });
 
-  test("returns an empty window for no rows", () => {
-    expect(visibleWindowVariable([], 0, 10)).toEqual({
-      bottomSpacer: 0,
-      end: 0,
-      start: 0,
-      topSpacer: 0,
-    });
+  test("is empty with no rows or no viewport", () => {
+    expect(visibleWindow([], 0, 10)).toEqual({ end: 0, start: 0, top: 0 });
+    expect(visibleWindow(fixed, 0, 0)).toEqual({ end: 0, start: 0, top: 0 });
   });
 });

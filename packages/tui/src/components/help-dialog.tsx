@@ -6,6 +6,7 @@ import { state } from "@/state";
 import { theme } from "@/theme/context";
 
 import packageJson from "../../package.json";
+import { useLineMeasurer } from "./diff/line-measure";
 
 // Minimum width of the left column box (the key combo or, on the marks view, the glyph); the
 // Description wraps in whatever remains of the row. A reserved-width box (not string padding) keeps
@@ -14,34 +15,9 @@ import packageJson from "../../package.json";
 // Calc (which counts only description wraps) undercounts and clips a row.
 const COMBO_WIDTH = 11;
 
-// Word-wrapped line count of `text` at display `width` (matches OpenTUI's word
-// Wrap). Widths are display columns via `Bun.stringWidth`, not code units, so a
-// Wide glyph counts correctly. At least one line.
-const wrappedLineCount = (text: string, width: number) => {
-  if (width <= 0) {
-    return 1;
-  }
-
-  let lines = 1;
-  let col = 0;
-
-  for (const word of text.split(" ")) {
-    const w = Bun.stringWidth(word);
-
-    if (col === 0) {
-      col = w;
-    } else if (col + 1 + w <= width) {
-      col += 1 + w;
-    } else {
-      lines += 1;
-      col = w;
-    }
-  }
-
-  return lines;
-};
-
 export const HelpDialog = () => {
+  const measurer = useLineMeasurer();
+
   // Both views reduce to one row shape: a left cell (key combo or colored glyph) and a description.
   // The registry and the mark set are both fixed, so this recomputes only on a view toggle or a
   // Live theme flip.
@@ -89,7 +65,7 @@ export const HelpDialog = () => {
         sum +
         (index === 0 ? 1 : 2) +
         group.entries.reduce(
-          (lines, entry) => lines + wrappedLineCount(entry.right, rightWidth),
+          (lines, entry) => lines + measurer().measure(entry.right, rightWidth),
           0
         ),
       0
@@ -145,8 +121,6 @@ export const HelpDialog = () => {
       <scrollbox
         width="100%"
         height={listHeight()}
-        scrollY
-        viewportCulling
         scrollbarOptions={{
           trackOptions: {
             backgroundColor: theme.rgba.transparent,

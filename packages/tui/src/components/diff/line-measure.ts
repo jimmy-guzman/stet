@@ -1,19 +1,23 @@
 import { TextBuffer, TextBufferView } from "@opentui/core";
 import type { NativeResourceOwner, WidthMethod } from "@opentui/core";
+import { useRenderer } from "@opentui/solid";
+import { createMemo, onCleanup } from "solid-js";
+
+import { widthMethod } from "@/diff/cells";
 
 // Exact wrapped-line measurement: a reusable native TextBufferView measures how
 // Many terminal rows a line occupies under word wrap, via the same engine call
-// (measureForDimensions) the renderable's own layout uses, so windowing spacers
-// And cursor-follow match the rendered height instead of estimating it. One
+// (measureForDimensions) the renderable's own layout uses, so the
+// Viewer's row offsets and the help list's height match what is rendered instead of estimating it. One
 // Scratch view is reused across all rows; the width method must mirror the
 // Renderer's so column widths agree with what is painted.
 const LARGE_HEIGHT = 2 ** 24;
 
 export const createLineMeasurer = (
-  widthMethod: WidthMethod,
+  method: WidthMethod,
   owner: NativeResourceOwner
 ) => {
-  const buffer = TextBuffer.create(widthMethod, owner);
+  const buffer = TextBuffer.create(method, owner);
   const view = TextBufferView.create(buffer);
   view.setWrapMode("word");
 
@@ -52,4 +56,22 @@ export const createLineMeasurer = (
       );
     },
   };
+};
+
+/**
+ * A measurer for the calling component. It is remade when the terminal's width method changes, so
+ * wrapped rows and pointer columns are always measured the one way.
+ */
+export const useLineMeasurer = () => {
+  const renderer = useRenderer();
+
+  return createMemo(() => {
+    const measurer = createLineMeasurer(widthMethod(), renderer.nativeScene);
+
+    onCleanup(() => {
+      measurer.destroy();
+    });
+
+    return measurer;
+  });
 };

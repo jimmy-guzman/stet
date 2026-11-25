@@ -88,8 +88,6 @@ export const ThemeCombobox = () => {
         }}
         width="100%"
         height={Math.min(12, Math.max(1, state.themeComboboxResults().length))}
-        scrollY
-        viewportCulling
         onMouseScroll={onWheel}
         scrollbarOptions={{
           trackOptions: {

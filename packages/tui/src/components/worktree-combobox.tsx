@@ -133,8 +133,6 @@ export const WorktreeCombobox = () => {
           12,
           Math.max(1, state.worktreeComboboxResults()?.length ?? 1)
         )}
-        scrollY
-        viewportCulling
         scrollbarOptions={{
           trackOptions: {
             backgroundColor: theme.rgba.transparent,
@@ -212,21 +210,15 @@ export const WorktreeCombobox = () => {
                       });
                     }}
                   >
-                    {/* Every text is pinned to one line (height 1 + wrapMode none): a branch name or
-                        path long enough to wrap would lay the row out two cells tall and mangle the
-                        list, exactly as it would in the scope menu's commit rows. */}
+                    {/* One line: a branch name or path long enough to wrap would break off at a word
+                        and hide the rest. */}
                     <box
                       width={MARKER_CELLS}
                       flexShrink={0}
                       flexDirection="row"
                     >
                       <Show when={current()}>
-                        <text
-                          selectable={false}
-                          wrapMode="none"
-                          height={1}
-                          fg={nameFg()}
-                        >
+                        <text selectable={false} wrapMode="none" fg={nameFg()}>
                           ●
                         </text>
                       </Show>
@@ -236,19 +228,13 @@ export const WorktreeCombobox = () => {
                       flexShrink={0}
                       flexDirection="row"
                     >
-                      <text
-                        selectable={false}
-                        wrapMode="none"
-                        height={1}
-                        fg={nameFg()}
-                      >
+                      <text selectable={false} wrapMode="none" fg={nameFg()}>
                         {truncate(worktreeLabel(worktree()), nameCells())}
                       </text>
                       <Show when={badges() !== ""}>
                         <text
                           selectable={false}
                           wrapMode="none"
-                          height={1}
                           marginLeft={1}
                           fg={theme.colors.severity.warning}
                         >
@@ -267,7 +253,6 @@ export const WorktreeCombobox = () => {
                         <text
                           selectable={false}
                           wrapMode="none"
-                          height={1}
                           fg={ageColor(activityAt())}
                         >
                           {ageText(activityAt())}
@@ -289,7 +274,7 @@ export const WorktreeCombobox = () => {
         paddingRight={1}
         backgroundColor={theme.colors.surface.panel}
       >
-        <text wrapMode="none" height={1} fg={theme.colors.text.muted}>
+        <text wrapMode="none" fg={theme.colors.text.muted}>
           {detailPath()}
         </text>
       </box>

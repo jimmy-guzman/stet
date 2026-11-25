@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 
 import { testRender } from "@opentui/solid";
 
@@ -141,6 +143,51 @@ describe("diff viewer vertical scroll", () => {
         const cursorLine = state.cursorLineNumber();
         expect(captureCharFrame()).toContain(`line_${cursorLine} =`);
       }
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("going back to a file that shrank shows its content, not the space past it", async () => {
+    const repoRoot = longFileRepo("stet-shrunk-");
+    writeFileSync(path.join(repoRoot, "other.ts"), "const other = 1\n");
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => <App />,
+      { height: 34, width: 120 }
+    );
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.selectFile("long.ts");
+      await settleUntil("long file", (frame) => frame.includes("line_1 ="), 5);
+
+      // The caret stays on the first line; only the viewport moves, as the wheel moves it.
+      state.setViewerScrollTop(80);
+      await settleUntil("scrolled", (frame) => frame.includes("line_100 ="));
+
+      // A position past the end stops where the last line fills the viewport.
+      state.setViewerScrollTop(10_000);
+
+      const end = await settleUntil("stopped at the end", (frame) =>
+        frame.includes("line_120 =")
+      );
+
+      expect(visibleLineNumbers(end)).toHaveLength(state.viewerHeight());
+
+      state.selectFile("other.ts");
+      await settleUntil("other file", (frame) => frame.includes("other = 1"));
+      writeFileSync(path.join(repoRoot, "long.ts"), "const line_1 = 1\n");
+
+      state.goBack();
+      await settleUntil(
+        "shrunken file",
+        (frame) => frame.includes("line_1 =") && !frame.includes("line_100 =")
+      );
+      expect(state.viewerScrollTop()).toBe(0);
     } finally {
       renderer.destroy();
     }

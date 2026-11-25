@@ -1,27 +1,17 @@
-// Pure viewport windowing: given the scroll offset and viewport height, return
-// The slice of rows to mount plus the spacer heights that stand in for the
-// Skipped rows above and below, so total scroll height is preserved while only
-// Visible rows are rendered. Mounting only the visible slice (rather than all
-// Rows) is what keeps layout cost viewport-bounded and avoids the eager
-// Whole-diff layout that wedged OpenTUI's scheduler.
+// Pure viewport windowing: given the rows' cumulative heights, the scroll offset, and the viewport
+// Height, return the slice of rows to mount. Mounting only the visible slice (rather than all rows)
+// Keeps mount and layout cost bounded by the viewport instead of the file.
 
 export interface VisibleWindow {
   /** First mounted row index, inclusive. */
   start: number;
   /** Last mounted row index, exclusive. */
   end: number;
-  /** Terminal rows skipped before the first mounted row. */
-  topSpacer: number;
-  /** Terminal rows skipped after the last mounted row. */
-  bottomSpacer: number;
+  /** The content offset, in terminal rows, of the first mounted row's top. */
+  top: number;
 }
 
-const EMPTY: VisibleWindow = {
-  bottomSpacer: 0,
-  end: 0,
-  start: 0,
-  topSpacer: 0,
-};
+const EMPTY: VisibleWindow = { end: 0, start: 0, top: 0 };
 
 /** Cumulative terminal-row end offset for each source row. */
 export const cumulativeRowEnds = (heights: readonly number[]) => {
@@ -61,92 +51,24 @@ export const rowIndexAtOffset = (ends: readonly number[], offset: number) => {
     : undefined;
 };
 
-/** Fast path: every row is one terminal row tall (unified, no wrap). */
+/**
+ * The slice of rows the viewport shows. The window and the offset it paints at come from the same
+ * scroll position, so a frame never shows a row the slice left out.
+ */
 export const visibleWindow = (
-  rowCount: number,
+  ends: readonly number[],
   scrollTop: number,
-  viewportHeight: number,
-  overscan = 0
+  viewportHeight: number
 ): VisibleWindow => {
-  if (rowCount <= 0) {
+  if (ends.length === 0 || viewportHeight <= 0) {
     return EMPTY;
   }
 
-  const top = Math.max(0, Math.floor(scrollTop));
-  const start = Math.max(0, top - overscan);
-  const end = Math.min(rowCount, top + Math.max(0, viewportHeight) + overscan);
-  const clampedEnd = Math.max(start, end);
+  const start = firstRowEndingAfter(ends, scrollTop);
 
   return {
-    bottomSpacer: rowCount - clampedEnd,
-    end: clampedEnd,
+    end: firstRowEndingAfter(ends, scrollTop + viewportHeight - 1) + 1,
     start,
-    topSpacer: start,
-  };
-};
-
-/** Variable path: `heights[i]` is row i's terminal-row height (wrap mode). */
-export const visibleWindowVariable = (
-  heights: number[],
-  scrollTop: number,
-  viewportHeight: number,
-  overscan = 0
-): VisibleWindow => {
-  const count = heights.length;
-
-  if (count <= 0) {
-    return EMPTY;
-  }
-
-  const tops: number[] = [];
-  let total = 0;
-
-  for (const height of heights) {
-    tops.push(total);
-    total += Math.max(0, height);
-  }
-
-  const top = Math.max(
-    0,
-    Math.min(Math.floor(scrollTop), Math.max(0, total - 1))
-  );
-
-  const bottom = top + Math.max(0, viewportHeight);
-
-  let first = -1;
-  let last = -1;
-
-  for (let index = 0; index < count; index += 1) {
-    const height = Math.max(0, heights[index] ?? 0);
-
-    if (height === 0) {
-      continue;
-    }
-
-    const rowTop = tops[index] ?? 0;
-
-    if (rowTop + height > top && rowTop < bottom) {
-      if (first === -1) {
-        first = index;
-      }
-
-      last = index;
-    }
-  }
-
-  if (first === -1) {
-    return { bottomSpacer: 0, end: count, start: count, topSpacer: total };
-  }
-
-  const start = Math.max(0, first - overscan);
-  const end = Math.min(count, last + 1 + overscan);
-  const lastTop = tops[end - 1] ?? 0;
-  const lastHeight = Math.max(0, heights[end - 1] ?? 0);
-
-  return {
-    bottomSpacer: Math.max(0, total - (lastTop + lastHeight)),
-    end,
-    start,
-    topSpacer: tops[start] ?? 0,
+    top: ends[start - 1] ?? 0,
   };
 };

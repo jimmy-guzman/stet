@@ -44,10 +44,15 @@ const unitAt = (content: string, column: number, unit: SelectionUnit) => {
     return { end: content.length, start: 0 };
   }
 
-  return (
-    (unit === "word" ? wordAt(content, column) : undefined) ??
-    graphemeAt(content, column)
-  );
+  const word = unit === "word" ? wordAt(content, column) : undefined;
+
+  // A word's characters can end inside a cluster, which a selection never splits.
+  return word === undefined
+    ? graphemeAt(content, column)
+    : {
+        end: graphemeAt(content, word.end - 1).end,
+        start: graphemeAt(content, word.start).start,
+      };
 };
 
 /**

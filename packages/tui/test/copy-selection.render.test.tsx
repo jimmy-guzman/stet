@@ -65,6 +65,15 @@ const selectedLines = () => {
 
 const scope = { kind: "all", ref: "HEAD" } as const;
 
+/** The screen cell where text starts in a frame. */
+const cellIn = (frame: string, text: string) => {
+  const rows = frame.split("\n");
+  const y = rows.findIndex((row) => row.includes(text));
+  const row = rows[y] ?? "";
+
+  return { x: Bun.stringWidth(row.slice(0, row.indexOf(text))), y };
+};
+
 /** One file open in the viewer, and the screen cell of any text in it. */
 const mountFile = async (after: string, width = 110) => {
   const repoRoot = createFixtureRepo("stet-select-", { "src/a.ts": "base\n" });
@@ -74,13 +83,7 @@ const mountFile = async (after: string, width = 110) => {
   const copied = recordClipboard();
   const app = await testRender(() => <App />, { height: 24, width });
 
-  const cellOf = (text: string) => {
-    const rows = app.captureCharFrame().split("\n");
-    const y = rows.findIndex((row) => row.includes(text));
-    const row = rows[y] ?? "";
-
-    return { x: Bun.stringWidth(row.slice(0, row.indexOf(text))), y };
-  };
+  const cellOf = (text: string) => cellIn(app.captureCharFrame(), text);
 
   // Rewrite the file and wait for the app's own watcher or poll to show it.
   const settleUntil = makeSettleUntil(app);
@@ -787,6 +790,66 @@ describe("selection across a refresh", () => {
       await mockMouse.release(end.x + 4, end.y);
       await settleUntil("copied", () => copied.length === 1);
       expect(copied).toEqual(["bravo();\ncharl"]);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a press that has not moved yet does not follow its text into another file", async () => {
+    const repoRoot = createFixtureRepo("stet-select-switch-", {
+      "a.ts": "base\n",
+      "b.ts": "base\n",
+    });
+
+    writeFileSync(path.join(repoRoot, "a.ts"), "alpha();\nbravo();\n");
+    writeFileSync(
+      path.join(repoRoot, "b.ts"),
+      "first();\nbravo();\nsecret();\n"
+    );
+    seedState(await loadModel(repoRoot, scope), scope);
+    const copied = recordClipboard();
+    const app = await testRender(() => <App />, { height: 24, width: 110 });
+    const settleUntil = makeSettleUntil(app);
+
+    try {
+      const first = await settleUntil("a loaded", (frame) =>
+        frame.includes("alpha")
+      );
+
+      const start = cellIn(first, "bravo");
+      await app.mockMouse.pressDown(start.x, start.y);
+      state.selectFile("b.ts");
+
+      const second = await settleUntil("b loaded", (frame) =>
+        frame.includes("secret")
+      );
+
+      const end = cellIn(second, "secret");
+      await app.mockMouse.moveTo(end.x + 3, end.y);
+      await app.mockMouse.release(end.x + 3, end.y);
+      await app.renderOnce();
+      expect(copied).toEqual([]);
+      expect(state.viewerSelection()).toBeUndefined();
+    } finally {
+      app.renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a menu open over a selection closes when a refresh drops it", async () => {
+    const app = await mountFile(before);
+    const { cellOf, copied, mockMouse, refresh, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("charlie"));
+      await dragText(app, { text: "bravo" }, { offset: 4, text: "bravo" });
+      await settleUntil("selected", () => copied.length === 1);
+      const { x, y } = cellOf("bravo");
+      await mockMouse.click(x, y, MouseButton.RIGHT);
+      await settleUntil("menu open", (frame) =>
+        frame.includes("Copy selection")
+      );
+      await refresh("alpha();\nbrought();\ncharlie();\n", "brought");
+      await settleUntil("menu closed", () => !state.commandMenuOpen());
     } finally {
       renderer.destroy();
     }

@@ -41,5 +41,8 @@ describe("matchColumn", () => {
     expect(matchColumn(`${"\u0130".repeat(80)}needle`, "needle")).toBe(80);
     expect(matchColumn("\u0130needle", "needle")).toBe(1);
     expect(matchColumn("\u0130", "needle")).toBe(-1);
+    // A match inside one character's lowercase form is that character.
+    expect(matchColumn("\u0130x", "\u0307")).toBe(0);
+    expect(matchColumn("a\u0130x", "\u0307x")).toBe(1);
   });
 });

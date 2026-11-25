@@ -145,6 +145,7 @@ interface CommandMenuGuard {
   cursorIndex: number;
   scrollTop: number;
   scrollX: number;
+  selection: Selection | undefined;
   scope: string;
   repoRoot: string;
 }
@@ -2674,6 +2675,7 @@ const createState = () => {
         scope: scopeIdentity(),
         scrollTop: viewerScrollTop(),
         scrollX: viewerScrollX(),
+        selection: viewerSelection(),
         sidebarScrollTop: sidebarScrollTop(),
       });
       setCommandMenuOpen(true);
@@ -2706,6 +2708,7 @@ const createState = () => {
         ? focusedNodeId() !== guard.focusedNodeId ||
           sidebarScrollTop() !== guard.sidebarScrollTop
         : cursorIndex() !== guard.cursorIndex ||
+          viewerSelection() !== guard.selection ||
           viewerScrollTop() !== guard.scrollTop ||
           viewerScrollX() !== guard.scrollX)
     ) {
@@ -3819,6 +3822,7 @@ const createState = () => {
     revealRange,
     revealRestoreTarget,
     scope,
+    scopeIdentity,
     scopeMenuIndex,
     scopeMenuOpen,
     scopeMenuView,

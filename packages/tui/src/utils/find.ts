@@ -5,11 +5,12 @@ const originalOffset = (line: string, lowered: number) => {
   let to = 0;
 
   for (const char of line) {
-    if (from >= lowered) {
+    from += char.toLowerCase().length;
+
+    if (from > lowered) {
       return to;
     }
 
-    from += char.toLowerCase().length;
     to += char.length;
   }
 

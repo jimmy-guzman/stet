@@ -3,7 +3,7 @@
 // UTF-16 string offsets, the same unit as JavaScript string indexing. No Solid/OpenTUI/Effect: unit-testable
 // Directly, like `git/tree`.
 
-const IDENTIFIER = /[\p{L}\p{M}\p{N}_$]/u;
+const IDENTIFIER = /[\p{L}\p{M}\p{N}\p{Join_Control}_$]/u;
 
 export interface Word {
   /** UTF-16 start offset (inclusive). */

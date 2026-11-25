@@ -873,6 +873,17 @@ export const DiffView = () => {
 
   onCleanup(endDrag);
 
+  // A press belongs to the content it landed on, as a selection does.
+  createEffect(
+    on(
+      [state.selectedPath, state.scopeIdentity, state.repoRoot],
+      () => {
+        endDrag();
+      },
+      { defer: true }
+    )
+  );
+
   // A refresh under a held button moves a press that has not selected yet, as it does a selection.
   createEffect(
     on(state.navigableLines, (lines, before) => {

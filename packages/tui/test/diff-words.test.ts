@@ -45,3 +45,14 @@ test("wordAt returns the owning word, or undefined inside a gap", () => {
   expect(wordAt(line, 20)).toBeUndefined();
   expect(wordAt(line, 99)).toBeUndefined();
 });
+
+test("a word runs through its joiners", () => {
+  // A Devanagari conjunct is joined by U+200D, and a Persian word by U+200C.
+  expect(wordAt("\u0915\u094D\u200D\u0937 x", 0)).toEqual({
+    end: 4,
+    start: 0,
+  });
+  expect(
+    wordAt("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 x", 0)
+  ).toEqual({ end: 8, start: 0 });
+});

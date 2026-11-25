@@ -73,6 +73,15 @@ describe("selected text", () => {
     );
   });
 
+  test("a word never ends inside a cluster", () => {
+    // A skin tone joins the letter before it into one cluster, and is no part of a word.
+    expect(
+      textOf({ anchor: at(0, 0), focus: at(0, 0), unit: "word" }, [
+        { content: "x\u{1F3FD} y", newLine: 1, oldLine: 1 },
+      ])
+    ).toBe("x\u{1F3FD}");
+  });
+
   test("lines ignore columns", () => {
     expect(textOf({ anchor: at(1, 0), focus: at(0, 9), unit: "line" })).toBe(
       "const user = load(id);\n"

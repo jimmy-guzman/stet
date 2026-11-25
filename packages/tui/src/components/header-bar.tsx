@@ -138,7 +138,7 @@ export const HeaderBar = () => (
           <box flexDirection="row">
             <Show when={state.iconsEnabled()}>
               <box width={GLYPH_CELLS} overflow="hidden">
-                <text fg={theme.colors.text.muted}>
+                <text selectable={false} fg={theme.colors.text.muted}>
                   {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
                 </text>
               </box>
@@ -150,7 +150,9 @@ export const HeaderBar = () => (
                   <text fg={theme.colors.border.unfocused}>{BAR_SEP}</text>
                   <Show when={state.iconsEnabled()}>
                     <box width={GLYPH_CELLS} overflow="hidden">
-                      <text fg={theme.colors.text.muted}>{BRANCH_GLYPH}</text>
+                      <text selectable={false} fg={theme.colors.text.muted}>
+                        {BRANCH_GLYPH}
+                      </text>
                     </box>
                   </Show>
                   <text fg={theme.colors.text.muted}>{branch()}</text>

@@ -53,14 +53,7 @@ export const Sidebar = () => {
         flexDirection="row"
         onMouseScroll={onWheel}
       >
-        <box
-          ref={(el) => {
-            // A click activates a row; it must never start a text selection.
-            el.selectable = false;
-          }}
-          flexGrow={1}
-          flexDirection="column"
-        >
+        <box flexGrow={1} flexDirection="column">
           <Show
             when={state.treeRowCount() > 0}
             fallback={

@@ -37,13 +37,9 @@ export const ListScrollbar = (props: {
   });
 
   return (
-    <box
-      ref={(el) => {
-        el.selectable = false;
-      }}
-      width={1}
-    >
+    <box width={1}>
       <text
+        selectable={false}
         height={props.viewport()}
         wrapMode="none"
         fg={theme.colors.scrollbar.thumb}

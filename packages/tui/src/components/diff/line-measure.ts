@@ -17,6 +17,16 @@ export const createLineMeasurer = (
   const view = TextBufferView.create(buffer);
   view.setWrapMode("word");
 
+  // The display column each wrapped row of a line starts at.
+  const rowStarts = (text: string, width: number) => {
+    const wrapWidth = Math.max(1, width);
+    buffer.setText(text);
+    view.setWrapWidth(wrapWidth);
+    view.measureForDimensions(wrapWidth, LARGE_HEIGHT);
+
+    return view.lineInfo.lineStartCols;
+  };
+
   return {
     destroy() {
       view.destroy();
@@ -33,13 +43,12 @@ export const createLineMeasurer = (
       return Math.max(1, result?.lineCount ?? 1);
     },
     offsetForVisualRow(text: string, width: number, visualRow: number) {
-      const wrapWidth = Math.max(1, width);
-      buffer.setText(text);
-      view.setWrapWidth(wrapWidth);
-      view.measureForDimensions(wrapWidth, LARGE_HEIGHT);
-
-      return (
-        view.lineInfo.lineStartCols[Math.max(0, Math.floor(visualRow))] ?? 0
+      return rowStarts(text, width)[Math.max(0, Math.floor(visualRow))] ?? 0;
+    },
+    visualRowForOffset(text: string, width: number, column: number) {
+      return Math.max(
+        0,
+        rowStarts(text, width).findLastIndex((start) => start <= column)
       );
     },
   };

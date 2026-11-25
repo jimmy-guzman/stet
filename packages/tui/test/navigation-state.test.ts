@@ -129,7 +129,6 @@ test("reopening a file restores its last caret and scroll", () => {
   seed(["a.ts", "b.ts"]);
   state.selectFile("a.ts", { line: 7 });
   state.setPendingRestore({
-    cursorColumn: 3,
     cursorLine: 7,
     path: "a.ts",
     viewport: { scrollTop: 4, scrollX: 2 },
@@ -138,7 +137,6 @@ test("reopening a file restores its last caret and scroll", () => {
 
   state.selectFile("a.ts");
   expect(state.pendingRestore()).toEqual({
-    cursorColumn: 3,
     cursorLine: 7,
     path: "a.ts",
     viewport: { scrollTop: 4, scrollX: 2 },

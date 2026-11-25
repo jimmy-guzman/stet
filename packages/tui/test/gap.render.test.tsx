@@ -9,6 +9,7 @@ import { state } from "@/state";
 
 import {
   createFixtureRepo,
+  cursorLineContent,
   loadModel,
   makeSettleUntil,
   runGit,
@@ -83,7 +84,6 @@ describe("gap expansion", () => {
       await mockMouse.click(state.layout().viewer.x + 14, lineY);
       expect(state.cursorLineNumber()).toBe(10);
 
-      const savedColumn = state.caretColumn();
       state.selectFile("src/other.ts");
       await settleUntil(
         "second file opened",
@@ -101,7 +101,6 @@ describe("gap expansion", () => {
 
       expect(state.fileView()).toBe(false);
       expect(state.cursorLineNumber()).toBe(10);
-      expect(state.caretColumn()).toBe(savedColumn);
     } finally {
       renderer.destroy();
     }
@@ -145,14 +144,10 @@ describe("gap expansion", () => {
         "caret on the staged deletion",
         () =>
           state.pendingRestore() === undefined &&
-          state.cursorLineContent() === "const line10 = 10"
+          cursorLineContent() === "const line10 = 10"
       );
       expect(state.navigableLines()[state.cursorIndex()]?.type).toBe("remove");
 
-      mockInput.pressTab();
-      mockInput.pressKey("l");
-      const savedColumn = state.caretColumn();
-      expect(savedColumn).toBe(7);
       state.selectFile("other.ts");
       await settleUntil(
         "second file opened",
@@ -175,8 +170,7 @@ describe("gap expansion", () => {
       );
 
       expect(state.cursorLineNumber()).toBe(22);
-      expect(state.cursorLineContent()).toBe("const line10 = 10");
-      expect(state.caretColumn()).toBe(savedColumn);
+      expect(cursorLineContent()).toBe("const line10 = 10");
       expect(state.fileView()).toBe(false);
     } finally {
       renderer.destroy();

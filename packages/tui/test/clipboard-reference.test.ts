@@ -13,14 +13,20 @@ describe("copy reference formatting", () => {
     );
   });
 
-  test("formats path, line, and column", () => {
-    expect(formatCopyReference({ column: 7, line: 2, path: "src/a.ts" })).toBe(
-      "src/a.ts:2:7"
+  test("formats a line range", () => {
+    expect(formatCopyReference({ endLine: 9, line: 2, path: "src/a.ts" })).toBe(
+      "src/a.ts:2-9"
     );
   });
 
-  test("drops a column with no line", () => {
-    expect(formatCopyReference({ column: 7, path: "src/a.ts" })).toBe(
+  test("a range of one line reads as that line", () => {
+    expect(formatCopyReference({ endLine: 2, line: 2, path: "src/a.ts" })).toBe(
+      "src/a.ts:2"
+    );
+  });
+
+  test("drops a range with no line", () => {
+    expect(formatCopyReference({ endLine: 9, path: "src/a.ts" })).toBe(
       "src/a.ts"
     );
   });

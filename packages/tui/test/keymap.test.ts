@@ -30,8 +30,7 @@ const noop = () => {};
 const noopOpen = async () => {};
 
 /**
- * Count which action each key reached, without the clipboard subprocess
- * (pbcopy/xclip, absent on CI).
+ * Count which action each key reached, without touching the clipboard.
  */
 const countCopyDispatches = (
   press: (handle: (key: KeyEvent) => void) => void
@@ -39,16 +38,11 @@ const countCopyDispatches = (
   const calls: string[] = [];
 
   const real = {
-    copyFileContents: state.copyFileContents,
-    copySelection: state.copySelection,
+    copyText: state.copyText,
   };
 
-  state.copyFileContents = () => {
-    calls.push("copyFileContents");
-  };
-
-  state.copySelection = () => {
-    calls.push("copySelection");
+  state.copyText = () => {
+    calls.push("copyText");
   };
 
   try {
@@ -391,7 +385,7 @@ describe("createKeyHandler", () => {
   });
 
   describe("copy keys in the viewer", () => {
-    test("Y copies the file and C the selection", () => {
+    test("Y copies text, and C is unbound", () => {
       batch(() => {
         state.seedNav("src/foo.ts");
         state.setFocusedPane("diff");
@@ -401,12 +395,12 @@ describe("createKeyHandler", () => {
         countCopyDispatches((handle) => {
           handle(keyEvent({ name: "Y", shift: true }));
         })
-      ).toEqual(["copyFileContents"]);
+      ).toEqual(["copyText"]);
       expect(
         countCopyDispatches((handle) => {
           handle(keyEvent({ name: "C", shift: true }));
         })
-      ).toEqual(["copySelection"]);
+      ).toEqual([]);
     });
   });
 

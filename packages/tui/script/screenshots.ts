@@ -162,12 +162,12 @@ const launchCmd = (root = REPO) =>
 /**
  * Open a substantial real source-file diff (the palette focuses the viewer on select), so the hero
  * and theme shots feature a changed file with hunks rather than the default docs file.
- * `components/diff/DiffView` carries one of the largest source diffs in the `BASE_REF..HEAD` window
- * (+254/-201) and interleaves additions and removals, so it reads as real review work.
+ * `git/model` is changed through the `BASE_REF..HEAD` window (+228/-196) and interleaves additions
+ * and removals from its first hunk, so it reads as real review work.
  */
 const openHeroDiff = [
   "Ctrl+P",
-  'Type "diff/DiffView"',
+  'Type "src/git/model"',
   "Sleep 400ms",
   "Enter",
   "Sleep 800ms",
@@ -239,8 +239,8 @@ const screens = [
   {
     /**
      * Open the diff and let it focus/settle, then open the find bar and type a term present in the
-     * viewport where the file opens (lowercase "window" is smart-case, so it also matches the
-     * `visibleWindow`/`visibleWindowVariable` imports in DiffView's first hunk, highlighting in
+     * viewport where the file opens (lowercase "branch" is smart-case, so it also matches the
+     * comment and the field the first hunks of `git/model` add and remove, highlighting in
      * view rather than off-screen). Capture the open bar showing the live N/M counter and
      * highlights. No commit: a too-early `/` or a no-match Enter both collapse back to a plain diff
      * with no find UI, so generous settles and a real match matter.
@@ -248,13 +248,13 @@ const screens = [
     name: "find",
     steps: [
       "Ctrl+P",
-      'Type "diff/DiffView"',
+      'Type "src/git/model"',
       "Sleep 500ms",
       "Enter",
       "Sleep 1500ms",
       'Type "/"',
       "Sleep 600ms",
-      'Type "window"',
+      'Type "branch"',
       "Sleep 1s",
     ].join("\n"),
   },

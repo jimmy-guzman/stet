@@ -48,6 +48,10 @@ const isKeyActionId = (id: string): id is KeyActionId => contextById.has(id);
  * against the old registry, not a typo, and the notice should say where it went.
  */
 const renamedIds = new Map([
+  ["caret-next", "scroll-right"],
+  ["caret-prev", "scroll-left"],
+  ["copy-file", "copy-text"],
+  ["copy-selection", "copy-text"],
   ["grow-sidebar", "grow-pane"],
   ["reset-sidebar", "reset-pane"],
   ["shrink-sidebar", "shrink-pane"],

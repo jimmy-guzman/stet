@@ -11,6 +11,7 @@ import { state } from "@/state";
 
 import {
   createFixtureRepo,
+  cursorLineContent,
   loadModel,
   makeSettleUntil,
   seedState,
@@ -108,8 +109,7 @@ describe("back / forward navigation", () => {
         () => state.cursorLineNumber() !== movedLn
       );
       const reopenedLine = state.cursorLineNumber();
-      const reopenedRow = state.cursorLineContent();
-      state.setCaretLineLevel(true);
+      const reopenedRow = cursorLineContent();
       state.openSearch();
       state.selectFile("src/a.ts");
       expect(state.mainView()).toBe("file");
@@ -118,8 +118,7 @@ describe("back / forward navigation", () => {
         () => state.pendingRestore() === undefined
       );
       expect(state.cursorLineNumber()).toBe(reopenedLine);
-      expect(state.cursorLineContent()).toBe(reopenedRow);
-      expect(state.caretColumn()).toBeUndefined();
+      expect(cursorLineContent()).toBe(reopenedRow);
       expect(state.canGoForward()).toBe(true);
 
       // Forward returns to b.ts.
@@ -175,7 +174,7 @@ describe("back / forward navigation", () => {
         "caret on the old side of line 2",
         () =>
           state.pendingRestore() === undefined &&
-          state.cursorLineContent() === "const line2 = 2"
+          cursorLineContent() === "const line2 = 2"
       );
 
       // Jump to line 2, then jump to line 27 in the same file (a distinct entry).
@@ -199,12 +198,12 @@ describe("back / forward navigation", () => {
       );
 
       expect(state.cursorLineNumber()).toBe(2);
-      expect(state.cursorLineContent()).toBe("const early = true");
+      expect(cursorLineContent()).toBe("const early = true");
 
       state.goBack();
       await settleUntil(
         "back to the old side of line 2",
-        () => state.cursorLineContent() === "const line2 = 2"
+        () => cursorLineContent() === "const line2 = 2"
       );
     } finally {
       renderer.destroy();
@@ -246,7 +245,6 @@ describe("back / forward navigation", () => {
           state.pendingRestore() === undefined
       );
       expect(state.cursorLineNumber()).toBe(MAX_FILE_LINES + 1);
-      expect(state.caretColumn()).toBe(7);
 
       batch(() => {
         state.selectFile("c.ts", { column: 7, line: 1 });
@@ -260,7 +258,6 @@ describe("back / forward navigation", () => {
           state.pendingRestore() === undefined
       );
       expect(state.cursorLineNumber()).toBe(1);
-      expect(state.caretColumn()).toBe(7);
 
       batch(() => {
         state.selectFile("a.ts", { column: 7, line: 1 });
@@ -274,7 +271,6 @@ describe("back / forward navigation", () => {
           state.pendingRestore() === undefined
       );
       expect(state.cursorLineNumber()).toBe(1);
-      expect(state.caretColumn()).toBe(7);
     } finally {
       renderer.destroy();
     }

@@ -16,7 +16,6 @@ interface RunOptions {
   allowedExitCodes?: readonly number[];
   /** Variables laid over the default child environment, for a call that needs git configured differently. */
   env?: Readonly<Record<string, string>>;
-  stdin?: string;
 }
 
 const renderCommand = (command: readonly string[]) =>
@@ -82,10 +81,6 @@ export const ProcessLive = Layer.succeed(Process)({
               ...options?.env,
             },
             stderr: "pipe",
-            stdin:
-              options?.stdin === undefined
-                ? undefined
-                : new Blob([options.stdin]),
             stdout: "pipe",
           });
         },

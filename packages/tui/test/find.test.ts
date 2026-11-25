@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { findMatches } from "@/utils/find";
+import { findMatches, matchColumn } from "@/utils/find";
 
 const lines = [
   "const findMatches = () => {",
@@ -28,5 +28,21 @@ describe("findMatches", () => {
 
   test("a query with no hits returns no indices", () => {
     expect(findMatches(lines, "zzz")).toEqual([]);
+  });
+});
+
+describe("matchColumn", () => {
+  test("finds where the match starts, smart-case", () => {
+    expect(matchColumn("  return MATCHES;", "matches")).toBe(9);
+    expect(matchColumn("  return matches;", "MATCHES")).toBe(-1);
+  });
+
+  test("is an offset into the line itself, which lowercasing can lengthen", () => {
+    expect(matchColumn(`${"\u0130".repeat(80)}needle`, "needle")).toBe(80);
+    expect(matchColumn("\u0130needle", "needle")).toBe(1);
+    expect(matchColumn("\u0130", "needle")).toBe(-1);
+    // A match inside one character's lowercase form is that character.
+    expect(matchColumn("\u0130x", "\u0307")).toBe(0);
+    expect(matchColumn("a\u0130x", "\u0307x")).toBe(1);
   });
 });

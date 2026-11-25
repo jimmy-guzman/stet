@@ -14,6 +14,37 @@ export const toCodePoints = (text: string): string[] => {
 // One shared segmenter: constructing one costs more than the truncation it serves.
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
+// Text of one cell per character, which needs no segmenting.
+const PLAIN = /^[\t\u0020-\u007E]*$/u;
+
+/** The text's grapheme clusters: the units a cell position can land on. */
+export const graphemeClusters = (text: string): string[] => {
+  if (PLAIN.test(text)) {
+    return toCodePoints(text);
+  }
+
+  const clusters: string[] = [];
+
+  for (const { segment } of graphemes.segment(text)) {
+    clusters.push(segment);
+  }
+
+  return clusters;
+};
+
+/** The cluster an offset falls in, as a UTF-16 range; empty at the text's end. */
+export const graphemeAt = (text: string, index: number) => {
+  const at = Math.max(0, Math.min(index, text.length));
+  const cluster = graphemes.segment(text).containing(at);
+
+  return cluster === undefined
+    ? { end: text.length, start: text.length }
+    : {
+        end: cluster.index + cluster.segment.length,
+        start: cluster.index,
+      };
+};
+
 // Truncate to `max` display columns (not code units), so a wide glyph or emoji counts as its real
 // Cell width and the result never overflows the budget it was given. A trailing … marks the cut and
 // Costs one cell, so the ellipsised form fits in `max` too. The unit is the grapheme cluster, not
@@ -56,17 +87,11 @@ export const truncateLeft = (text: string, max: number) => {
     return max === 1 ? "…" : "";
   }
 
-  const segments: string[] = [];
-
-  for (const { segment } of graphemes.segment(text)) {
-    segments.push(segment);
-  }
-
   const budget = max - 1;
   let width = 0;
   let kept = "";
 
-  for (const segment of segments.toReversed()) {
+  for (const segment of graphemeClusters(text).toReversed()) {
     const cells = Bun.stringWidth(segment);
 
     if (width + cells > budget) {

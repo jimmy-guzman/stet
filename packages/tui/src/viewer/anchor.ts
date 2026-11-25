@@ -1,67 +1,16 @@
-// Pure placement math for the viewer's caret-anchored context menu: map the caret to its
-// On-screen cell inside the viewer content area, then place a fixed-size card next to it,
-// Clamped to the viewport and flipped above the caret near the bottom edge. Kept free of
+// Pure placement math for the context menu: place a fixed-size card next to its anchor cell,
+// Clamped to the viewport and flipped above the anchor near the bottom edge. Kept free of
 // Solid/OpenTUI so the geometry is unit-tested directly, the way `diff/follow.ts`
 // Is, rather than only through the render harness.
 
-export interface CaretAnchorInput {
-  /** Cumulative terminal-row height of the rows above the caret's row. */
-  cursorTop: number;
-  /** Vertical scroll offset of the viewport (terminal rows). */
-  scrollTop: number;
-  /** Viewer content height (terminal rows). */
-  viewportHeight: number;
-  /** Viewer content width (cells). */
-  viewportWidth: number;
-  /** Columns left of the line text: the fixed gutter plus the one diff-sign column. */
-  contentLeft: number;
-  /** The caret word's start display column within the line content. */
-  caretFrom: number;
-  /** Horizontal scroll offset (display columns). */
-  scrollX: number;
-}
-
-/**
- * The caret's cell, 0-based within the viewer content area, or undefined when it is scrolled out of
- * view.
- */
-export interface CaretCell {
+/** The cell a menu opens at, 0-based in the caller's coordinate frame. */
+export interface AnchorCell {
   row: number;
   col: number;
 }
 
-// The caret's row is its cumulative top minus the scroll, and its column the
-// Content-left offset plus the word's display column shifted by the horizontal
-// Scroll. Off-screen on either axis (above the fold or past the bottom; scrolled
-// Left of the content or past the right edge) yields undefined so the decoration
-// Hides rather than anchoring to a cell the user can't see.
-export const caretCell = ({
-  cursorTop,
-  scrollTop,
-  viewportHeight,
-  viewportWidth,
-  contentLeft,
-  caretFrom,
-  scrollX,
-}: CaretAnchorInput): CaretCell | undefined => {
-  const row = cursorTop - scrollTop;
-
-  if (row < 0 || row >= viewportHeight) {
-    return undefined;
-  }
-
-  const col = contentLeft + caretFrom - scrollX;
-
-  if (col < contentLeft || col >= viewportWidth) {
-    return undefined;
-  }
-
-  return { col, row };
-};
-
 export interface CardPlacementInput {
-  /** The caret cell to anchor against (0-based within the viewer content area). */
-  anchor: CaretCell;
+  anchor: AnchorCell;
   /** Card width in cells. */
   cardWidth: number;
   /** Card height in rows. */
@@ -81,7 +30,7 @@ export interface CardPlacement {
 
 // Prefer the row below the caret so the card never covers the line being inspected;
 // Flip to end just above the caret when the card would overflow the bottom edge. The
-// Left edge tracks the caret column, clamped so the card stays fully on screen (and
+// Left edge tracks the anchor column, clamped so the card stays fully on screen (and
 // Pinned to 0 when it is wider than the viewport).
 export const placeCard = ({
   anchor,

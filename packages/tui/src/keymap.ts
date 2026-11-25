@@ -3,6 +3,7 @@ import { batch } from "solid-js";
 
 import { scopeKinds } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
+import { HORIZONTAL_STEP } from "./diff/follow";
 import { latestActivity } from "./git/activity";
 import type { KeyActionId } from "./keys/actions";
 import { matchesKey } from "./keys/combo";
@@ -40,7 +41,7 @@ const cycleFind = (direction: number) => {
 
   if (target !== undefined) {
     state.setFindMatchPos(pos);
-    state.setCursorRow(target);
+    state.goToFindMatch(target);
   }
 };
 
@@ -517,7 +518,7 @@ const handleSearchResultEnds: KeyStep = ({ key }) => {
 };
 
 // E/o and y retarget from the hidden viewer to the selected result: open
-// It in the editor, or copy its reference (a match carries its column).
+// It in the editor, or copy its reference.
 // Unshifted only, so Shift+O falls through to the external-open binding
 // Rather than opening the highlighted result in the IDE.
 const handleSearchResultTargets: KeyStep = ({ key, host }) => {
@@ -541,7 +542,6 @@ const handleSearchResultTargets: KeyStep = ({ key, host }) => {
     } else if (item?.kind === "line") {
       state.copy(
         formatCopyReference({
-          column: item.match?.column,
           line: item.line,
           path: item.path,
         })
@@ -630,12 +630,12 @@ const handleCommittedFind: KeyStep = ({ key }) => {
   return false;
 };
 
-// A line selection is dismiss-on-esc, claimed after the find handlers (so an
-// Open or committed find dismisses first) but before the global esc, so esc
-// Clears the band; the caret stays where the selection's focus was.
+// A selection is dismiss-on-esc, claimed after the find handlers (so an open or
+// Committed find dismisses first) but before the global esc; the cursor stays where
+// The selection's focus was.
 const handleSelectionEscape: KeyStep = ({ key }) => {
-  if (state.selectionAnchor() !== undefined && key.name === "escape") {
-    state.setSelectionAnchor(undefined);
+  if (state.viewerSelection() !== undefined && key.name === "escape") {
+    state.clearSelection();
 
     return true;
   }
@@ -894,16 +894,8 @@ const handleFileView: KeyStep = (ctx) => {
   // One action id (one rebind, one help row) rather than a per-pane id, which the
   // Conflict detector would report against the global binding anyway, since a
   // Global action claims its combo in every pane scope.
-  if (ctx.pressed("copy-file")) {
-    state.copyFileContents();
-
-    return true;
-  }
-
-  // Copy the selected lines' source text, or the caret line when there is no
-  // Selection. Distinct from copy-reference and copy-file.
-  if (ctx.pressed("copy-selection")) {
-    state.copySelection();
+  if (ctx.pressed("copy-text")) {
+    state.copyText();
 
     return true;
   }
@@ -929,16 +921,8 @@ const handleCopyReference: KeyStep = ({ pressed }) => {
   const selectedPath = state.selectedPath();
 
   if (selectedPath !== undefined && fileViewShowing()) {
-    const lineNumber = caretLineNumber();
     state.copy(
-      formatCopyReference({
-        // Emit the exact column unless the caret is line-level (a gutter
-        // Click), which copies path:line. `caretColumn` keeps the precise
-        // Column even when it lands in a gap.
-        column: lineNumber === undefined ? undefined : state.caretColumn(),
-        line: lineNumber,
-        path: selectedPath,
-      })
+      formatCopyReference({ ...state.referenceLines(), path: selectedPath })
     );
   }
 
@@ -955,15 +939,25 @@ const diffBindings: readonly Binding[] = [
   {
     id: "select-down",
     run: () => {
-      state.extendSelectionTo(
-        Math.max(0, Math.min(state.cursorIndex() + 1, lastNavigableLine()))
-      );
+      state.extendSelectionRow(1);
     },
   },
   {
     id: "select-up",
     run: () => {
-      state.extendSelectionTo(Math.max(state.cursorIndex() - 1, 0));
+      state.extendSelectionRow(-1);
+    },
+  },
+  {
+    id: "select-right",
+    run: () => {
+      state.extendSelectionColumn(1);
+    },
+  },
+  {
+    id: "select-left",
+    run: () => {
+      state.extendSelectionColumn(-1);
     },
   },
   {
@@ -1010,17 +1004,15 @@ const diffBindings: readonly Binding[] = [
     },
   },
   {
-    id: "caret-next",
+    id: "scroll-right",
     run: () => {
-      state.caretNextWord();
+      state.scrollViewerX(HORIZONTAL_STEP);
     },
   },
-  // The caret hops words; switch-pane is the way out to another pane (a
-  // No-op here at the first word).
   {
-    id: "caret-prev",
+    id: "scroll-left",
     run: () => {
-      state.caretPrevWord();
+      state.scrollViewerX(-HORIZONTAL_STEP);
     },
   },
   // Fold/unfold the region at the caret (an indent block or a git-elided gap).

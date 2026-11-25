@@ -112,7 +112,7 @@ export const resolveIdeTemplate = (
 
 /**
  * The OS "open with the default application" command for a path: `open` on macOS, `xdg-open` on
- * Linux (the same platform split as the clipboard tool). `undefined` on any other platform, where
+ * Linux. `undefined` on any other platform, where
  * the caller surfaces a notice instead. `platform` is a parameter so every branch is
  * unit-testable.
  */

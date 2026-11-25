@@ -1,6 +1,11 @@
 #!/usr/bin/env bun
 
-import { createCliRenderer } from "@opentui/core";
+import {
+  createCliRenderer,
+  createClipboard,
+  createHostClipboard,
+  createRendererClipboardAdapter,
+} from "@opentui/core";
 import { render } from "@opentui/solid";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { batch, createRoot } from "solid-js";
@@ -8,6 +13,7 @@ import { batch, createRoot } from "solid-js";
 import packageJson from "../package.json";
 import { App } from "./app";
 import { helpText, parseCommand } from "./cli";
+import { registerClipboard } from "./clipboard/registry";
 import { themesDir } from "./config/paths";
 import { configDefaults } from "./config/schema";
 import type { UserConfig } from "./config/schema";
@@ -215,6 +221,13 @@ try {
   exitOnSignals(pendingRenderer);
 
   const renderer = await pendingRenderer;
+
+  registerClipboard(
+    createClipboard({
+      host: createHostClipboard(),
+      terminal: createRendererClipboardAdapter(renderer),
+    })
+  );
 
   // The appearance and the terminal palette (the `system` theme) are two bounded queries, asked
   // Together so a terminal that answers neither costs one timeout, not two.

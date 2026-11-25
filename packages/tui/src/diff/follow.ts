@@ -72,8 +72,11 @@ export interface FollowRange {
   margin: number;
 }
 
-// Horizontal sibling of `followScrollTop`: keep the caret word's display range in
-// View as it hops along the line, with a margin of context columns on each side.
+/** Columns one sideways step scrolls, by key or by wheel. */
+export const HORIZONTAL_STEP = 4;
+
+// Horizontal sibling of `followScrollTop`: bring a display range into view, with a
+// Margin of context columns on each side.
 // A range wider than the viewport anchors its start.
 export const followScrollX = ({
   from,

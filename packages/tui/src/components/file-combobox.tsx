@@ -152,7 +152,10 @@ export const FileCombobox = () => {
                   </box>
                   <Show when={changed()}>
                     {(entry) => (
-                      <text fg={theme.colors.stage[entry().stage]}>
+                      <text
+                        selectable={false}
+                        fg={theme.colors.stage[entry().stage]}
+                      >
                         {kindLetter(entry().kind)}
                       </text>
                     )}
@@ -226,6 +229,7 @@ const HighlightedPath = (props: {
       ref={(el) => {
         ref = el;
       }}
+      selectable={false}
       wrapMode="none"
       height={1}
     />

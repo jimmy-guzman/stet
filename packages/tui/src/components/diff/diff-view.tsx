@@ -12,12 +12,14 @@ import {
   createEffect,
   createMemo,
   Index,
+  on,
   onCleanup,
   Show,
   untrack,
 } from "solid-js";
 
-import { followScrollTop, followScrollX } from "@/diff/follow";
+import { cellWidth, widthMethod } from "@/diff/cells";
+import { followScrollTop, followScrollX, HORIZONTAL_STEP } from "@/diff/follow";
 import { isLineRow } from "@/diff/rows";
 import type { DiffLineRow, DiffRow } from "@/diff/rows";
 import { columnToIndex, markRange, sliceSpansWindow } from "@/diff/spans";
@@ -28,34 +30,21 @@ import {
   visibleWindow,
   visibleWindowVariable,
 } from "@/diff/windowing";
-import { wordAt } from "@/diff/words";
 import { state } from "@/state";
 import { activeThemeMonochrome } from "@/theme/active";
 import { theme } from "@/theme/context";
-import { caretCell } from "@/viewer/anchor";
+import { followLines, selectedColumns } from "@/viewer/selection";
+import type { SelectionPoint, SelectionUnit } from "@/viewer/selection";
 
 import { CommandMenu } from "../command-menu";
 import { isRightClick } from "../mouse";
 import { createLineMeasurer } from "./line-measure";
 
-// The caret word's display-column range on the cursor line, [from, to). Undefined
-// On a line with no word under the caret.
-interface CaretRange {
+/** Display columns, [from, to). */
+interface CellRange {
   from: number;
   to: number;
 }
-
-const caretRangeFor = (
-  content: string,
-  word: { start: number; end: number }
-): CaretRange => {
-  const from = Bun.stringWidth(content.slice(0, word.start));
-
-  return {
-    from,
-    to: from + Bun.stringWidth(content.slice(word.start, word.end)),
-  };
-};
 
 // Only removed/added lines carry changed words, so a context row never reads this.
 const changedWordBg = (row: DiffLineRow, lifted: boolean) => {
@@ -75,7 +64,7 @@ const StyledLine = (props: {
   wrap: boolean;
   width: number;
   scrollX: number;
-  caret: CaretRange | undefined;
+  selected: CellRange | undefined;
   /** The row wears the lifted cursor/selection background, so its changed words layer over that. */
   lifted: boolean;
 }) => {
@@ -93,22 +82,22 @@ const StyledLine = (props: {
       ? row.spans
       : sliceSpansWindow(row.spans, props.scrollX, props.width);
 
-    // The caret word gets a background. Its range is in content display columns;
-    // In scroll mode the window starts at scrollX, so shift the range by it. In
-    // Wrap mode the column styling follows the word wherever it wraps.
+    // The selected range is in content display columns; in scroll mode the window starts at
+    // ScrollX, so shift it. In wrap mode the styling follows the text wherever it wraps.
     const offset = props.wrap ? 0 : props.scrollX;
 
     const spans: HighlightSpan[] =
-      props.caret === undefined
+      props.selected === undefined
         ? windowed
         : markRange(
             windowed,
-            props.caret.from - offset,
-            props.caret.to - offset
+            props.selected.from - offset,
+            props.selected.to - offset
           );
 
-    // A changed word layers its line's sign color over the row's own background; the
-    // Caret word wins over it.
+    // A changed word layers its line's sign color over the row's own background. A row with
+    // Selected text drops its marks: in a theme with no hue they are the selection's own grey, so
+    // Its end could not be seen.
     const wordBg = changedWordBg(row, props.lifted);
 
     ref.content = new StyledText(
@@ -116,10 +105,12 @@ const StyledLine = (props: {
         const chunk = fg(part.fg ?? theme.colors.text.primary)(part.text);
 
         if (part.highlight === true) {
-          return bg(theme.colors.caret.wordBg)(chunk);
+          return bg(theme.colors.selection.bg)(chunk);
         }
 
-        return part.changed === true ? bg(wordBg)(chunk) : chunk;
+        return part.changed === true && props.selected === undefined
+          ? bg(wordBg)(chunk)
+          : chunk;
       })
     );
   });
@@ -130,7 +121,7 @@ const StyledLine = (props: {
         ref = el;
         // Opt this text leaf out of OpenTUI's native text selection (which a drag
         // Would otherwise start on the deepest hit, painting its own colorful
-        // Highlight over our band); stet owns the line selection.
+        // Highlight over our band); stet owns the selection.
         el.selectable = false;
       }}
       // Pinned to the width `heights()` measured against: left to flex layout, the leaf sizes one
@@ -144,12 +135,22 @@ const StyledLine = (props: {
 
 const wrap = () => state.overflow() === "wrap";
 
+const clickUnit = (count: number): SelectionUnit => {
+  if (count === 3) {
+    return "line";
+  }
+
+  return count === 2 ? "word" : "character";
+};
+
+// Which way a drag at this row scrolls: only past the viewport, since a drag along its first or last
+// Row is selecting that row. The title above and the bar below always leave room to go past.
 const edgeDirection = (localY: number) => {
-  if (localY <= 0) {
+  if (localY < 0) {
     return -1;
   }
 
-  return localY >= state.viewerHeight() - 1 ? 1 : 0;
+  return localY >= state.viewerHeight() ? 1 : 0;
 };
 
 // Like the tree's cursor row, the caret line lifts only while the viewer holds focus: with no frame
@@ -157,16 +158,68 @@ const edgeDirection = (localY: number) => {
 const isCursor = (row: DiffLineRow) =>
   state.focusedPane() === "diff" && row.navIndex === state.cursorIndex();
 
-// A row inside the active line selection. Selected rows reuse the cursor lift
-// (`resolveBackground`'s active branch), so the band is theme-correct per diff
-// State with no new token; the focus row still shows its caret word on top.
+// A row inside a whole-line selection wears the cursor lift (`resolveBackground`'s active branch),
+// So the band is theme-correct per diff state and covers blank lines. Any other selection paints
+// Its own columns (`selectedCells`).
 const isSelected = (row: DiffLineRow) => {
   const range = state.selectionRange();
 
   return (
-    range !== undefined && row.navIndex >= range[0] && row.navIndex <= range[1]
+    range !== undefined &&
+    state.viewerSelection()?.unit === "line" &&
+    row.navIndex >= range.start.index &&
+    row.navIndex <= range.end.index
   );
 };
+
+const rowText = (row: DiffLineRow) =>
+  row.spans.map((span) => span.text).join("");
+
+/** The selected display columns of a row, for a selection that is not whole lines. */
+const selectedCells = (row: DiffLineRow): CellRange | undefined => {
+  const range = state.selectionRange();
+
+  if (range === undefined || state.viewerSelection()?.unit === "line") {
+    return undefined;
+  }
+
+  const content = rowText(row);
+  const columns = selectedColumns(range, row.navIndex, content);
+
+  return columns === undefined || columns.from === columns.to
+    ? undefined
+    : {
+        from: cellWidth(content.slice(0, columns.from)),
+        to: cellWidth(content.slice(0, columns.to)),
+      };
+};
+
+/** Whether a point is on selected text, or on a selected line. */
+const isOnSelection = ({ column, index }: SelectionPoint) => {
+  const range = state.selectionRange();
+
+  if (range === undefined) {
+    return false;
+  }
+
+  if (state.viewerSelection()?.unit === "line") {
+    return index >= range.start.index && index <= range.end.index;
+  }
+
+  const content = state.navigableLines()[index]?.content ?? "";
+  const columns = selectedColumns(range, index, content);
+
+  // A blank line has no glyph to be on, but a selection that spans it copies it.
+  return (
+    columns !== undefined &&
+    (content === "" || (column >= columns.from && column < columns.to))
+  );
+};
+
+// A lifted row is too close to the selection's own background to show where it ends, so a row with
+// Selected text drops the lift from its code. Its gutter keeps it, so the caret line stays marked.
+const isCodeLifted = (row: DiffLineRow) =>
+  isSelected(row) || (isCursor(row) && selectedCells(row) === undefined);
 
 // The gutter reads left to right as change bar, number, then code: the far-left change bar
 // And the number digits take the diff state (add green / remove red / context neutral).
@@ -289,14 +342,18 @@ const toggleMarker = (row: DiffRow) => {
 export const DiffView = () => {
   const renderer = useRenderer();
 
-  const measurer = createLineMeasurer(
-    renderer.widthMethod,
-    renderer.nativeScene
-  );
+  // Remade when the terminal's width method changes, so wrapped rows and pointer columns are always
+  // Measured the one way.
+  const measurer = createMemo(() => {
+    const current = createLineMeasurer(widthMethod(), renderer.nativeScene);
 
-  onCleanup(() => {
-    measurer.destroy();
+    onCleanup(() => {
+      current.destroy();
+    });
+
+    return current;
   });
+
   let scrollRef: ScrollBoxRenderable | undefined;
   let interactionRef: BoxRenderable | undefined;
   // Scroll offsets live in `state` (lifted out of this component) so a navigation
@@ -313,8 +370,13 @@ export const DiffView = () => {
 
   // Mouse capture belongs to one stable viewer-sized interaction layer, never a
   // Windowed row that can unmount while scrolling changes the visible slice.
-  let dragActive = false;
-  let dragScrollDirection = 0;
+  // The left press a drag extends from; undefined between gestures.
+  let press: { anchor: SelectionPoint; unit: SelectionUnit } | undefined;
+  // Whether this gesture selected anything, which its release copies.
+  let selecting = false;
+  let lastClick = { count: 0, time: 0, x: 0, y: 0 };
+  let dragPointer = { x: 0, y: 0 };
+  let dragScroll = { x: 0, y: 0 };
   let dragScrollTimer: ReturnType<typeof setInterval> | undefined;
 
   // Nearest line row's navIndex for every `rows()` index (the line at or before it,
@@ -333,7 +395,6 @@ export const DiffView = () => {
     });
   });
 
-  const navIndexForRow = (rowIndex: number) => nearestNavByRow()[rowIndex];
   const findMatchSet = createMemo(() => new Set(state.findMatches()));
 
   // Row indices of the navigable (line) rows, so a cursor navIndex maps to its
@@ -388,10 +449,7 @@ export const DiffView = () => {
       }
 
       // The gutter (bar/number/glyph) is fixed, so the content that wraps is code only.
-      return measurer.measure(
-        row.spans.map((span) => span.text).join(""),
-        width
-      );
+      return measurer().measure(rowText(row), width);
     });
   });
 
@@ -405,15 +463,22 @@ export const DiffView = () => {
 
     for (const row of rows()) {
       if (isLineRow(row)) {
-        max = Math.max(
-          max,
-          Bun.stringWidth(row.spans.map((span) => span.text).join(""))
-        );
+        max = Math.max(max, cellWidth(rowText(row)));
       }
     }
 
     return max;
   });
+
+  // Which way a drag at this column scrolls: out over the gutter, or against the last column, since
+  // The viewer reaches the terminal's right edge and a pointer cannot go past it.
+  const horizontalEdge = (localX: number) => {
+    if (localX < gutterWidth()) {
+      return -1;
+    }
+
+    return localX >= gutterWidth() + contentWidth() - 1 ? 1 : 0;
+  };
 
   const maxScrollX = () => Math.max(0, longestLine() - contentWidth());
 
@@ -489,7 +554,6 @@ export const DiffView = () => {
   // Delta so the scrollbox never also acts on it: scrollTop must stay the single
   // Source of truth for the window, or a native read-back races the uncommitted
   // Scroll and the slice trails the visible content, blanking the lower viewport.
-  const HORIZONTAL_STEP = 4;
   const VERTICAL_STEP = 3;
 
   const onWheel = (event: MouseEvent) => {
@@ -537,25 +601,99 @@ export const DiffView = () => {
     currentScroll = untrack(scrollTop)
   ) => rowIndexAtOffset(rowEnds(), currentScroll + localY);
 
-  const extendDragTo = (localY: number, currentScroll = untrack(scrollTop)) => {
-    const viewportCell = Math.max(
+  // The glyph under a pointer, clamped into the visible content: past either end of a line is that
+  // Line's end, below the file is its last line's end, and a marker row is the line on the drag's own
+  // Side.
+  const pointAt = (
+    pointer: { x: number; y: number },
+    currentScroll = untrack(scrollTop)
+  ): SelectionPoint | undefined => {
+    const y = Math.max(0, Math.min(pointer.y, state.viewerHeight() - 1));
+    const rowIndex = rowIndexForPointer(y, currentScroll);
+    const row = rows()[rowIndex ?? rows().length - 1];
+
+    if (row === undefined) {
+      return undefined;
+    }
+
+    if (rowIndex === undefined || !isLineRow(row)) {
+      const index = nearestNavByRow()[rowIndex ?? rows().length - 1];
+
+      if (index === undefined) {
+        return undefined;
+      }
+
+      const before = (lineRowIndices()[index] ?? 0) <= (rowIndex ?? Infinity);
+
+      // A drag up from below the marker stops short of the lines it hides.
+      if (before && press !== undefined && press.anchor.index > index) {
+        return { column: 0, index: index + 1 };
+      }
+
+      return {
+        column: before
+          ? (state.navigableLines()[index]?.content.length ?? 0)
+          : 0,
+        index,
+      };
+    }
+
+    const content = rowText(row);
+
+    const x = Math.max(
       0,
-      Math.min(localY, state.viewerHeight() - 1)
+      Math.min(pointer.x - gutterWidth(), contentWidth() - 1)
     );
 
-    const rowIndex = rowIndexForPointer(viewportCell, currentScroll);
-    const nav = rowIndex === undefined ? undefined : navIndexForRow(rowIndex);
-
-    if (nav !== undefined) {
-      batch(() => {
-        state.setFocusedPane("diff");
-        state.extendSelectionTo(nav);
-      });
+    if (!wrap()) {
+      return {
+        column: columnToIndex(content, x + untrack(scrollX)),
+        index: row.navIndex,
+      };
     }
+
+    const visualRow = currentScroll + y - (rowEnds()[rowIndex - 1] ?? 0);
+
+    const start = measurer().offsetForVisualRow(
+      content,
+      contentWidth(),
+      visualRow
+    );
+
+    const next = measurer().offsetForVisualRow(
+      content,
+      contentWidth(),
+      visualRow + 1
+    );
+
+    // Past the end of a wrapped row is that row's last glyph, not one from the row below.
+    return {
+      column: columnToIndex(
+        content,
+        next > start ? Math.min(start + x, next - 1) : start + x
+      ),
+      index: row.navIndex,
+    };
+  };
+
+  // How many times in a row this spot was clicked, up to a triple-click, by OpenTUI's own rule (its
+  // Mouse events carry no count).
+  const clickCount = (event: MouseEvent) => {
+    const now = performance.now();
+
+    const repeated =
+      now - lastClick.time <= 500 &&
+      Math.abs(event.x - lastClick.x) <= 1 &&
+      Math.abs(event.y - lastClick.y) <= 1;
+
+    const count = repeated ? Math.min(lastClick.count + 1, 3) : 1;
+    lastClick = { count, time: now, x: event.x, y: event.y };
+
+    return count;
   };
 
   const stopDragScroll = () => {
-    dragScrollDirection = 0;
+    dragScroll = { x: 0, y: 0 };
 
     if (dragScrollTimer !== undefined) {
       clearInterval(dragScrollTimer);
@@ -563,54 +701,208 @@ export const DiffView = () => {
     }
   };
 
-  const finishDrag = () => {
-    dragActive = false;
+  const endDrag = () => {
+    press = undefined;
+    selecting = false;
     stopDragScroll();
+  };
+
+  const selectTo = (focus: SelectionPoint) => {
+    if (press === undefined) {
+      return;
+    }
+
+    // Once it selects, the selection holds the anchor: a refresh moves it with its text, or drops
+    // It, and the gesture with it.
+    const held = selecting ? state.viewerSelection() : press;
+
+    if (held === undefined) {
+      endDrag();
+
+      return;
+    }
+
+    selecting = true;
+    state.select({ anchor: held.anchor, focus, unit: held.unit });
+  };
+
+  // A drag selects once it leaves the glyph (or, from the gutter, the line) it started on, so a
+  // Click that wobbles selects nothing.
+  const extendDrag = () => {
+    const focus = pointAt(dragPointer);
+
+    if (focus === undefined || press === undefined) {
+      return;
+    }
+
+    const moved =
+      focus.index !== press.anchor.index ||
+      (press.unit !== "line" && focus.column !== press.anchor.column);
+
+    if (selecting || moved) {
+      selectTo(focus);
+    }
+  };
+
+  // The release copies, once: OpenTUI reports both a drag's end and the button going up.
+  const finishDrag = () => {
+    const copies = selecting;
+    endDrag();
+
+    if (copies) {
+      state.copySelection();
+    }
+  };
+
+  // One press, in the caller's batch, so it lands as one update. Returns whether it asks for the
+  // Context menu, which opens after the batch: moving the cursor can scroll, and the menu closes
+  // On a scroll it did not open at.
+  const pressAt = (event: MouseEvent) => {
+    // A press that leaves the cursor where it is drifts nothing the menu's guard watches.
+    state.closeCommandMenu();
+    endDrag();
+    state.setFocusedPane("diff");
+
+    const pointer = localPointer(event);
+    const rowIndex = rowIndexForPointer(pointer.y);
+    const row = rowIndex === undefined ? undefined : rows()[rowIndex];
+    const point = pointAt(pointer);
+
+    if (row === undefined || point === undefined) {
+      if (event.button === 0) {
+        state.clearSelection();
+      }
+
+      return false;
+    }
+
+    if (!isLineRow(row)) {
+      toggleMarker(row);
+
+      return false;
+    }
+
+    if (isRightClick(event)) {
+      // The menu acts on a selection it opens over, so the press keeps it.
+      if (!isOnSelection(point)) {
+        state.setCursorRow(point.index);
+      }
+
+      return true;
+    }
+
+    if (event.button !== 0) {
+      return false;
+    }
+
+    if (event.modifiers.shift) {
+      const current = state.viewerSelection();
+
+      press = {
+        anchor: current?.anchor ?? { column: 0, index: state.cursorIndex() },
+        unit: current?.unit ?? "line",
+      };
+      selectTo(point);
+
+      return false;
+    }
+
+    const count = clickCount(event);
+
+    press = {
+      anchor: point,
+      unit: pointer.x < gutterWidth() ? "line" : clickUnit(count),
+    };
+    state.setCursorRow(point.index);
+
+    if (count > 1) {
+      selectTo(point);
+    }
+
+    return false;
   };
 
   const scrollDragSelection = () => {
-    if (!dragActive || dragScrollDirection === 0) {
-      stopDragScroll();
+    const top = untrack(scrollTop);
+    const left = untrack(scrollX);
 
-      return;
-    }
+    const nextTop = Math.max(0, Math.min(top + dragScroll.y, maxScrollY()));
 
-    const current = untrack(scrollTop);
-
-    const next = Math.max(
+    const nextLeft = Math.max(
       0,
-      Math.min(current + dragScrollDirection, maxScrollY())
+      Math.min(left + dragScroll.x * HORIZONTAL_STEP, maxScrollX())
     );
 
-    if (next === current) {
+    if (nextTop === top && nextLeft === left) {
       stopDragScroll();
 
       return;
     }
 
-    setScrollTop(next);
-    extendDragTo(dragScrollDirection < 0 ? 0 : state.viewerHeight() - 1, next);
+    batch(() => {
+      setScrollTop(nextTop);
+      setScrollX(nextLeft);
+    });
+    extendDrag();
   };
 
-  const updateDragScroll = (localY: number) => {
-    const direction = edgeDirection(localY);
+  const updateDragScroll = () => {
+    const direction = {
+      x: wrap() || press?.unit === "line" ? 0 : horizontalEdge(dragPointer.x),
+      y: edgeDirection(dragPointer.y),
+    };
 
-    if (direction === 0) {
+    if (direction.x === 0 && direction.y === 0) {
       stopDragScroll();
 
       return;
     }
 
-    if (direction === dragScrollDirection && dragScrollTimer !== undefined) {
+    if (
+      direction.x === dragScroll.x &&
+      direction.y === dragScroll.y &&
+      dragScrollTimer !== undefined
+    ) {
       return;
     }
 
     stopDragScroll();
-    dragScrollDirection = direction;
+    dragScroll = direction;
     dragScrollTimer = setInterval(scrollDragSelection, 50);
   };
 
-  onCleanup(finishDrag);
+  onCleanup(endDrag);
+
+  // A press belongs to the content it landed on, as a selection does.
+  createEffect(
+    on(
+      [state.selectedPath, state.scopeIdentity, state.repoRoot],
+      () => {
+        endDrag();
+      },
+      { defer: true }
+    )
+  );
+
+  // A refresh under a held button moves a press that has not selected yet, as it does a selection.
+  createEffect(
+    on(state.navigableLines, (lines, before) => {
+      if (press === undefined || selecting || before === undefined) {
+        return;
+      }
+
+      const followed = followLines(before, lines, {
+        ...press,
+        focus: press.anchor,
+      });
+
+      if (followed === undefined) {
+        endDrag();
+      } else {
+        press = { anchor: followed.anchor, unit: followed.unit };
+      }
+    })
+  );
 
   // Keep the cursor's row inside the viewport by scrolling the box to it, with a
   // Margin of context rows so the cursor never glues to the very edge (where a
@@ -622,7 +914,7 @@ export const DiffView = () => {
   createEffect((follow: boolean) => {
     const cursorRow = lineRowIndices()[state.cursorIndex()];
 
-    if (dragActive) {
+    if (press !== undefined) {
       return true;
     }
 
@@ -650,16 +942,6 @@ export const DiffView = () => {
     return true;
   }, followOnMount);
 
-  // The caret word's display-column range on the cursor line, derived from the
-  // Caret offset; undefined when the caret sits in a gap (no word to highlight).
-  const caretRange = createMemo<CaretRange | undefined>(() => {
-    const word = state.caretWord();
-
-    return word === undefined
-      ? undefined
-      : caretRangeFor(state.cursorLineContent(), word);
-  });
-
   // The cursor row's cumulative top, the same sum the vertical-follow effect uses,
   // Lifted to a memo so the context menu's anchor reads it without recomputing.
   const cursorTop = createMemo(() => {
@@ -674,25 +956,22 @@ export const DiffView = () => {
   // Space the context menu's absolute left/clamp live in.
   const innerWidth = () => contentWidth() + gutterWidth();
 
-  // The caret's on-screen cell, in viewer-content coordinates, for the context menu.
-  // A line-level caret (a gutter click, no word) has no `caretRange`, so fall back to
-  // The line start rather than
-  // Leaving the open menu unanchored and invisible. Undefined only when there is no
-  // Cursor line or it is scrolled out of view, which hides the menu.
+  // The cell the context menu opens at, in viewer-content coordinates: the one right-clicked, else
+  // The start of the caret line. Undefined when that line is scrolled out of view, which hides the
+  // Menu.
   const commandAnchor = createMemo(() => {
-    const top = cursorTop();
+    const at = state.commandMenuAnchor();
 
-    return top === undefined
+    if (at !== undefined) {
+      return { col: at.x, row: at.y };
+    }
+
+    const top = cursorTop();
+    const row = top === undefined ? -1 : top - state.viewerScrollTop();
+
+    return row < 0 || row >= state.viewerHeight()
       ? undefined
-      : caretCell({
-          caretFrom: caretRange()?.from ?? 0,
-          contentLeft: gutterWidth(),
-          cursorTop: top,
-          scrollTop: state.viewerScrollTop(),
-          scrollX: state.viewerScrollX(),
-          viewportHeight: state.viewerHeight(),
-          viewportWidth: innerWidth(),
-        });
+      : { col: gutterWidth(), row };
   });
 
   // A viewer menu with no on-screen anchor (the caret is scrolled out of view) would
@@ -708,34 +987,58 @@ export const DiffView = () => {
     }
   });
 
-  // Keep the caret word in view as it hops along a long line (scroll mode only;
-  // Wrap mode has no horizontal scroll). Reads scrollX untracked, like the vertical
-  // Follow, so free horizontal wheel scrolling is never snapped back.
-  const CARET_SCROLL_MARGIN = 4;
-  createEffect((follow: boolean) => {
-    const range = caretRange();
+  // Scroll a requested range of the caret line into view: sideways, or in wrap mode down to its
+  // Wrapped row, since a line can be taller than the viewport. The request is consumed here, so it
+  // Never fights a later scroll.
+  const REVEAL_MARGIN = 4;
+  createEffect(() => {
+    const range = state.revealRange();
 
-    if (range === undefined || wrap()) {
-      return true;
+    if (range === undefined) {
+      return;
     }
 
-    const current = untrack(scrollX);
+    state.setRevealRange(undefined);
 
-    const next = followScrollX({
-      current,
-      from: range.from,
-      margin: CARET_SCROLL_MARGIN,
-      maxScroll: maxScrollX(),
-      to: range.to,
-      viewport: contentWidth(),
-    });
+    if (!wrap()) {
+      setScrollX((current) =>
+        followScrollX({
+          current,
+          from: range.from,
+          margin: REVEAL_MARGIN,
+          maxScroll: maxScrollX(),
+          to: range.to,
+          viewport: contentWidth(),
+        })
+      );
 
-    if (follow && next !== current) {
-      setScrollX(next);
+      return;
     }
 
-    return true;
-  }, followOnMount);
+    const rowIndex = lineRowIndices()[state.cursorIndex()] ?? 0;
+    const row = rows()[rowIndex];
+
+    if (row === undefined || !isLineRow(row)) {
+      return;
+    }
+
+    const wrappedRow = measurer().visualRowForOffset(
+      rowText(row),
+      contentWidth(),
+      range.from
+    );
+
+    setScrollTop((current) =>
+      followScrollTop({
+        current,
+        height: 1,
+        margin: CURSOR_SCROLL_MARGIN,
+        maxScroll: maxScrollY(),
+        top: (rowEnds()[rowIndex - 1] ?? 0) + wrappedRow,
+        viewport: state.viewerHeight(),
+      })
+    );
+  });
 
   // Each line's background: a find match wins, else a faint add/remove tint (the change
   // Bar and colored number carry the diff state; this is just a subtle block cue). The
@@ -766,7 +1069,7 @@ export const DiffView = () => {
   };
 
   const contentBackground = (row: DiffLineRow) =>
-    resolveBackground(contentState(row), isCursor(row) || isSelected(row));
+    resolveBackground(contentState(row), isCodeLifted(row));
 
   const lineLabel = (row: DiffLineRow) =>
     String(row.newLine ?? row.oldLine ?? "").padStart(numberWidth());
@@ -801,9 +1104,6 @@ export const DiffView = () => {
               when={asLineRow(row())}
               fallback={
                 <box
-                  ref={(el) => {
-                    el.selectable = false;
-                  }}
                   width="100%"
                   height={1}
                   backgroundColor={theme.colors.surface.panel}
@@ -823,12 +1123,6 @@ export const DiffView = () => {
             >
               {(line) => (
                 <box
-                  // Own the line selection here, so disable OpenTUI's native text
-                  // Selection on the row (it would otherwise start its own drag
-                  // Highlight and copy button, fighting our band).
-                  ref={(el) => {
-                    el.selectable = false;
-                  }}
                   width="100%"
                   flexDirection="row"
                   // Explicit per-row height in both modes, from the same `heights()`
@@ -855,20 +1149,14 @@ export const DiffView = () => {
                   >
                     {`${lineLabel(line())} `}
                   </text>
-                  <box
-                    ref={(el) => {
-                      el.selectable = false;
-                    }}
-                    flexGrow={1}
-                    backgroundColor={contentBackground(line())}
-                  >
+                  <box flexGrow={1} backgroundColor={contentBackground(line())}>
                     <StyledLine
                       row={line()}
                       wrap={wrap()}
                       width={contentWidth()}
                       scrollX={scrollX()}
-                      caret={isCursor(line()) ? caretRange() : undefined}
-                      lifted={isCursor(line()) || isSelected(line())}
+                      selected={selectedCells(line())}
+                      lifted={isCodeLifted(line())}
                     />
                   </box>
                 </box>
@@ -894,81 +1182,21 @@ export const DiffView = () => {
         onMouseScroll={onWheel}
         onMouseDown={(event: MouseEvent) => {
           event.stopPropagation();
-          const pointer = localPointer(event);
-          const currentScroll = untrack(scrollTop);
-          const rowIndex = rowIndexForPointer(pointer.y, currentScroll);
 
-          if (rowIndex === undefined) {
-            state.setFocusedPane("diff");
-
-            return;
-          }
-
-          const row = rows()[rowIndex];
-
-          if (row === undefined) {
-            state.setFocusedPane("diff");
-
-            return;
-          }
-
-          if (!isLineRow(row)) {
-            batch(() => {
-              state.setFocusedPane("diff");
-              toggleMarker(row);
-            });
-
-            return;
-          }
-
-          if (event.modifiers.shift) {
-            batch(() => {
-              state.setFocusedPane("diff");
-              state.extendSelectionTo(row.navIndex);
-            });
-
-            return;
-          }
-
-          dragActive = event.button === 0;
-          batch(() => {
-            state.setFocusedPane("diff");
-            state.setCursorRow(row.navIndex);
-            const content = row.spans.map((part) => part.text).join("");
-            const rowTop = rowEnds()[rowIndex - 1] ?? 0;
-
-            const offset = wrap()
-              ? measurer.offsetForVisualRow(
-                  content,
-                  contentWidth(),
-                  currentScroll + pointer.y - rowTop
-                )
-              : scrollX();
-
-            const column = pointer.x - gutterWidth() + offset;
-
-            if (column >= 0) {
-              const index = columnToIndex(content, column);
-              state.setCursorColumn(wordAt(content, index)?.start ?? index);
-            } else {
-              state.setCaretLineLevel(true);
-            }
-          });
-
-          if (isRightClick(event)) {
-            state.openCommandMenu("viewer");
+          if (batch(() => pressAt(event))) {
+            state.openCommandMenu("viewer", localPointer(event));
           }
         }}
         onMouseDrag={(event: MouseEvent) => {
           event.stopPropagation();
 
-          if (!dragActive) {
+          if (press === undefined) {
             return;
           }
 
-          const pointer = localPointer(event);
-          extendDragTo(pointer.y);
-          updateDragScroll(pointer.y);
+          dragPointer = localPointer(event);
+          extendDrag();
+          updateDragScroll();
         }}
         onMouseDragEnd={finishDrag}
         onMouseUp={finishDrag}

@@ -1,7 +1,10 @@
+import { graphemeClusters } from "@/utils/text";
+
+import { cellWidth } from "./cells";
 import type { RenderSpan } from "./hast";
 
 export interface HighlightSpan extends RenderSpan {
-  /** Set on the spans inside the caret word so the renderer paints a background. */
+  /** Set on the selected spans so the renderer paints a background. */
   highlight?: boolean;
 }
 
@@ -14,7 +17,7 @@ const highlightSpan = (
   highlight ? { ...span, highlight: true, text } : { ...span, text };
 
 // Tag the display-column range [from, to) of these spans as highlighted, splitting
-// Spans at the boundaries so the caret word can carry a background. Columns are
+// Spans at the boundaries so a selection can carry a background. Columns are
 // Display columns from the start of `spans` (wide glyphs count as two), so the
 // Caller passes a window-relative range. A no-op range returns the spans unchanged.
 export const markRange = (
@@ -33,7 +36,7 @@ export const markRange = (
     let text = "";
     let highlighted = false;
 
-    for (const char of span.text) {
+    for (const char of graphemeClusters(span.text)) {
       const inRange = col >= from && col < to;
 
       if (text !== "" && inRange !== highlighted) {
@@ -43,7 +46,7 @@ export const markRange = (
 
       highlighted = inRange;
       text += char;
-      col += Bun.stringWidth(char);
+      col += cellWidth(char);
     }
 
     if (text !== "") {
@@ -65,8 +68,8 @@ export const columnToIndex = (line: string, col: number): number => {
   let display = 0;
   let index = 0;
 
-  for (const char of line) {
-    const charWidth = Bun.stringWidth(char);
+  for (const char of graphemeClusters(line)) {
+    const charWidth = cellWidth(char);
 
     if (display + charWidth > col) {
       return index;
@@ -82,7 +85,8 @@ export const columnToIndex = (line: string, col: number): number => {
 // Slice spans to a horizontal window [start, start+width) in display columns,
 // Left-aligned, so the diff can scroll long lines horizontally (shared offset
 // Across all lines) while clipping the rest. Wide (CJK) glyphs count as two
-// Columns; a glyph straddling either edge is dropped rather than split.
+// Columns; a glyph straddling an edge is not split, and one cut by the left edge leaves blank cells
+// Behind, so the rest of the line keeps its columns.
 export const sliceSpansWindow = (
   spans: RenderSpan[],
   start: number,
@@ -99,11 +103,13 @@ export const sliceSpansWindow = (
   for (const span of spans) {
     let text = "";
 
-    for (const char of span.text) {
-      const charWidth = Bun.stringWidth(char);
+    for (const char of graphemeClusters(span.text)) {
+      const charWidth = cellWidth(char);
 
       if (col >= start && col + charWidth <= end) {
         text += char;
+      } else if (col < start && col + charWidth > start) {
+        text += " ".repeat(col + charWidth - start);
       }
 
       col += charWidth;

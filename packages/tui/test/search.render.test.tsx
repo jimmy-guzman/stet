@@ -71,7 +71,7 @@ describe("project content search", () => {
 
       // Enter the results, jump the selection to the last navigable row with G
       // (lib.ts's match, the file after a.ts), then open it: the caret must land
-      // On the matched line 3 at the match column, not the top of the file.
+      // On the matched line 3, not the top of the file.
       mockInput.pressKey("n", { ctrl: true });
       mockInput.pressKey("G");
       mockInput.pressEnter();
@@ -81,8 +81,7 @@ describe("project content search", () => {
         (frame) =>
           !frame.includes("g/G ends") &&
           state.selectedPath() === "src/lib.ts" &&
-          state.cursorLineNumber() === 3 &&
-          state.caretColumn() === 14
+          state.cursorLineNumber() === 3
       );
 
       expect(jumped).not.toContain("g/G ends");
@@ -99,8 +98,7 @@ describe("project content search", () => {
         "forward to the search match",
         () =>
           state.diffView()?.path === "src/lib.ts" &&
-          state.cursorLineNumber() === 3 &&
-          state.caretColumn() === 14
+          state.cursorLineNumber() === 3
       );
 
       // Reopening restores the query and the result set without retyping.
@@ -200,8 +198,7 @@ describe("project content search", () => {
       state.diffView()?.path === "src/zzz.ts" &&
       state.fileView() &&
       state.diffView()?.showFileContent === true &&
-      state.cursorLineNumber() === matchLine &&
-      state.caretColumn() === 7;
+      state.cursorLineNumber() === matchLine;
 
     try {
       // Seeded on aaa.ts; the only needle match is line 50 of the changed zzz.ts.
@@ -317,7 +314,7 @@ describe("project content search", () => {
       await mockMouse.click(state.layout().viewer.x + 10, matchRowY);
       await settleUntil(
         "double click opens",
-        () => state.cursorLineNumber() === 2 && state.caretColumn() === 7
+        () => state.mainView() === "file" && state.cursorLineNumber() === 2
       );
 
       // Back into the pane for the states below.

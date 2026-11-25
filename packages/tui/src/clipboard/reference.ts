@@ -1,7 +1,8 @@
 export interface CopyReferencePayload {
   path: string;
   line?: number;
-  column?: number;
+  /** The last line of a range; a range of one line reads as that line. */
+  endLine?: number;
 }
 
 export const formatCopyReference = (payload: CopyReferencePayload) => {
@@ -9,25 +10,9 @@ export const formatCopyReference = (payload: CopyReferencePayload) => {
     return payload.path;
   }
 
-  if (payload.column === undefined) {
+  if (payload.endLine === undefined || payload.endLine === payload.line) {
     return `${payload.path}:${payload.line}`;
   }
 
-  return `${payload.path}:${payload.line}:${payload.column}`;
-};
-
-const LINUX_CLIPBOARD_COMMANDS = [
-  ["wl-copy"],
-  ["xclip", "-selection", "clipboard"],
-  ["xsel", "--clipboard", "--input"],
-];
-
-export const clipboardCommand = () => {
-  if (process.platform === "darwin") {
-    return ["pbcopy"];
-  }
-
-  return LINUX_CLIPBOARD_COMMANDS.find(
-    (command) => Bun.which(command[0] ?? "") !== null
-  );
+  return `${payload.path}:${payload.line}-${payload.endLine}`;
 };

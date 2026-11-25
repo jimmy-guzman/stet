@@ -137,6 +137,7 @@ export const ThemeCombobox = () => {
                   }}
                 >
                   <text
+                    selectable={false}
                     fg={
                       current()
                         ? theme.colors.accent.primary
@@ -145,8 +146,11 @@ export const ThemeCombobox = () => {
                   >
                     {current() ? "✓ " : "  "}
                   </text>
-                  <text fg={swatch(item().name)}>{"██ "}</text>
+                  <text selectable={false} fg={swatch(item().name)}>
+                    {"██ "}
+                  </text>
                   <text
+                    selectable={false}
                     fg={
                       selected()
                         ? theme.colors.text.selected

@@ -1,14 +1,6 @@
 import { expect, test } from "bun:test";
 
-import {
-  firstWord,
-  lastWord,
-  nextWord,
-  prevWord,
-  wordAt,
-  words,
-  wordStarts,
-} from "@/diff/words";
+import { wordAt, words } from "@/diff/words";
 
 const line = "const user = getUser(id)";
 // Words:        const(0-5) user(6-10) getUser(13-20) id(21-23)
@@ -20,7 +12,6 @@ test("splits a line into identifier runs, skipping punctuation and spaces", () =
     { end: 20, start: 13 },
     { end: 23, start: 21 },
   ]);
-  expect(wordStarts(line)).toEqual([0, 6, 13, 21]);
 });
 
 test("treats unicode letters and digits, _ and $ as identifier characters", () => {
@@ -39,19 +30,9 @@ test("keeps an astral identifier glyph whole (no surrogate-pair split)", () => {
   expect(wordAt(astral, 1)).toEqual({ end: 4, start: 0 });
 });
 
-test("a blank or whitespace-only line has no words; the caret home is 0", () => {
+test("a blank or whitespace-only line has no words", () => {
   expect(words("   ")).toEqual([]);
-  expect(wordStarts("")).toEqual([]);
-  expect(firstWord("   ")).toBe(0);
-  expect(firstWord(line)).toBe(0);
-  expect(firstWord("  hi")).toBe(2);
-});
-
-test("firstWord and lastWord bracket the line's words for caret wrapping", () => {
-  expect(firstWord(line)).toBe(0);
-  expect(lastWord(line)).toBe(21);
-  expect(lastWord("   ")).toBe(0);
-  expect(lastWord("one")).toBe(0);
+  expect(words("")).toEqual([]);
 });
 
 test("wordAt returns the owning word, or undefined inside a gap", () => {
@@ -65,28 +46,13 @@ test("wordAt returns the owning word, or undefined inside a gap", () => {
   expect(wordAt(line, 99)).toBeUndefined();
 });
 
-test("nextWord hops to the following word start, then stays at the last", () => {
-  expect(nextWord(line, 0)).toBe(6);
-  expect(nextWord(line, 6)).toBe(13);
-  // From mid-word
-  expect(nextWord(line, 8)).toBe(13);
-  // Already on the last word
-  expect(nextWord(line, 21)).toBe(21);
-});
-
-test("prevWord hops to the preceding word start, then stays at the first", () => {
-  expect(prevWord(line, 21)).toBe(13);
-  expect(prevWord(line, 13)).toBe(6);
-  // From mid-word jumps to that word's start
-  expect(prevWord(line, 8)).toBe(6);
-  // Already on the first word
-  expect(prevWord(line, 0)).toBe(0);
-});
-
-test("from a gap with no word ahead/behind, the helpers stay put (so the caret wraps lines)", () => {
-  // "x = y": words x(0), y(4). A trailing gap (index 5, past y) has no word ahead;
-  // A leading gap (index 0 of "  x", before x at 2) has no word behind. Both must
-  // Return the index unchanged so caretNextWord/caretPrevWord take the line-wrap branch.
-  expect(nextWord("x = y", 5)).toBe(5);
-  expect(prevWord("  x", 0)).toBe(0);
+test("a word runs through its joiners", () => {
+  // A Devanagari conjunct is joined by U+200D, and a Persian word by U+200C.
+  expect(wordAt("\u0915\u094D\u200D\u0937 x", 0)).toEqual({
+    end: 4,
+    start: 0,
+  });
+  expect(
+    wordAt("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 x", 0)
+  ).toEqual({ end: 8, start: 0 });
 });

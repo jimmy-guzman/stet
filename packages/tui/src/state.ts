@@ -23,6 +23,7 @@ import type {
   CommandMenuInput,
 } from "./components/command-menu/items";
 import { Config } from "./config/service";
+import { cellWidth } from "./diff/cells";
 import { DiffEngine, languageForPath } from "./diff/engine";
 import type { DiffRender } from "./diff/engine";
 import { followScrollTop } from "./diff/follow";
@@ -32,8 +33,8 @@ import {
   foldRegionsFor,
   remapCursorAfterToggle,
 } from "./diff/regions";
-import type { DiffLineSide, DiffRow } from "./diff/rows";
-import { firstWord, lastWord, nextWord, prevWord, wordAt } from "./diff/words";
+import type { DiffLineSide, DiffRow, NavigableLine } from "./diff/rows";
+import { wordAt } from "./diff/words";
 import { openExternalCommand } from "./editor/reference";
 import { Editor } from "./editor/service";
 import { contentToContextPatch } from "./file/content";
@@ -97,9 +98,10 @@ import { createTreeModel } from "./tree/model";
 import type { TreeMove } from "./tree/model";
 import { worktreeLabel } from "./ui-helpers";
 import { fetchLatestVersion, isNewer } from "./upgrade/release";
-import { findMatches as findMatchIndices } from "./utils/find";
+import { findMatches as findMatchIndices, matchColumn } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
+import { graphemeAt, graphemeClusters } from "./utils/text";
 import {
   back,
   canBack,
@@ -119,6 +121,15 @@ import type {
   Position,
 } from "./viewer/navigation";
 import { buildSearchItems, isNavigableSearchItem } from "./viewer/search-items";
+import {
+  followLines,
+  moveFocusColumn,
+  moveFocusRow,
+  selectedLineNumbers,
+  selectedRange,
+  selectedText,
+} from "./viewer/selection";
+import type { Selection, SelectionPoint } from "./viewer/selection";
 import { Watcher } from "./watcher/service";
 
 // The context the command menu was opened against; a clear effect closes the menu
@@ -132,10 +143,9 @@ interface CommandMenuGuard {
   focusedNodeId: string;
   sidebarScrollTop: number;
   cursorIndex: number;
-  cursorColumn: number;
-  caretLineLevel: boolean;
   scrollTop: number;
   scrollX: number;
+  selection: Selection | undefined;
   scope: string;
   repoRoot: string;
 }
@@ -426,6 +436,9 @@ const readSearchLines = async (
   );
 };
 
+const counted = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
+
 const isGapMarker = (row: DiffRow) =>
   row.kind === "marker" && row.regionKind === "gap";
 
@@ -434,7 +447,6 @@ const recordLeaving = (nav: NavState, leaving: Location | undefined) =>
   leaving === undefined
     ? nav
     : remember(recordCurrent(nav, leaving), leaving.path, {
-        cursorColumn: leaving.cursorColumn,
         cursorLine: leaving.cursorLine,
         cursorSide: leaving.cursorSide,
         jump: leaving.jump,
@@ -663,26 +675,17 @@ const createState = () => {
   const [lastChange, setLastChange] = tracked(0);
   const [lastWatcherTick, setLastWatcherTick] = tracked(0);
   const [cursorIndex, setCursorIndex] = tracked(0);
-  // The in-line caret: a UTF-16 offset (a word start) on the cursor line. Motion
-  // Hops word to word; a precise offset is still stored so a search jump lands
-  // On its exact column and copy-reference can emit `:line:col`. Normalized to the
-  // Line's first word whenever the cursor line or content changes (the Viewer
-  // Effect), unless a restore/jump placed it on a valid word.
-  const [cursorColumn, setCursorColumn] = tracked(0);
-  // True when the caret selects a whole line, not a symbol on it (a click on the
-  // Gutter): no word is highlighted and `y` copies `path:line`, not `path:line:col`.
-  // Transient — any vertical move, word hop, jump, or content click re-selects a
-  // Symbol, so it is never captured into navigation history.
-  const [caretLineLevel, setCaretLineLevel] = tracked(false);
 
-  // The fixed end of a line-range selection: a navIndex, or undefined when there
-  // Is only a caret (today's behavior). The selection spans anchor..cursorIndex,
-  // Whole-line. Transient like `caretLineLevel`: any plain caret move or navigation
-  // Clears it (see `setCursorRow`/`goToLocation`), and it is never captured into
-  // Navigation history. `C` copies the spanned lines' source text.
-  const [selectionAnchor, setSelectionAnchor] = tracked<number | undefined>(
+  // The viewer's text selection, or undefined when there is only a cursor. Transient: any plain
+  // Cursor move or navigation clears it (see `setCursorRow`/`goToLocation`), and it is never
+  // Captured into navigation history.
+  const [viewerSelection, setViewerSelection] = tracked<Selection | undefined>(
     undefined
   );
+
+  const clearSelection = () => {
+    setViewerSelection(undefined);
+  };
 
   /**
    * The viewer's scroll offsets, lifted out of DiffView so a navigation can capture and restore
@@ -691,6 +694,13 @@ const createState = () => {
    */
   const [viewerScrollTop, setViewerScrollTop] = tracked(0);
   const [viewerScrollX, setViewerScrollX] = tracked(0);
+
+  // A one-shot request to scroll a display-column range into view (a search jump, a find match).
+  // DiffView consumes it, since only it knows the content width.
+  const [revealRange, setRevealRange] = tracked<
+    { from: number; to: number } | undefined
+  >(undefined);
+
   // The viewer renders the live signals. History captures them on leave so
   // back/forward and fresh visits can restore the recorded position.
   const [navState, setNavState] = tracked<NavState>(initialNav(undefined));
@@ -1349,6 +1359,8 @@ const createState = () => {
       selectFile(item.path, {
         column: item.match?.column,
         escalate: true,
+        // A pattern's match can run to the end of its line.
+        length: searchRegex() ? Infinity : searchQuery().length,
         line: item.line,
       });
     });
@@ -1757,7 +1769,6 @@ const createState = () => {
 
   // --- status / cursor view-model ---
   const cursorLine = createMemo(() => navigableLines()[cursorIndex()]);
-  const cursorLineContent = createMemo(() => cursorLine()?.content ?? "");
 
   const cursorLineNumber = createMemo(() => {
     const line = cursorLine();
@@ -1765,48 +1776,21 @@ const createState = () => {
     return line?.newLine ?? line?.oldLine;
   });
 
-  // The word the caret sits on, for the highlight. Undefined in line-level mode or on a
-  // Gap/word-less position.
-  const caretWord = createMemo(() =>
-    caretLineLevel() ? undefined : wordAt(cursorLineContent(), cursorColumn())
-  );
-
-  // The exact 1-based column the caret points at, for `:col` in copy. Driven
-  // By line-level alone (not `caretWord`), so a search jump that lands in a gap
-  // Still reports its precise column instead of falling back to line-only.
-  const caretColumn = createMemo(() =>
-    caretLineLevel() ? undefined : cursorColumn() + 1
-  );
-
-  // The inclusive [start, end] navIndex span of the active line selection, ordered
-  // Regardless of drag direction; undefined when only a caret is present. Drives the
-  // Selection band in the viewer and the range `C` copies.
   const selectionRange = createMemo(() => {
-    const anchor = selectionAnchor();
+    const current = viewerSelection();
 
-    if (anchor === undefined) {
-      return anchor;
-    }
-
-    const focus = cursorIndex();
-
-    return [Math.min(anchor, focus), Math.max(anchor, focus)] as const;
+    return current === undefined
+      ? undefined
+      : selectedRange(navigableLines(), current);
   });
 
-  // The selected lines' source text (no sign, no gutter), what `C` copies. Empty
-  // When there is no selection; a folded or git-elided region is excluded for free,
-  // Since it never enters `navigableLines`.
-  const selectionText = createMemo(() => {
+  // The file lines `y` names: the selection's, else the caret line.
+  const referenceLines = createMemo(() => {
     const range = selectionRange();
 
-    if (range === undefined) {
-      return "";
-    }
-
-    return navigableLines()
-      .slice(range[0], range[1] + 1)
-      .map((line) => line.content)
-      .join("\n");
+    return range === undefined
+      ? { endLine: undefined, line: cursorLineNumber() }
+      : selectedLineNumbers(navigableLines(), range);
   });
 
   // The context menu's inputs, gathered from the caret (viewer) or the focused node
@@ -1816,9 +1800,10 @@ const createState = () => {
   const commandMenuInput = (context: "tree" | "viewer"): CommandMenuInput => {
     if (context === "viewer") {
       return {
-        caretColumn: caretColumn(),
         caretLine: cursorLineNumber(),
         context: "viewer",
+        reference: referenceLines(),
+        selecting: selectionRange() !== undefined,
         selectedPath: selectedPath(),
         treeNode: undefined,
         truncated: truncated(),
@@ -1828,9 +1813,10 @@ const createState = () => {
     const node = focusedTreeRow()?.node;
 
     return {
-      caretColumn: undefined,
       caretLine: undefined,
       context: "tree",
+      reference: { endLine: undefined, line: undefined },
+      selecting: false,
       selectedPath: selectedPath(),
       treeNode:
         node === undefined
@@ -1916,7 +1902,6 @@ const createState = () => {
 
     return {
       ...context,
-      cursorColumn: cursorColumn(),
       cursorLine: line?.newLine ?? line?.oldLine,
       cursorSide:
         line?.newLine === undefined && line?.oldLine !== undefined
@@ -1935,7 +1920,6 @@ const createState = () => {
     const target = jump ?? remembered?.jump;
 
     return {
-      cursorColumn: target === undefined ? remembered?.cursorColumn : undefined,
       cursorLine: target?.line ?? remembered?.cursorLine,
       cursorSide: target === undefined ? remembered?.cursorSide : undefined,
       fileView: false,
@@ -1954,7 +1938,7 @@ const createState = () => {
   // Closes the search view instead of being consumed invisibly behind it.
   const goToLocation = (location: Location) => {
     closeSearch();
-    setSelectionAnchor(undefined);
+    clearSelection();
     setSelectedPath(location.path);
     setFileView(location.fileView);
 
@@ -1967,7 +1951,6 @@ const createState = () => {
     }
 
     setPendingRestore({
-      cursorColumn: location.cursorColumn,
       cursorLine: location.cursorLine,
       cursorSide: location.cursorSide,
       jump: location.jump,
@@ -1988,7 +1971,7 @@ const createState = () => {
         closeSearch();
 
         if (kind === "jump") {
-          setSelectionAnchor(undefined);
+          clearSelection();
           setNavState((nav) => {
             const current = currentLocation(nav);
 
@@ -2011,7 +1994,7 @@ const createState = () => {
       leaving?.path === path &&
       leaving.cursorLine === jump.line &&
       leaving.cursorSide === undefined
-        ? { ...leaving, cursorColumn: undefined, jump, kind }
+        ? { ...leaving, jump, kind }
         : arrivingLocation(path, kind, jump);
 
     batch(() => {
@@ -2116,7 +2099,6 @@ const createState = () => {
     batch(() => {
       goToLocation({
         ...location,
-        cursorColumn: undefined,
         cursorSide: undefined,
         fileView: !location.fileView,
         jump: line === undefined ? undefined : { escalate: false, line },
@@ -2134,101 +2116,119 @@ const createState = () => {
     });
   };
 
-  // Move the line cursor and land the caret on the new line's first word, so every
-  // Vertical move (j/k, page, top/bottom, find cycle, the row click) leaves the
-  // Caret on a word. A jump or restore sets the
-  // Caret itself, so those use `setCursorIndex` directly and bypass this.
+  // Move the line cursor: every plain vertical move (j/k, page, top/bottom, find cycle, the row
+  // Click). A jump or restore positions the cursor itself, so those use `setCursorIndex`.
   const setCursorRow = (index: number) => {
     batch(() => {
-      setCaretLineLevel(false);
-      setSelectionAnchor(undefined);
+      clearSelection();
       setCursorIndex(index);
-      setCursorColumn(firstWord(navigableLines()[index]?.content ?? ""));
     });
   };
 
-  // Extend (or begin) a line selection to `index`, keeping the caret on a symbol
-  // There. Mirrors `setCursorRow` but seeds the anchor from the current row on the
-  // First extend and, unlike it, preserves the anchor. Reached by Shift+arrow and a
-  // Shift-click / drag in the viewer.
-  const extendSelectionTo = (index: number) => {
+  // Scroll a line's columns into view.
+  const revealColumns = (content: string, from: number, to: number) => {
+    setRevealRange({
+      from: cellWidth(content.slice(0, from)),
+      to: cellWidth(content.slice(0, to)),
+    });
+  };
+
+  // Scroll a match into view with the rest of its word, so neither is cut short. Starting at the
+  // Match itself keeps it on screen in a word wider than the viewer.
+  const revealMatch = (index: number, column: number, length = 1) => {
+    const content = navigableLines()[index]?.content ?? "";
+    const at = Math.max(0, Math.min(column, content.length));
+    const wordEnd = wordAt(content, at)?.end ?? at;
+    revealColumns(content, at, Math.max(wordEnd, at + length));
+  };
+
+  // Land on a find match, with its text on screen however far the line is scrolled.
+  const goToFindMatch = (index: number) => {
+    const query = findQuery();
+
     batch(() => {
-      if (selectionAnchor() === undefined) {
-        setSelectionAnchor(cursorIndex());
-      }
-
-      setCaretLineLevel(false);
-      setCursorIndex(index);
-      setCursorColumn(firstWord(navigableLines()[index]?.content ?? ""));
+      setCursorRow(index);
+      revealMatch(
+        index,
+        matchColumn(navigableLines()[index]?.content ?? "", query),
+        query.length
+      );
     });
   };
 
-  // Hop the caret to the next word; past the line's last word it wraps to the next
-  // Navigable line's first word, so h/l tab through every symbol in the file. From
-  // Line-level (a gutter click), the first hop just selects the current first word.
-  const caretNextWord = () => {
-    setSelectionAnchor(undefined);
-
-    if (caretLineLevel()) {
-      setCaretLineLevel(false);
-
-      return;
-    }
-
-    const content = cursorLineContent();
-    const column = cursorColumn();
-    const next = nextWord(content, column);
-
-    if (next !== column) {
-      setCursorColumn(next);
-
-      return;
-    }
-
-    const lines = navigableLines();
-    const index = cursorIndex();
-
-    if (index < lines.length - 1) {
-      batch(() => {
-        setCursorIndex(index + 1);
-        setCursorColumn(firstWord(lines[index + 1]?.content ?? ""));
-      });
+  // Scroll the viewer sideways. DiffView clamps the far end, since only it knows the longest line.
+  const scrollViewerX = (delta: number) => {
+    if (overflow() === "scroll") {
+      setViewerScrollX((current) => Math.max(0, current + delta));
     }
   };
 
-  // Hop the caret to the previous word; past the line's first word it wraps to the
-  // Previous navigable line's last word. From line-level, select the line's last word.
-  const caretPrevWord = () => {
-    setSelectionAnchor(undefined);
+  // Set the selection, with the cursor on its focus line. Reached by the mouse gestures and the
+  // Shift+arrows.
+  const select = (next: Selection) => {
+    batch(() => {
+      setViewerSelection(next);
+      setCursorIndex(next.focus.index);
+    });
+  };
 
-    if (caretLineLevel()) {
-      batch(() => {
-        setCaretLineLevel(false);
-        setCursorColumn(lastWord(cursorLineContent()));
-      });
-
-      return;
-    }
-
-    const content = cursorLineContent();
-    const column = cursorColumn();
-    const previous = prevWord(content, column);
-
-    if (previous !== column) {
-      setCursorColumn(previous);
-
-      return;
-    }
-
+  // Shift+up/down: move the selection's end a line, or start selecting whole lines at the cursor.
+  const extendSelectionRow = (delta: -1 | 1) => {
     const lines = navigableLines();
-    const index = cursorIndex();
 
-    if (index > 0) {
-      batch(() => {
-        setCursorIndex(index - 1);
-        setCursorColumn(lastWord(lines[index - 1]?.content ?? ""));
-      });
+    if (lines.length === 0) {
+      return;
     }
+
+    const at = { column: 0, index: cursorIndex() };
+
+    select(
+      moveFocusRow(
+        lines,
+        viewerSelection() ?? { anchor: at, focus: at, unit: "line" },
+        delta
+      )
+    );
+  };
+
+  // Shift+left/right: move the selection's end a character. The cursor has no column, so there is
+  // Nothing to start from without a selection.
+  const extendSelectionColumn = (delta: -1 | 1) => {
+    const current = viewerSelection();
+
+    if (current === undefined) {
+      return;
+    }
+
+    const next = moveFocusColumn(navigableLines(), current, delta);
+
+    batch(() => {
+      select(next);
+
+      if (next.unit !== "line") {
+        const { column, index } = next.focus;
+        const content = navigableLines()[index]?.content ?? "";
+        revealColumns(content, column, graphemeAt(content, column).end);
+      }
+    });
+  };
+
+  // Keep a selection on its lines across a fold or gap toggle, as the cursor is kept on its own.
+  const remapSelection = (previous: NavigableLine[], next: NavigableLine[]) => {
+    const current = viewerSelection();
+
+    const remap = (point: SelectionPoint) => ({
+      ...point,
+      index: remapCursorAfterToggle(previous, point.index, next),
+    });
+
+    return current === undefined
+      ? undefined
+      : {
+          ...current,
+          anchor: remap(current.anchor),
+          focus: remap(current.focus),
+        };
   };
 
   // Toggle one fold, keeping the caret on its file line (or the fold header once the
@@ -2245,20 +2245,13 @@ const createState = () => {
     }
 
     const nextLines = collapsedNavigableFor(next, expandedGaps());
-    // Remap the selection's anchor across the toggle exactly as the caret is, so a
-    // Live selection survives a fold the same way the cursor does (setCursorRow
-    // Clears the anchor, so restore the remapped value after it).
-    const anchor = selectionAnchor();
-
-    const remappedAnchor =
-      anchor === undefined
-        ? undefined
-        : remapCursorAfterToggle(previous, anchor, nextLines);
+    // `setCursorRow` clears the selection, so its remap lands after.
+    const remapped = remapSelection(previous, nextLines);
 
     batch(() => {
       setFoldedRegions(next);
       setCursorRow(remapCursorAfterToggle(previous, cursorIndex(), nextLines));
-      setSelectionAnchor(remappedAnchor);
+      setViewerSelection(remapped);
     });
   };
 
@@ -2275,17 +2268,12 @@ const createState = () => {
     }
 
     const nextLines = collapsedNavigableFor(foldedRegions(), next);
-    const anchor = selectionAnchor();
-
-    const remappedAnchor =
-      anchor === undefined
-        ? undefined
-        : remapCursorAfterToggle(previous, anchor, nextLines);
+    const remapped = remapSelection(previous, nextLines);
 
     batch(() => {
       setExpandedGaps(next);
       setCursorRow(remapCursorAfterToggle(previous, cursorIndex(), nextLines));
-      setSelectionAnchor(remappedAnchor);
+      setViewerSelection(remapped);
     });
   };
 
@@ -2426,17 +2414,17 @@ const createState = () => {
   const scopeIdentity = () =>
     `${scope().kind}:${scope().ref}:${scope().headRef ?? ""}`;
 
-  // Drop the line selection when the viewed content's identity changes (file,
+  // Drop the selection when the viewed content's identity changes (file,
   // Scope, or worktree): a navIndex anchor is meaningless against a different line
   // List. This is the structural backstop for every reload path (the scope menu,
   // A worktree switch, empty-worktree recovery) that does not route through the
-  // Caret/`goToLocation` clears. It deliberately does not track the git model, so a
-  // Background refresh of the same file keeps the selection instead of dropping it.
+  // Caret/`goToLocation` clears. It deliberately does not track the git model: a background
+  // Refresh of the same file moves the selection with its text, below.
   createEffect(
     on(
       [selectedPath, scopeIdentity, repoRoot],
       () => {
-        setSelectionAnchor(undefined);
+        clearSelection();
       },
       {
         defer: true,
@@ -2444,13 +2432,54 @@ const createState = () => {
     )
   );
 
-  const copy = (text: string, message = `copied ${text.split("\n")[0]}`) => {
+  // A refresh replaces the lines under a selection without touching it, so it follows its text, and
+  // Goes when that text does. A toggle replaces both at once, having already moved the selection.
+  createEffect(
+    on([navigableLines, viewerSelection], ([lines, selected], before) => {
+      if (
+        selected === undefined ||
+        before === undefined ||
+        before[0] === lines ||
+        before[1] !== selected
+      ) {
+        return;
+      }
+
+      const followed = followLines(before[0], lines, selected);
+
+      if (followed === undefined) {
+        clearSelection();
+      } else {
+        select(followed);
+      }
+    })
+  );
+
+  /**
+   * Copy `text` and acknowledge it.
+   *
+   * @param label What was copied, for the notice; the text's first line by default.
+   */
+  const copy = (text: string, label = text.split("\n")[0]) => {
+    if (text === "") {
+      notify("nothing to copy");
+
+      return;
+    }
+
     const run = async () => {
       try {
-        await runtime.runPromise(
+        const destination = await runtime.runPromise(
           Clipboard.use((clipboard) => clipboard.copy(text))
         );
-        notify(message, "success");
+
+        if (destination === "terminal") {
+          notify(`sent ${label} to the terminal`);
+
+          return;
+        }
+
+        notify(`copied ${label}`, "success");
       } catch (error) {
         notify(
           `couldn't copy: ${error instanceof Error ? error.message : String(error)}`,
@@ -2492,7 +2521,7 @@ const createState = () => {
         );
 
         if (content.kind === "text") {
-          copy(content.content, `copied ${path}`);
+          copy(content.content, path);
 
           return;
         }
@@ -2509,25 +2538,36 @@ const createState = () => {
     void run();
   };
 
-  // Copy the selected lines' source text (no sign, no gutter), or the caret line
-  // When there is no selection. Reads the on-screen `navigableLines`, so a folded or
-  // Git-elided region is naturally excluded (it never enters that list). Reuses the
-  // Shared `copy` sink for the pbcopy/wl-copy path and the success/error notice.
+  /** Copy text a drag selected, acknowledged by its length. */
+  const copyCharacters = (text: string) => {
+    copy(text, counted(graphemeClusters(text).length, "character"));
+  };
+
+  // Copy the selected source text (no sign, no gutter). Reads the on-screen `navigableLines`, so a
+  // Folded or git-elided region is naturally excluded (it never enters that list).
   const copySelection = () => {
     const range = selectionRange();
 
     if (range === undefined) {
-      if (cursorLine() === undefined) {
-        return;
-      }
-
-      copy(cursorLineContent(), "copied 1 line");
-
       return;
     }
 
-    const count = range[1] - range[0] + 1;
-    copy(selectionText(), `copied ${count} line${count === 1 ? "" : "s"}`);
+    const text = selectedText(navigableLines(), range);
+
+    if (viewerSelection()?.unit === "line") {
+      copy(text, counted(range.end.index - range.start.index + 1, "line"));
+    } else {
+      copyCharacters(text);
+    }
+  };
+
+  /** `Y`: the selection, else the whole file. */
+  const copyText = () => {
+    if (selectionRange() === undefined) {
+      copyFileContents();
+    } else {
+      copySelection();
+    }
   };
 
   // Opt the current path out of the truncation cap for a full re-read. Reached by
@@ -2611,23 +2651,22 @@ const createState = () => {
       // The tree menu falls back to the focused row's first text cell: the tree's interior, plus
       // The one column of padding a `TreeRow` adds inside it.
       setCommandMenuAnchor(
-        context === "viewer"
-          ? undefined
-          : (anchor ?? {
-              x: layout().sidebar.content.x + 1,
-              y:
-                layout().sidebar.content.y +
-                focusedRowIndex() -
-                sidebarScrollTop(),
-            })
+        anchor ??
+          (context === "viewer"
+            ? undefined
+            : {
+                x: layout().sidebar.content.x + 1,
+                y:
+                  layout().sidebar.content.y +
+                  focusedRowIndex() -
+                  sidebarScrollTop(),
+              })
       );
       setCommandMenuIndex(0);
       // Snapshot the context so the clear effect can dismiss the menu the moment a
       // Click or refresh drifts the caret/focus/file it was opened against.
       setCommandMenuGuard({
-        caretLineLevel: caretLineLevel(),
         context,
-        cursorColumn: cursorColumn(),
         cursorIndex: cursorIndex(),
         focusedNodeId: focusedNodeId(),
         focusedPane: focusedPane(),
@@ -2636,6 +2675,7 @@ const createState = () => {
         scope: scopeIdentity(),
         scrollTop: viewerScrollTop(),
         scrollX: viewerScrollX(),
+        selection: viewerSelection(),
         sidebarScrollTop: sidebarScrollTop(),
       });
       setCommandMenuOpen(true);
@@ -2668,8 +2708,7 @@ const createState = () => {
         ? focusedNodeId() !== guard.focusedNodeId ||
           sidebarScrollTop() !== guard.sidebarScrollTop
         : cursorIndex() !== guard.cursorIndex ||
-          cursorColumn() !== guard.cursorColumn ||
-          caretLineLevel() !== guard.caretLineLevel ||
+          viewerSelection() !== guard.selection ||
           viewerScrollTop() !== guard.scrollTop ||
           viewerScrollX() !== guard.scrollX)
     ) {
@@ -2719,11 +2758,16 @@ const createState = () => {
       case "copyReference": {
         copy(
           formatCopyReference({
-            column: action.column,
+            endLine: action.endLine,
             line: action.line,
             path: action.path,
           })
         );
+        break;
+      }
+
+      case "copySelection": {
+        copySelection();
         break;
       }
 
@@ -3685,13 +3729,9 @@ const createState = () => {
     availableUpdate,
     canGoBack,
     canGoForward,
-    caretColumn,
-    caretLineLevel,
-    caretNextWord,
-    caretPrevWord,
-    caretWord,
     changesOnly,
     checkForUpdate,
+    clearSelection,
     closeCommandMenu,
     closeSearch,
     closeThemePicker,
@@ -3706,19 +3746,19 @@ const createState = () => {
     commitsNow,
     commitsStatus,
     copy,
-    copyFileContents,
+    copyCharacters,
     copySelection,
+    copyText,
     currentWorktreeDeleted,
-    cursorColumn,
     cursorIndex,
-    cursorLineContent,
     cursorLineNumber,
     diffView,
     directoryRecencyByPath,
     dispatchCommandAction,
     editorTemplate,
     emptyTree,
-    extendSelectionTo,
+    extendSelectionColumn,
+    extendSelectionRow,
     fileComboboxIndex,
     fileComboboxOpen,
     fileComboboxQuery,
@@ -3739,6 +3779,7 @@ const createState = () => {
     gitModel,
     goBack,
     goForward,
+    goToFindMatch,
     growPane,
     helpDialogOpen,
     helpView,
@@ -3776,8 +3817,12 @@ const createState = () => {
     resetFind,
     resetPane,
     resetState,
+    referenceLines,
+    revealMatch,
+    revealRange,
     revealRestoreTarget,
     scope,
+    scopeIdentity,
     scopeMenuIndex,
     scopeMenuOpen,
     scopeMenuView,
@@ -3796,21 +3841,19 @@ const createState = () => {
     searchTruncated,
     seedNav,
     selectCommit,
+    scrollViewerX,
     selectFile,
     selectScope,
     selectedFile,
     selectedPath,
-    selectionAnchor,
+    select,
     selectionRange,
-    selectionText,
     setActivityLog,
-    setCaretLineLevel,
     setChangesOnly,
     setCliBaseRef,
     setCommandMenuIndex,
     setCommits,
     setCurrentWorktreeDeleted,
-    setCursorColumn,
     setCursorIndex,
     setCursorRow,
     setEditorFlag,
@@ -3842,6 +3885,7 @@ const createState = () => {
     setPendingRestore,
     setQuitConfirmOpen,
     setRepoRoot,
+    setRevealRange,
     setScope,
     setScopeMenuIndex,
     setScopeMenuOpen,
@@ -3855,7 +3899,6 @@ const createState = () => {
     setSearchScope,
     setSearchScrollTop,
     setSearchSelection,
-    setSelectionAnchor,
     setSessionBase,
     setSidebarHeightOverride,
     setSidebarOpen,
@@ -3908,6 +3951,7 @@ const createState = () => {
     viewerRows,
     viewerScrollTop,
     viewerScrollX,
+    viewerSelection,
     worktreeComboboxIndex,
     worktreeComboboxOpen,
     worktreeComboboxQuery,

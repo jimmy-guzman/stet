@@ -109,6 +109,7 @@ export const ScopeMenu = () => {
                     }}
                   >
                     <text
+                      selectable={false}
                       fg={rowFg(active())}
                     >{`${marker(active(), current())}${scopeMenuLabel(kind())}`}</text>
                   </box>
@@ -133,10 +134,15 @@ export const ScopeMenu = () => {
               state.loadCommits(state.gitModel().repoRoot);
             }}
           >
-            <text fg={rowFg(state.scopeMenuIndex() === scopeKinds.length)}>
+            <text
+              selectable={false}
+              fg={rowFg(state.scopeMenuIndex() === scopeKinds.length)}
+            >
               {`${marker(state.scopeMenuIndex() === scopeKinds.length, state.scope().kind === "commit")}commits`}
             </text>
-            <text fg={theme.colors.text.muted}>→</text>
+            <text selectable={false} fg={theme.colors.text.muted}>
+              →
+            </text>
           </box>
         </scrollbox>
         <box
@@ -206,12 +212,14 @@ export const ScopeMenu = () => {
                         row two cells tall and mangle the list. The sha column never
                         shrinks; the subject clips at the overlay edge. */}
                     <text
+                      selectable={false}
                       flexShrink={0}
                       wrapMode="none"
                       height={1}
                       fg={rowFg(active())}
                     >{`${marker(active(), current())}${commit().shortSha}`}</text>
                     <text
+                      selectable={false}
                       flexGrow={1}
                       wrapMode="none"
                       height={1}

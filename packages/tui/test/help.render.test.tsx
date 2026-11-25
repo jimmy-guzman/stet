@@ -61,7 +61,7 @@ describe("help overlay", () => {
       // The version left the header bar for this overlay's title row; it must still be reachable.
       expect(help).toContain(`stet@${packageJson.version}`);
       expect(help).toContain("go to file: fuzzy-search the whole repo");
-      expect(help).toContain("copy the file");
+      expect(help).toContain("copy the selected text, or the whole file");
       // Folding took over `z`; wrap moved to `x`. Both must be listed under their keys.
       expect(help).toContain("fold / unfold the region at the caret");
       expect(help).toContain("toggle long-line wrap in the viewer");

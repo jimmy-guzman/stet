@@ -370,9 +370,6 @@ export const Viewer = () => {
           key. */}
           <Show when={state.truncated()}>
             <box
-              ref={(el) => {
-                el.selectable = false;
-              }}
               height={1}
               flexDirection="row"
               paddingLeft={1}
@@ -382,12 +379,7 @@ export const Viewer = () => {
                 state.loadFullContent();
               }}
             >
-              <text
-                ref={(el) => {
-                  el.selectable = false;
-                }}
-                fg={theme.colors.text.muted}
-              >
+              <text selectable={false} fg={theme.colors.text.muted}>
                 {`⋯ ${state.truncatedHidden()} more ${
                   state.truncatedHidden() === 1 ? "line" : "lines"
                 } · f to load`}

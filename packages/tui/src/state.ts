@@ -689,8 +689,7 @@ const createState = () => {
 
   /**
    * The viewer's scroll offsets, lifted out of DiffView so a navigation can capture and restore
-   * them; DiffView projects `viewerScrollTop` onto the scrollbox whenever it changes (it stays the
-   * single source of truth for the window).
+   * them. `viewerScrollTop` alone decides which rows DiffView mounts and where they paint.
    */
   const [viewerScrollTop, setViewerScrollTop] = tracked(0);
   const [viewerScrollX, setViewerScrollX] = tracked(0);

@@ -2,12 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { TextRenderable } from "@opentui/core";
+import { rgbToHex, TextRenderable } from "@opentui/core";
 import type { Renderable } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
 import { state } from "@/state";
+import { setAppearance } from "@/theme/active";
+import { theme } from "@/theme/context";
 
 import {
   createFixtureRepo,
@@ -89,6 +91,42 @@ describe("text outside the viewer", () => {
     }
   }, 20_000);
 
+  test("wears the theme's selection, readable, through a theme change", async () => {
+    const { captureSpans, mockMouse, renderer, settleUntil } = await mount();
+
+    const isPainted = (background: string, foreground: string) =>
+      captureSpans().lines.some((line) =>
+        line.spans.some(
+          (span) =>
+            span.text.includes("uncommitted") &&
+            rgbToHex(span.bg) === background &&
+            rgbToHex(span.fg) === foreground
+        )
+      );
+
+    try {
+      const frame = await settleUntil("loaded", (current) =>
+        current.includes("alpha")
+      );
+
+      const { x, y } = cellOf(frame, "uncommitted");
+      await mockMouse.drag(x, y, x + 10, y);
+
+      const dark = theme.colors.selection.bg;
+      await settleUntil("painted", () =>
+        isPainted(dark, theme.colors.text.primary)
+      );
+
+      setAppearance("light");
+      expect(theme.colors.selection.bg).not.toBe(dark);
+      await settleUntil("repainted", () =>
+        isPainted(theme.colors.selection.bg, theme.colors.text.primary)
+      );
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
   test("only one selection is highlighted at a time", async () => {
     const { copied, mockMouse, renderer, settleUntil } = await mount();
 
@@ -156,10 +194,10 @@ describe("text outside the viewer", () => {
 
     try {
       const frame = await settleUntil("overflowing tree", (current) =>
-        current.includes("▐")
+        current.includes("▀")
       );
 
-      const { x, y } = cellOf(frame, "▐");
+      const { x, y } = cellOf(frame, "▀");
       await app.mockMouse.drag(x, y, x, y + 4);
       await app.renderOnce();
       expect(copied).toEqual([]);

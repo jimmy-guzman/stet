@@ -102,6 +102,9 @@ export const Sidebar = () => {
           rowCount={state.treeRowCount}
           viewport={viewport}
           scrollTop={state.sidebarScrollTop}
+          setScrollTop={(next) => {
+            state.setSidebarScrollTop(next);
+          }}
         />
       </box>
     </box>

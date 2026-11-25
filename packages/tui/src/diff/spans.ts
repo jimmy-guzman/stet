@@ -8,18 +8,11 @@ export interface HighlightSpan extends RenderSpan {
   highlight?: boolean;
 }
 
-// A piece of `span` carrying `text`, keeping its color and changed-word flag.
-const highlightSpan = (
-  span: RenderSpan,
-  text: string,
-  highlight: boolean
-): HighlightSpan =>
-  highlight ? { ...span, highlight: true, text } : { ...span, text };
-
-// Tag the display-column range [from, to) of these spans as highlighted, splitting
-// Spans at the boundaries so a selection can carry a background. Columns are
-// Display columns from the start of `spans` (wide glyphs count as two), so the
-// Caller passes a window-relative range. A no-op range returns the spans unchanged.
+/**
+ * Tags the UTF-16 range [from, to) of these spans as highlighted, splitting spans at the boundaries
+ * so a selection can carry a background. Offsets count from the start of the line and land on
+ * grapheme boundaries, which the selection guarantees. An empty range returns the spans unchanged.
+ */
 export const markRange = (
   spans: RenderSpan[],
   from: number,
@@ -29,32 +22,21 @@ export const markRange = (
     return spans;
   }
 
-  const out: HighlightSpan[] = [];
-  let col = 0;
+  let end = 0;
 
-  for (const span of spans) {
-    let text = "";
-    let highlighted = false;
+  return spans.flatMap((span) => {
+    const start = end;
+    end += span.text.length;
 
-    for (const char of graphemeClusters(span.text)) {
-      const inRange = col >= from && col < to;
+    const cut = (at: number) =>
+      Math.max(0, Math.min(at - start, span.text.length));
 
-      if (text !== "" && inRange !== highlighted) {
-        out.push(highlightSpan(span, text, highlighted));
-        text = "";
-      }
-
-      highlighted = inRange;
-      text += char;
-      col += cellWidth(char);
-    }
-
-    if (text !== "") {
-      out.push(highlightSpan(span, text, highlighted));
-    }
-  }
-
-  return out;
+    return [
+      { ...span, text: span.text.slice(0, cut(from)) },
+      { ...span, highlight: true, text: span.text.slice(cut(from), cut(to)) },
+      { ...span, text: span.text.slice(cut(to)) },
+    ].filter((part) => part.text !== "");
+  });
 };
 
 // The UTF-16 string index at display column `col` (wide glyphs count as two), for
@@ -80,53 +62,4 @@ export const columnToIndex = (line: string, col: number): number => {
   }
 
   return index;
-};
-
-// Slice spans to a horizontal window [start, start+width) in display columns,
-// Left-aligned, so the diff can scroll long lines horizontally (shared offset
-// Across all lines) while clipping the rest. Wide (CJK) glyphs count as two
-// Columns; a glyph straddling an edge is not split, and one cut by the left edge leaves blank cells
-// Behind, so the rest of the line keeps its columns.
-export const sliceSpansWindow = (
-  spans: RenderSpan[],
-  start: number,
-  width: number
-): RenderSpan[] => {
-  if (width <= 0) {
-    return [];
-  }
-
-  const end = start + width;
-  const out: RenderSpan[] = [];
-  let col = 0;
-
-  for (const span of spans) {
-    let text = "";
-
-    for (const char of graphemeClusters(span.text)) {
-      const charWidth = cellWidth(char);
-
-      if (col >= start && col + charWidth <= end) {
-        text += char;
-      } else if (col < start && col + charWidth > start) {
-        text += " ".repeat(col + charWidth - start);
-      }
-
-      col += charWidth;
-
-      if (col >= end) {
-        break;
-      }
-    }
-
-    if (text !== "") {
-      out.push({ ...span, text });
-    }
-
-    if (col >= end) {
-      break;
-    }
-  }
-
-  return out;
 };

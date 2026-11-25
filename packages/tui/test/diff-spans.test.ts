@@ -1,75 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { cellWidth } from "@/diff/cells";
-import { columnToIndex, markRange, sliceSpansWindow } from "@/diff/spans";
-
-describe("sliceSpansWindow", () => {
-  test("scrolls tabs by the cells they paint", () => {
-    expect(sliceSpansWindow([{ text: "\t\tcall()" }], 4, 20)).toEqual([
-      { text: "call()" },
-    ]);
-  });
-
-  test("a glyph cut by the left edge leaves its cells blank, so columns hold", () => {
-    expect(sliceSpansWindow([{ text: "你好" }], 1, 20)).toEqual([
-      { text: " 好" },
-    ]);
-    expect(sliceSpansWindow([{ text: "\tx" }], 1, 20)).toEqual([
-      { text: " x" },
-    ]);
-  });
-
-  test("keeps spans that fit within the budget from column 0", () => {
-    const spans = [{ fg: "#f00", text: "const" }, { text: " x" }];
-    expect(sliceSpansWindow(spans, 0, 20)).toEqual(spans);
-  });
-
-  test("clips to the width, left-aligned, from column 0", () => {
-    const spans = [
-      { fg: "#f00", text: "const" },
-      { fg: "#0f0", text: " value = 1" },
-    ];
-
-    expect(sliceSpansWindow(spans, 0, 8)).toEqual([
-      { fg: "#f00", text: "const" },
-      { fg: "#0f0", text: " va" },
-    ]);
-  });
-
-  test("scrolls horizontally: skips `start` columns, then takes `width`", () => {
-    const spans = [
-      { fg: "#f00", text: "const" },
-      { fg: "#0f0", text: " value = 1" },
-    ];
-
-    // Skip 6 cols ("const "), then take 5 → "value".
-    expect(sliceSpansWindow(spans, 6, 5)).toEqual([
-      { fg: "#0f0", text: "value" },
-    ]);
-  });
-
-  test("drops spans entirely before or after the window", () => {
-    const spans = [
-      { text: "abcd" },
-      { fg: "#0f0", text: "EFGH" },
-      { text: "ijkl" },
-    ];
-
-    expect(sliceSpansWindow(spans, 4, 4)).toEqual([
-      { fg: "#0f0", text: "EFGH" },
-    ]);
-  });
-
-  test("counts wide CJK glyphs as two columns", () => {
-    expect(sliceSpansWindow([{ text: "你好世" }], 0, 5)).toEqual([
-      { text: "你好" },
-    ]);
-  });
-
-  test("returns nothing for a non-positive width", () => {
-    expect(sliceSpansWindow([{ text: "x" }], 0, 0)).toEqual([]);
-  });
-});
+import { columnToIndex, markRange } from "@/diff/spans";
 
 describe("markRange", () => {
   test("splits a span so the display range carries the highlight flag", () => {

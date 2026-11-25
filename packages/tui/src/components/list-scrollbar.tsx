@@ -1,51 +1,85 @@
-import { createMemo } from "solid-js";
+import { MouseButton, SliderRenderable } from "@opentui/core";
+import type { MouseEvent } from "@opentui/core";
+import { useRenderer } from "@opentui/solid";
+import { createEffect } from "solid-js";
 
 import { theme } from "@/theme/context";
 
-import { scrollbarThumb } from "./scrollbar";
+/**
+ * A slider inside a pane. OpenTUI's takes any button and keeps the press to itself, so a press here
+ * would not focus the pane, and a right-click would scroll it. The pane gets every press first, and
+ * the slider only the left one.
+ */
+class PaneSliderRenderable extends SliderRenderable {
+  override processMouseEvent(event: MouseEvent) {
+    if (event.type === "down") {
+      this.parent?.processMouseEvent(event);
+
+      if (event.button !== MouseButton.LEFT.valueOf()) {
+        return;
+      }
+    }
+
+    super.processMouseEvent(event);
+  }
+}
 
 /**
- * A hand-drawn scroll-position indicator for a windowed list: one width-1 column whose thumb is
- * derived from the window's own (rowCount, viewport, scrollTop), since a viewport-windowed list
- * mounts only the visible slice and leaves the native scrollbox nothing to measure. Shared by the
- * sidebar and search results, the same surfaces that reuse `windowWheelHandler`.
- *
- * It is one visual element, so it renders as one `<text>` (not a renderable per cell): thumb cells
- * take the glyph, track cells are spaces that paint nothing so the surface shows through
- * (transparent track). The column stays reserved even with no overflow, so content growth never
- * shifts layout.
+ * The scrollbar of a windowed list, which mounts only its visible slice and so leaves a scrollbox
+ * nothing to measure. It is OpenTUI's slider, built here because Solid has no element for it. The
+ * standalone `ScrollBarRenderable` around that slider is no use: it sizes the thumb against the range
+ * of the moment, so a list whose rows arrive after its pane keeps the smallest one. The column stays
+ * reserved while the content fits, so content growth never shifts layout.
  */
 export const ListScrollbar = (props: {
   rowCount: () => number;
   viewport: () => number;
   scrollTop: () => number;
+  setScrollTop: (next: number) => void;
 }) => {
-  const content = createMemo(() => {
-    const thumb = scrollbarThumb(
-      props.rowCount(),
-      props.viewport(),
-      props.scrollTop()
-    );
+  // The slider reports a value the list gave it exactly as it reports a drag, and only a drag moves
+  // The list.
+  let syncing = false;
 
-    return Array.from({ length: props.viewport() }, (_, index) =>
-      thumb !== undefined &&
-      index >= thumb.top &&
-      index < thumb.top + thumb.size
-        ? "▐"
-        : " "
-    ).join("\n");
+  const slider = new PaneSliderRenderable(useRenderer(), {
+    height: "100%",
+    onChange: (value) => {
+      if (!syncing) {
+        props.setScrollTop(Math.round(value));
+      }
+    },
+    orientation: "vertical",
+    width: 1,
+  });
+
+  createEffect(() => {
+    const rows = props.rowCount();
+    const viewport = props.viewport();
+    const range = Math.max(0, rows - viewport);
+
+    syncing = true;
+    // The slider clamps the thumb to the range it has when the thumb is set, so that is the whole
+    // List's until the thumb is in.
+    slider.max = rows;
+    slider.viewPortSize = viewport;
+    slider.max = range;
+    slider.value = props.scrollTop();
+    slider.visible = range > 0;
+    syncing = false;
+  });
+
+  createEffect(() => {
+    slider.backgroundColor = theme.rgba.transparent;
+    slider.foregroundColor = theme.colors.scrollbar.thumb;
   });
 
   return (
-    <box width={1}>
-      <text
-        selectable={false}
-        height={props.viewport()}
-        wrapMode="none"
-        fg={theme.colors.scrollbar.thumb}
-      >
-        {content()}
-      </text>
-    </box>
+    <box
+      ref={(el) => {
+        el.add(slider);
+      }}
+      width={1}
+      height={props.viewport()}
+    />
   );
 };

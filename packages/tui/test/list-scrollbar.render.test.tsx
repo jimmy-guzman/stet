@@ -2,10 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import { createSignal } from "solid-js";
 
 import { App } from "@/app";
+import { ListScrollbar } from "@/components/list-scrollbar";
 import { state } from "@/state";
+import { toCodePoints } from "@/utils/text";
 
 import {
   createFixtureRepo,
@@ -14,74 +18,193 @@ import {
   seedState,
 } from "./helpers";
 
-const thumbRowAnywhere = (frame: string) =>
-  frame.split("\n").findIndex((line) => line.includes("▐"));
-
-const thumbRow = (frame: string) =>
+/** The rows of a pane's last column that its scrollbar thumb covers. */
+const thumbRows = (
+  frame: string,
+  {
+    height,
+    width,
+    x,
+    y,
+  }: { height: number; width: number; x: number; y: number }
+) =>
   frame
     .split("\n")
-    .map((line) => line.split("│")[0])
-    .findIndex((line) => line.includes("▐"));
+    .slice(y, y + height)
+    .flatMap((row, index) =>
+      /[█▀▄]/u.test(toCodePoints(row)[x + width - 1] ?? "") ? [index] : []
+    );
 
-// The windowed lists mount only their visible slice, so the scroll indicator is
-// Hand-drawn: a width-1 thumb column derived from (rowCount, viewport, scrollTop).
-// These pin the behavior it must have: a thumb appears only when the list
-// Overflows, and it tracks the scroll position downward. Each fixture keeps the
-// Sidebar small (one file) so the only thumb in the frame belongs to the list
-// Under test, which is what proves that list wired its own scroll signal in.
+const tree = (frame: string) =>
+  thumbRows(frame, state.layout().sidebar.content);
+
+const results = (frame: string) =>
+  thumbRows(frame, state.layout().viewer.content);
+
+const bigDirectory = (count: number) =>
+  Object.fromEntries(
+    Array.from({ length: count }, (_, i) => [
+      `big/f${String(i).padStart(3, "0")}.txt`,
+      `content ${i}\n`,
+    ])
+  );
+
+// The windowed lists mount only their visible slice, so their scrollbar is a standalone one fed the
+// List's own numbers. Each fixture overflows one list only, which proves that list wired its own.
+const scope = { kind: "all", ref: "HEAD" } as const;
+
 describe("list scrollbar", () => {
   test("shows a thumb only when the tree overflows, and it tracks scroll", async () => {
-    const files: Record<string, string> = {};
-
-    for (let i = 0; i < 300; i += 1) {
-      files[`big/f${String(i).padStart(3, "0")}.txt`] = `content ${i}\n`;
-    }
-
-    const repoRoot = createFixtureRepo("stet-scrollbar-", files);
-    const scope = { kind: "all", ref: "HEAD" } as const;
+    const repoRoot = createFixtureRepo("stet-scrollbar-", bigDirectory(300));
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
     const { renderer, mockInput, renderOnce, captureCharFrame } =
-      await testRender(() => <App />, {
-        height: 16,
-        width: 90,
-      });
+      await testRender(() => <App />, { height: 16, width: 90 });
 
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
-    await settleUntil("first render", (current) =>
-      current.includes("f000.txt")
+
+    try {
+      await settleUntil("first render", (current) =>
+        current.includes("f000.txt")
+      );
+
+      expect(tree(captureCharFrame())[0]).toBe(0);
+
+      for (let i = 0; i < 80; i += 1) {
+        mockInput.pressKey("j");
+        // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
+        await renderOnce();
+      }
+
+      await settleUntil("thumb moved", (frame) => (tree(frame)[0] ?? 0) > 0);
+
+      // Collapsing the directory leaves fewer rows than the viewport: the column
+      // Stays reserved but paints no thumb.
+      for (let i = 0; i < 90; i += 1) {
+        mockInput.pressKey("k");
+        // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
+        await renderOnce();
+      }
+
+      mockInput.pressKey("h");
+      await settleUntil("no thumb", (frame) => tree(frame).length === 0);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("dragging the thumb scrolls the tree, and a track click jumps", async () => {
+    const repoRoot = createFixtureRepo("stet-scrollbar-", bigDirectory(300));
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, mockMouse, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, { height: 16, width: 90 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("first render", (current) =>
+        current.includes("f000.txt")
+      );
+
+      const { height, width, x, y } = state.layout().sidebar.content;
+      const column = x + width - 1;
+      const last = state.treeRowCount() - height;
+
+      // Any other button is the pane's, and scrolls nothing.
+      state.setFocusedPane("diff");
+      await mockMouse.click(column, y + height - 1, MouseButtons.RIGHT);
+      await renderOnce();
+      expect(state.sidebarScrollTop()).toBe(0);
+      expect(state.focusedPane()).toBe("tree");
+
+      state.setFocusedPane("diff");
+      // The thumb moves by half cells, so the end is a drag past the last row.
+      await mockMouse.drag(column, y, column, y + height);
+      await settleUntil("dragged to the end", (frame) =>
+        frame.includes("f299.txt")
+      );
+      expect(state.sidebarScrollTop()).toBe(last);
+      expect(state.focusedPane()).toBe("tree");
+
+      await mockMouse.click(column, y + Math.floor(height / 2));
+      await settleUntil("jumped", () => state.sidebarScrollTop() < last);
+      expect(state.sidebarScrollTop()).toBeGreaterThan(0);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("the thumb covers the visible share of the list, however the list got there", async () => {
+    const [list, setList] = createSignal({ rows: 0, top: 0, viewport: 20 });
+
+    const { renderer, renderOnce, captureCharFrame } = await testRender(
+      () => (
+        <ListScrollbar
+          rowCount={() => list().rows}
+          viewport={() => list().viewport}
+          scrollTop={() => list().top}
+          setScrollTop={(top) => {
+            setList((current) => ({ ...current, top }));
+          }}
+        />
+      ),
+      { height: 20, width: 4 }
     );
 
-    // The 300-file directory far exceeds the ~10-row sidebar viewport, so the
-    // Thumb paints near the top.
-    const topRow = thumbRow(captureCharFrame());
-    expect(topRow).toBeGreaterThanOrEqual(0);
-
-    // Scrolling deep into the directory moves the thumb strictly downward.
-    for (let i = 0; i < 80; i += 1) {
-      mockInput.pressKey("j");
-      // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
+    const thumb = async (rows: number, viewport: number) => {
+      setList({ rows, top: 0, viewport });
       await renderOnce();
+
+      return thumbRows(captureCharFrame(), {
+        height: viewport,
+        width: 1,
+        x: 0,
+        y: 0,
+      }).length;
+    };
+
+    try {
+      // Rows arrive after the pane, as a deferred load does.
+      expect(await thumb(0, 20)).toBe(0);
+      expect(await thumb(40, 20)).toBe(10);
+      // Most of it visible, then all of it, then back.
+      expect(await thumb(25, 20)).toBe(16);
+      expect(await thumb(20, 20)).toBe(0);
+      expect(await thumb(40, 20)).toBe(10);
+      expect(await thumb(40, 10)).toBe(3);
+      expect(await thumb(100_000, 20)).toBe(1);
+    } finally {
+      renderer.destroy();
     }
+  });
 
-    await renderOnce();
-    expect(thumbRow(captureCharFrame())).toBeGreaterThan(topRow);
+  test("a list that shrinks with its pane keeps the position it was given", async () => {
+    const [list, setList] = createSignal({ rows: 100, top: 30, viewport: 40 });
 
-    // Collapsing the directory leaves fewer rows than the viewport: the column
-    // Stays reserved but paints no thumb.
-    for (let i = 0; i < 90; i += 1) {
-      mockInput.pressKey("k");
-      // oxlint-disable-next-line no-await-in-loop -- sequential nav steps
+    const { renderer, renderOnce } = await testRender(
+      () => (
+        <ListScrollbar
+          rowCount={() => list().rows}
+          viewport={() => list().viewport}
+          scrollTop={() => list().top}
+          setScrollTop={(top) => {
+            setList((current) => ({ ...current, top }));
+          }}
+        />
+      ),
+      { height: 40, width: 4 }
+    );
+
+    try {
       await renderOnce();
+      setList({ rows: 50, top: 30, viewport: 10 });
+      await renderOnce();
+      expect(list().top).toBe(30);
+    } finally {
+      renderer.destroy();
     }
-
-    mockInput.pressKey("h");
-    await renderOnce();
-    await renderOnce();
-    expect(thumbRow(captureCharFrame())).toBe(-1);
-
-    renderer.destroy();
   });
 
   test("shows a thumb in the search results and tracks scroll", async () => {
@@ -98,7 +221,6 @@ describe("list scrollbar", () => {
       path.join(repoRoot, "src", "many.ts"),
       `${lines.join("\n")}\n`
     );
-    const scope = { kind: "all", ref: "HEAD" } as const;
     const model = await loadModel(repoRoot, scope);
     seedState(model, scope);
 
@@ -118,7 +240,7 @@ describe("list scrollbar", () => {
 
       // 60 matches overflow the results band; the sidebar has one file, so the
       // Only thumb in the frame is the search pane's.
-      const topRow = thumbRowAnywhere(captureCharFrame());
+      const [topRow] = results(captureCharFrame());
       expect(topRow).toBeGreaterThanOrEqual(0);
 
       for (let i = 0; i < 10; i += 1) {
@@ -129,7 +251,7 @@ describe("list scrollbar", () => {
       }
 
       await renderOnce();
-      expect(thumbRowAnywhere(captureCharFrame())).toBeGreaterThan(topRow);
+      expect(results(captureCharFrame())[0]).toBeGreaterThan(topRow ?? 0);
     } finally {
       renderer.destroy();
     }

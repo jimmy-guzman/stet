@@ -8,10 +8,6 @@ export const QuitConfirm = () => (
   // The background, and capturing mouse-down keeps a background click inert (never
   // Passing through to the tree/viewer, never dismissing). The keymap traps keys.
   <box
-    ref={(el) => {
-      el.selectable = false;
-      el.focusable = false;
-    }}
     position="absolute"
     left={0}
     top={0}
@@ -24,10 +20,6 @@ export const QuitConfirm = () => (
     }}
   >
     <box
-      ref={(el) => {
-        el.selectable = false;
-        el.focusable = false;
-      }}
       position="absolute"
       left={state.overlayLeft()}
       top={1}
@@ -42,13 +34,7 @@ export const QuitConfirm = () => (
         paddingLeft={1}
         backgroundColor={theme.colors.surface.panel}
       >
-        <text
-          ref={(el) => {
-            el.selectable = false;
-            el.focusable = false;
-          }}
-          fg={theme.colors.text.strong}
-        >
+        <text selectable={false} fg={theme.colors.text.strong}>
           Quit stet?
         </text>
       </box>
@@ -57,13 +43,7 @@ export const QuitConfirm = () => (
         paddingLeft={1}
         backgroundColor={theme.colors.surface.panel}
       >
-        <text
-          ref={(el) => {
-            el.selectable = false;
-            el.focusable = false;
-          }}
-          fg={theme.colors.text.muted}
-        >
+        <text selectable={false} fg={theme.colors.text.muted}>
           y quit · esc cancel
         </text>
       </box>

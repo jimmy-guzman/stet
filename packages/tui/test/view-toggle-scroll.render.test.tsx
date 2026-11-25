@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { ScrollBoxRenderable } from "@opentui/core";
-import type { Renderable } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
@@ -18,37 +16,13 @@ import {
 
 /**
  * Toggling a diff to whole-file view used to leave the viewport blank until the user scrolled: the
- * cursor jumps deep into the now-taller content, but the scrollbox clamped the physical scroll to its
- * content height as last laid out, stranding the viewport in the empty top spacer. The viewer now
- * re-applies `scrollTo` whenever scrollTop changes, and OpenTUI applies it again after the next
- * frame's layout, so the deep scroll lands against the new content.
+ * cursor jumps deep into the now-taller content, and the painted position lagged the window. The
+ * slice and the offset it paints at now come from one scroll position.
  */
 const visibleLineNumbers = (frame: string) =>
   (frame.match(/line_\d+ =/gu) ?? []).map((match) =>
     Number(match.replaceAll(/\D/gu, ""))
   );
-
-/**
- * The diff viewer's scrollbox is the deepest-scrolling box in the tree (the file tree is short);
- * find it so the test can read physical scroll metrics.
- */
-const diffScrollBox = (node: Renderable) => {
-  const candidates: ScrollBoxRenderable[] = [];
-
-  const walk = (current: Renderable) => {
-    if (current instanceof ScrollBoxRenderable) {
-      candidates.push(current);
-    }
-
-    for (const child of current.getChildren()) {
-      walk(child);
-    }
-  };
-
-  walk(node);
-
-  return candidates.toSorted((a, b) => b.scrollHeight - a.scrollHeight)[0];
-};
 
 const longFileToggleFixture = (prefix: string) => {
   const lines = Array.from(
@@ -118,15 +92,11 @@ describe("view toggle scroll", () => {
 
       expect(visibleLineNumbers(frame)).toContain(110);
 
-      const box = diffScrollBox(renderer.root);
-      expect(box).toBeDefined();
-      expect(box.scrollHeight).toBeGreaterThanOrEqual(115);
-      expect(box.scrollTop).toBeGreaterThan(50);
+      expect(state.viewerScrollTop()).toBeGreaterThan(50);
 
       state.setViewerScrollTop(0);
-      await settleUntil(
-        "scrolled away from the caret",
-        () => box.scrollTop === 0
+      await settleUntil("scrolled away from the caret", (current) =>
+        visibleLineNumbers(current).includes(1)
       );
       mockInput.pressKey("f", { ctrl: true });
       await settleUntil("search open", (current) =>
@@ -146,7 +116,7 @@ describe("view toggle scroll", () => {
 
       expect(state.cursorLineNumber()).toBe(110);
       expect(visibleLineNumbers(reopened)).toContain(1);
-      expect(diffScrollBox(renderer.root)?.scrollTop).toBe(0);
+      expect(state.viewerScrollTop()).toBe(0);
     } finally {
       renderer.destroy();
     }

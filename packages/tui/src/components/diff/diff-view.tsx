@@ -3,10 +3,8 @@ import type {
   BoxRenderable,
   MouseEvent,
   RGBA,
-  ScrollBoxRenderable,
   TextRenderable,
 } from "@opentui/core";
-import { useRenderer } from "@opentui/solid";
 import {
   batch,
   createEffect,
@@ -18,17 +16,16 @@ import {
   untrack,
 } from "solid-js";
 
-import { cellWidth, widthMethod } from "@/diff/cells";
+import { cellWidth } from "@/diff/cells";
 import { followScrollTop, followScrollX, HORIZONTAL_STEP } from "@/diff/follow";
 import { isLineRow } from "@/diff/rows";
 import type { DiffLineRow, DiffRow } from "@/diff/rows";
-import { columnToIndex, markRange, sliceSpansWindow } from "@/diff/spans";
+import { columnToIndex, markRange } from "@/diff/spans";
 import type { HighlightSpan } from "@/diff/spans";
 import {
   cumulativeRowEnds,
   rowIndexAtOffset,
   visibleWindow,
-  visibleWindowVariable,
 } from "@/diff/windowing";
 import { state } from "@/state";
 import { activeThemeMonochrome } from "@/theme/active";
@@ -38,10 +35,10 @@ import type { SelectionPoint, SelectionUnit } from "@/viewer/selection";
 
 import { CommandMenu } from "../command-menu";
 import { isRightClick } from "../mouse";
-import { createLineMeasurer } from "./line-measure";
+import { useLineMeasurer } from "./line-measure";
 
-/** Display columns, [from, to). */
-interface CellRange {
+/** UTF-16 offsets into a line, [from, to). */
+interface TextRange {
   from: number;
   to: number;
 }
@@ -62,9 +59,10 @@ const changedWordBg = (row: DiffLineRow, lifted: boolean) => {
 const StyledLine = (props: {
   row: DiffLineRow;
   wrap: boolean;
+  /** The cells the text spans: what it wraps at, or the longest line it scrolls across. */
   width: number;
   scrollX: number;
-  selected: CellRange | undefined;
+  selected: TextRange | undefined;
   /** The row wears the lifted cursor/selection background, so its changed words layer over that. */
   lifted: boolean;
 }) => {
@@ -78,22 +76,10 @@ const StyledLine = (props: {
 
     // The change bar and line metadata live in the fixed gutter (so they stay put while
     // The code scrolls); this buffer renders code only.
-    const windowed = props.wrap
-      ? row.spans
-      : sliceSpansWindow(row.spans, props.scrollX, props.width);
-
-    // The selected range is in content display columns; in scroll mode the window starts at
-    // ScrollX, so shift it. In wrap mode the styling follows the text wherever it wraps.
-    const offset = props.wrap ? 0 : props.scrollX;
-
     const spans: HighlightSpan[] =
       props.selected === undefined
-        ? windowed
-        : markRange(
-            windowed,
-            props.selected.from - offset,
-            props.selected.to - offset
-          );
+        ? row.spans
+        : markRange(row.spans, props.selected.from, props.selected.to);
 
     // A changed word layers its line's sign color over the row's own background. A row with
     // Selected text drops its marks: in a theme with no hue they are the selection's own grey, so
@@ -119,14 +105,12 @@ const StyledLine = (props: {
     <text
       ref={(el) => {
         ref = el;
-        // Opt this text leaf out of OpenTUI's native text selection (which a drag
-        // Would otherwise start on the deepest hit, painting its own colorful
-        // Highlight over our band); stet owns the selection.
-        el.selectable = false;
       }}
-      // Pinned to the width `heights()` measured against: left to flex layout, the leaf sizes one
-      // Cell wider than its box, so it wrapped at a width the measurer never saw and the
-      // Overflowing column was clipped off the right edge.
+      // Stet owns the viewer's selection, so OpenTUI's never includes a windowed row.
+      selectable={false}
+      // Every line shares one offset and one width. `scrollX` on the text would clamp to each
+      // Line's own length and shift the short ones out of their columns.
+      left={-props.scrollX}
       width={props.width}
       wrapMode={props.wrap ? "word" : "none"}
     />
@@ -160,7 +144,7 @@ const isCursor = (row: DiffLineRow) =>
 
 // A row inside a whole-line selection wears the cursor lift (`resolveBackground`'s active branch),
 // So the band is theme-correct per diff state and covers blank lines. Any other selection paints
-// Its own columns (`selectedCells`).
+// Its own columns (`selectedOffsets`).
 const isSelected = (row: DiffLineRow) => {
   const range = state.selectionRange();
 
@@ -175,23 +159,17 @@ const isSelected = (row: DiffLineRow) => {
 const rowText = (row: DiffLineRow) =>
   row.spans.map((span) => span.text).join("");
 
-/** The selected display columns of a row, for a selection that is not whole lines. */
-const selectedCells = (row: DiffLineRow): CellRange | undefined => {
+/** The selected part of a row, for a selection that is not whole lines. */
+const selectedOffsets = (row: DiffLineRow): TextRange | undefined => {
   const range = state.selectionRange();
 
   if (range === undefined || state.viewerSelection()?.unit === "line") {
     return undefined;
   }
 
-  const content = rowText(row);
-  const columns = selectedColumns(range, row.navIndex, content);
+  const columns = selectedColumns(range, row.navIndex, rowText(row));
 
-  return columns === undefined || columns.from === columns.to
-    ? undefined
-    : {
-        from: cellWidth(content.slice(0, columns.from)),
-        to: cellWidth(content.slice(0, columns.to)),
-      };
+  return columns?.from === columns?.to ? undefined : columns;
 };
 
 /** Whether a point is on selected text, or on a selected line. */
@@ -219,7 +197,7 @@ const isOnSelection = ({ column, index }: SelectionPoint) => {
 // A lifted row is too close to the selection's own background to show where it ends, so a row with
 // Selected text drops the lift from its code. Its gutter keeps it, so the caret line stays marked.
 const isCodeLifted = (row: DiffLineRow) =>
-  isSelected(row) || (isCursor(row) && selectedCells(row) === undefined);
+  isSelected(row) || (isCursor(row) && selectedOffsets(row) === undefined);
 
 // The gutter reads left to right as change bar, number, then code: the far-left change bar
 // And the number digits take the diff state (add green / remove red / context neutral).
@@ -340,21 +318,8 @@ const toggleMarker = (row: DiffRow) => {
 // Oscillates. That stable width is the property that keeps OpenTUI's layout from
 // Thrashing into the scheduler wedge the built-in `<diff>` triggered.
 export const DiffView = () => {
-  const renderer = useRenderer();
+  const measurer = useLineMeasurer();
 
-  // Remade when the terminal's width method changes, so wrapped rows and pointer columns are always
-  // Measured the one way.
-  const measurer = createMemo(() => {
-    const current = createLineMeasurer(widthMethod(), renderer.nativeScene);
-
-    onCleanup(() => {
-      current.destroy();
-    });
-
-    return current;
-  });
-
-  let scrollRef: ScrollBoxRenderable | undefined;
   let interactionRef: BoxRenderable | undefined;
   // Scroll offsets live in `state` (lifted out of this component) so a navigation
   // Can capture and restore them; this view is just their reader/writer.
@@ -432,7 +397,7 @@ export const DiffView = () => {
   const contentWidth = () =>
     Math.max(1, state.layout().viewer.content.width - gutterWidth());
 
-  // Per-row terminal heights for windowing spacers and cursor-follow. In non-wrap
+  // Per-row terminal heights for windowing and cursor-follow. In non-wrap
   // Mode every row is exactly one terminal row (`wrapMode="none"`), so heights are
   // Uniform; in wrap mode each line row is measured exactly against OpenTUI's own
   // Word-wrap engine so the cumulative offsets match the rendered layout.
@@ -490,24 +455,8 @@ export const DiffView = () => {
   // Context rows kept between the cursor and the top/bottom edge as it moves.
   const CURSOR_SCROLL_MARGIN = 3;
 
-  // Mount a few rows beyond the viewport as a buffer so a fast scroll tick never
-  // Flashes an unmounted row at the viewport edge.
-  const OVERSCAN = 8;
-
   const window = createMemo(() =>
-    wrap()
-      ? visibleWindowVariable(
-          heights(),
-          scrollTop(),
-          state.viewerHeight(),
-          OVERSCAN
-        )
-      : visibleWindow(
-          rows().length,
-          scrollTop(),
-          state.viewerHeight(),
-          OVERSCAN
-        )
+    visibleWindow(rowEnds(), scrollTop(), state.viewerHeight())
   );
 
   const visibleRows = createMemo(() =>
@@ -523,37 +472,18 @@ export const DiffView = () => {
       setScrollX(max);
     }
   });
-  // Clamp scrollTop when the content shrinks under it (toggle to a shorter file,
-  // Terminal resize), mirroring the scrollX clamp. Reads scrollTop untracked so it
-  // Fires on a height/viewport change, not on every scroll tick, and never feeds
-  // Back into the projection below.
+  // Clamp scrollTop the same way: the content can shrink under it (toggle to a shorter file, terminal
+  // Resize), and a restore can set a position remembered from a longer version of the file.
   createEffect(() => {
     const max = maxScrollY();
 
-    if (untrack(scrollTop) > max) {
+    if (scrollTop() > max) {
       setScrollTop(max);
     }
   });
 
-  /**
-   * The scrollbox's physical scroll is a pure projection of the scrollTop signal: the windowed slice
-   * (driven by scrollTop) and what's painted must never disagree. A scroll made in the same tick as a
-   * content swap could land against the old height and strand the viewport in the empty top spacer
-   * (the toggle-blank bug), but OpenTUI's `scrollTo` applies again after the next frame's layout, so
-   * it lands against the new content. Only the target needs tracking: content that shrinks under
-   * scrollTop moves it through the clamp above, and the scrollbox keeps its own position when its
-   * content grows.
-   */
-  createEffect(() => {
-    scrollRef?.scrollTo(scrollTop());
-  });
-
   // Wheel: left/right scroll long lines horizontally (shared across all lines, so
-  // The whole view shifts); up/down drive scrollTop directly (the projection above
-  // Carries it to the scrollbox). Both axes own the scroll and zero the native
-  // Delta so the scrollbox never also acts on it: scrollTop must stay the single
-  // Source of truth for the window, or a native read-back races the uncommitted
-  // Scroll and the slice trails the visible content, blanking the lower viewport.
+  // The whole view shifts); up/down drive scrollTop.
   const VERTICAL_STEP = 3;
 
   const onWheel = (event: MouseEvent) => {
@@ -571,10 +501,6 @@ export const DiffView = () => {
         );
       }
 
-      if (event.scroll !== undefined) {
-        event.scroll.delta = 0;
-      }
-
       return;
     }
 
@@ -585,10 +511,6 @@ export const DiffView = () => {
         Math.min(previous + sign * delta * VERTICAL_STEP, maxScrollY())
       )
     );
-
-    if (event.scroll !== undefined) {
-      event.scroll.delta = 0;
-    }
   };
 
   const localPointer = (event: MouseEvent) => ({
@@ -904,7 +826,7 @@ export const DiffView = () => {
     })
   );
 
-  // Keep the cursor's row inside the viewport by scrolling the box to it, with a
+  // Keep the cursor's row inside the viewport by scrolling to it, with a
   // Margin of context rows so the cursor never glues to the very edge (where a
   // Frame of scheduling lag could push it off screen). Reads the current scroll
   // Offset untracked: this effect must fire only when the cursor or layout moves,
@@ -918,7 +840,7 @@ export const DiffView = () => {
       return true;
     }
 
-    if (cursorRow === undefined || scrollRef === undefined) {
+    if (cursorRow === undefined) {
       return true;
     }
 
@@ -1076,101 +998,88 @@ export const DiffView = () => {
 
   return (
     <box position="relative" width="100%" height={state.viewerHeight()}>
-      <scrollbox
-        ref={(el) => {
-          scrollRef = el;
-        }}
-        width="100%"
-        height={state.viewerHeight()}
-        scrollY
-        scrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.rgba.transparent,
-            foregroundColor: theme.colors.scrollbar.thumb,
-          },
-          visible: false,
-        }}
-      >
-        <box width="100%" height={window().topSpacer} />
-        {/* Non-wrap rows are pinned to height 1 because `heights()` counts every such
-          row as one terminal row, and the spacers/maxScrollY derive from that. Some
-          graphemes (emoji with a U+FE0F variation selector) otherwise lay a
-          `wrapMode="none"` text out two rows tall, under-counting the content height
-          and stranding the file's last line below the fold. Separators count as 1 in
-          both modes, so they pin unconditionally. */}
-        <Index each={visibleRows()}>
-          {(row, rowIndex) => (
-            <Show
-              when={asLineRow(row())}
-              fallback={
-                <box
-                  width="100%"
-                  height={1}
-                  backgroundColor={theme.colors.surface.panel}
-                >
-                  <text
-                    ref={(el) => {
-                      el.selectable = false;
-                    }}
-                    fg={theme.colors.text.faint}
+      <box width="100%" height={state.viewerHeight()} overflow="hidden">
+        {/* The slice paints at its own content offset less the scroll, so a tall wrapped row can
+            start above the viewport. */}
+        <box
+          position="absolute"
+          left={0}
+          top={window().top - scrollTop()}
+          width="100%"
+          flexDirection="column"
+        >
+          <Index each={visibleRows()}>
+            {(row, rowIndex) => (
+              <Show
+                when={asLineRow(row())}
+                fallback={
+                  <box
+                    width="100%"
+                    height={1}
+                    flexShrink={0}
+                    backgroundColor={theme.colors.surface.panel}
                   >
-                    {`${markerGlyph(row())
-                      .padStart(numberWidth() + 1)
-                      .padEnd(gutterWidth())}${markerLabel(row())}`}
-                  </text>
-                </box>
-              }
-            >
-              {(line) => (
-                <box
-                  width="100%"
-                  flexDirection="row"
-                  // Explicit per-row height in both modes, from the same `heights()`
-                  // The spacers and scroll math use. A `1 -> undefined` (fixed -> auto)
-                  // Transition does not relayout the text leaf, so a `z` toggle into
-                  // Wrap left long lines stuck at one row; `1 -> N` always relayouts.
-                  height={heights()[window().start + rowIndex] ?? 1}
-                >
-                  <text
-                    ref={(el) => {
-                      el.selectable = false;
-                    }}
-                    fg={changeBarColor(line())}
-                    bg={gutterBackground(line())}
-                  >
-                    {changeBar(line())}
-                  </text>
-                  <text
-                    ref={(el) => {
-                      el.selectable = false;
-                    }}
-                    fg={gutterNumberColor(line())}
-                    bg={gutterBackground(line())}
-                  >
-                    {`${lineLabel(line())} `}
-                  </text>
-                  <box flexGrow={1} backgroundColor={contentBackground(line())}>
-                    <StyledLine
-                      row={line()}
-                      wrap={wrap()}
-                      width={contentWidth()}
-                      scrollX={scrollX()}
-                      selected={selectedCells(line())}
-                      lifted={isCodeLifted(line())}
-                    />
+                    <text selectable={false} fg={theme.colors.text.faint}>
+                      {`${markerGlyph(row())
+                        .padStart(numberWidth() + 1)
+                        .padEnd(gutterWidth())}${markerLabel(row())}`}
+                    </text>
                   </box>
-                </box>
-              )}
-            </Show>
-          )}
-        </Index>
-        <box width="100%" height={window().bottomSpacer} />
-      </scrollbox>
+                }
+              >
+                {(line) => (
+                  <box
+                    width="100%"
+                    flexDirection="row"
+                    flexShrink={0}
+                    // The height the window and every pointer mapping count this row as.
+                    height={heights()[window().start + rowIndex] ?? 1}
+                  >
+                    <text
+                      selectable={false}
+                      flexShrink={0}
+                      fg={changeBarColor(line())}
+                      bg={gutterBackground(line())}
+                    >
+                      {changeBar(line())}
+                    </text>
+                    <text
+                      selectable={false}
+                      flexShrink={0}
+                      fg={gutterNumberColor(line())}
+                      bg={gutterBackground(line())}
+                    >
+                      {`${lineLabel(line())} `}
+                    </text>
+                    <box
+                      width={contentWidth()}
+                      flexShrink={0}
+                      overflow="hidden"
+                      backgroundColor={contentBackground(line())}
+                    >
+                      <StyledLine
+                        row={line()}
+                        wrap={wrap()}
+                        width={
+                          wrap()
+                            ? contentWidth()
+                            : Math.max(contentWidth(), longestLine())
+                        }
+                        scrollX={wrap() ? 0 : scrollX()}
+                        selected={selectedOffsets(line())}
+                        lifted={isCodeLifted(line())}
+                      />
+                    </box>
+                  </box>
+                )}
+              </Show>
+            )}
+          </Index>
+        </box>
+      </box>
       <box
         ref={(el) => {
           interactionRef = el;
-          el.selectable = false;
-          el.focusable = false;
         }}
         position="absolute"
         left={0}

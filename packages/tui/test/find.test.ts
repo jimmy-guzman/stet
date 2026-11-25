@@ -36,4 +36,10 @@ describe("matchColumn", () => {
     expect(matchColumn("  return MATCHES;", "matches")).toBe(9);
     expect(matchColumn("  return matches;", "MATCHES")).toBe(-1);
   });
+
+  test("is an offset into the line itself, which lowercasing can lengthen", () => {
+    expect(matchColumn(`${"\u0130".repeat(80)}needle`, "needle")).toBe(80);
+    expect(matchColumn("\u0130needle", "needle")).toBe(1);
+    expect(matchColumn("\u0130", "needle")).toBe(-1);
+  });
 });

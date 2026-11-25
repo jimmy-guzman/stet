@@ -331,6 +331,61 @@ describe("line cursor", () => {
     }
   }, 20_000);
 
+  test("a find match is shown in a wrapped line taller than the viewer", async () => {
+    const { mockInput, renderer, settleUntil } = await mountChanged(
+      "stet-cursor-tall-",
+      "const a = 1\n",
+      `${"word ".repeat(1000)}NEEDLE\n`
+    );
+
+    try {
+      await settleUntil("diff loaded", (frame) => frame.includes("word word"));
+      mockInput.pressTab();
+      mockInput.pressKey("x");
+      await settleUntil("wrapped", () => state.overflow() === "wrap");
+      mockInput.pressKey("/");
+      await settleUntil("find open", () => state.findOpen());
+      await mockInput.typeText("NEEDLE");
+      mockInput.pressEnter();
+      await settleUntil("match shown", (frame) =>
+        frame
+          .split("\n")
+          .slice(state.layout().viewer.content.y + 1)
+          .join("\n")
+          .includes("NEEDLE")
+      );
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a search result is shown in a wrapped line taller than the viewer", async () => {
+    const { mockInput, renderer, settleUntil } = await mountChanged(
+      "stet-cursor-tall-jump-",
+      "const a = 1\n",
+      `${"word ".repeat(1000)}NEEDLE\n`
+    );
+
+    try {
+      await settleUntil("diff loaded", (frame) => frame.includes("word word"));
+      mockInput.pressKey("x");
+      await settleUntil("wrapped", () => state.overflow() === "wrap");
+      mockInput.pressKey("f", { ctrl: true });
+      await settleUntil("search", (frame) => frame.includes("search…"));
+      await mockInput.typeText("NEEDLE");
+      await settleUntil("result", (frame) =>
+        frame.includes("1 match in 1 file")
+      );
+      mockInput.pressEnter();
+      await settleUntil(
+        "match shown",
+        (frame) => state.mainView() === "file" && frame.includes("NEEDLE")
+      );
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
   test("extending a selection inside a wide word keeps its end on screen", async () => {
     const { mockInput, renderer, settleUntil } = await mountChanged(
       "stet-cursor-extend-",

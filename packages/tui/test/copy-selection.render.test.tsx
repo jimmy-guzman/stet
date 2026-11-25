@@ -82,7 +82,15 @@ const mountFile = async (after: string, width = 110) => {
     return { x: Bun.stringWidth(row.slice(0, row.indexOf(text))), y };
   };
 
-  return { ...app, cellOf, copied, settleUntil: makeSettleUntil(app) };
+  // Rewrite the file and wait for the app's own watcher or poll to show it.
+  const settleUntil = makeSettleUntil(app);
+
+  const refresh = async (text: string, shows: string) => {
+    writeFileSync(path.join(repoRoot, "src", "a.ts"), text);
+    await settleUntil("refreshed", (frame) => frame.includes(shows));
+  };
+
+  return { ...app, cellOf, copied, refresh, settleUntil };
 };
 
 type Mounted = Awaited<ReturnType<typeof mountFile>>;
@@ -227,6 +235,22 @@ describe("mouse selection", () => {
         frame.includes("copied 1 line")
       );
       expect(copied).toEqual(["total", "  const total = sum(rows);"]);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a double-click takes a word with its combining marks", async () => {
+    const app = await mountFile("caf\u0065\u0301s x\n");
+    const { cellOf, copied, mockMouse, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("caf"));
+      const { x, y } = cellOf("caf");
+      await mockMouse.click(x + 1, y);
+      await mockMouse.click(x + 1, y);
+      await settleUntil("copied", () => copied.length === 1);
+      expect(copied).toEqual(["cafe\u0301s"]);
     } finally {
       renderer.destroy();
     }
@@ -677,6 +701,132 @@ describe("mouse selection", () => {
         "alpha();\nbeta();",
         "alpha();\nbeta();\ngamma();",
       ]);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+});
+
+describe("selection across a refresh", () => {
+  const before = "alpha();\nbravo();\ncharlie();\n";
+
+  test("keeps to its text when lines are added above it", async () => {
+    const app = await mountFile(before);
+    const { copied, mockInput, refresh, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("charlie"));
+      await dragText(app, { text: "bravo" }, { offset: 4, text: "bravo" });
+      await settleUntil("selected", () => copied.length === 1);
+
+      await refresh(`added();\n${before}`, "added");
+      mockInput.pressKey("Y");
+      await settleUntil("copied again", () => copied.length === 2);
+      expect(copied).toEqual(["bravo", "bravo"]);
+      expect(cursorLineContent()).toBe("bravo();");
+
+      mockInput.pressKey("y");
+      await settleUntil("reference", () => copied.length === 3);
+      expect(copied[2]).toBe("src/a.ts:3");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("goes when its line is edited", async () => {
+    const app = await mountFile(before);
+    const { copied, refresh, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("charlie"));
+      await dragText(app, { text: "bravo" }, { offset: 4, text: "bravo" });
+      await settleUntil("selected", () => copied.length === 1);
+      await refresh("alpha();\nbrought();\ncharlie();\n", "brought");
+      expect(state.viewerSelection()).toBeUndefined();
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a held drag keeps the glyph it started on", async () => {
+    const app = await mountFile(before);
+    const { cellOf, copied, mockMouse, refresh, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("charlie"));
+      const start = cellOf("bravo");
+      await mockMouse.pressDown(start.x, start.y);
+      await mockMouse.moveTo(start.x + 1, start.y);
+      await settleUntil(
+        "selecting",
+        () => state.selectionRange() !== undefined
+      );
+
+      await refresh(`added();\n${before}`, "added");
+      const end = cellOf("charlie");
+      await mockMouse.moveTo(end.x + 4, end.y);
+      await mockMouse.release(end.x + 4, end.y);
+      await settleUntil("copied", () => copied.length === 1);
+      expect(copied).toEqual(["bravo();\ncharl"]);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a press that has not moved yet keeps its glyph too", async () => {
+    const app = await mountFile(before);
+    const { cellOf, copied, mockMouse, refresh, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("charlie"));
+      const start = cellOf("bravo");
+      await mockMouse.pressDown(start.x, start.y);
+      await refresh(`added();\n${before}`, "added");
+      const end = cellOf("charlie");
+      await mockMouse.moveTo(end.x + 4, end.y);
+      await mockMouse.release(end.x + 4, end.y);
+      await settleUntil("copied", () => copied.length === 1);
+      expect(copied).toEqual(["bravo();\ncharl"]);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a held drag whose line is edited copies nothing", async () => {
+    const app = await mountFile(before);
+    const { cellOf, copied, mockMouse, refresh, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("charlie"));
+      const start = cellOf("bravo");
+      await mockMouse.pressDown(start.x, start.y);
+      await mockMouse.moveTo(start.x + 1, start.y);
+      await settleUntil(
+        "selecting",
+        () => state.selectionRange() !== undefined
+      );
+      await refresh("alpha();\nbrought();\ncharlie();\n", "brought");
+      const end = cellOf("charlie");
+      await mockMouse.moveTo(end.x + 4, end.y);
+      await mockMouse.release(end.x + 4, end.y);
+      await app.renderOnce();
+      expect(copied).toEqual([]);
+      expect(state.viewerSelection()).toBeUndefined();
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("an upward selection whose lower line goes is dropped, not left empty", async () => {
+    const app = await mountFile("abcdefgh\nsecond line\n");
+    const { copied, refresh, renderer, settleUntil } = app;
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("second"));
+      await dragText(app, { text: "second" }, { offset: 5, text: "abcdefgh" });
+      await settleUntil("selected", () => copied.length === 1);
+      await refresh("zbcdefgh\n", "zbcdefgh");
+      expect(state.viewerSelection()).toBeUndefined();
     } finally {
       renderer.destroy();
     }

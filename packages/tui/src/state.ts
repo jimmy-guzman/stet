@@ -122,6 +122,7 @@ import type {
 } from "./viewer/navigation";
 import { buildSearchItems, isNavigableSearchItem } from "./viewer/search-items";
 import {
+  followLines,
   moveFocusColumn,
   moveFocusRow,
   selectedLineNumbers,
@@ -2416,8 +2417,8 @@ const createState = () => {
   // Scope, or worktree): a navIndex anchor is meaningless against a different line
   // List. This is the structural backstop for every reload path (the scope menu,
   // A worktree switch, empty-worktree recovery) that does not route through the
-  // Caret/`goToLocation` clears. It deliberately does not track the git model, so a
-  // Background refresh of the same file keeps the selection instead of dropping it.
+  // Caret/`goToLocation` clears. It deliberately does not track the git model: a background
+  // Refresh of the same file moves the selection with its text, below.
   createEffect(
     on(
       [selectedPath, scopeIdentity, repoRoot],
@@ -2428,6 +2429,29 @@ const createState = () => {
         defer: true,
       }
     )
+  );
+
+  // A refresh replaces the lines under a selection without touching it, so it follows its text, and
+  // Goes when that text does. A toggle replaces both at once, having already moved the selection.
+  createEffect(
+    on([navigableLines, viewerSelection], ([lines, selected], before) => {
+      if (
+        selected === undefined ||
+        before === undefined ||
+        before[0] === lines ||
+        before[1] !== selected
+      ) {
+        return;
+      }
+
+      const followed = followLines(before[0], lines, selected);
+
+      if (followed === undefined) {
+        clearSelection();
+      } else {
+        select(followed);
+      }
+    })
   );
 
   /**

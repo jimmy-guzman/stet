@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  followLines,
   moveFocusColumn,
   moveFocusRow,
   selectedLineNumbers,
@@ -76,6 +77,14 @@ describe("selected text", () => {
     expect(textOf({ anchor: at(1, 0), focus: at(0, 9), unit: "line" })).toBe(
       "const user = load(id);\n"
     );
+  });
+
+  test("endpoints that clamp onto one line stay in order", () => {
+    expect(
+      textOf({ anchor: at(2, 0), focus: at(0, 4), unit: "character" }, [
+        { content: "abcdef", newLine: 1, oldLine: 1 },
+      ])
+    ).toBe("abcde");
   });
 
   test("a selection outliving its lines is clamped to what is left", () => {
@@ -159,5 +168,55 @@ describe("moving the focus", () => {
   test("a row moved past the first keeps the anchor's glyph", () => {
     const up = moveFocusRow(lines, { ...user, anchor: at(2, 0) }, -1);
     expect(textOf(up)).toBe("r = load(id);\n\nr");
+  });
+});
+
+const text = (...contents: string[]) =>
+  contents.map((content) => ({ content }));
+
+const rows = (selection: Selection | undefined) =>
+  selection === undefined
+    ? undefined
+    : [selection.anchor.index, selection.focus.index];
+
+describe("following a refresh", () => {
+  const old = text("a", "b", "c", "d", "e");
+
+  const onB: Selection = {
+    anchor: at(1, 0),
+    focus: at(1, 0),
+    unit: "character",
+  };
+
+  test("text before the first change stays", () => {
+    expect(followLines(old, text("a", "b", "x", "d", "e"), onB)).toBe(onB);
+  });
+
+  test("text after the last change moves with the length, duplicates aside", () => {
+    const braces = text("}", "a", "}", "b");
+    const second: Selection = { ...onB, anchor: at(2, 0), focus: at(2, 0) };
+    expect(
+      rows(followLines(braces, text("}", "new", "}", "a", "}", "b"), second))
+    ).toEqual([4, 4]);
+  });
+
+  test("text between two changes is found", () => {
+    expect(
+      rows(followLines(old, text("x", "y", "a", "b", "c", "z"), onB))
+    ).toEqual([3, 3]);
+  });
+
+  test("an edited or removed line takes the selection with it", () => {
+    expect(
+      followLines(old, text("a", "B", "c", "d", "e"), onB)
+    ).toBeUndefined();
+    expect(followLines(old, text("a", "c", "d", "e"), onB)).toBeUndefined();
+  });
+
+  test("a backward selection keeps its direction", () => {
+    const backward: Selection = { ...onB, anchor: at(2, 0), focus: at(1, 0) };
+    expect(
+      rows(followLines(old, text("new", "a", "b", "c", "d", "e"), backward))
+    ).toEqual([3, 2]);
   });
 });

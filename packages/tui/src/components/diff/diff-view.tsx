@@ -12,6 +12,7 @@ import {
   createEffect,
   createMemo,
   Index,
+  on,
   onCleanup,
   Show,
   untrack,
@@ -32,7 +33,7 @@ import {
 import { state } from "@/state";
 import { activeThemeMonochrome } from "@/theme/active";
 import { theme } from "@/theme/context";
-import { selectedColumns } from "@/viewer/selection";
+import { followLines, selectedColumns } from "@/viewer/selection";
 import type { SelectionPoint, SelectionUnit } from "@/viewer/selection";
 
 import { CommandMenu } from "../command-menu";
@@ -691,14 +692,38 @@ export const DiffView = () => {
     return count;
   };
 
+  const stopDragScroll = () => {
+    dragScroll = { x: 0, y: 0 };
+
+    if (dragScrollTimer !== undefined) {
+      clearInterval(dragScrollTimer);
+      dragScrollTimer = undefined;
+    }
+  };
+
+  const endDrag = () => {
+    press = undefined;
+    selecting = false;
+    stopDragScroll();
+  };
+
   const selectTo = (focus: SelectionPoint) => {
     if (press === undefined) {
       return;
     }
 
+    // Once it selects, the selection holds the anchor: a refresh moves it with its text, or drops
+    // It, and the gesture with it.
+    const held = selecting ? state.viewerSelection() : press;
+
+    if (held === undefined) {
+      endDrag();
+
+      return;
+    }
+
     selecting = true;
-    const { anchor, unit } = press;
-    state.select({ anchor, focus, unit });
+    state.select({ anchor: held.anchor, focus, unit: held.unit });
   };
 
   // A drag selects once it leaves the glyph (or, from the gutter, the line) it started on, so a
@@ -719,21 +744,6 @@ export const DiffView = () => {
     }
   };
 
-  const stopDragScroll = () => {
-    dragScroll = { x: 0, y: 0 };
-
-    if (dragScrollTimer !== undefined) {
-      clearInterval(dragScrollTimer);
-      dragScrollTimer = undefined;
-    }
-  };
-
-  const endDrag = () => {
-    press = undefined;
-    selecting = false;
-    stopDragScroll();
-  };
-
   // The release copies, once: OpenTUI reports both a drag's end and the button going up.
   const finishDrag = () => {
     const copies = selecting;
@@ -750,6 +760,7 @@ export const DiffView = () => {
   const pressAt = (event: MouseEvent) => {
     // A press that leaves the cursor where it is drifts nothing the menu's guard watches.
     state.closeCommandMenu();
+    endDrag();
     state.setFocusedPane("diff");
 
     const pointer = localPointer(event);
@@ -862,6 +873,26 @@ export const DiffView = () => {
 
   onCleanup(endDrag);
 
+  // A refresh under a held button moves a press that has not selected yet, as it does a selection.
+  createEffect(
+    on(state.navigableLines, (lines, before) => {
+      if (press === undefined || selecting || before === undefined) {
+        return;
+      }
+
+      const followed = followLines(before, lines, {
+        ...press,
+        focus: press.anchor,
+      });
+
+      if (followed === undefined) {
+        endDrag();
+      } else {
+        press = { anchor: followed.anchor, unit: followed.unit };
+      }
+    })
+  );
+
   // Keep the cursor's row inside the viewport by scrolling the box to it, with a
   // Margin of context rows so the cursor never glues to the very edge (where a
   // Frame of scheduling lag could push it off screen). Reads the current scroll
@@ -945,8 +976,9 @@ export const DiffView = () => {
     }
   });
 
-  // Scroll a requested range into view (scroll mode only; wrap mode has no horizontal scroll). The
-  // Request is consumed here, so it never fights a later sideways scroll.
+  // Scroll a requested range of the caret line into view: sideways, or in wrap mode down to its
+  // Wrapped row, since a line can be taller than the viewport. The request is consumed here, so it
+  // Never fights a later scroll.
   const REVEAL_MARGIN = 4;
   createEffect(() => {
     const range = state.revealRange();
@@ -968,7 +1000,33 @@ export const DiffView = () => {
           viewport: contentWidth(),
         })
       );
+
+      return;
     }
+
+    const rowIndex = lineRowIndices()[state.cursorIndex()] ?? 0;
+    const row = rows()[rowIndex];
+
+    if (row === undefined || !isLineRow(row)) {
+      return;
+    }
+
+    const wrappedRow = measurer().visualRowForOffset(
+      rowText(row),
+      contentWidth(),
+      range.from
+    );
+
+    setScrollTop((current) =>
+      followScrollTop({
+        current,
+        height: 1,
+        margin: CURSOR_SCROLL_MARGIN,
+        maxScroll: maxScrollY(),
+        top: (rowEnds()[rowIndex - 1] ?? 0) + wrappedRow,
+        viewport: state.viewerHeight(),
+      })
+    );
   });
 
   // Each line's background: a find match wins, else a faint add/remove tint (the change

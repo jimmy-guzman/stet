@@ -50,33 +50,128 @@ const unitAt = (content: string, column: number, unit: SelectionUnit) => {
   );
 };
 
-/** Both end glyphs are included, as a terminal's own selection includes them. */
+/**
+ * Both end glyphs are included, as a terminal's own selection includes them. The endpoints are
+ * clamped before they are ordered: two that clamp onto one line can swap.
+ */
 export const selectedRange = (
   lines: readonly SelectableLine[],
   { anchor, focus, unit }: Selection
 ): SelectedRange | undefined => {
-  const last = lines.length - 1;
-
-  if (last < 0) {
+  if (lines.length === 0) {
     return undefined;
   }
 
-  const [first, second] = isBefore(anchor, focus)
-    ? [anchor, focus]
-    : [focus, anchor];
+  const clampPoint = ({ column, index }: SelectionPoint) => ({
+    column,
+    index: clamp(index, lines.length - 1),
+  });
 
-  const start = clamp(first.index, last);
-  const end = clamp(second.index, last);
+  const ends = [clampPoint(anchor), clampPoint(focus)] as const;
+  const [first, second] = isBefore(...ends) ? ends : [ends[1], ends[0]];
 
   return {
     end: {
-      column: unitAt(lines[end]?.content ?? "", second.column, unit).end,
-      index: end,
+      column: unitAt(lines[second.index]?.content ?? "", second.column, unit)
+        .end,
+      index: second.index,
     },
     start: {
-      column: unitAt(lines[start]?.content ?? "", first.column, unit).start,
-      index: start,
+      column: unitAt(lines[first.index]?.content ?? "", first.column, unit)
+        .start,
+      index: first.index,
     },
+  };
+};
+
+const sameText = (
+  a: SelectableLine | undefined,
+  b: SelectableLine | undefined
+) => a !== undefined && a.content === b?.content;
+
+/** How many leading lines the two have in common, up to `limit`. */
+const commonLines = (
+  a: readonly SelectableLine[],
+  b: readonly SelectableLine[],
+  limit: number
+) => {
+  let count = 0;
+
+  while (count < limit && sameText(a[count], b[count])) {
+    count += 1;
+  }
+
+  return count;
+};
+
+/** Where a run of lines now starts, nearest to where it was; undefined when it is nowhere. */
+const nearestRun = (
+  lines: readonly SelectableLine[],
+  run: readonly SelectableLine[],
+  from: number
+) => {
+  const starts = lines.flatMap((_, start) =>
+    run.every((line, offset) => sameText(line, lines[start + offset]))
+      ? [start]
+      : []
+  );
+
+  return starts.toSorted((a, b) => Math.abs(a - from) - Math.abs(b - from))[0];
+};
+
+/**
+ * Keep a selection on its text when a refresh changes the lines under it: text before the first
+ * changed line stays, text after the last one moves with the length, and text between is looked for.
+ *
+ * @returns The selection, moved if need be; undefined when its lines are gone or edited.
+ */
+export const followLines = (
+  previous: readonly SelectableLine[],
+  next: readonly SelectableLine[],
+  selection: Selection
+): Selection | undefined => {
+  const range = selectedRange(previous, selection);
+
+  if (range === undefined) {
+    return undefined;
+  }
+
+  const { start, end } = range;
+  const shared = Math.min(previous.length, next.length);
+  const before = commonLines(previous, next, shared);
+
+  if (end.index < before) {
+    return selection;
+  }
+
+  const after = commonLines(
+    previous.toReversed(),
+    next.toReversed(),
+    shared - before
+  );
+
+  const moved =
+    start.index >= previous.length - after
+      ? start.index + next.length - previous.length
+      : nearestRun(
+          next,
+          previous.slice(start.index, end.index + 1),
+          start.index
+        );
+
+  if (moved === undefined) {
+    return undefined;
+  }
+
+  const move = ({ column, index }: SelectionPoint) => ({
+    column,
+    index: index + moved - start.index,
+  });
+
+  return {
+    ...selection,
+    anchor: move(selection.anchor),
+    focus: move(selection.focus),
   };
 };
 

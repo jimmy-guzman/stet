@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.12.0...stet-v0.13.0) (2026-11-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* **viewer:** 💥 The word caret, the copy-selection action (C), and the :col in copied references are removed. caret-next, caret-prev, and copy-file are now scroll-right, scroll-left, and copy-text.
+
+### Features
+
+* **file-support:** ✨ restore icons orphaned by the trees resolver ([#405](https://github.com/jimmy-guzman/stet/issues/405)) ([fe05183](https://github.com/jimmy-guzman/stet/commit/fe05183ac14c4ff624a7e43b1159310853d30825))
+* **tui:** ✨ drag list scrollbars & let opentui clip the viewer ([#408](https://github.com/jimmy-guzman/stet/issues/408)) ([fe11705](https://github.com/jimmy-guzman/stet/commit/fe1170543b4a3a46e0cf2c53c38e984dee3fca9b))
+* **viewer:** ✨ copy selected text on release ([#407](https://github.com/jimmy-guzman/stet/issues/407)) ([530a12a](https://github.com/jimmy-guzman/stet/commit/530a12af93176185f925d16c3fb12950ee960e86))
+
 ## [0.12.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.11.0...stet-v0.12.0) (2026-11-23)
 
 

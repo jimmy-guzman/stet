@@ -94,8 +94,9 @@ const StyledLine = (props: {
             props.selected.to - offset
           );
 
-    // A changed word layers its line's sign color over the row's own background; the
-    // Selection wins over it.
+    // A changed word layers its line's sign color over the row's own background. A row with
+    // Selected text drops its marks: in a theme with no hue they are the selection's own grey, so
+    // Its end could not be seen.
     const wordBg = changedWordBg(row, props.lifted);
 
     ref.content = new StyledText(
@@ -106,7 +107,9 @@ const StyledLine = (props: {
           return bg(theme.colors.selection.bg)(chunk);
         }
 
-        return part.changed === true ? bg(wordBg)(chunk) : chunk;
+        return part.changed === true && props.selected === undefined
+          ? bg(wordBg)(chunk)
+          : chunk;
       })
     );
   });

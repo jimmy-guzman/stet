@@ -8,6 +8,7 @@ import { testRender } from "@opentui/solid";
 
 import { App } from "@/app";
 import { state } from "@/state";
+import { setSelection } from "@/theme/active";
 import { theme } from "@/theme/context";
 
 import {
@@ -162,6 +163,32 @@ describe("mouse selection", () => {
       expect(
         gutter?.spans.find((span) => span.text.includes("▎"))?.bg.toInts()
       ).not.toEqual(unselected);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("selected text is the only mark on its row, so its end shows without hue", async () => {
+    setSelection("mono-dark");
+    const app = await mountFile("base one two\n");
+    const { captureSpans, copied, renderer, settleUntil } = app;
+
+    const added = () =>
+      captureSpans()
+        .lines.find(({ spans }) =>
+          spans.some(({ text }) => text.includes("two"))
+        )
+        ?.spans.find(({ text }) => text.includes("two"))
+        ?.bg.toInts();
+
+    try {
+      await settleUntil("loaded", (frame) => frame.includes("base one two"));
+      const plain = RGBA.fromHex(theme.colors.diff.addedBg).toInts();
+      expect(added()).not.toEqual(plain);
+
+      await dragText(app, { text: "one" }, { offset: 2, text: "one" });
+      await settleUntil("selected", () => copied.length === 1);
+      expect(added()).toEqual(plain);
     } finally {
       renderer.destroy();
     }

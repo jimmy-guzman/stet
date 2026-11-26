@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeEach } from "bun:test";
 import { themes } from "@pierre/highlights/themes/loader";
 
 import { registerClipboard } from "@/clipboard/registry";
+import { resetPointer } from "@/components/pointer";
 import { registerWidthMethod } from "@/diff/cells";
 import { preloadDiffHighlighter } from "@/diff/engine";
 import {
@@ -27,13 +28,14 @@ const bundledLoaders = { ...themes };
  * it left set poisoned every file after it, failing unrelated tests on a signal they never touched.
  * Registering here means this runs before any file's own hooks, so no test can inherit another's
  * state, however it ended. The clipboard, cell width, theme, keybinding, and file-support registries, the bundled theme
- * loaders, and the active theme signals live outside `state` (their own module state and root),
+ * loaders, the pointer, and the active theme signals live outside `state` (their own module state and root),
  * where `resetState` cannot reach them, so they reset here too.
  */
 beforeEach(() => {
   Object.assign(themes, bundledLoaders);
   state.resetState();
   registerClipboard(undefined);
+  resetPointer();
   registerWidthMethod("unicode-wide");
   restoreRegistry();
   setSelection(undefined);

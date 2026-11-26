@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 
 import type { DockedPane, Layout, LayoutInput } from "@/layout/regions";
-import { computeLayout, DOCKS, PANE_DEFAULT_HEIGHT } from "@/layout/regions";
+import {
+  computeLayout,
+  DOCKS,
+  draggedExtent,
+  PANE_DEFAULT_HEIGHT,
+  PANE_MIN_HEIGHT,
+  PANE_MIN_WIDTH,
+} from "@/layout/regions";
 
 const pane = (overrides: Partial<DockedPane> = {}): DockedPane => ({
   heightOverride: null,
@@ -240,4 +247,66 @@ test("zoom gives one pane the band without touching the open flags", () => {
   expect(layout({ ...open, zoom: "tree" }).header.height).toBe(1);
   // With one pane on screen there is no divider to join to the rules.
   expect(layout({ ...open, zoom: "viewer" }).junction).toBeUndefined();
+});
+
+// The coordinate a pane's divider is drawn at, along its dock's axis.
+const dividerAt = (position: DockedPane["position"], result: Layout) => {
+  const { height, width, x, y } = result.sidebar;
+
+  return {
+    bottom: y,
+    left: x + width - 1,
+    right: x,
+    top: y + height - 1,
+  }[position];
+};
+
+test("dragging the divider puts it on the pointer's cell, on every dock", () => {
+  for (const position of DOCKS) {
+    const input = {
+      sidebar: pane({ position }),
+      terminalHeight: 30,
+      terminalWidth: 100,
+      zoom: undefined,
+    };
+
+    const point = { x: 40, y: 12 };
+    const extent = draggedExtent(input, point);
+    const horizontal = position === "left" || position === "right";
+
+    const result = computeLayout({
+      ...input,
+      sidebar: pane({
+        position,
+        [horizontal ? "widthOverride" : "heightOverride"]: extent,
+      }),
+    });
+
+    expect(dividerAt(position, result)).toBe(horizontal ? point.x : point.y);
+  }
+});
+
+test("a drag past either limit stores the extent that is drawn", () => {
+  const input = {
+    sidebar: pane(),
+    terminalHeight: 30,
+    terminalWidth: 100,
+    zoom: undefined,
+  };
+
+  expect(draggedExtent(input, { x: 2, y: 5 })).toBe(PANE_MIN_WIDTH);
+  expect(draggedExtent(input, { x: 99, y: 5 })).toBe(
+    computeLayout({ ...input, sidebar: pane({ widthOverride: 1000 }) }).sidebar
+      .width
+  );
+
+  const top = { ...input, sidebar: pane({ position: "top" }) };
+
+  expect(draggedExtent(top, { x: 5, y: 1 })).toBe(PANE_MIN_HEIGHT);
+  expect(draggedExtent(top, { x: 5, y: 29 })).toBe(
+    computeLayout({
+      ...top,
+      sidebar: pane({ heightOverride: 1000, position: "top" }),
+    }).sidebar.height
+  );
 });

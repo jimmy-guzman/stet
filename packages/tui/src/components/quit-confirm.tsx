@@ -3,7 +3,9 @@ import type { MouseEvent } from "@opentui/core";
 import { state } from "@/state";
 import { theme } from "@/theme/context";
 
-export const QuitConfirm = () => (
+import { ActionText } from "./action-text";
+
+export const QuitConfirm = (props: { onQuit: () => void }) => (
   // Full-screen barrier: an alert dialog blocks the app behind it. The scrim dims
   // The background, and capturing mouse-down keeps a background click inert (never
   // Passing through to the tree/viewer, never dismissing). The keymap traps keys.
@@ -40,12 +42,20 @@ export const QuitConfirm = () => (
       </box>
       <box
         height={1}
+        flexDirection="row"
         paddingLeft={1}
         backgroundColor={theme.colors.surface.panel}
       >
+        <ActionText label="y quit" onPress={props.onQuit} />
         <text selectable={false} fg={theme.colors.text.muted}>
-          y quit · esc cancel
+          {" · "}
         </text>
+        <ActionText
+          label="esc cancel"
+          onPress={() => {
+            state.setQuitConfirmOpen(false);
+          }}
+        />
       </box>
     </box>
   </box>

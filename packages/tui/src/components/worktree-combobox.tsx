@@ -10,6 +10,9 @@ import { lerpHex } from "@/utils/color";
 import { relativeTime } from "@/utils/relative-time";
 import { collapseHome, truncate, truncateLeft } from "@/utils/text";
 
+import { leftPress } from "./mouse";
+import { hoverable } from "./pointer";
+
 // Every cell is a fixed-width box, never a padded string: a whitespace-only `<text>` measures zero
 // Cells in a flex row, so a worktree with no age would pull the columns right of it out of line.
 // `11mo` is the widest age `relativeTime` produces.
@@ -204,11 +207,13 @@ export const WorktreeCombobox = () => {
                         ? theme.colors.surface.cursor
                         : theme.colors.surface.panel
                     }
-                    onMouseDown={() => {
-                      batch(() => {
-                        void state.switchWorktree(worktree());
-                      });
+                    ref={hoverable("pointer").ref}
+                    onMouseMove={() => {
+                      state.setWorktreeComboboxIndex(index);
                     }}
+                    onMouseDown={leftPress(() => {
+                      void state.switchWorktree(worktree());
+                    })}
                   >
                     {/* One line: a branch name or path long enough to wrap would break off at a word
                         and hide the rest. */}

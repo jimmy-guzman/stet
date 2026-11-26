@@ -4,7 +4,6 @@ import { batch } from "solid-js";
 import { scopeKinds } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { HORIZONTAL_STEP } from "./diff/follow";
-import { latestActivity } from "./git/activity";
 import type { KeyActionId } from "./keys/actions";
 import { matchesKey } from "./keys/combo";
 import { combosFor } from "./keys/registry";
@@ -26,37 +25,6 @@ interface HostEffects {
     mode: "terminal" | "ide"
   ) => Promise<void>;
 }
-
-const cycleFind = (direction: number) => {
-  const matches = state.findMatches();
-
-  if (matches.length === 0) {
-    return;
-  }
-
-  const pos =
-    (state.findMatchPos() + direction + matches.length) % matches.length;
-
-  const target = matches[pos];
-
-  if (target !== undefined) {
-    state.setFindMatchPos(pos);
-    state.goToFindMatch(target);
-  }
-};
-
-// Open the scope picker on the kinds level, reading as "where am I now": on the
-// Active kind, or the "commits" drill-down row when a commit scope is active (its
-// SHA is not a top-level kind, so indexOf is a benign -1).
-const openScopeMenu = () => {
-  state.setScopeMenuView("kinds");
-  state.setScopeMenuIndex(
-    state.scope().kind === "commit"
-      ? scopeKinds.length
-      : Math.max(0, scopeKinds.indexOf(state.scope().kind))
-  );
-  state.setScopeMenuOpen(true);
-};
 
 /** Everything one keypress's handlers read: the event, the host seam, and the binding matcher. */
 interface KeyContext {
@@ -210,8 +178,7 @@ const handleScopeMenu: KeyStep = ({ key }) => {
   if (key.name === "escape" || (key.name === "left" && inCommits)) {
     // Esc (or left) backs out of the drill-down first, then closes the picker.
     if (inCommits) {
-      state.setScopeMenuView("kinds");
-      state.setScopeMenuIndex(scopeKinds.length);
+      state.leaveScopeCommits();
     } else {
       state.setScopeMenuOpen(false);
     }
@@ -351,7 +318,12 @@ const searchChords = new Map<string, () => void>([
   // Keys once open, and a pick reruns the search via the git-model dep.
   // Ctrl-o, not ctrl-s: one key means one thing, and ctrl-s saves settings
   // Everywhere.
-  ["o", openScopeMenu],
+  [
+    "o",
+    () => {
+      state.openScopeMenu();
+    },
+  ],
   // This input-owning branch swallows unmatched keys, so the global save
   // Below is repeated here rather than reached by fallthrough.
   [
@@ -614,13 +586,13 @@ const handleCommittedFind: KeyStep = ({ key }) => {
   }
 
   if (key.name === "n" && !key.shift) {
-    cycleFind(1);
+    state.cycleFind(1);
 
     return true;
   }
 
   if (key.name === "N" || (key.name === "n" && key.shift)) {
-    cycleFind(-1);
+    state.cycleFind(-1);
 
     return true;
   }
@@ -752,8 +724,7 @@ const globalBindings: readonly Binding[] = [
   {
     id: "help",
     run: () => {
-      state.setHelpView("keys");
-      state.setHelpDialogOpen(true);
+      state.openHelp();
     },
   },
   {
@@ -765,7 +736,12 @@ const globalBindings: readonly Binding[] = [
       state.openWorktreePicker();
     },
   },
-  { id: "scope", run: openScopeMenu },
+  {
+    id: "scope",
+    run: () => {
+      state.openScopeMenu();
+    },
+  },
   {
     id: "theme",
     run: ({ key }) => {
@@ -785,9 +761,7 @@ const globalBindings: readonly Binding[] = [
   {
     id: "changes-only",
     run: () => {
-      const current = state.changesOnly();
-      state.setChangesOnly(!current);
-      state.notify(current ? "all files" : "changes only");
+      state.toggleChangesOnly();
     },
   },
   {
@@ -802,11 +776,7 @@ const globalBindings: readonly Binding[] = [
   {
     id: "latest-file",
     run: () => {
-      const latest = latestActivity(state.activityLog());
-
-      if (latest !== undefined) {
-        state.selectFile(latest.path);
-      }
+      state.openLatestFile();
     },
   },
   {
@@ -822,8 +792,9 @@ const globalBindings: readonly Binding[] = [
     },
   },
   // Open the context menu on the focused pane (Shift+F10, the IDE-standard "show
-  // Context menu" key). The tree menu works from tree focus; the viewer menu only
-  // While the file view is on screen (its copy actions need a caret).
+  // Context menu" key): the focused tree row, the selected search result, or the
+  // Viewer's caret. A file the viewer shows as a preview has no caret, so its menu
+  // Is the preview's, which the app mounts; the caret menu only DiffView mounts.
   {
     id: "context-menu",
     run: () => {
@@ -831,8 +802,12 @@ const globalBindings: readonly Binding[] = [
 
       if (pane === "tree") {
         state.openCommandMenu("tree");
+      } else if (pane === "search") {
+        state.openCommandMenu("search");
       } else if (pane === "diff" && fileViewShowing()) {
-        state.openCommandMenu("viewer");
+        state.openCommandMenu(
+          state.viewerShowsPreview() ? "preview" : "viewer"
+        );
       }
     },
   },

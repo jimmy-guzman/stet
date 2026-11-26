@@ -7,8 +7,11 @@ import { state } from "@/state";
 import { theme } from "@/theme/context";
 import { truncate } from "@/utils/text";
 
+import { ActionText } from "./action-text";
 import { BAR_EDGE, BAR_SEP, ISLAND_PAD } from "./bar";
 import { Island } from "./island";
+import { leftPress } from "./mouse";
+import { hoverable } from "./pointer";
 
 // Nerd Font (Material Design) glyphs for the header's git identity, code points verbatim from the
 // Official Nerd Fonts glyphnames.json (never hand-guessed). Repo is md-source_repository (U+F0CCF),
@@ -123,6 +126,59 @@ const branchText = () => {
   return branch === undefined ? undefined : fitBranch(branch);
 };
 
+// The identity group opens the worktree picker (`w`), as a whole: its glyphs, name, and branch light
+// Together under the pointer, so it reads as one target.
+const Identity = () => {
+  const hover = hoverable("pointer");
+
+  const tone = (rest: string) =>
+    hover.hovered() ? theme.colors.text.primary : rest;
+
+  return (
+    <box
+      ref={hover.ref}
+      flexDirection="row"
+      onMouseDown={leftPress(() => {
+        state.openWorktreePicker();
+      })}
+    >
+      <Show when={state.iconsEnabled()}>
+        <box width={GLYPH_CELLS} overflow="hidden">
+          <text selectable={false} fg={tone(theme.colors.text.muted)}>
+            {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
+          </text>
+        </box>
+      </Show>
+      <text selectable={false} fg={tone(theme.colors.text.secondary)}>
+        {primaryText()}
+      </text>
+      <Show when={branchText()}>
+        {(branch) => (
+          <box flexDirection="row">
+            <text selectable={false} fg={theme.colors.border.unfocused}>
+              {BAR_SEP}
+            </text>
+            <Show when={state.iconsEnabled()}>
+              <box width={GLYPH_CELLS} overflow="hidden">
+                <text selectable={false} fg={tone(theme.colors.text.muted)}>
+                  {BRANCH_GLYPH}
+                </text>
+              </box>
+            </Show>
+            <text selectable={false} fg={tone(theme.colors.text.muted)}>
+              {branch()}
+            </text>
+          </box>
+        )}
+      </Show>
+    </box>
+  );
+};
+
+const openScopeMenu = () => {
+  state.openScopeMenu();
+};
+
 export const HeaderBar = () => (
   <box
     height={1}
@@ -132,45 +188,24 @@ export const HeaderBar = () => (
     paddingRight={BAR_EDGE}
   >
     <Island>
-      <Show
-        when={isCommit()}
-        fallback={
-          <box flexDirection="row">
-            <Show when={state.iconsEnabled()}>
-              <box width={GLYPH_CELLS} overflow="hidden">
-                <text selectable={false} fg={theme.colors.text.muted}>
-                  {inWorktree() ? WORKTREE_GLYPH : REPO_GLYPH}
-                </text>
-              </box>
-            </Show>
-            <text fg={theme.colors.text.secondary}>{primaryText()}</text>
-            <Show when={branchText()}>
-              {(branch) => (
-                <box flexDirection="row">
-                  <text fg={theme.colors.border.unfocused}>{BAR_SEP}</text>
-                  <Show when={state.iconsEnabled()}>
-                    <box width={GLYPH_CELLS} overflow="hidden">
-                      <text selectable={false} fg={theme.colors.text.muted}>
-                        {BRANCH_GLYPH}
-                      </text>
-                    </box>
-                  </Show>
-                  <text fg={theme.colors.text.muted}>{branch()}</text>
-                </box>
-              )}
-            </Show>
-          </box>
-        }
-      >
-        <text fg={theme.colors.text.muted}>{commitSubject()}</text>
+      <Show when={isCommit()} fallback={<Identity />}>
+        {/* The subject names the commit scope, so it opens the scope picker as `s` does. */}
+        <ActionText label={commitSubject()} onPress={openScopeMenu} />
       </Show>
     </Island>
     <Island>
       <Show when={!isCommit()}>
-        <text fg={theme.colors.text.muted}>{scopeText()}</text>
-        <text fg={theme.colors.border.unfocused}>{BAR_SEP}</text>
+        <ActionText label={scopeText()} onPress={openScopeMenu} />
+        <text selectable={false} fg={theme.colors.border.unfocused}>
+          {BAR_SEP}
+        </text>
       </Show>
-      <text fg={theme.colors.text.muted}>{tail()}</text>
+      <ActionText
+        label={tail()}
+        onPress={() => {
+          state.toggleChangesOnly();
+        }}
+      />
     </Island>
   </box>
 );

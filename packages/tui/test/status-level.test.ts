@@ -50,7 +50,7 @@ test("the find modes carry their own guidance", () => {
   state.setFindOpen(false);
   state.setFindActive(true);
   expect(state.statusBarModel()).toMatchObject({
-    text: "n/N next/prev ─ esc clear",
+    text: "n next ─ N prev ─ esc clear",
   });
 });
 

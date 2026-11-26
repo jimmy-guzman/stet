@@ -1,10 +1,13 @@
+import type { MouseEvent } from "@opentui/core";
 import { Show } from "solid-js";
 
 import type { ImageMeta } from "@/file/image-meta";
 import type { BinaryDiff, SideMeta } from "@/git/file-patch";
+import { state } from "@/state";
 import { theme } from "@/theme/context";
 import { formatBytes } from "@/utils/format-bytes";
 
+import { ActionText } from "./action-text";
 import { FileIcon } from "./file-icon";
 
 const dimensions = (image: ImageMeta | undefined) =>
@@ -30,6 +33,7 @@ export const BinaryPreview = (props: {
   height: number;
   single?: SideMeta;
   diff?: BinaryDiff;
+  onMouseDown?: (event: MouseEvent) => void;
 }) => {
   const labelSide = () =>
     props.single ?? props.diff?.newSide ?? props.diff?.oldSide;
@@ -63,6 +67,7 @@ export const BinaryPreview = (props: {
       flexDirection="column"
       justifyContent="center"
       alignItems="center"
+      onMouseDown={props.onMouseDown}
     >
       <box flexDirection="row">
         <FileIcon path={props.path} />
@@ -71,9 +76,15 @@ export const BinaryPreview = (props: {
       <Show when={detail() !== ""}>
         <text fg={theme.colors.text.muted}>{detail()}</text>
       </Show>
-      <text fg={theme.colors.text.faint}>
-        can't preview here · O to open externally
-      </text>
+      {/* The way out is the hint itself: a click opens the file as `O` does. */}
+      <ActionText
+        label="can't preview here · O to open externally"
+        fg={theme.colors.text.faint}
+        wraps
+        onPress={() => {
+          state.openExternally(props.path);
+        }}
+      />
     </box>
   );
 };

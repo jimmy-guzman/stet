@@ -98,7 +98,7 @@ describe("text outside the viewer", () => {
       captureSpans().lines.some((line) =>
         line.spans.some(
           (span) =>
-            span.text.includes("uncommitted") &&
+            span.text.includes("src/a.ts") &&
             rgbToHex(span.bg) === background &&
             rgbToHex(span.fg) === foreground
         )
@@ -109,8 +109,8 @@ describe("text outside the viewer", () => {
         current.includes("alpha")
       );
 
-      const { x, y } = cellOf(frame, "uncommitted");
-      await mockMouse.drag(x, y, x + 10, y);
+      const { x, y } = cellOf(frame, "src/a.ts");
+      await mockMouse.drag(x, y, x + 7, y);
 
       const dark = theme.colors.selection.bg;
       await settleUntil("painted", () =>
@@ -139,10 +139,10 @@ describe("text outside the viewer", () => {
       await mockMouse.drag(code.x, code.y, code.x + 4, code.y);
       await settleUntil("viewer copied", () => copied.length === 1);
 
-      const header = cellOf(frame, "uncommitted");
-      await mockMouse.drag(header.x, header.y, header.x + 10, header.y);
-      await settleUntil("header copied", () => copied.length === 2);
-      expect(copied).toEqual(["alpha", "uncommitted"]);
+      const title = cellOf(frame, "src/a.ts");
+      await mockMouse.drag(title.x, title.y, title.x + 7, title.y);
+      await settleUntil("title copied", () => copied.length === 2);
+      expect(copied).toEqual(["alpha", "src/a.ts"]);
       expect(state.viewerSelection()).toBeUndefined();
 
       state.extendSelectionRow(1);
@@ -152,7 +152,8 @@ describe("text outside the viewer", () => {
     }
   }, 20_000);
 
-  test("a drag across the viewer's title keeps its parts apart", async () => {
+  // The stats switch the view on a click, so like every clickable label they offer nothing to copy.
+  test("a drag across the viewer's title copies its path alone", async () => {
     const { copied, mockMouse, renderer, settleUntil } = await mount();
 
     try {
@@ -170,7 +171,7 @@ describe("text outside the viewer", () => {
       );
       expect(title.y).toBeGreaterThan(-1);
       await settleUntil("copied", () => copied.length === 1);
-      expect(copied[0]).toBe("src/a.ts +1 -1");
+      expect(copied[0]).toBe("src/a.ts");
     } finally {
       renderer.destroy();
     }
@@ -236,6 +237,10 @@ describe("text outside the viewer", () => {
       );
 
       expect(offered()).not.toContain("notes.md");
+      // The bars' fields open what they name, so they are rows too.
+      expect(offered()).not.toContain("uncommitted");
+      expect(offered()).not.toContain("1 changed");
+      expect(offered()).not.toContain("? help");
 
       const tree = cellOf(frame, "notes.md");
       await mockMouse.click(tree.x, tree.y, 2);

@@ -9,7 +9,8 @@ import { kindLetter } from "@/ui-helpers";
 import { truncate, truncateName } from "@/utils/text";
 
 import { FileIcon } from "./file-icon";
-import { isRightClick } from "./mouse";
+import { isRightClick, leftPress } from "./mouse";
+import { hoverable } from "./pointer";
 import { RecencyDot } from "./recency-dot";
 
 // Fine-grained reactivity replaces React.memo: only the rows whose focus,
@@ -34,6 +35,33 @@ export const TreeRow = (props: { row: FileTreeRow }) => (
   </>
 );
 
+// The cursor row keeps its own band; the row under the pointer takes a fainter one, so hovering
+// Never reads as moving the cursor.
+const rowBackground = (focused: boolean, hovered: boolean) => {
+  if (focused) {
+    return theme.colors.surface.cursor;
+  }
+
+  return hovered ? theme.colors.surface.hover : theme.colors.surface.base;
+};
+
+// A right-click focuses the row and opens its context menu at the cell. The press stops here, so
+// The app's root does not close the menu it just opened.
+const openMenuOnRightClick = (event: MouseEvent, id: string) => {
+  if (!isRightClick(event)) {
+    return false;
+  }
+
+  event.stopPropagation();
+  batch(() => {
+    state.setFocusedPane("tree");
+    state.focusTreeNode(id);
+  });
+  state.openCommandMenu("tree", { x: event.x, y: event.y });
+
+  return true;
+};
+
 const contentWidth = () => state.layout().sidebar.content.width - 2;
 
 const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
@@ -43,31 +71,22 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
     state.focusedPane() === "tree" &&
     props.row.index === state.focusedRowIndex();
 
-  const background = () =>
-    focused() ? theme.colors.surface.cursor : theme.colors.surface.base;
+  const hover = hoverable("pointer");
+  const background = () => rowBackground(focused(), hover.hovered());
 
   // Clicking a directory row reproduces the keyboard outcome: move the cursor
-  // There and toggle its expansion (collapsing `l`/`h` into one click).
-  // StopPropagation keeps the Sidebar's focus-only handler from also firing. A
+  // There and toggle its expansion (collapsing `l`/`h` into one click). A
   // Right-click instead focuses the row and opens the context menu at the cell.
   const onMouseDown = (event: MouseEvent) => {
-    event.stopPropagation();
-
-    if (isRightClick(event)) {
-      batch(() => {
-        state.setFocusedPane("tree");
-        state.focusTreeNode(props.node.id);
-      });
-      state.openCommandMenu("tree", { x: event.x, y: event.y });
-
+    if (openMenuOnRightClick(event, props.node.id)) {
       return;
     }
 
-    batch(() => {
+    leftPress(() => {
       state.setFocusedPane("tree");
       state.focusTreeNode(props.node.id);
       state.toggleTreeNode(props.node.id);
-    });
+    })(event);
   };
 
   const isExpanded = () => props.node.expanded;
@@ -111,6 +130,7 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
       flexDirection="row"
       justifyContent="space-between"
       paddingLeft={1}
+      ref={hover.ref}
       backgroundColor={background()}
       onMouseDown={onMouseDown}
     >
@@ -164,27 +184,18 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
     state.focusedPane() === "tree" &&
     props.row.index === state.focusedRowIndex();
 
-  const background = () =>
-    focused() ? theme.colors.surface.cursor : theme.colors.surface.base;
+  const hover = hoverable("pointer");
+  const background = () => rowBackground(focused(), hover.hovered());
 
   const onMouseDown = (event: MouseEvent) => {
-    // The row handles focus, so the sidebar's focus handler can be skipped.
-    event.stopPropagation();
-
-    if (isRightClick(event)) {
-      batch(() => {
-        state.setFocusedPane("tree");
-        state.focusTreeNode(props.node.id);
-      });
-      state.openCommandMenu("tree", { x: event.x, y: event.y });
-
+    if (openMenuOnRightClick(event, props.node.id)) {
       return;
     }
 
-    batch(() => {
+    leftPress(() => {
       state.setFocusedPane("tree");
       state.selectFile(props.node.path);
-    });
+    })(event);
   };
 
   const changed = () => props.node.changed;
@@ -218,6 +229,7 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
       flexDirection="row"
       justifyContent="space-between"
       paddingLeft={1}
+      ref={hover.ref}
       backgroundColor={background()}
       onMouseDown={onMouseDown}
     >

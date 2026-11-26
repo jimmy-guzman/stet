@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import type { Selection, ThemeMode } from "@opentui/core";
+import type { MouseEvent, Selection, ThemeMode } from "@opentui/core";
 import {
   useKeyboard,
   useRenderer,
@@ -13,6 +13,7 @@ import { CommandMenu } from "./components/command-menu";
 import { FileCombobox } from "./components/file-combobox";
 import { HeaderBar } from "./components/header-bar";
 import { HelpDialog } from "./components/help-dialog";
+import { pointerStyle, trackPointer } from "./components/pointer";
 import { QuitConfirm } from "./components/quit-confirm";
 import { ScopeMenu } from "./components/scope-menu";
 import { Sidebar } from "./components/sidebar";
@@ -202,6 +203,13 @@ export const App = () => {
     });
   });
 
+  // The terminal's pointer follows what is under it. OSC 22 goes out with a frame, and a pointer
+  // Move alone may not cause one.
+  createEffect(() => {
+    renderer.setMousePointer(pointerStyle());
+    renderer.requestRender();
+  });
+
   // OpenTUI inverts selected cells unless it is given colors; text outside the viewer wears the
   // Viewer's selection, under the primary text color, since the faint tiers would vanish into it.
   createEffect(() => {
@@ -240,6 +248,13 @@ export const App = () => {
       height="100%"
       flexDirection="column"
       backgroundColor={theme.colors.surface.base}
+      onMouseMove={trackPointer}
+      onMouseOver={trackPointer}
+      onMouseDown={() => {
+        // A press nothing claimed (a bar, a blank stretch of a pane) closes the context menu, as
+        // A press on any target does.
+        state.closeCommandMenu();
+      }}
     >
       {/* Every region is placed at the rect `computeLayout` returned, in terminal
           cells. Nothing here re-derives a position or a size, so a pane that docks
@@ -308,6 +323,24 @@ export const App = () => {
         </text>
         <StatusBar />
       </box>
+      {/* Under the browsing overlays: a press outside one lands here and closes it, rather than
+          acting on the pane behind, and the wheel stops here too. Transparent, so the panes
+          still show; the quit confirm brings its own scrim and never closes this way. */}
+      <Show when={state.browsingOverlayOpen()}>
+        <box
+          position="absolute"
+          left={0}
+          top={0}
+          width="100%"
+          height="100%"
+          backgroundColor={theme.rgba.transparent}
+          zIndex={99}
+          onMouseDown={(event: MouseEvent) => {
+            event.stopPropagation();
+            state.dismissOverlay();
+          }}
+        />
+      </Show>
       <Show when={state.fileComboboxOpen()}>
         <FileCombobox />
       </Show>
@@ -317,10 +350,12 @@ export const App = () => {
       <Show when={state.scopeMenuOpen()}>
         <ScopeMenu />
       </Show>
-      {/* The tree context menu anchors in global terminal coordinates (the viewer's
-          own instance lives inside DiffView, in viewer-content space). */}
+      {/* Every context menu but the caret's anchors in global terminal coordinates
+          (the viewer's own instance lives inside DiffView, in viewer-content space). */}
       <Show
-        when={state.commandMenuOpen() && state.commandMenuContext() === "tree"}
+        when={
+          state.commandMenuOpen() && state.commandMenuContext() !== "viewer"
+        }
       >
         <CommandMenu
           anchor={() => {
@@ -339,7 +374,7 @@ export const App = () => {
         <HelpDialog />
       </Show>
       <Show when={state.quitConfirmOpen()}>
-        <QuitConfirm />
+        <QuitConfirm onQuit={quitWithUpdateNotice} />
       </Show>
     </box>
   );

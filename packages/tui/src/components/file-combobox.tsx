@@ -9,6 +9,8 @@ import { matchIndices } from "@/utils/fuzzy";
 import { toCodePoints, truncateAroundMatch } from "@/utils/text";
 
 import { FileIcon } from "./file-icon";
+import { leftPress } from "./mouse";
+import { hoverable } from "./pointer";
 import { RecencyDot } from "./recency-dot";
 
 // Opening a result is the same whether it comes from the input's submit (the
@@ -130,9 +132,13 @@ export const FileCombobox = () => {
                       ? theme.colors.surface.cursor
                       : theme.colors.surface.panel
                   }
-                  onMouseDown={() => {
-                    openPath(path());
+                  ref={hoverable("pointer").ref}
+                  onMouseMove={() => {
+                    state.setFileComboboxIndex(index);
                   }}
+                  onMouseDown={leftPress(() => {
+                    openPath(path());
+                  })}
                 >
                   <box flexDirection="row">
                     <FileIcon path={path()} />

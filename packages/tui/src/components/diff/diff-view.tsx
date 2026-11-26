@@ -9,6 +9,7 @@ import {
   batch,
   createEffect,
   createMemo,
+  createSignal,
   Index,
   on,
   onCleanup,
@@ -16,6 +17,8 @@ import {
   untrack,
 } from "solid-js";
 
+import { isLeftClick, isRightClick } from "@/components/mouse";
+import { hoverable, retrackPointer } from "@/components/pointer";
 import { cellWidth } from "@/diff/cells";
 import { followScrollTop, followScrollX, HORIZONTAL_STEP } from "@/diff/follow";
 import { isLineRow } from "@/diff/rows";
@@ -34,7 +37,6 @@ import { followLines, selectedColumns } from "@/viewer/selection";
 import type { SelectionPoint, SelectionUnit } from "@/viewer/selection";
 
 import { CommandMenu } from "../command-menu";
-import { isRightClick } from "../mouse";
 import { useLineMeasurer } from "./line-measure";
 
 /** UTF-16 offsets into a line, [from, to). */
@@ -487,7 +489,17 @@ export const DiffView = () => {
   const VERTICAL_STEP = 3;
 
   const onWheel = (event: MouseEvent) => {
-    const direction = event.scroll?.direction;
+    const raw = event.scroll?.direction;
+
+    // Shift turns a vertical wheel sideways, where the terminal forwards it as vertical. A sideways
+    // Report stays as it came: macOS already turns shift+wheel horizontal and reports the shift too,
+    // So swapping it back, as OpenTUI's own scrollers do, would scroll the wrong axis there. Wrapped
+    // Lines have no sideways, so there the wheel keeps scrolling down the file.
+    const direction =
+      event.modifiers.shift && !wrap() && (raw === "up" || raw === "down")
+        ? { down: "right", up: "left" }[raw]
+        : raw;
+
     const delta = event.scroll?.delta ?? 1;
 
     if (direction === "left" || direction === "right") {
@@ -522,6 +534,48 @@ export const DiffView = () => {
     localY: number,
     currentScroll = untrack(scrollTop)
   ) => rowIndexAtOffset(rowEnds(), currentScroll + localY);
+
+  // The pointer's row within the viewport, from its last move. Content that scrolls under a still
+  // Pointer changes what is under it, so the hovered row is read against the live scroll.
+  const [pointerY, setPointerY] = createSignal<number | undefined>(undefined);
+
+  // One interaction layer covers every row, so the pointer is read off the row it is over: a
+  // Marker folds on a click, code selects as text, and the gutter and separators do neither.
+  const layer = hoverable((event) => {
+    const pointer = localPointer(event);
+    const row = rows()[rowIndexForPointer(pointer.y) ?? -1];
+
+    if (row === undefined) {
+      return "default";
+    }
+
+    if (!isLineRow(row)) {
+      return row.kind === "marker" ? "pointer" : "default";
+    }
+
+    return pointer.x < gutterWidth() ? "default" : "text";
+  });
+
+  // OpenTUI re-checks the hit target after a frame, but the target here is always this one layer,
+  // So content that scrolls under a still pointer would keep the style of the row that left.
+  createEffect(
+    on([scrollTop, scrollX], () => {
+      if (untrack(layer.hovered)) {
+        retrackPointer();
+      }
+    })
+  );
+
+  const markerHovered = (index: number) => {
+    const y = pointerY();
+
+    return (
+      layer.hovered() &&
+      y !== undefined &&
+      rowIndexForPointer(y, scrollTop()) === index &&
+      rows()[index]?.kind === "marker"
+    );
+  };
 
   // The glyph under a pointer, clamped into the visible content: past either end of a line is that
   // Line's end, below the file is its last line's end, and a marker row is the line on the drag's own
@@ -680,6 +734,13 @@ export const DiffView = () => {
   // Context menu, which opens after the batch: moving the cursor can scroll, and the menu closes
   // On a scroll it did not open at.
   const pressAt = (event: MouseEvent) => {
+    // A left press with the menu open only closes it, as one anywhere does.
+    if (state.commandMenuOpen() && isLeftClick(event)) {
+      state.closeCommandMenu();
+
+      return false;
+    }
+
     // A press that leaves the cursor where it is drifts nothing the menu's guard watches.
     state.closeCommandMenu();
     endDrag();
@@ -698,12 +759,8 @@ export const DiffView = () => {
       return false;
     }
 
-    if (!isLineRow(row)) {
-      toggleMarker(row);
-
-      return false;
-    }
-
+    // A right-click opens the menu on whatever it hit; on a marker, the caret takes the line the
+    // Marker sits against. Only a left press folds or unfolds.
     if (isRightClick(event)) {
       // The menu acts on a selection it opens over, so the press keeps it.
       if (!isOnSelection(point)) {
@@ -713,7 +770,9 @@ export const DiffView = () => {
       return true;
     }
 
-    if (event.button !== 0) {
+    if (!isLineRow(row)) {
+      toggleMarker(row);
+
       return false;
     }
 
@@ -1019,7 +1078,14 @@ export const DiffView = () => {
                     flexShrink={0}
                     backgroundColor={theme.colors.surface.panel}
                   >
-                    <text selectable={false} fg={theme.colors.text.faint}>
+                    <text
+                      selectable={false}
+                      fg={
+                        markerHovered(window().start + rowIndex)
+                          ? theme.colors.text.primary
+                          : theme.colors.text.faint
+                      }
+                    >
                       {`${markerGlyph(row())
                         .padStart(numberWidth() + 1)
                         .padEnd(gutterWidth())}${markerLabel(row())}`}
@@ -1080,6 +1146,7 @@ export const DiffView = () => {
       <box
         ref={(el) => {
           interactionRef = el;
+          layer.ref(el);
         }}
         position="absolute"
         left={0}
@@ -1089,7 +1156,16 @@ export const DiffView = () => {
         backgroundColor={theme.rgba.transparent}
         zIndex={1}
         onMouseScroll={onWheel}
+        onMouseMove={(event: MouseEvent) => {
+          setPointerY(localPointer(event).y);
+        }}
         onMouseDown={(event: MouseEvent) => {
+          // Any other button is the pane's: a middle press only focuses it, a side button steps
+          // History.
+          if (!isLeftClick(event) && !isRightClick(event)) {
+            return;
+          }
+
           event.stopPropagation();
 
           if (batch(() => pressAt(event))) {

@@ -13,6 +13,7 @@ import {
   untrack,
 } from "solid-js";
 
+import { scopeKinds } from "./cli";
 import type { DiffScope, ScopeKind } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { Clipboard } from "./clipboard/service";
@@ -20,6 +21,7 @@ import { BAR_SEP } from "./components/bar";
 import { buildCommandMenuItems } from "./components/command-menu/items";
 import type {
   CommandAction,
+  CommandMenuContext,
   CommandMenuInput,
 } from "./components/command-menu/items";
 import { Config } from "./config/service";
@@ -67,11 +69,12 @@ import {
 import type { Worktree, WorktreeSummary } from "./git/worktree";
 import {
   computeLayout,
+  draggedExtent,
   horizontalDock,
   PANE_MIN_HEIGHT,
   PANE_MIN_WIDTH,
 } from "./layout/regions";
-import type { Dock } from "./layout/regions";
+import type { Dock, LayoutInput } from "./layout/regions";
 import type { LogLevel } from "./log/levels";
 import { runtime } from "./runtime";
 import {
@@ -137,7 +140,7 @@ import { Watcher } from "./watcher/service";
 // Render (a click away moves the caret/focus and dismisses the menu). The tree menu
 // Tracks its focused node and sidebar scroll, the viewer menu its caret and scroll.
 interface CommandMenuGuard {
-  context: "tree" | "viewer";
+  context: CommandMenuContext;
   focusedPane: "tree" | "diff" | "search";
   path: string | undefined;
   focusedNodeId: string;
@@ -148,6 +151,8 @@ interface CommandMenuGuard {
   selection: Selection | undefined;
   scope: string;
   repoRoot: string;
+  searchItemId: string | undefined;
+  searchScrollTop: number;
 }
 
 interface PendingRestore extends Position {
@@ -552,9 +557,8 @@ const createState = () => {
   const [commandMenuOpen, setCommandMenuOpen] = tracked(false);
   const [commandMenuIndex, setCommandMenuIndex] = tracked(0);
 
-  const [commandMenuContext, setCommandMenuContext] = tracked<
-    "tree" | "viewer"
-  >("tree");
+  const [commandMenuContext, setCommandMenuContext] =
+    tracked<CommandMenuContext>("tree");
 
   const [commandMenuAnchor, setCommandMenuAnchor] = tracked<
     { x: number; y: number } | undefined
@@ -1582,8 +1586,8 @@ const createState = () => {
   // Subtract from. Zoom is still a model input with no signal behind it.
   const zoomTarget = () => (focusedPane() === "tree" ? "tree" : "viewer");
 
-  const layout = createMemo(() =>
-    computeLayout({
+  const layoutInput = () =>
+    ({
       sidebar: {
         heightOverride: sidebarHeightOverride(),
         open: sidebarOpen(),
@@ -1598,8 +1602,9 @@ const createState = () => {
       // Something open. The map is still a map, not an identity: the search view is a second
       // Focus value for the one viewer slot.
       zoom: zoomed() ? zoomTarget() : undefined,
-    })
-  );
+    }) satisfies LayoutInput;
+
+  const layout = createMemo(() => computeLayout(layoutInput()));
 
   // A truncated file reserves one row for the "N more lines" footer, so the diff
   // Content shrinks by it; DiffView derives its whole windowing from this height,
@@ -1758,6 +1763,17 @@ const createState = () => {
     setSidebarPosition(NEXT_DOCK[sidebarPosition()]);
   };
 
+  // The divider drag: the tree takes the extent that puts its divider under the pointer. It stores
+  // The clamped extent, which is what is drawn, so the keys that nudge it afterwards start from
+  // What the user sees. Inert while zoomed or closed, like the keys.
+  const resizePaneTo = (point: { x: number; y: number }) => {
+    if (zoomed() || !sidebarOpen()) {
+      return;
+    }
+
+    sizingAxis(sidebarPane).setOverride(draggedExtent(layoutInput(), point));
+  };
+
   const overlayWidth = createMemo(() =>
     Math.max(30, Math.min(70, terminalWidth() - 8))
   );
@@ -1792,38 +1808,61 @@ const createState = () => {
       : selectedLineNumbers(navigableLines(), range);
   });
 
-  // The context menu's inputs, gathered from the caret (viewer) or the focused node
-  // (tree). Taking `context` as an argument (not the signal) lets `openCommandMenu`
-  // Read a context's items before committing it, sidestepping the stale-memo read a
-  // Same-batch signal write would cause.
-  const commandMenuInput = (context: "tree" | "viewer"): CommandMenuInput => {
-    if (context === "viewer") {
+  // What a non-viewer menu acts on: the focused tree node, the selected search result (a match line
+  // Carries its line; a gap names nothing), or the file a preview shows.
+  const commandMenuTarget = (
+    context: CommandMenuContext
+  ): CommandMenuInput["target"] => {
+    if (context === "tree") {
+      const node = focusedTreeRow()?.node;
+
+      return node === undefined
+        ? undefined
+        : { kind: node.type, path: node.path };
+    }
+
+    if (context === "search") {
+      const item = searchItems()[searchIndex()];
+
+      if (item === undefined || item.kind === "gap") {
+        return undefined;
+      }
+
       return {
-        caretLine: cursorLineNumber(),
-        context: "viewer",
-        reference: referenceLines(),
-        selecting: selectionRange() !== undefined,
-        selectedPath: selectedPath(),
-        treeNode: undefined,
-        truncated: truncated(),
+        kind: "file",
+        line: item.kind === "line" ? item.line : undefined,
+        path: item.path,
       };
     }
 
-    const node = focusedTreeRow()?.node;
+    const path = selectedPath();
 
-    return {
-      caretLine: undefined,
-      context: "tree",
-      reference: { endLine: undefined, line: undefined },
-      selecting: false,
-      selectedPath: selectedPath(),
-      treeNode:
-        node === undefined
-          ? undefined
-          : { id: node.id, kind: node.type, path: node.path },
-      truncated: false,
-    };
+    return path === undefined ? undefined : { kind: "file", path };
   };
+
+  // The context menu's inputs, gathered from the caret (viewer) or the node a menu acts on. Taking
+  // `context` as an argument (not the signal) lets `openCommandMenu` read a context's items before
+  // committing it, sidestepping the stale-memo read a same-batch signal write would cause.
+  const commandMenuInput = (context: CommandMenuContext): CommandMenuInput =>
+    context === "viewer"
+      ? {
+          caretLine: cursorLineNumber(),
+          context,
+          reference: referenceLines(),
+          selectedPath: selectedPath(),
+          selecting: selectionRange() !== undefined,
+          target: undefined,
+          truncated: truncated(),
+        }
+      : {
+          caretLine: undefined,
+          context,
+          reference: { endLine: undefined, line: undefined },
+          selectedPath: selectedPath(),
+          selecting: false,
+          target: commandMenuTarget(context),
+          truncated: false,
+        };
 
   // Both the render (CommandMenu) and the dispatch (keymap/click) read this one list,
   // So the highlighted index always maps to the same action. Gated on the menu being
@@ -1836,18 +1875,64 @@ const createState = () => {
 
   // The bar's lowest tier: context-aware only for the temporary find modes, which have controls a
   // User cannot guess, and otherwise the one hint that reaches everything else. The panes get no
-  // Standing tutorial line, since any live content outranks this and would bury it anyway.
+  // Standing tutorial line, since any live content outranks this and would bury it anyway. Each hint
+  // Carries what its key does, so a click on the hint does the same.
   const guidance = createMemo(() => {
     if (findOpen()) {
-      return ["enter find", "esc cancel"].join(BAR_SEP);
+      return [
+        {
+          label: "enter find",
+          run: () => {
+            commitFind();
+          },
+        },
+        {
+          label: "esc cancel",
+          run: () => {
+            resetFind();
+          },
+        },
+      ];
     }
 
-    // The keymap ignores a committed find's keys under the search view, so the hint goes with them.
-    return (
-      findActive() && mainView() === "file"
-        ? ["n/N next/prev", "esc clear"]
-        : ["? help", "q quit"]
-    ).join(BAR_SEP);
+    // The keymap ignores a committed find's keys under the search view, so the hints go with them.
+    if (findActive() && mainView() === "file") {
+      return [
+        {
+          label: "n next",
+          run: () => {
+            cycleFind(1);
+          },
+        },
+        {
+          label: "N prev",
+          run: () => {
+            cycleFind(-1);
+          },
+        },
+        {
+          label: "esc clear",
+          run: () => {
+            resetFind();
+          },
+        },
+      ];
+    }
+
+    return [
+      {
+        label: "? help",
+        run: () => {
+          openHelp();
+        },
+      },
+      {
+        label: "q quit",
+        run: () => {
+          setQuitConfirmOpen(true);
+        },
+      },
+    ];
   });
 
   const statusBarModel = createMemo(() => {
@@ -1869,7 +1954,9 @@ const createState = () => {
             },
       alert: latestAlert(alerts()),
       foregroundProgress: switchProgress(),
-      guidance: guidance(),
+      guidance: guidance()
+        .map((hint) => hint.label)
+        .join(BAR_SEP),
       notification: notice(),
       width: terminalWidth(),
     });
@@ -2155,6 +2242,41 @@ const createState = () => {
         matchColumn(navigableLines()[index]?.content ?? "", query),
         query.length
       );
+    });
+  };
+
+  // Step through a committed find's matches, wrapping at either end (`n`/`N`).
+  const cycleFind = (direction: number) => {
+    const matches = findMatches();
+
+    if (matches.length === 0) {
+      return;
+    }
+
+    const pos = (findMatchPos() + direction + matches.length) % matches.length;
+    const target = matches[pos];
+
+    if (target !== undefined) {
+      batch(() => {
+        setFindMatchPos(pos);
+        goToFindMatch(target);
+      });
+    }
+  };
+
+  // Commit the open find (`enter`): land on its first match and keep the highlights, closing the
+  // Bar's input so `n`/`N` cycle.
+  const commitFind = () => {
+    batch(() => {
+      const [first] = findMatches();
+
+      if (first !== undefined) {
+        setFindMatchPos(0);
+        goToFindMatch(first);
+        setFindActive(true);
+      }
+
+      setFindOpen(false);
     });
   };
 
@@ -2634,12 +2756,38 @@ const createState = () => {
     return false;
   };
 
+  // Where a keyboard-opened menu anchors, in terminal cells: the focused tree row's first text
+  // Cell (the tree's interior plus the one column a `TreeRow` pads), the selected search result
+  // Below the pane's three rows of chrome, or the preview's first row under the title. The viewer
+  // Instance derives its own from the caret, so it has none here.
+  const keyboardMenuAnchor = (context: CommandMenuContext) => {
+    const { sidebar, viewer } = layout();
+
+    const anchors = {
+      preview: { x: viewer.content.x + 1, y: viewer.content.y + 1 },
+      search: {
+        x: viewer.content.x + 1,
+        y: viewer.content.y + 3 + searchIndex() - searchScrollTop(),
+      },
+      tree: {
+        x: sidebar.content.x + 1,
+        y: sidebar.content.y + focusedRowIndex() - sidebarScrollTop(),
+      },
+      viewer: undefined,
+    } satisfies Record<
+      CommandMenuContext,
+      { x: number; y: number } | undefined
+    >;
+
+    return anchors[context];
+  };
+
   // Open the context menu on a pane. A right-click passes its exact cell as `anchor`;
-  // The keyboard trigger omits it, so the tree menu falls back to the focused row and
-  // The viewer menu derives its anchor from the caret (stored as none). A no-op when
-  // The context has no items (defensive: every real context has one).
+  // The keyboard trigger omits it, so the menu falls back to `keyboardMenuAnchor` (the
+  // Viewer's derives its own from the caret, stored as none). A no-op when the context
+  // Has no items (a search gap, a pane with no file).
   const openCommandMenu = (
-    context: "tree" | "viewer",
+    context: CommandMenuContext,
     anchor?: { x: number; y: number }
   ) => {
     const items = buildCommandMenuItems(commandMenuInput(context));
@@ -2650,20 +2798,7 @@ const createState = () => {
 
     batch(() => {
       setCommandMenuContext(context);
-      // The tree menu falls back to the focused row's first text cell: the tree's interior, plus
-      // The one column of padding a `TreeRow` adds inside it.
-      setCommandMenuAnchor(
-        anchor ??
-          (context === "viewer"
-            ? undefined
-            : {
-                x: layout().sidebar.content.x + 1,
-                y:
-                  layout().sidebar.content.y +
-                  focusedRowIndex() -
-                  sidebarScrollTop(),
-              })
-      );
+      setCommandMenuAnchor(anchor ?? keyboardMenuAnchor(context));
       setCommandMenuIndex(0);
       // Snapshot the context so the clear effect can dismiss the menu the moment a
       // Click or refresh drifts the caret/focus/file it was opened against.
@@ -2677,6 +2812,8 @@ const createState = () => {
         scope: scopeIdentity(),
         scrollTop: viewerScrollTop(),
         scrollX: viewerScrollX(),
+        searchItemId: searchItems()[searchIndex()]?.id,
+        searchScrollTop: searchScrollTop(),
         selection: viewerSelection(),
         sidebarScrollTop: sidebarScrollTop(),
       });
@@ -2689,6 +2826,30 @@ const createState = () => {
       setCommandMenuOpen(false);
       setCommandMenuGuard(undefined);
     });
+  };
+
+  // Whether what a menu was opened on has moved: the tree's node or scroll, the search pane's
+  // Selection or scroll, or the viewer's caret, selection, or scroll. A preview has nothing of its
+  // Own to move; its file and focus are checked for every context.
+  const menuAnchorDrifted = (guard: CommandMenuGuard) => {
+    const drifted = {
+      preview: () => false,
+      // By the result's identity, not its index: a refresh re-runs the search and can put another
+      // Match at the same index, which the menu would then act on.
+      search: () =>
+        searchItems()[searchIndex()]?.id !== guard.searchItemId ||
+        searchScrollTop() !== guard.searchScrollTop,
+      tree: () =>
+        focusedNodeId() !== guard.focusedNodeId ||
+        sidebarScrollTop() !== guard.sidebarScrollTop,
+      viewer: () =>
+        cursorIndex() !== guard.cursorIndex ||
+        viewerSelection() !== guard.selection ||
+        viewerScrollTop() !== guard.scrollTop ||
+        viewerScrollX() !== guard.scrollX,
+    } satisfies Record<CommandMenuContext, () => boolean>;
+
+    return drifted[guard.context]();
   };
 
   // Dismiss the menu the instant its opening context drifts (a click elsewhere moves
@@ -2706,13 +2867,7 @@ const createState = () => {
       selectedPath() !== guard.path ||
       scopeIdentity() !== guard.scope ||
       repoRoot() !== guard.repoRoot ||
-      (guard.context === "tree"
-        ? focusedNodeId() !== guard.focusedNodeId ||
-          sidebarScrollTop() !== guard.sidebarScrollTop
-        : cursorIndex() !== guard.cursorIndex ||
-          viewerSelection() !== guard.selection ||
-          viewerScrollTop() !== guard.scrollTop ||
-          viewerScrollX() !== guard.scrollX)
+      menuAnchorDrifted(guard)
     ) {
       closeCommandMenu();
     }
@@ -3725,8 +3880,114 @@ const createState = () => {
     }
   });
 
+  // Open the scope picker on the kinds level, reading as "where am I now": on the active kind, or
+  // The "commits" drill-down row when a commit scope is active (its SHA is not a top-level kind, so
+  // `indexOf` is a benign -1).
+  const openScopeMenu = () => {
+    batch(() => {
+      setScopeMenuView("kinds");
+      setScopeMenuIndex(
+        scope().kind === "commit"
+          ? scopeKinds.length
+          : Math.max(0, scopeKinds.indexOf(scope().kind))
+      );
+      setScopeMenuOpen(true);
+    });
+  };
+
+  // Back out of the commits drill-down onto the row that opened it.
+  const leaveScopeCommits = () => {
+    batch(() => {
+      setScopeMenuView("kinds");
+      setScopeMenuIndex(scopeKinds.length);
+    });
+  };
+
+  const openHelp = () => {
+    batch(() => {
+      setHelpView("keys");
+      setHelpDialogOpen(true);
+    });
+  };
+
+  const toggleChangesOnly = () => {
+    const current = changesOnly();
+    setChangesOnly(!current);
+    notify(current ? "all files" : "changes only");
+  };
+
+  const openLatestFile = () => {
+    const latest = latestActivity(activityLog());
+
+    if (latest !== undefined) {
+      selectFile(latest.path);
+    }
+  };
+
+  // The browsing overlays: dismissible surfaces with nothing to decide, so a press outside one
+  // Closes it. The quit confirm is not among them; it is a decision and only its keys close it.
+  const browsingOverlayOpen = createMemo(
+    () =>
+      fileComboboxOpen() ||
+      worktreeComboboxOpen() ||
+      scopeMenuOpen() ||
+      themeComboboxOpen() ||
+      helpDialogOpen()
+  );
+
+  // Whether anything floats over the panes. A pane's input yields its native focus to the
+  // Overlay's while this holds, and takes it back when it ends.
+  const overlayOpen = createMemo(
+    () => browsingOverlayOpen() || commandMenuOpen() || quitConfirmOpen()
+  );
+
+  // A press outside a browsing overlay: close it as `esc` does, so the theme picker reverts its
+  // Preview rather than committing it.
+  const dismissOverlay = () => {
+    batch(() => {
+      if (themeComboboxOpen()) {
+        closeThemePicker(false);
+      }
+
+      setFileComboboxOpen(false);
+      setWorktreeComboboxOpen(false);
+      setScopeMenuOpen(false);
+      setHelpDialogOpen(false);
+    });
+  };
+
+  // Whether the viewer shows the file as something other than text, a binary preview or a
+  // Placeholder line, where the caret-anchored viewer menu has nothing to anchor to.
+  const viewerShowsPreview = createMemo(() => {
+    const view = diffView();
+
+    if (view === undefined) {
+      return false;
+    }
+
+    return (
+      view.binary !== undefined ||
+      (view.showFileContent &&
+        view.fileContent !== undefined &&
+        view.fileContent.kind !== "text")
+    );
+  });
+
   return {
     activateTreeNode,
+    browsingOverlayOpen,
+    commitFind,
+    cycleFind,
+    dismissOverlay,
+    guidance,
+    leaveScopeCommits,
+    openHelp,
+    openLatestFile,
+    openScopeMenu,
+    overlayOpen,
+    resizePaneTo,
+    toggleChangesOnly,
+    viewerShowsPreview,
     activityLog,
     availableUpdate,
     canGoBack,

@@ -87,6 +87,7 @@ const STEPS = {
     border: 0.09,
     cursor: 0.09,
     faint: 0.32,
+    hover: 0.045,
     find: 0.3,
     lineNumber: 0.27,
     muted: 0.51,
@@ -101,6 +102,7 @@ const STEPS = {
     border: 0.29,
     cursor: 0.17,
     faint: 0.52,
+    hover: 0.085,
     find: 0.2,
     lineNumber: 0.52,
     muted: 0.66,
@@ -181,6 +183,7 @@ const derive = (zed: ZedTheme): Theme => {
     surface: {
       base: bg,
       cursor: toward(fg, step.cursor),
+      hover: toward(fg, step.hover),
       panel: toward("#000000", step.panel),
       scrim: "#000000",
     },

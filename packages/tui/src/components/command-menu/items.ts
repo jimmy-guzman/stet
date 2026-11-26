@@ -32,8 +32,14 @@ export interface CommandMenuItem {
   action: CommandAction;
 }
 
+/**
+ * Where a menu opens: on the viewer's caret, or on one file or directory named by the tree, a search
+ * result, or a viewed file the viewer cannot show as text (a binary preview or a placeholder).
+ */
+export type CommandMenuContext = "tree" | "viewer" | "search" | "preview";
+
 export interface CommandMenuInput {
-  context: "tree" | "viewer";
+  context: CommandMenuContext;
   /** The viewed file; the viewer menu is empty without one. */
   selectedPath: string | undefined;
   /** The caret line (`newLine ?? oldLine`), where the editor opens. */
@@ -42,9 +48,12 @@ export interface CommandMenuInput {
   reference: { line: number | undefined; endLine: number | undefined };
   /** Whether text is selected in the viewer, gating "Copy selection". */
   selecting: boolean;
-  /** The focused tree node; the tree menu is empty without one. */
-  treeNode:
-    | { kind: "file" | "directory"; id: string; path: string }
+  /**
+   * What a tree, search, or preview menu acts on: the focused node, the selected result (a match
+   * carries its line), or the viewed file. Every context but the viewer's is empty without one.
+   */
+  target:
+    | { kind: "file" | "directory"; path: string; line?: number }
     | undefined;
   /** Whether the viewer capped the file, gating the "Show full content" action. */
   truncated: boolean;
@@ -53,7 +62,7 @@ export interface CommandMenuInput {
 export const buildCommandMenuItems = (
   input: CommandMenuInput
 ): CommandMenuItem[] =>
-  input.context === "viewer" ? viewerItems(input) : treeItems(input);
+  input.context === "viewer" ? viewerItems(input) : targetItems(input);
 
 const viewerItems = (input: CommandMenuInput): CommandMenuItem[] => {
   const path = input.selectedPath;
@@ -102,32 +111,28 @@ const viewerItems = (input: CommandMenuInput): CommandMenuItem[] => {
   ];
 };
 
-const treeItems = (input: CommandMenuInput): CommandMenuItem[] => {
-  const node = input.treeNode;
+const targetItems = (input: CommandMenuInput): CommandMenuItem[] => {
+  const node = input.target;
 
   if (node === undefined) {
     return [];
   }
 
-  const copyPath: CommandMenuItem = {
-    action: {
-      kind: "copyReference",
-      line: undefined,
-      path: node.path,
-    },
-    label: "Copy path",
+  const copy: CommandMenuItem = {
+    action: { kind: "copyReference", line: node.line, path: node.path },
+    label: node.line === undefined ? "Copy path" : "Copy reference",
   };
 
   if (node.kind === "directory") {
-    return [copyPath];
+    return [copy];
   }
 
   return [
-    copyPath,
+    copy,
     {
       action: {
         kind: "openEditor",
-        line: undefined,
+        line: node.line,
         mode: "terminal",
         path: node.path,
       },
@@ -136,7 +141,7 @@ const treeItems = (input: CommandMenuInput): CommandMenuItem[] => {
     {
       action: {
         kind: "openEditor",
-        line: undefined,
+        line: node.line,
         mode: "ide",
         path: node.path,
       },

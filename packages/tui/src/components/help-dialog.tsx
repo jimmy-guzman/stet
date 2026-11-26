@@ -6,6 +6,7 @@ import { state } from "@/state";
 import { theme } from "@/theme/context";
 
 import packageJson from "../../package.json";
+import { ActionText } from "./action-text";
 import { useLineMeasurer } from "./diff/line-measure";
 
 // Minimum width of the left column box (the key combo or, on the marks view, the glyph); the
@@ -14,6 +15,11 @@ import { useLineMeasurer } from "./diff/line-measure";
 // Longest rendered left cell (a rebind can exceed `Shift+F10`), or that cell wraps and the height
 // Calc (which counts only description wraps) undercounts and clips a row.
 const COMBO_WIDTH = 11;
+
+const tabTone = (view: "keys" | "marks") =>
+  state.helpView() === view
+    ? theme.colors.text.strong
+    : theme.colors.text.faint;
 
 export const HelpDialog = () => {
   const measurer = useLineMeasurer();
@@ -96,25 +102,21 @@ export const HelpDialog = () => {
       >
         <box flexDirection="row">
           {/* The active view is bracketed as well as brightened, so it reads under NO_COLOR. */}
-          <text
-            fg={
-              state.helpView() === "keys"
-                ? theme.colors.text.strong
-                : theme.colors.text.faint
-            }
-          >
-            {state.helpView() === "keys" ? "[keys]" : "keys"}
-          </text>
+          <ActionText
+            label={state.helpView() === "keys" ? "[keys]" : "keys"}
+            fg={tabTone("keys")}
+            onPress={() => {
+              state.setHelpView("keys");
+            }}
+          />
           <text fg={theme.colors.text.faint}>{" · "}</text>
-          <text
-            fg={
-              state.helpView() === "marks"
-                ? theme.colors.text.strong
-                : theme.colors.text.faint
-            }
-          >
-            {state.helpView() === "marks" ? "[marks]" : "marks"}
-          </text>
+          <ActionText
+            label={state.helpView() === "marks" ? "[marks]" : "marks"}
+            fg={tabTone("marks")}
+            onPress={() => {
+              state.setHelpView("marks");
+            }}
+          />
         </box>
         <text fg={theme.colors.text.faint}>stet@{packageJson.version}</text>
       </box>

@@ -1,4 +1,4 @@
-import type { InputRenderable } from "@opentui/core";
+import type { InputRenderable, MouseEvent } from "@opentui/core";
 import {
   batch,
   createEffect,
@@ -20,9 +20,12 @@ import { truncate } from "@/utils/text";
 import { isNavigableSearchItem } from "@/viewer/search-items";
 import type { SearchItem } from "@/viewer/search-items";
 
+import { ActionText } from "./action-text";
 import { CodeLine } from "./code-line";
 import { FileIcon } from "./file-icon";
 import { ListScrollbar } from "./list-scrollbar";
+import { isRightClick, leftPress } from "./mouse";
+import { hoverable } from "./pointer";
 import { windowWheelHandler } from "./wheel";
 
 /**
@@ -63,8 +66,18 @@ const scopeLabel = () => {
   return kind === "last-commit" ? "last commit" : kind;
 };
 
+// An open overlay holds native focus while it is up; the input takes it back when it closes.
 const focusIn = (target: "query" | "glob") =>
-  state.focusedPane() === "search" && state.searchFocus() === target;
+  state.focusedPane() === "search" &&
+  state.searchFocus() === target &&
+  !state.overlayOpen();
+
+// A click on an input's row focuses that field, as `tab` cycles to it.
+const focusField = (target: "query" | "glob") =>
+  leftPress(() => {
+    state.setFocusedPane("search");
+    state.setSearchFocus(target);
+  });
 
 const statusColor = () =>
   state.searchStatus() === "error"
@@ -75,14 +88,20 @@ const statusColor = () =>
 const isSelected = (index: number) =>
   state.focusedPane() === "search" && index === state.searchIndex();
 
-const rowBackground = (item: SearchItem, index: number) => {
+// A match keeps its find band whether or not the pointer is over it; any other row under the pointer
+// Takes the hover band, fainter than the selection's, so hovering never reads as selecting.
+const rowBackground = (item: SearchItem, index: number, hovered: boolean) => {
   const selected = isSelected(index);
 
   if (item.kind === "line" && item.match !== undefined) {
     return selected ? theme.rgba.findMatchBgActive : theme.colors.find.matchBg;
   }
 
-  return selected ? theme.colors.surface.cursor : undefined;
+  if (selected) {
+    return theme.colors.surface.cursor;
+  }
+
+  return hovered ? theme.colors.surface.hover : undefined;
 };
 
 const submit = () => {
@@ -139,6 +158,33 @@ const emptyText = () => {
  * state, so idle/searching/ready/ error swaps never shift layout; the results band windows over the
  * flat `searchItems` list, one terminal row per item.
  */
+// Select the row, or the nearest navigable one above a context row or a gap.
+const selectNearest = (index: number) => {
+  const selected = state
+    .searchItems()
+    .findLastIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex <= index && isNavigableSearchItem(candidate)
+    );
+
+  if (selected !== -1) {
+    state.setSearchSelection(selected);
+  }
+};
+
+// A right-click selects the row it landed on (a header included, which a click would fold) and
+// Opens that result's menu at the pointer. It stops here, so the app's root does not close it.
+const openRowMenu = (event: MouseEvent, index: number) => {
+  event.stopPropagation();
+  batch(() => {
+    state.closeCommandMenu();
+    state.setFocusedPane("search");
+    state.setSearchFocus("results");
+    selectNearest(index);
+  });
+  state.openCommandMenu("search", { x: event.x, y: event.y });
+};
+
 export const SearchPane = () => {
   const fileCount = createMemo(
     () => new Set(state.searchResults().map((m) => m.path)).size
@@ -316,17 +362,7 @@ export const SearchPane = () => {
         return;
       }
 
-      // Select the clicked row, or the nearest navigable one above a context row.
-      const items = state.searchItems();
-
-      const selected = items.findLastIndex(
-        (candidate, candidateIndex) =>
-          candidateIndex <= index && isNavigableSearchItem(candidate)
-      );
-
-      if (selected !== -1) {
-        state.setSearchSelection(selected);
-      }
+      selectNearest(index);
     });
   };
 
@@ -347,7 +383,7 @@ export const SearchPane = () => {
         paddingRight={1}
         backgroundColor={theme.colors.surface.panel}
       >
-        <box flexGrow={1}>
+        <box flexGrow={1} onMouseDown={focusField("query")}>
           <input
             ref={(el: InputRenderable) => {
               el.value = state.searchQuery();
@@ -360,28 +396,21 @@ export const SearchPane = () => {
             onSubmit={submit}
           />
         </box>
-        <box
-          onMouseDown={() => {
+        <ActionText
+          label={toggleCell(state.searchRegex(), ".*")}
+          fg={toggleColor(state.searchRegex())}
+          onPress={() => {
             state.toggleSearchRegex();
           }}
-        >
-          <text selectable={false} fg={toggleColor(state.searchRegex())}>
-            {toggleCell(state.searchRegex(), ".*")}
-          </text>
-        </box>
+        />
         <text> </text>
-        <box
-          onMouseDown={() => {
+        <ActionText
+          label={toggleCell(state.searchCaseSensitive(), "Aa")}
+          fg={toggleColor(state.searchCaseSensitive())}
+          onPress={() => {
             state.toggleSearchCase();
           }}
-        >
-          <text
-            selectable={false}
-            fg={toggleColor(state.searchCaseSensitive())}
-          >
-            {toggleCell(state.searchCaseSensitive(), "Aa")}
-          </text>
-        </box>
+        />
       </box>
       <box
         height={1}
@@ -391,7 +420,7 @@ export const SearchPane = () => {
         backgroundColor={theme.colors.surface.panel}
       >
         <text fg={theme.colors.text.muted}>{"in "}</text>
-        <box flexGrow={1}>
+        <box flexGrow={1} onMouseDown={focusField("glob")}>
           <input
             ref={(el: InputRenderable) => {
               el.value = state.searchGlob();
@@ -404,16 +433,12 @@ export const SearchPane = () => {
             onSubmit={submit}
           />
         </box>
-        <box
-          onMouseDown={() => {
+        <ActionText
+          label={`[${scopeLabel()}]`}
+          onPress={() => {
             state.toggleSearchScope();
           }}
-        >
-          <text
-            selectable={false}
-            fg={theme.colors.text.muted}
-          >{`[${scopeLabel()}]`}</text>
-        </box>
+        />
       </box>
       <box height={1} paddingLeft={1} paddingRight={1}>
         <text fg={statusColor()}>
@@ -457,86 +482,109 @@ export const SearchPane = () => {
             }
           >
             <Index each={visibleItems()}>
-              {(row) => (
-                <box
-                  height={1}
-                  width="100%"
-                  flexDirection="row"
-                  backgroundColor={rowBackground(row().item, row().index)}
-                  onMouseDown={() => {
-                    clickRow(row().item, row().index);
-                  }}
-                >
-                  <Show when={asHeader(row().item)}>
-                    {(header) => (
-                      <box
-                        height={1}
-                        flexGrow={1}
-                        flexDirection="row"
-                        justifyContent="space-between"
-                        paddingLeft={1}
-                        paddingRight={1}
-                      >
-                        <box flexDirection="row">
-                          <text
-                            selectable={false}
-                            fg={
-                              isSelected(row().index)
-                                ? theme.colors.text.selected
-                                : theme.colors.text.strong
-                            }
-                          >
-                            {`${header().collapsed ? "▸" : "▾"} `}
-                          </text>
-                          <FileIcon path={header().path} />
-                          <text
-                            selectable={false}
-                            fg={
-                              isSelected(row().index)
-                                ? theme.colors.text.selected
-                                : theme.colors.text.strong
-                            }
-                          >
-                            {truncate(
-                              header().path,
-                              Math.max(
-                                8,
-                                resultsWidth() - (state.iconsEnabled() ? 10 : 8)
-                              )
-                            )}
+              {(row) => {
+                // A gap names nothing to open, so it leaves the pointer to the pane.
+                const hover = hoverable(() =>
+                  row().item.kind === "gap" ? undefined : "pointer"
+                );
+
+                return (
+                  <box
+                    ref={hover.ref}
+                    height={1}
+                    width="100%"
+                    flexDirection="row"
+                    backgroundColor={rowBackground(
+                      row().item,
+                      row().index,
+                      hover.hovered()
+                    )}
+                    onMouseDown={(event: MouseEvent) => {
+                      if (isRightClick(event)) {
+                        openRowMenu(event, row().index);
+
+                        return;
+                      }
+
+                      leftPress(() => {
+                        clickRow(row().item, row().index);
+                      })(event);
+                    }}
+                  >
+                    <Show when={asHeader(row().item)}>
+                      {(header) => (
+                        <box
+                          height={1}
+                          flexGrow={1}
+                          flexDirection="row"
+                          justifyContent="space-between"
+                          paddingLeft={1}
+                          paddingRight={1}
+                        >
+                          <box flexDirection="row">
+                            <text
+                              selectable={false}
+                              fg={
+                                isSelected(row().index)
+                                  ? theme.colors.text.selected
+                                  : theme.colors.text.strong
+                              }
+                            >
+                              {`${header().collapsed ? "▸" : "▾"} `}
+                            </text>
+                            <FileIcon path={header().path} />
+                            <text
+                              selectable={false}
+                              fg={
+                                isSelected(row().index)
+                                  ? theme.colors.text.selected
+                                  : theme.colors.text.strong
+                              }
+                            >
+                              {truncate(
+                                header().path,
+                                Math.max(
+                                  8,
+                                  resultsWidth() -
+                                    (state.iconsEnabled() ? 10 : 8)
+                                )
+                              )}
+                            </text>
+                          </box>
+                          <text selectable={false} fg={theme.colors.text.muted}>
+                            {String(header().count)}
                           </text>
                         </box>
-                        <text selectable={false} fg={theme.colors.text.muted}>
-                          {String(header().count)}
-                        </text>
-                      </box>
-                    )}
-                  </Show>
-                  <Show when={asLine(row().item)}>
-                    {(line) => (
-                      <>
-                        <text
-                          selectable={false}
-                          flexShrink={0}
-                          fg={
-                            line().match === undefined
-                              ? theme.colors.text.faint
-                              : theme.colors.text.muted
-                          }
-                        >
-                          {` ${String(line().line).padStart(line().lineWidth)} `}
-                        </text>
-                        <CodeLine spans={() => rowSpans(line(), row().index)} />
-                      </>
-                    )}
-                  </Show>
-                  <Show when={row().item.kind === "gap"}>
-                    <text selectable={false} fg={theme.colors.text.faint}>
-                      {" ⋯"}
-                    </text>
-                  </Show>
-                </box>
-              )}
+                      )}
+                    </Show>
+                    <Show when={asLine(row().item)}>
+                      {(line) => (
+                        <>
+                          <text
+                            selectable={false}
+                            flexShrink={0}
+                            fg={
+                              line().match === undefined
+                                ? theme.colors.text.faint
+                                : theme.colors.text.muted
+                            }
+                          >
+                            {` ${String(line().line).padStart(line().lineWidth)} `}
+                          </text>
+                          <CodeLine
+                            spans={() => rowSpans(line(), row().index)}
+                          />
+                        </>
+                      )}
+                    </Show>
+                    <Show when={row().item.kind === "gap"}>
+                      <text selectable={false} fg={theme.colors.text.faint}>
+                        {" ⋯"}
+                      </text>
+                    </Show>
+                  </box>
+                );
+              }}
             </Index>
           </Show>
         </box>

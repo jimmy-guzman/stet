@@ -26,13 +26,12 @@ import { openInEditor } from "./editor/open";
 import type { Worktree } from "./git/worktree";
 import { createKeyHandler } from "./keymap";
 import type { LogLevel } from "./log/levels";
-import { exitAfterRestore } from "./shutdown";
+import { exitAfterRestore, quitWithUpdateNotice } from "./shutdown";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { theme } from "./theme/context";
 import { refreshTerminalPalette, syncTerminalPalette } from "./theme/system";
 import { worktreeLabel } from "./ui-helpers";
-import { formatUpdateNotice } from "./upgrade/release";
 
 /**
  * A bar's backdrop: a rule across its row, with a tee where a side-docked divider meets it. The bar's
@@ -132,18 +131,6 @@ export const App = () => {
     void exitAfterRestore(renderer, 0, message);
   };
 
-  // The user-initiated quit (keyboard) surfaces a pending update on the way out, gh-style. The
-  // Worktree-recovery exit reports its degraded shutdown through the same path; the crash/signal
-  // Backstops in main.tsx never route here.
-  const quitWithUpdateNotice = () => {
-    const update = state.availableUpdate();
-    quit(
-      update === undefined
-        ? undefined
-        : { level: "info", text: formatUpdateNotice(update) }
-    );
-  };
-
   // The heartbeat flags a deleted current worktree; recover by switching to the
   // Main worktree (the parent repo), or exit cleanly when it too is gone.
   createEffect(() => {
@@ -231,7 +218,9 @@ export const App = () => {
     openInEditor: async (file, line, mode) => {
       await openInEditor(renderer, file, line, mode);
     },
-    quit: quitWithUpdateNotice,
+    quit: () => {
+      quitWithUpdateNotice(renderer);
+    },
   });
 
   useKeyboard((key) => {
@@ -374,7 +363,7 @@ export const App = () => {
         <HelpDialog />
       </Show>
       <Show when={state.quitConfirmOpen()}>
-        <QuitConfirm onQuit={quitWithUpdateNotice} />
+        <QuitConfirm />
       </Show>
     </box>
   );

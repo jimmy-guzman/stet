@@ -1,9 +1,11 @@
-import { MouseButton, SliderRenderable } from "@opentui/core";
+import { SliderRenderable } from "@opentui/core";
 import type { MouseEvent } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
 import { createEffect } from "solid-js";
 
 import { theme } from "@/theme/context";
+
+import { isLeftClick } from "./mouse";
 
 /**
  * A slider inside a pane. OpenTUI's takes any button and keeps the press to itself, so a press here
@@ -15,7 +17,7 @@ class PaneSliderRenderable extends SliderRenderable {
     if (event.type === "down") {
       this.parent?.processMouseEvent(event);
 
-      if (event.button !== MouseButton.LEFT.valueOf()) {
+      if (!isLeftClick(event)) {
         return;
       }
     }

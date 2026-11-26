@@ -109,7 +109,9 @@ export const HelpDialog = () => {
               state.setHelpView("keys");
             }}
           />
-          <text fg={theme.colors.text.faint}>{" · "}</text>
+          <text selectable={false} fg={theme.colors.text.faint}>
+            {" · "}
+          </text>
           <ActionText
             label={state.helpView() === "marks" ? "[marks]" : "marks"}
             fg={tabTone("marks")}

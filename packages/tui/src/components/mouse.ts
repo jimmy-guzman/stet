@@ -2,6 +2,7 @@ import { MouseButton } from "@opentui/core";
 import type { MouseEvent } from "@opentui/core";
 import { batch } from "solid-js";
 
+import type { CommandMenuContext } from "@/components/command-menu/items";
 import { state } from "@/state";
 
 // OpenTUI types `MouseEvent.button` as a bare number, so a direct `=== MouseButton.RIGHT`
@@ -40,10 +41,42 @@ export const pressHistoryButton = (event: MouseEvent) => {
 };
 
 /**
- * A left click's handler, the one place a click reads its button. Another button passes through to
- * the target's ancestors untouched (a middle press does nothing, a side button steps history). While
- * the context menu is open, a left press anywhere only closes it, as a click outside a desktop menu
- * does, rather than also acting on what lies under it.
+ * Whether a press only closes the open context menu: a left press anywhere does, as a click outside a
+ * desktop menu does, rather than also acting on what lies under it.
+ */
+export const pressOnlyClosesMenu = (event: MouseEvent) =>
+  isLeftClick(event) && state.commandMenuOpen();
+
+/**
+ * On a right-click, open a context menu at the pointer on what it landed on. `select` moves focus and
+ * the cursor onto the target in the same batch as closing any menu already open, and the press stops
+ * here, so the app's root does not close the menu it just opened.
+ *
+ * @returns Whether the press was a right-click, so the caller does nothing else with it.
+ */
+export const openMenuAt = (
+  event: MouseEvent,
+  context: CommandMenuContext,
+  select: () => void
+) => {
+  if (!isRightClick(event)) {
+    return false;
+  }
+
+  event.stopPropagation();
+  batch(() => {
+    state.closeCommandMenu();
+    select();
+  });
+  state.openCommandMenu(context, { x: event.x, y: event.y });
+
+  return true;
+};
+
+/**
+ * A left click's action. Another button passes through to the target's ancestors untouched (a
+ * middle press only focuses the pane, a side button steps history), and a press that only closes
+ * the menu does that and stops.
  */
 export const leftPress =
   (run: (event: MouseEvent) => void) => (event: MouseEvent) => {
@@ -51,7 +84,7 @@ export const leftPress =
       return;
     }
 
-    if (state.commandMenuOpen()) {
+    if (pressOnlyClosesMenu(event)) {
       event.stopPropagation();
       state.closeCommandMenu();
 

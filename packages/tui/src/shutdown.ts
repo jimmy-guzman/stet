@@ -4,6 +4,8 @@ import type { CliRenderer } from "@opentui/core";
 
 import type { LogLevel } from "./log/levels";
 import { log } from "./log/terminal";
+import { state } from "./state";
+import { formatUpdateNotice } from "./upgrade/release";
 
 /**
  * Renderers whose shutdown stet started, so `exitOnOutputFailure` can tell a close stet asked for
@@ -13,14 +15,14 @@ import { log } from "./log/terminal";
 const shuttingDown = new WeakSet<CliRenderer>();
 
 /**
- * The one way stet exits once the renderer is up: the keyboard quit, the worktree-recovery exit, and
- * the signal and crash backstops all route here. `destroy()` returns at once but restores the
- * terminal asynchronously, and `closed` resolves once the restore has been written, so the message
- * waits for it and lands on the restored screen rather than the alt buffer, and the exit cannot cut
- * the restore short. A rejected `closed` (the output failed, or the close ran late) leaves nothing
- * stet can still restore, so it exits the same way. `destroy()` is idempotent, so a backstop that
- * races an exit already in flight is harmless. Destroying the renderer also resets the terminal
- * title.
+ * The one way stet exits once the renderer is up: the user's own quit (a key, or a click on the
+ * dialog's `y quit`), the worktree-recovery exit, and the signal and crash backstops all route here.
+ * `destroy()` returns at once but restores the terminal asynchronously, and `closed` resolves once
+ * the restore has been written, so the message waits for it and lands on the restored screen rather
+ * than the alt buffer, and the exit cannot cut the restore short. A rejected `closed` (the output
+ * failed, or the close ran late) leaves nothing stet can still restore, so it exits the same way.
+ * `destroy()` is idempotent, so a backstop that races an exit already in flight is harmless.
+ * Destroying the renderer also resets the terminal title.
  *
  * @param renderer The renderer to tear down.
  * @param code The process exit code.
@@ -41,6 +43,26 @@ export const exitAfterRestore = async (
   }
 
   process.exit(code);
+};
+
+/**
+ * The user's own quit (a key, or a click on the quit dialog's `y quit`) surfaces a pending update on
+ * the way out, gh-style. It is a module function rather than an `App` closure, as `openInEditor` is,
+ * so the keymap's host seam and the dialog reach one action. The worktree-recovery exit and
+ * the crash/signal backstops never route here, so they stay silent.
+ *
+ * @param renderer The renderer to tear down.
+ */
+export const quitWithUpdateNotice = (renderer: CliRenderer) => {
+  const update = state.availableUpdate();
+
+  void exitAfterRestore(
+    renderer,
+    0,
+    update === undefined
+      ? undefined
+      : { level: "info", text: formatUpdateNotice(update) }
+  );
 };
 
 /**

@@ -8,7 +8,7 @@ import { createDoubleClickGuard } from "@/utils/double-click";
 
 import { emptyStateTone } from "./focus-tone";
 import { ListScrollbar } from "./list-scrollbar";
-import { isLeftClick, pressHistoryButton } from "./mouse";
+import { isLeftClick, pressHistoryButton, pressOnlyClosesMenu } from "./mouse";
 import { hoverable } from "./pointer";
 import { TreeRow } from "./tree-row";
 import { windowWheelHandler } from "./wheel";
@@ -42,10 +42,7 @@ export const Sidebar = () => {
   const onMouseDown = (event: MouseEvent) => {
     // With the context menu open, a left press only closes it (the app's root does that), as one
     // Anywhere does.
-    if (
-      pressHistoryButton(event) ||
-      (isLeftClick(event) && state.commandMenuOpen())
-    ) {
+    if (pressHistoryButton(event) || pressOnlyClosesMenu(event)) {
       return;
     }
 

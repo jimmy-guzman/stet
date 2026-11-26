@@ -24,7 +24,7 @@ import { ActionText } from "./action-text";
 import { CodeLine } from "./code-line";
 import { FileIcon } from "./file-icon";
 import { ListScrollbar } from "./list-scrollbar";
-import { isRightClick, leftPress } from "./mouse";
+import { leftPress, openMenuAt } from "./mouse";
 import { hoverable } from "./pointer";
 import { windowWheelHandler } from "./wheel";
 
@@ -152,12 +152,6 @@ const emptyText = () => {
   return state.searchStatus() === "ready" ? "no matches" : "type to search";
 };
 
-/**
- * The full-view project search pane: it swaps in for the file view inside the Viewer
- * (`mainView === "search"`). Chrome rows (query, filter, summary, footer) are fixed-height in every
- * state, so idle/searching/ready/ error swaps never shift layout; the results band windows over the
- * flat `searchItems` list, one terminal row per item.
- */
 // Select the row, or the nearest navigable one above a context row or a gap.
 const selectNearest = (index: number) => {
   const selected = state
@@ -172,19 +166,12 @@ const selectNearest = (index: number) => {
   }
 };
 
-// A right-click selects the row it landed on (a header included, which a click would fold) and
-// Opens that result's menu at the pointer. It stops here, so the app's root does not close it.
-const openRowMenu = (event: MouseEvent, index: number) => {
-  event.stopPropagation();
-  batch(() => {
-    state.closeCommandMenu();
-    state.setFocusedPane("search");
-    state.setSearchFocus("results");
-    selectNearest(index);
-  });
-  state.openCommandMenu("search", { x: event.x, y: event.y });
-};
-
+/**
+ * The full-view project search pane: it swaps in for the file view inside the Viewer
+ * (`mainView === "search"`). Chrome rows (query, filter, summary, footer) are fixed-height in every
+ * state, so idle/searching/ready/ error swaps never shift layout; the results band windows over the
+ * flat `searchItems` list, one terminal row per item.
+ */
 export const SearchPane = () => {
   const fileCount = createMemo(
     () => new Set(state.searchResults().map((m) => m.path)).size
@@ -500,9 +487,15 @@ export const SearchPane = () => {
                       hover.hovered()
                     )}
                     onMouseDown={(event: MouseEvent) => {
-                      if (isRightClick(event)) {
-                        openRowMenu(event, row().index);
-
+                      // A right-click selects the row it landed on (a header included,
+                      // Which a click would fold) and opens that result's menu there.
+                      if (
+                        openMenuAt(event, "search", () => {
+                          state.setFocusedPane("search");
+                          state.setSearchFocus("results");
+                          selectNearest(row().index);
+                        })
+                      ) {
                         return;
                       }
 

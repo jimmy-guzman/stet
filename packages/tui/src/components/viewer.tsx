@@ -17,10 +17,10 @@ import { BinaryPreview } from "./binary-preview";
 import { DiffView } from "./diff/diff-view";
 import { emptyStateTone } from "./focus-tone";
 import {
-  isLeftClick,
-  isRightClick,
   leftPress,
+  openMenuAt,
   pressHistoryButton,
+  pressOnlyClosesMenu,
 } from "./mouse";
 import { hoverable } from "./pointer";
 import { SearchPane } from "./search-pane";
@@ -138,19 +138,11 @@ const onFindSubmit = () => {
 // A file shown as a preview (a binary's metadata, a placeholder line) has no caret for the viewer's
 // Menu to open on, so a right-click opens the file's own menu at the pointer.
 const onPreviewPress = (event: MouseEvent) => {
-  if (!isRightClick(event)) {
-    return;
-  }
-
-  event.stopPropagation();
-  batch(() => {
-    state.closeCommandMenu();
+  openMenuAt(event, "preview", () => {
     state.setFocusedPane("diff");
   });
-  state.openCommandMenu("preview", { x: event.x, y: event.y });
 };
 
-// The whole footer row loads the rest, as `f` does.
 const TruncationFooter = () => {
   const hover = hoverable("pointer");
 
@@ -277,10 +269,7 @@ export const Viewer = () => {
       flexDirection="column"
       onMouseDown={(event: MouseEvent) => {
         // With the context menu open, a left press only closes it (the app's root does that).
-        if (
-          pressHistoryButton(event) ||
-          (isLeftClick(event) && state.commandMenuOpen())
-        ) {
+        if (pressHistoryButton(event) || pressOnlyClosesMenu(event)) {
           return;
         }
 

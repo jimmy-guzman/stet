@@ -50,7 +50,7 @@ describe("commit drill-down", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
 
-    const { renderer, renderOnce, captureCharFrame, mockInput } =
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
       await testRender(() => <App />, {
         height: 30,
         width: 90,
@@ -102,6 +102,16 @@ describe("commit drill-down", () => {
       );
 
       expect(after).toContain("YACHT");
+
+      // A commit scope draws no scope label, so its subject is the header's way back to the picker.
+      const head = after.split("\n")[0] ?? "";
+      await mockMouse.click(
+        Bun.stringWidth(head.slice(0, head.indexOf("YACHT"))),
+        0
+      );
+      await settleUntil("the subject reopens the scope picker", (frame) =>
+        frame.includes("switch scope")
+      );
     } finally {
       renderer.destroy();
     }

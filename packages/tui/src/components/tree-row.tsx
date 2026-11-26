@@ -1,5 +1,5 @@
 import type { MouseEvent } from "@opentui/core";
-import { batch, Show } from "solid-js";
+import { Show } from "solid-js";
 
 import { namedIcon } from "@/file-support/registry";
 import type { DirectoryNode, FileNode, FileTreeRow } from "@/git/tree";
@@ -9,7 +9,7 @@ import { kindLetter } from "@/ui-helpers";
 import { truncate, truncateName } from "@/utils/text";
 
 import { FileIcon } from "./file-icon";
-import { isRightClick, leftPress } from "./mouse";
+import { leftPress, openMenuAt } from "./mouse";
 import { hoverable } from "./pointer";
 import { RecencyDot } from "./recency-dot";
 
@@ -45,23 +45,6 @@ const rowBackground = (focused: boolean, hovered: boolean) => {
   return hovered ? theme.colors.surface.hover : theme.colors.surface.base;
 };
 
-// A right-click focuses the row and opens its context menu at the cell. The press stops here, so
-// The app's root does not close the menu it just opened.
-const openMenuOnRightClick = (event: MouseEvent, id: string) => {
-  if (!isRightClick(event)) {
-    return false;
-  }
-
-  event.stopPropagation();
-  batch(() => {
-    state.setFocusedPane("tree");
-    state.focusTreeNode(id);
-  });
-  state.openCommandMenu("tree", { x: event.x, y: event.y });
-
-  return true;
-};
-
 const contentWidth = () => state.layout().sidebar.content.width - 2;
 
 const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
@@ -78,7 +61,12 @@ const DirectoryRow = (props: { node: DirectoryNode; row: FileTreeRow }) => {
   // There and toggle its expansion (collapsing `l`/`h` into one click). A
   // Right-click instead focuses the row and opens the context menu at the cell.
   const onMouseDown = (event: MouseEvent) => {
-    if (openMenuOnRightClick(event, props.node.id)) {
+    if (
+      openMenuAt(event, "tree", () => {
+        state.setFocusedPane("tree");
+        state.focusTreeNode(props.node.id);
+      })
+    ) {
       return;
     }
 
@@ -188,7 +176,12 @@ const FileRow = (props: { node: FileNode; row: FileTreeRow }) => {
   const background = () => rowBackground(focused(), hover.hovered());
 
   const onMouseDown = (event: MouseEvent) => {
-    if (openMenuOnRightClick(event, props.node.id)) {
+    if (
+      openMenuAt(event, "tree", () => {
+        state.setFocusedPane("tree");
+        state.focusTreeNode(props.node.id);
+      })
+    ) {
       return;
     }
 

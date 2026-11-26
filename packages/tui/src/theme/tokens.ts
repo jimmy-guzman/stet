@@ -39,11 +39,8 @@ export interface Theme {
   success: string;
   /**
    * `scrim` is the alert-dialog backdrop color; resolve.ts blends it with a fixed alpha into
-   * `rgba.scrim` to dim (not hide) the app behind a modal.
-   */
-  /**
-   * `hover` marks the list row under the pointer, halfway to the cursor row so the two never read
-   * as the same mark.
+   * `rgba.scrim` to dim (not hide) the app behind a modal. `hover` marks the list row under the
+   * pointer, halfway to the cursor row so the two never read as the same mark.
    */
   surface: {
     base: string;

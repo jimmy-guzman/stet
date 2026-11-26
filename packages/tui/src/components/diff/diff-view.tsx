@@ -17,7 +17,11 @@ import {
   untrack,
 } from "solid-js";
 
-import { isLeftClick, isRightClick } from "@/components/mouse";
+import {
+  isLeftClick,
+  isRightClick,
+  pressOnlyClosesMenu,
+} from "@/components/mouse";
 import { hoverable, retrackPointer } from "@/components/pointer";
 import { cellWidth } from "@/diff/cells";
 import { followScrollTop, followScrollX, HORIZONTAL_STEP } from "@/diff/follow";
@@ -734,8 +738,7 @@ export const DiffView = () => {
   // Context menu, which opens after the batch: moving the cursor can scroll, and the menu closes
   // On a scroll it did not open at.
   const pressAt = (event: MouseEvent) => {
-    // A left press with the menu open only closes it, as one anywhere does.
-    if (state.commandMenuOpen() && isLeftClick(event)) {
+    if (pressOnlyClosesMenu(event)) {
       state.closeCommandMenu();
 
       return false;
@@ -752,7 +755,7 @@ export const DiffView = () => {
     const point = pointAt(pointer);
 
     if (row === undefined || point === undefined) {
-      if (event.button === 0) {
+      if (isLeftClick(event)) {
         state.clearSelection();
       }
 

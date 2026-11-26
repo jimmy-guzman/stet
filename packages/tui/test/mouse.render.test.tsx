@@ -168,6 +168,172 @@ describe("clickable chrome", () => {
   }, 20_000);
 });
 
+describe("find, search, and scope controls", () => {
+  test("the find hints and the find bar's controls do what their keys do", async () => {
+    const { mockInput, mockMouse, renderer, settleUntil } = await mount();
+
+    const click = async (label: string) => {
+      const frame = await settleUntil(label, (current) =>
+        current.includes(label)
+      );
+
+      const { x, y } = cellOf(frame, label, 1);
+      await mockMouse.click(x, y);
+    };
+
+    try {
+      await settleUntil("loaded", (current) => current.includes("alpha"));
+
+      // While typing, the bar offers commit and cancel.
+      mockInput.pressKey("/");
+      await mockInput.typeText("a");
+      await click("esc cancel");
+      expect(state.findOpen()).toBe(false);
+      expect(state.findActive()).toBe(false);
+
+      mockInput.pressKey("/");
+      await mockInput.typeText("a");
+      await click("enter find");
+      expect(state.findActive()).toBe(true);
+      expect(state.findMatchPos()).toBe(0);
+
+      // `base` and `const alpha = 1;` both match, so each step lands on the other.
+      await click("n next");
+      expect(state.findMatchPos()).toBe(1);
+      await click("N prev");
+      expect(state.findMatchPos()).toBe(0);
+      await click("1/2");
+      expect(state.findMatchPos()).toBe(1);
+
+      await click("esc clear");
+      expect(state.findActive()).toBe(false);
+
+      mockInput.pressKey("/");
+      await mockInput.typeText("a");
+      mockInput.pressEnter();
+      await settleUntil("committed", () => state.findActive());
+
+      const bar = await settleUntil("find bar", (current) =>
+        current.includes("1/2")
+      );
+
+      const esc = cellOf(bar, "esc", 1);
+      await mockMouse.click(esc.x, esc.y);
+      expect(state.findActive()).toBe(false);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  // The keys refuse to cycle a find while the search view covers its file, so the bar must not
+  // Offer the hints that would.
+  test("the committed find's hints give way to the search view", async () => {
+    const { mockInput, renderer, settleUntil } = await mount();
+
+    try {
+      await settleUntil("loaded", (current) => current.includes("alpha"));
+      mockInput.pressKey("/");
+      await mockInput.typeText("a");
+      mockInput.pressEnter();
+      await settleUntil("hints", (current) => current.includes("n next"));
+
+      mockInput.pressKey("f", { ctrl: true });
+      await settleUntil("search", () => state.mainView() === "search");
+
+      const frame = await settleUntil("guidance", (current) =>
+        current.includes("? help")
+      );
+
+      expect(frame).not.toContain("n next");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a click on a search field focuses it", async () => {
+    const { mockInput, mockMouse, renderer, settleUntil } = await mount();
+
+    try {
+      await settleUntil("loaded", (current) => current.includes("alpha"));
+      mockInput.pressKey("f", { ctrl: true });
+
+      const frame = await settleUntil("search", (current) =>
+        current.includes("search…")
+      );
+
+      const glob = cellOf(frame, "src/ *.ts", 1);
+      await mockMouse.click(glob.x + 2, glob.y);
+      expect(state.searchFocus()).toBe("glob");
+
+      const query = cellOf(frame, "search…", 1);
+      await mockMouse.click(query.x + 2, query.y);
+      expect(state.searchFocus()).toBe("query");
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("esc back in the commits list returns to the scope kinds", async () => {
+    const { mockInput, mockMouse, renderer, settleUntil } = await mount();
+
+    try {
+      await settleUntil("loaded", (current) => current.includes("alpha"));
+      mockInput.pressKey("s");
+
+      const menu = await settleUntil("scope menu", (current) =>
+        current.includes("commits")
+      );
+
+      const commits = cellOf(menu, "commits", 2);
+      await mockMouse.click(commits.x, commits.y);
+
+      const list = await settleUntil("commits view", (current) =>
+        current.includes("esc back")
+      );
+
+      const back = cellOf(list, "esc back", 1);
+      await mockMouse.click(back.x, back.y);
+      expect(state.scopeMenuView()).toBe("kinds");
+      expect(state.scopeMenuOpen()).toBe(true);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a file too large to show loads on a click", async () => {
+    const repoRoot = createFixtureRepo("stet-mouse-large-", {
+      "big.txt": "small\n",
+    });
+
+    writeFileSync(
+      path.join(repoRoot, "big.txt"),
+      `${"x".repeat(80)}\n`.repeat(14_000)
+    );
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const app = await testRender(() => <App />, { height: 30, width: 110 });
+    const settleUntil = makeSettleUntil(app);
+
+    try {
+      await settleUntil("loaded", () => state.selectedPath() === "big.txt");
+      state.setFocusedPane("diff");
+      app.mockInput.pressKey("v");
+
+      const frame = await settleUntil("placeholder", (current) =>
+        current.includes("too large")
+      );
+
+      const placeholder = cellOf(frame, "too large", 1);
+      await app.mockMouse.click(placeholder.x, placeholder.y);
+      await settleUntil("loading", () =>
+        state.fullContentPaths().has("big.txt")
+      );
+    } finally {
+      app.renderer.destroy();
+    }
+  }, 20_000);
+});
+
 describe("buttons", () => {
   test("a middle press acts on nothing, and the side buttons step history", async () => {
     const { mockMouse, renderer, renderOnce, settleUntil } = await mount();
@@ -252,6 +418,42 @@ describe("overlays", () => {
       await mockMouse.click(outside.x, outside.y);
       await settleUntil("closed", () => !state.themeComboboxOpen());
       expect(selection()).toBeUndefined();
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a press outside the file picker, worktree picker, or scope menu closes it and opens nothing", async () => {
+    const { mockInput, mockMouse, renderer, settleUntil } = await mount();
+
+    try {
+      const frame = await settleUntil("loaded", (current) =>
+        current.includes("alpha")
+      );
+
+      const before = state.selectedPath();
+      // A tree row left of every overlay: a press there would open it if it reached the tree.
+      const outside = treeCell(frame, "notes.md");
+
+      mockInput.pressKey("p", { ctrl: true });
+      await settleUntil("file picker", () => state.fileComboboxOpen());
+      await mockMouse.click(outside.x, outside.y);
+      await settleUntil("file picker closed", () => !state.fileComboboxOpen());
+
+      mockInput.pressKey("w");
+      await settleUntil("worktree picker", () => state.worktreeComboboxOpen());
+      await mockMouse.click(outside.x, outside.y);
+      await settleUntil(
+        "worktree picker closed",
+        () => !state.worktreeComboboxOpen()
+      );
+
+      mockInput.pressKey("s");
+      await settleUntil("scope menu", () => state.scopeMenuOpen());
+      await mockMouse.click(outside.x, outside.y);
+      await settleUntil("scope menu closed", () => !state.scopeMenuOpen());
+
+      expect(state.selectedPath()).toBe(before);
     } finally {
       renderer.destroy();
     }

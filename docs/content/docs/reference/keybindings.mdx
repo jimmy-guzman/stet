@@ -108,11 +108,19 @@ Keys in overlays (pickers, menus, the quit confirmation, and the search pane) an
 You can also use the mouse:
 
 - Click a file to open it, a folder to expand or collapse it, or a viewer line to move the caret there.
-- Click items in the overlays and the search pane.
-- Hover over a theme in the switcher to preview it live.
-- Click a pane to focus it. The wheel scrolls the pane under the pointer.
+- Click items in the overlays and the search pane. Click the search pane's query or path filter to type in it.
+- Move the pointer over a list in an overlay to move its highlight. In the theme switcher, this previews the theme live.
+- Click outside an overlay to close it. The theme switcher then goes back to the theme you had before. The quit confirmation stays open until you answer it.
+- Click a pane to focus it. The wheel scrolls the pane under the pointer. In the viewer, `Shift` and the wheel scroll long lines sideways.
 - Drag the scrollbar of the tree or of the search results to scroll it.
-- Right-click a tree row or a viewer line to open a context menu of the actions that apply there. `Shift+F10` opens the same menu on the focused pane.
+- Drag the divider between the tree and the viewer to resize the tree. Double-click it to reset the size.
+- Click the header: the repository or branch opens the worktree picker, the scope opens the scope picker, and the changed count switches changes only on or off.
+- Click a hint in the status bar to do what it names, such as `? help`. Click the recent file to open it.
+- Click the viewer's line counts (`+12 -3`) to switch between the diff and the full file.
+- Use the back and forward side buttons of your mouse to move through the viewer history, as `<` and `>` do.
+- Right-click a tree row, a viewer line, a search result, or a binary file's preview to open a context menu of the actions that apply there. `Shift+F10` opens the same menu on the focused pane. While a menu is open, a click anywhere else only closes it.
+
+The pointer changes shape to show what a press does: a hand over things you can click, a text cursor over text you can select, and a resize cursor over the divider. Rows that you can click also highlight under the pointer. Your terminal must support pointer shapes (OSC 22) for the shape to change.
 
 ![The viewer's context menu listing its copy and open actions](/screenshots/context-menu.png)
 

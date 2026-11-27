@@ -12,6 +12,7 @@ import { collapseHome, truncate, truncateLeft } from "@/utils/text";
 
 import { leftPress } from "./mouse";
 import { hoverable } from "./pointer";
+import { scrollboxBar } from "./scrollbar";
 
 // Every cell is a fixed-width box, never a padded string: a whitespace-only `<text>` measures zero
 // Cells in a flex row, so a worktree with no age would pull the columns right of it out of line.
@@ -96,6 +97,7 @@ const onSubmit = () => {
 
 export const WorktreeCombobox = () => {
   let worktreeComboboxRef: ScrollBoxRenderable | undefined;
+  const bar = scrollboxBar();
 
   createEffect(() => {
     worktreeComboboxRef?.scrollChildIntoView(
@@ -130,18 +132,16 @@ export const WorktreeCombobox = () => {
       <scrollbox
         ref={(el) => {
           worktreeComboboxRef = el;
+          bar.ref(el);
         }}
         width="100%"
         height={Math.min(
           12,
           Math.max(1, state.worktreeComboboxResults()?.length ?? 1)
         )}
-        scrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.rgba.transparent,
-            foregroundColor: theme.colors.scrollbar.thumb,
-          },
-        }}
+        scrollbarOptions={bar.options()}
+        onMouseDown={bar.onMouseDown}
+        onMouseUp={bar.onMouseUp}
       >
         <Show
           when={state.worktreeComboboxResults() !== undefined}

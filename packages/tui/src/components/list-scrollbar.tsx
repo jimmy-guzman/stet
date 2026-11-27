@@ -1,18 +1,23 @@
 import { SliderRenderable } from "@opentui/core";
 import type { MouseEvent } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { createEffect } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 
 import { theme } from "@/theme/context";
 
 import { isLeftClick } from "./mouse";
+import { hoverable } from "./pointer";
+import { thumbColor } from "./scrollbar";
 
 /**
  * A slider inside a pane. OpenTUI's takes any button and keeps the press to itself, so a press here
  * would not focus the pane, and a right-click would scroll it. The pane gets every press first, and
- * the slider only the left one.
+ * the slider only the left one. `onHold` reports the left press from its start to its release, which
+ * the slider keeps to itself too.
  */
 class PaneSliderRenderable extends SliderRenderable {
+  onHold?: (held: boolean) => void;
+
   override processMouseEvent(event: MouseEvent) {
     if (event.type === "down") {
       this.parent?.processMouseEvent(event);
@@ -20,6 +25,12 @@ class PaneSliderRenderable extends SliderRenderable {
       if (!isLeftClick(event)) {
         return;
       }
+
+      this.onHold?.(true);
+    }
+
+    if (event.type === "up") {
+      this.onHold?.(false);
     }
 
     super.processMouseEvent(event);
@@ -70,15 +81,22 @@ export const ListScrollbar = (props: {
     syncing = false;
   });
 
+  const column = hoverable("default");
+  const [held, setHeld] = createSignal(false);
+  slider.onHold = (next) => {
+    setHeld(next);
+  };
+
   createEffect(() => {
     slider.backgroundColor = theme.rgba.transparent;
-    slider.foregroundColor = theme.colors.scrollbar.thumb;
+    slider.foregroundColor = thumbColor(column.hovered() || held());
   });
 
   return (
     <box
       ref={(el) => {
         el.add(slider);
+        column.ref(el);
       }}
       width={1}
       height={props.viewport()}

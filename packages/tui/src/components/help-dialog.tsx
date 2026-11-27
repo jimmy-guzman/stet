@@ -8,6 +8,7 @@ import { theme } from "@/theme/context";
 import packageJson from "../../package.json";
 import { ActionText } from "./action-text";
 import { useLineMeasurer } from "./diff/line-measure";
+import { scrollboxBar } from "./scrollbar";
 
 // Minimum width of the left column box (the key combo or, on the marks view, the glyph); the
 // Description wraps in whatever remains of the row. A reserved-width box (not string padding) keeps
@@ -23,6 +24,7 @@ const tabTone = (view: "keys" | "marks") =>
 
 export const HelpDialog = () => {
   const measurer = useLineMeasurer();
+  const bar = scrollboxBar();
 
   // Both views reduce to one row shape: a left cell (key combo or colored glyph) and a description.
   // The registry and the mark set are both fixed, so this recomputes only on a view toggle or a
@@ -123,14 +125,12 @@ export const HelpDialog = () => {
         <text fg={theme.colors.text.faint}>stet@{packageJson.version}</text>
       </box>
       <scrollbox
+        ref={bar.ref}
         width="100%"
         height={listHeight()}
-        scrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.rgba.transparent,
-            foregroundColor: theme.colors.scrollbar.thumb,
-          },
-        }}
+        scrollbarOptions={bar.options()}
+        onMouseDown={bar.onMouseDown}
+        onMouseUp={bar.onMouseUp}
       >
         <For each={groups()}>
           {(group, index) => (

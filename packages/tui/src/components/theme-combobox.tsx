@@ -7,6 +7,7 @@ import { AUTO_THEME, themeForName } from "@/theme/registry";
 
 import { leftPress } from "./mouse";
 import { hoverable } from "./pointer";
+import { scrollboxBar } from "./scrollbar";
 
 // `auto` follows the terminal, so its swatch is the live active accent; every
 // Named theme shows its own accent regardless of what's currently active.
@@ -52,6 +53,7 @@ const onWheel = (event: MouseEvent) => {
 
 export const ThemeCombobox = () => {
   let themeComboboxRef: ScrollBoxRenderable | undefined;
+  const bar = scrollboxBar();
 
   createEffect(() => {
     themeComboboxRef?.scrollChildIntoView(
@@ -88,16 +90,14 @@ export const ThemeCombobox = () => {
       <scrollbox
         ref={(el) => {
           themeComboboxRef = el;
+          bar.ref(el);
         }}
         width="100%"
         height={Math.min(12, Math.max(1, state.themeComboboxResults().length))}
         onMouseScroll={onWheel}
-        scrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.rgba.transparent,
-            foregroundColor: theme.colors.scrollbar.thumb,
-          },
-        }}
+        scrollbarOptions={bar.options()}
+        onMouseDown={bar.onMouseDown}
+        onMouseUp={bar.onMouseUp}
       >
         <Show
           when={state.themeComboboxResults().length > 0}

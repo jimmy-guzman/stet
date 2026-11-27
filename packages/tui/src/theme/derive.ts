@@ -171,7 +171,7 @@ const derive = (zed: ZedTheme): Theme => {
       untracked: hues.green,
     },
     recency: { aged: faint, fresh: accent },
-    scrollbar: { thumb: toward(fg, step.scrollbar) },
+    scrollbar: { active: muted, thumb: toward(fg, step.scrollbar) },
     selection: { bg: toward(fg, step.selection) },
     severity: { error: hues.red, warning: hues.yellow },
     stage: {

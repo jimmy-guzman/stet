@@ -12,6 +12,7 @@ import { FileIcon } from "./file-icon";
 import { leftPress } from "./mouse";
 import { hoverable } from "./pointer";
 import { RecencyDot } from "./recency-dot";
+import { scrollboxBar } from "./scrollbar";
 
 // Opening a result is the same whether it comes from the input's submit (the
 // Highlighted row) or a click on a specific row.
@@ -48,6 +49,7 @@ const maxPathLen = () =>
 
 export const FileCombobox = () => {
   let fileComboboxRef: ScrollBoxRenderable | undefined;
+  const bar = scrollboxBar();
 
   createEffect(() => {
     fileComboboxRef?.scrollChildIntoView(
@@ -82,15 +84,13 @@ export const FileCombobox = () => {
       <scrollbox
         ref={(el) => {
           fileComboboxRef = el;
+          bar.ref(el);
         }}
         width="100%"
         height={Math.min(12, Math.max(1, state.fileComboboxResults().length))}
-        scrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.rgba.transparent,
-            foregroundColor: theme.colors.scrollbar.thumb,
-          },
-        }}
+        scrollbarOptions={bar.options()}
+        onMouseDown={bar.onMouseDown}
+        onMouseUp={bar.onMouseUp}
       >
         <Show
           when={state.fileComboboxResults().length > 0}

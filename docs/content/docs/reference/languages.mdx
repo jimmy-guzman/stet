@@ -17,13 +17,13 @@ Language support has layers. Named file associations select the syntax and the i
 | CSS                     | yes          | indent     |
 | GraphQL                 | yes          | indent     |
 | Markdown                | yes          | by heading |
-| 140+ others             | yes          | indent     |
+| 170+ others             | yes          | indent     |
 
 Press `z` to fold the block at the caret (the current position in the viewer). Code folds by indentation in each language, and Markdown folds by heading section. [Reading files and diffs](/docs/guides/reading-files-and-diffs#fold-code) describes folding.
 
 ## Syntax highlighting
 
-stet highlights code with [`@pierre/highlights`](https://diffs.com/highlights), which bundles lexers for more than 150 languages. A lexer splits the code of one language into tokens for color. stet selects the language from the file name, including exact names such as `Dockerfile`. The diff, the full-file view, and the search results use the same highlighter and theme. A file type that stet does not know shows as plain text.
+stet highlights code with [`@pierre/highlights`](https://diffs.com/highlights), which bundles lexers for about 190 languages. A lexer splits the code of one language into tokens for color. stet selects the language from the file name, including exact names such as `Dockerfile`. The diff, the full-file view, and the search results use the same highlighter and theme. A file type that stet does not know shows as plain text.
 
 A dotfile is a file whose name starts with a dot. Configuration dotfiles have no extension to select a language from, so stet resolves them by name. `.npmrc` highlights as INI, and `.prettierrc` highlights as JSONC, so a comment in it shows as a comment. Their extension variants, such as `.prettierrc.json` and `.prettierrc.yaml`, already resolve by their extension.
 

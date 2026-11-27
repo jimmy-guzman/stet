@@ -1,6 +1,5 @@
 import {
   columnCells,
-  DiffHunksRenderer,
   getSharedHighlighter,
   parseDiffFromFile,
   parsePatchFiles,
@@ -25,6 +24,7 @@ import {
   rowsFromHunks,
 } from "./rows";
 import type { DiffLineSide, DiffRow, NavigableLine } from "./rows";
+import { WholeLineRenderer } from "./whole-line-renderer";
 
 interface DiffLayout {
   rows: DiffRow[];
@@ -135,8 +135,9 @@ const sizeOf = (render: DiffLayout, retained: number) => {
 };
 
 /**
- * Initialize the shared highlighter (its WebAssembly module and the active theme) so the first diff
- * does not pay for it. Called at startup (and in test setup); never rejects.
+ * Initialize the shared highlighter and attach the active theme so the first diff does not pay for
+ * it. The WebAssembly module still compiles on the first tokenize (~2ms), which an empty tokenize
+ * here would move but not save: it blocks ~9ms right after the paint. Called at startup (and in test setup); never rejects.
  */
 export const preloadDiffHighlighter = async () => {
   try {
@@ -261,7 +262,7 @@ const compute = async (
 
   // Owned by this render's closure, never by app state: it caches the whole-file
   // Highlight once, so each `expand` only re-lays out rows.
-  const renderer = new DiffHunksRenderer({
+  const renderer = new WholeLineRenderer({
     collapsedContextThreshold: 1,
     diffStyle: "unified",
     hunkSeparators: "line-info",

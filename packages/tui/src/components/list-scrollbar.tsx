@@ -5,24 +5,26 @@ import { createEffect, createSignal } from "solid-js";
 
 import { theme } from "@/theme/context";
 
-import { isLeftClick } from "./mouse";
+import { isLeftClick, pressOnlyClosesMenu } from "./mouse";
 import { hoverable } from "./pointer";
 import { thumbColor } from "./scrollbar";
 
 /**
  * A slider inside a pane. OpenTUI's takes any button and keeps the press to itself, so a press here
  * would not focus the pane, and a right-click would scroll it. The pane gets every press first, and
- * the slider only the left one. `onHold` reports the left press from its start to its release, which
- * the slider keeps to itself too.
+ * the slider only the left one, unless that press only closes the context menu. `onHold` reports the
+ * left press from its start to its release, which the slider keeps to itself too.
  */
 class PaneSliderRenderable extends SliderRenderable {
   onHold?: (held: boolean) => void;
 
   override processMouseEvent(event: MouseEvent) {
     if (event.type === "down") {
+      // Asked first: the pane's own handling closes the menu, so afterwards no menu is open.
+      const onlyClosesMenu = pressOnlyClosesMenu(event);
       this.parent?.processMouseEvent(event);
 
-      if (!isLeftClick(event)) {
+      if (!isLeftClick(event) || onlyClosesMenu) {
         return;
       }
 

@@ -108,6 +108,32 @@ describe("list scrollbar", () => {
     }
   }, 20_000);
 
+  test("a track click that closes the context menu scrolls nothing", async () => {
+    const repoRoot = createFixtureRepo("stet-scrollbar-", bigDirectory(300));
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, mockMouse, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, { height: 16, width: 90 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("first render", (current) =>
+        current.includes("f000.txt")
+      );
+
+      const { height, width, x, y } = state.layout().sidebar.content;
+      await mockMouse.click(x + 2, y + 1, MouseButtons.RIGHT);
+      await settleUntil("menu", () => state.commandMenuOpen());
+
+      await mockMouse.click(x + width - 1, y + height - 1);
+      await settleUntil("menu closed", () => !state.commandMenuOpen());
+      expect(state.sidebarScrollTop()).toBe(0);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
   test("dragging the thumb scrolls the tree, and a track click jumps", async () => {
     const repoRoot = createFixtureRepo("stet-scrollbar-", bigDirectory(300));
     seedState(await loadModel(repoRoot, scope), scope);

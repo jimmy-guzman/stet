@@ -561,9 +561,10 @@ export const DiffView = () => {
   });
 
   // OpenTUI re-checks the hit target after a frame, but the target here is always this one layer,
-  // So content that scrolls under a still pointer would keep the style of the row that left.
+  // So content that moves under a still pointer would keep the style of the row that left: a scroll,
+  // Or a re-layout with the scroll unchanged (wrap, a resize, a fold or gap toggle).
   createEffect(
-    on([scrollTop, scrollX], () => {
+    on([scrollTop, scrollX, rowEnds], () => {
       if (untrack(layer.hovered)) {
         retrackPointer();
       }

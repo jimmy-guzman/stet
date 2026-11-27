@@ -570,6 +570,56 @@ describe("pointer", () => {
     }
   }, 20_000);
 
+  test("the viewer's pointer follows rows that move under it without a scroll", async () => {
+    const lines = Array.from(
+      { length: 20 },
+      (_, index) => `const l${index + 1} = ${index + 1};`
+    );
+
+    const repoRoot = createFixtureRepo("stet-mouse-gap-", {
+      "mod.ts": `${lines.join("\n")}\n`,
+    });
+
+    writeFileSync(
+      path.join(repoRoot, "mod.ts"),
+      `${lines.map((line, index) => (index === 0 || index === 19 ? line.replace("=", "= 100 +") : line)).join("\n")}\n`
+    );
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const app = await testRender(() => <App />, { height: 30, width: 110 });
+    const settleUntil = makeSettleUntil(app);
+
+    try {
+      const frame = await settleUntil("loaded", (current) =>
+        current.includes("l2 = 2")
+      );
+
+      const l2 = cellOf(frame, "l2 = 2");
+      await app.mockMouse.click(l2.x, l2.y);
+      await settleUntil("viewer focused", () => state.focusedPane() === "diff");
+
+      app.mockInput.pressKey("z");
+
+      const open = await settleUntil("gap expanded", (current) =>
+        current.includes("l10 = 10")
+      );
+
+      const l19 = cellOf(open, "l19 = 19");
+      await app.mockMouse.moveTo(l19.x, l19.y);
+      expect(pointerStyle()).toBe("text");
+
+      // Collapsing the gap from the keyboard leaves the still pointer past the file's last row.
+      app.mockInput.pressKey("z");
+      await settleUntil(
+        "gap collapsed",
+        (current) => !current.includes("l10 = 10")
+      );
+      await settleUntil("pointer follows", () => pointerStyle() === "default");
+    } finally {
+      app.renderer.destroy();
+    }
+  }, 20_000);
+
   test("tints the tree row under the pointer, never the cursor's", async () => {
     const { captureSpans, mockMouse, renderer, settleUntil } = await mount();
 

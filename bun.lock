@@ -45,8 +45,8 @@
       "dependencies": {
         "@opentui/core": "0.9.9",
         "@opentui/solid": "0.9.9",
-        "@pierre/diffs": "1.7.1",
-        "@pierre/highlights": "0.5.2",
+        "@pierre/diffs": "1.7.2",
+        "@pierre/highlights": "0.6.0",
         "@pierre/trees": "1.0.0",
         "effect": "4.1.5",
         "jsonc-parser": "3.3.1",
@@ -489,9 +489,9 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.95.0", "", { "os": "win32", "cpu": "x64" }, "sha512-I/Fn+Fed1qzb1k2uRjMe2VRtRN1+ZObyU+E76B6v/Ul3Z6JdeAW5zBHSe0n5d8a0ZyU4iorzVy0Rw9LYgo3MSQ=="],
 
-    "@pierre/diffs": ["@pierre/diffs@1.7.1", "", { "dependencies": { "@pierre/highlights": "0.5.2", "@pierre/patches": "0.0.1", "@pierre/theme": "2.1.0", "@pierre/theming": "1.0.2", "diff": "9.0.0", "hast-util-to-html": "9.0.5", "lru_map": "0.4.1", "shiki": "^3.0.0 || ^4.0.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-saKteoCq9tWbRqLruIixV6sKgxIcY0OK6RkKcr8lYv7r4iJhXQJbmVPN3VBmjBHivgMIG2Att6tV/AOXXzEvvg=="],
+    "@pierre/diffs": ["@pierre/diffs@1.7.2", "", { "dependencies": { "@pierre/highlights": "0.6.0", "@pierre/patches": "0.0.1", "@pierre/theme": "2.1.0", "@pierre/theming": "1.0.2", "diff": "9.0.0", "hast-util-to-html": "9.0.5", "lru_map": "0.4.1", "shiki": "^3.0.0 || ^4.0.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-zMYTBWK4srIYKoKMTSwCVWxbgpJT8UXJ2v5ONTXBbzDSDYpOCpgqfoyQexDWo6FH9RDicZvkeZwIbiTrBBSJ2Q=="],
 
-    "@pierre/highlights": ["@pierre/highlights@0.5.2", "", {}, "sha512-CV+yFa8dodaU3w7U42FR+AfoavrsfcH0/n3rckDu1A/UXan1Dzo6OdM/MPOAAsGM/EbKhDxD6k+qMcNUtnLfsg=="],
+    "@pierre/highlights": ["@pierre/highlights@0.6.0", "", {}, "sha512-5RhenEkZxlcsw2hrDaYlGyT6ERfQgHSvZxRg/ByZ11SVkoWuAwDMozL7HxUfUnOVyShD5WKMxqiakg8S/8Fi7A=="],
 
     "@pierre/patches": ["@pierre/patches@0.0.1", "", {}, "sha512-NycJQVQNuqmBdr7u1LsUcmkiIz1fRm9xhWZyRbm21oJYd0MVVCa45t9Lsuj5IKrTMBonxOuh4LMv+R3BpL4bmQ=="],
 

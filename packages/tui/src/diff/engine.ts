@@ -135,8 +135,9 @@ const sizeOf = (render: DiffLayout, retained: number) => {
 };
 
 /**
- * Initialize the shared highlighter (its WebAssembly module and the active theme) so the first diff
- * does not pay for it. Called at startup (and in test setup); never rejects.
+ * Initialize the shared highlighter and attach the active theme so the first diff does not pay for
+ * it. The WebAssembly module still compiles on the first tokenize (~2ms), which an empty tokenize
+ * here would move but not save: it blocks ~9ms right after the paint. Called at startup (and in test setup); never rejects.
  */
 export const preloadDiffHighlighter = async () => {
   try {

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.1](https://github.com/jimmy-guzman/stet/compare/stet-v0.13.0...stet-v0.13.1) (2026-11-27)
+
+
+### Features
+
+* **diff:** ✨ highlight Nushell, Templ, Marko & 24 more languages ([#404](https://github.com/jimmy-guzman/stet/issues/404)) ([310219b](https://github.com/jimmy-guzman/stet/commit/310219b6229cdd89cda829bcc640d9ce16078e46))
+* **tui:** ✨ click, drag & hover across the chrome, panes & overlays ([#410](https://github.com/jimmy-guzman/stet/issues/410)) ([83c007d](https://github.com/jimmy-guzman/stet/commit/83c007d87618bd76e970a3dc280f3183b00ad170))
+
+
+### Bug Fixes
+
+* **viewer:** 🐛 close search on the first esc after a viewer selection ([#411](https://github.com/jimmy-guzman/stet/issues/411)) ([01a888d](https://github.com/jimmy-guzman/stet/commit/01a888da260ff3ba99b013f28b266a230f997214))
+
 ## [0.13.0](https://github.com/jimmy-guzman/stet/compare/stet-v0.12.0...stet-v0.13.0) (2026-11-25)
 
 

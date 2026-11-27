@@ -80,7 +80,8 @@ const ANSI_FALLBACK = {
  * measured off stet's own palettes so `stet-dark`/`stet-light` keep their look. Light surfaces need
  * larger steps because sRGB compresses contrast near white.
  * `selection` is measured the same way: at 0.2 it was within 1.1:1 of a find match in `stet-dark`,
- * and at 0.3 it is 1.4:1, there and in `stet-light`.
+ * and at 0.3 it is 1.4:1, there and in `stet-light`. `hover` is half of `cursor`, so a hovered row
+ * never reads as the cursor row.
  */
 const STEPS = {
   dark: {
@@ -88,6 +89,7 @@ const STEPS = {
     cursor: 0.09,
     faint: 0.32,
     find: 0.3,
+    hover: 0.045,
     lineNumber: 0.27,
     muted: 0.51,
     panel: 0.36,
@@ -102,6 +104,7 @@ const STEPS = {
     cursor: 0.17,
     faint: 0.52,
     find: 0.2,
+    hover: 0.085,
     lineNumber: 0.52,
     muted: 0.66,
     panel: 0.07,
@@ -168,7 +171,7 @@ const derive = (zed: ZedTheme): Theme => {
       untracked: hues.green,
     },
     recency: { aged: faint, fresh: accent },
-    scrollbar: { thumb: toward(fg, step.scrollbar) },
+    scrollbar: { active: muted, thumb: toward(fg, step.scrollbar) },
     selection: { bg: toward(fg, step.selection) },
     severity: { error: hues.red, warning: hues.yellow },
     stage: {
@@ -181,6 +184,7 @@ const derive = (zed: ZedTheme): Theme => {
     surface: {
       base: bg,
       cursor: toward(fg, step.cursor),
+      hover: toward(fg, step.hover),
       panel: toward("#000000", step.panel),
       scrim: "#000000",
     },

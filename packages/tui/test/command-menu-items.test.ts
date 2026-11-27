@@ -11,7 +11,7 @@ const viewer = (
   reference: { endLine: undefined, line: 12 },
   selectedPath: "src/foo.ts",
   selecting: false,
-  treeNode: undefined,
+  target: undefined,
   truncated: false,
   ...overrides,
 });
@@ -22,7 +22,7 @@ const tree = (overrides: Partial<CommandMenuInput> = {}): CommandMenuInput => ({
   reference: { endLine: undefined, line: undefined },
   selectedPath: undefined,
   selecting: false,
-  treeNode: { id: "file:src/foo.ts", kind: "file", path: "src/foo.ts" },
+  target: { kind: "file", path: "src/foo.ts" },
   truncated: false,
   ...overrides,
 });
@@ -146,10 +146,10 @@ describe("buildCommandMenuItems", () => {
   });
 
   test("tree directory node offers only its path (no expand/collapse)", () => {
-    const node = { id: "dir:src", kind: "directory" as const, path: "src" };
+    const node = { kind: "directory" as const, path: "src" };
 
-    expect(labels(tree({ treeNode: node }))).toEqual(["Copy path"]);
-    expect(buildCommandMenuItems(tree({ treeNode: node }))[0]?.action).toEqual({
+    expect(labels(tree({ target: node }))).toEqual(["Copy path"]);
+    expect(buildCommandMenuItems(tree({ target: node }))[0]?.action).toEqual({
       kind: "copyReference",
       line: undefined,
       path: "src",
@@ -157,6 +157,38 @@ describe("buildCommandMenuItems", () => {
   });
 
   test("tree without a focused node has no items", () => {
-    expect(buildCommandMenuItems(tree({ treeNode: undefined }))).toEqual([]);
+    expect(buildCommandMenuItems(tree({ target: undefined }))).toEqual([]);
+  });
+
+  test("a search match names its line in every action", () => {
+    const input = tree({
+      context: "search",
+      target: { kind: "file", line: 7, path: "src/foo.ts" },
+    });
+
+    expect(labels(input)).toEqual([
+      "Copy reference",
+      "Open in editor",
+      "Open in IDE",
+      "Open externally",
+    ]);
+    expect(buildCommandMenuItems(input)[0]?.action).toEqual({
+      kind: "copyReference",
+      line: 7,
+      path: "src/foo.ts",
+    });
+    expect(
+      buildCommandMenuItems(input).find((item) => item.label === "Open in IDE")
+        ?.action
+    ).toEqual({ kind: "openEditor", line: 7, mode: "ide", path: "src/foo.ts" });
+  });
+
+  test("a preview offers the viewed file's path and opens", () => {
+    expect(labels(tree({ context: "preview" }))).toEqual([
+      "Copy path",
+      "Open in editor",
+      "Open in IDE",
+      "Open externally",
+    ]);
   });
 });

@@ -5,6 +5,10 @@ import { state } from "@/state";
 import { theme } from "@/theme/context";
 import { AUTO_THEME, themeForName } from "@/theme/registry";
 
+import { leftPress } from "./mouse";
+import { hoverable } from "./pointer";
+import { scrollboxBar } from "./scrollbar";
+
 // `auto` follows the terminal, so its swatch is the live active accent; every
 // Named theme shows its own accent regardless of what's currently active.
 const swatch = (name: string) =>
@@ -49,6 +53,7 @@ const onWheel = (event: MouseEvent) => {
 
 export const ThemeCombobox = () => {
   let themeComboboxRef: ScrollBoxRenderable | undefined;
+  const bar = scrollboxBar();
 
   createEffect(() => {
     themeComboboxRef?.scrollChildIntoView(
@@ -85,16 +90,14 @@ export const ThemeCombobox = () => {
       <scrollbox
         ref={(el) => {
           themeComboboxRef = el;
+          bar.ref(el);
         }}
         width="100%"
         height={Math.min(12, Math.max(1, state.themeComboboxResults().length))}
         onMouseScroll={onWheel}
-        scrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.rgba.transparent,
-            foregroundColor: theme.colors.scrollbar.thumb,
-          },
-        }}
+        scrollbarOptions={bar.options()}
+        onMouseDown={bar.onMouseDown}
+        onMouseUp={bar.onMouseUp}
       >
         <Show
           when={state.themeComboboxResults().length > 0}
@@ -124,15 +127,16 @@ export const ThemeCombobox = () => {
                       ? theme.colors.surface.cursor
                       : theme.colors.surface.panel
                   }
-                  onMouseOver={() => {
+                  ref={hoverable("pointer").ref}
+                  // Motion, not `over`: OpenTUI re-sends `over` when the list scrolls under a
+                  // Still pointer, which would snap a keyboard pick back to the row beneath it.
+                  onMouseMove={() => {
                     state.setThemeComboboxIndex(index);
                   }}
-                  onMouseDown={() => {
-                    batch(() => {
-                      state.setThemeComboboxIndex(index);
-                      state.closeThemePicker(true);
-                    });
-                  }}
+                  onMouseDown={leftPress(() => {
+                    state.setThemeComboboxIndex(index);
+                    state.closeThemePicker(true);
+                  })}
                 >
                   <text
                     selectable={false}

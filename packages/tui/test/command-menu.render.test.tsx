@@ -356,3 +356,191 @@ describe("context command menu", () => {
     }
   }, 20_000);
 });
+
+describe("context menu on every surface", () => {
+  test("a right-click on a gap marker opens the menu and leaves the gap folded", async () => {
+    const lines = Array.from(
+      { length: 20 },
+      (_, index) => `const l${index + 1} = ${index + 1}`
+    );
+
+    const source = `${lines.join("\n")}\n`;
+
+    const repoRoot = createFixtureRepo("stet-cmd-marker-", {
+      "mod.ts": source,
+    });
+
+    writeFileSync(
+      path.join(repoRoot, "mod.ts"),
+      source
+        .replace("const l1 = 1", "const l1 = 100")
+        .replace("const l20 = 20", "const l20 = 200")
+    );
+
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockMouse } =
+      await testRender(() => <App />, { height: 30, width: 110 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      const frame = await settleUntil("gap marker", (current) =>
+        current.includes("unmodified lines")
+      );
+
+      const rows = frame.split("\n");
+      const y = rows.findIndex((row) => row.includes("unmodified lines"));
+      const x = (rows[y] ?? "").indexOf("unmodified lines");
+
+      await mockMouse.click(x, y, MouseButton.RIGHT);
+
+      const menu = await settleUntil("menu", (current) =>
+        current.includes("Copy reference")
+      );
+
+      expect(menu).toContain("unmodified lines");
+      expect(menu).not.toContain("const l10 = 10");
+    } finally {
+      state.closeCommandMenu();
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a binary file's preview has the file's menu, from a right-click or Shift+F10", async () => {
+    const repoRoot = createFixtureRepo("stet-cmd-binary-", { "blob.bin": "x" });
+
+    writeFileSync(
+      path.join(repoRoot, "blob.bin"),
+      Uint8Array.from([0, 1, 2, 3, 0, 255])
+    );
+
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
+      await testRender(() => <App />, { height: 24, width: 100 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      const frame = await settleUntil("preview", (current) =>
+        current.includes("Binary file")
+      );
+
+      const rows = frame.split("\n");
+      const y = rows.findIndex((row) => row.includes("Binary file"));
+      const x = (rows[y] ?? "").indexOf("Binary file");
+
+      await mockMouse.click(x, y, MouseButton.RIGHT);
+      await settleUntil("menu", (current) =>
+        current.includes("Open externally")
+      );
+      expect(state.commandMenuContext()).toBe("preview");
+      mockInput.pressEscape();
+      await settleUntil("closed", () => !state.commandMenuOpen());
+
+      // From the keyboard the menu mounts too, so it never swallows keys unseen.
+      state.setFocusedPane("diff");
+      mockInput.pressKey("F10", { shift: true });
+      await settleUntil("keyboard menu", (current) =>
+        current.includes("Open externally")
+      );
+      mockInput.pressEscape();
+      await settleUntil("closed again", () => !state.commandMenuOpen());
+    } finally {
+      state.closeCommandMenu();
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a right-click on a search result opens a menu naming its line", async () => {
+    const repoRoot = createFixtureRepo("stet-cmd-search-", {
+      "a.ts": "const needle = 1;\n",
+    });
+
+    writeFileSync(path.join(repoRoot, "a.ts"), "const needle = 2;\n");
+
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
+      await testRender(() => <App />, { height: 24, width: 100 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("loaded", (current) => current.includes("needle"));
+      mockInput.pressKey("f", { ctrl: true });
+      await mockInput.typeText("needle");
+
+      const results = await settleUntil("results", (current) =>
+        current.includes("1 match")
+      );
+
+      const rows = results.split("\n");
+      const y = rows.findLastIndex((row) => row.includes("const needle"));
+      const x = (rows[y] ?? "").indexOf("needle");
+
+      await mockMouse.click(x, y, MouseButton.RIGHT);
+      await settleUntil("menu", (current) =>
+        current.includes("Copy reference")
+      );
+      expect(state.commandMenuContext()).toBe("search");
+      expect(state.commandMenuItems()[0]?.action).toEqual({
+        kind: "copyReference",
+        line: 1,
+        path: "a.ts",
+      });
+    } finally {
+      state.closeCommandMenu();
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("a search result's menu closes when a refresh puts another result under it", async () => {
+    const repoRoot = createFixtureRepo("stet-cmd-search-drift-", {
+      "a.ts": "const needle = 1;\nconst needle2 = 1;\n",
+      "b.ts": "const needle = 1;\n",
+    });
+
+    writeFileSync(
+      path.join(repoRoot, "a.ts"),
+      "const needle = 2;\nconst needle2 = 2;\n"
+    );
+    writeFileSync(path.join(repoRoot, "b.ts"), "const needle = 2;\n");
+
+    const scope = { kind: "all", ref: "HEAD" } as const;
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } =
+      await testRender(() => <App />, { height: 30, width: 100 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("loaded", (current) => current.includes("needle"));
+      mockInput.pressKey("f", { ctrl: true });
+      await mockInput.typeText("needle");
+
+      const results = await settleUntil("results", (current) =>
+        current.includes("3 matches")
+      );
+
+      const rows = results.split("\n");
+      const y = rows.findLastIndex((row) => row.includes("const needle"));
+      const x = (rows[y] ?? "").indexOf("needle");
+
+      await mockMouse.click(x, y, MouseButton.RIGHT);
+      await settleUntil("menu", () => state.commandMenuOpen());
+
+      // Folding the group above shifts every row after it, so the same index names another row.
+      state.toggleSearchGroup("a.ts");
+      await settleUntil("menu closed", () => !state.commandMenuOpen());
+    } finally {
+      state.closeCommandMenu();
+      renderer.destroy();
+    }
+  }, 20_000);
+});

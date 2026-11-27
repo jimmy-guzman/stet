@@ -9,6 +9,8 @@ import type { AnchorCell } from "@/viewer/anchor";
 import { placeCard } from "@/viewer/anchor";
 
 import type { CommandMenuItem } from "./command-menu/items";
+import { isLeftClick } from "./mouse";
+import { hoverable } from "./pointer";
 
 const HINT = "↑↓ navigate · ⏎ run · esc close";
 
@@ -79,6 +81,11 @@ export const CommandMenu = (props: {
           borderColor={theme.colors.border.focused}
           backgroundColor={theme.colors.surface.panel}
           zIndex={100}
+          // A press anywhere on the menu is the menu's: it must not reach the pane under it, nor
+          // The app's root, which closes the menu on a press nothing else claimed.
+          onMouseDown={(event: MouseEvent) => {
+            event.stopPropagation();
+          }}
         >
           <Index each={value().items}>
             {(item, index) => {
@@ -95,9 +102,14 @@ export const CommandMenu = (props: {
                       ? theme.colors.surface.cursor
                       : theme.colors.surface.panel
                   }
+                  ref={hoverable("pointer").ref}
+                  onMouseMove={() => {
+                    state.setCommandMenuIndex(index);
+                  }}
                   onMouseDown={(event: MouseEvent) => {
-                    event.stopPropagation();
-                    run(item());
+                    if (isLeftClick(event)) {
+                      run(item());
+                    }
                   }}
                 >
                   <text

@@ -1,10 +1,15 @@
-import { createMemo, Index, Show } from "solid-js";
+import type { MouseEvent } from "@opentui/core";
+import { batch, createMemo, createSignal, Index, Show } from "solid-js";
 
+import { horizontalDock } from "@/layout/regions";
 import { state } from "@/state";
 import { theme } from "@/theme/context";
+import { createDoubleClickGuard } from "@/utils/double-click";
 
 import { emptyStateTone } from "./focus-tone";
 import { ListScrollbar } from "./list-scrollbar";
+import { isLeftClick, pressHistoryButton, pressOnlyClosesMenu } from "./mouse";
+import { hoverable } from "./pointer";
 import { TreeRow } from "./tree-row";
 import { windowWheelHandler } from "./wheel";
 
@@ -16,7 +21,53 @@ const dividerBorder = () => {
   return side === undefined ? false : [side];
 };
 
+// The divider is the pane's own border, the one cell of it no child covers, so a hit whose target is
+// The pane itself landed on the divider.
+const onDivider = (event: MouseEvent) =>
+  event.target !== null && event.target === event.currentTarget;
+
+const resizePointer = () =>
+  horizontalDock(state.sidebarPosition()) ? "col-resize" : "row-resize";
+
 export const Sidebar = () => {
+  // A drag resizes only when its press landed on the divider: a text selection or a drag whose
+  // Pressed row closed can also cross the divider, and neither is a resize.
+  const [resizing, setResizing] = createSignal(false);
+  const isDoubleClick = createDoubleClickGuard();
+
+  const divider = hoverable((event, pane) =>
+    event.target === pane ? resizePointer() : undefined
+  );
+
+  const onMouseDown = (event: MouseEvent) => {
+    // With the context menu open, a left press only closes it (the app's root does that), as one
+    // Anywhere does.
+    if (pressHistoryButton(event) || pressOnlyClosesMenu(event)) {
+      return;
+    }
+
+    batch(() => {
+      state.setFocusedPane("tree");
+
+      if (!isLeftClick(event) || !onDivider(event)) {
+        return;
+      }
+
+      // Keyed by cell, so grabbing the divider again where a drag left it is not a double-click.
+      if (isDoubleClick(`${event.x},${event.y}`)) {
+        state.resetPane();
+
+        return;
+      }
+
+      setResizing(true);
+    });
+  };
+
+  const endResize = () => {
+    setResizing(false);
+  };
+
   // Window the tree to its viewport, the SearchPane pattern: only ~viewport
   // TreeRow renderables ever exist, so a 100k-file repo mounts and scrolls at
   // The same cost as a small one. The cursor-follow and clamp live in state.
@@ -40,12 +91,22 @@ export const Sidebar = () => {
       width="100%"
       height="100%"
       flexDirection="column"
+      ref={divider.ref}
       border={dividerBorder()}
-      borderColor={theme.colors.border.unfocused}
+      borderColor={
+        divider.hovered() || resizing()
+          ? theme.colors.border.focused
+          : theme.colors.border.unfocused
+      }
       backgroundColor={theme.colors.surface.base}
-      onMouseDown={() => {
-        state.setFocusedPane("tree");
+      onMouseDown={onMouseDown}
+      onMouseDrag={(event: MouseEvent) => {
+        if (resizing()) {
+          state.resizePaneTo(event);
+        }
       }}
+      onMouseDragEnd={endResize}
+      onMouseUp={endResize}
     >
       <box
         width="100%"

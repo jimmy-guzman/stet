@@ -1,23 +1,38 @@
-import { MouseButton, SliderRenderable } from "@opentui/core";
+import { SliderRenderable } from "@opentui/core";
 import type { MouseEvent } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { createEffect } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 
 import { theme } from "@/theme/context";
+
+import { isLeftClick, pressOnlyClosesMenu } from "./mouse";
+import { hoverable } from "./pointer";
+import { thumbColor } from "./scrollbar";
 
 /**
  * A slider inside a pane. OpenTUI's takes any button and keeps the press to itself, so a press here
  * would not focus the pane, and a right-click would scroll it. The pane gets every press first, and
- * the slider only the left one.
+ * the slider only the left one, unless that press only closes the context menu. `onHold` reports the
+ * left press from its start to its release, which the slider keeps to itself too.
  */
 class PaneSliderRenderable extends SliderRenderable {
+  onHold?: (held: boolean) => void;
+
   override processMouseEvent(event: MouseEvent) {
     if (event.type === "down") {
+      // Asked first: the pane's own handling closes the menu, so afterwards no menu is open.
+      const onlyClosesMenu = pressOnlyClosesMenu(event);
       this.parent?.processMouseEvent(event);
 
-      if (event.button !== MouseButton.LEFT.valueOf()) {
+      if (!isLeftClick(event) || onlyClosesMenu) {
         return;
       }
+
+      this.onHold?.(true);
+    }
+
+    if (event.type === "up") {
+      this.onHold?.(false);
     }
 
     super.processMouseEvent(event);
@@ -68,15 +83,22 @@ export const ListScrollbar = (props: {
     syncing = false;
   });
 
+  const column = hoverable("default");
+  const [held, setHeld] = createSignal(false);
+  slider.onHold = (next) => {
+    setHeld(next);
+  };
+
   createEffect(() => {
     slider.backgroundColor = theme.rgba.transparent;
-    slider.foregroundColor = theme.colors.scrollbar.thumb;
+    slider.foregroundColor = thumbColor(column.hovered() || held());
   });
 
   return (
     <box
       ref={(el) => {
         el.add(slider);
+        column.ref(el);
       }}
       width={1}
       height={props.viewport()}

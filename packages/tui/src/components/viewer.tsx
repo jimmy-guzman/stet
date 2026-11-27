@@ -1,4 +1,4 @@
-import type { InputRenderable } from "@opentui/core";
+import type { InputRenderable, MouseEvent } from "@opentui/core";
 import { batch, createEffect, Match, on, Show, Switch } from "solid-js";
 
 import type { NavigableLine } from "@/diff/rows";
@@ -12,9 +12,17 @@ import {
 import { truncateLeft } from "@/utils/text";
 import type { Position } from "@/viewer/navigation";
 
+import { ActionText } from "./action-text";
 import { BinaryPreview } from "./binary-preview";
 import { DiffView } from "./diff/diff-view";
 import { emptyStateTone } from "./focus-tone";
+import {
+  leftPress,
+  openMenuAt,
+  pressHistoryButton,
+  pressOnlyClosesMenu,
+} from "./mouse";
+import { hoverable } from "./pointer";
 import { SearchPane } from "./search-pane";
 
 const findRestoreIndex = (lines: NavigableLine[], position: Position) => {
@@ -124,18 +132,44 @@ const onFindInput = (value: string) => {
 };
 
 const onFindSubmit = () => {
-  batch(() => {
-    const matches = state.findMatches();
-    const [first] = matches;
+  state.commitFind();
+};
 
-    if (first !== undefined) {
-      state.setFindMatchPos(0);
-      state.goToFindMatch(first);
-      state.setFindActive(true);
-    }
-
-    state.setFindOpen(false);
+// A file shown as a preview (a binary's metadata, a placeholder line) has no caret for the viewer's
+// Menu to open on, so a right-click opens the file's own menu at the pointer.
+const onPreviewPress = (event: MouseEvent) => {
+  openMenuAt(event, "preview", () => {
+    state.setFocusedPane("diff");
   });
+};
+
+const TruncationFooter = () => {
+  const hover = hoverable("pointer");
+
+  return (
+    <box
+      ref={hover.ref}
+      height={1}
+      flexDirection="row"
+      paddingLeft={1}
+      paddingRight={1}
+      backgroundColor={theme.colors.surface.panel}
+      onMouseDown={leftPress(() => {
+        state.loadFullContent();
+      })}
+    >
+      <text
+        selectable={false}
+        fg={
+          hover.hovered() ? theme.colors.text.primary : theme.colors.text.muted
+        }
+      >
+        {`⋯ ${state.truncatedHidden()} more ${
+          state.truncatedHidden() === 1 ? "line" : "lines"
+        } · f to load`}
+      </text>
+    </box>
+  );
 };
 
 export const Viewer = () => {
@@ -233,7 +267,12 @@ export const Viewer = () => {
       width="100%"
       height="100%"
       flexDirection="column"
-      onMouseDown={() => {
+      onMouseDown={(event: MouseEvent) => {
+        // With the context menu open, a left press only closes it (the app's root does that).
+        if (pressHistoryButton(event) || pressOnlyClosesMenu(event)) {
+          return;
+        }
+
         state.setFocusedPane(state.viewerFocus());
       }}
     >
@@ -265,9 +304,25 @@ export const Viewer = () => {
                 >
                   {truncateLeft(state.selectedPath() ?? "", titleBudget())}
                 </text>
-                <text fg={theme.colors.text.muted} flexShrink={0}>
-                  {titleStats() === "" ? "" : ` ${titleStats()}`}
-                </text>
+                {/* The stats name the view (`+A -D` a diff, `N lines` the file), so a click
+                    switches it, as `v` does, for a changed file, the only kind with both. */}
+                <Show
+                  when={
+                    state.selectedFile() !== undefined && titleStats() !== ""
+                  }
+                  fallback={
+                    <text fg={theme.colors.text.muted} flexShrink={0}>
+                      {titleStats() === "" ? "" : ` ${titleStats()}`}
+                    </text>
+                  }
+                >
+                  <ActionText
+                    label={` ${titleStats()}`}
+                    onPress={() => {
+                      state.toggleFileView();
+                    }}
+                  />
+                </Show>
               </box>
             }
           >
@@ -294,7 +349,7 @@ export const Viewer = () => {
                   ref={(el: InputRenderable) => {
                     findInputRef = el;
                   }}
-                  focused={state.findOpen()}
+                  focused={state.findOpen() && !state.overlayOpen()}
                   width="100%"
                   backgroundColor={theme.colors.surface.panel}
                   focusedBackgroundColor={theme.colors.surface.panel}
@@ -305,10 +360,30 @@ export const Viewer = () => {
                   onSubmit={onFindSubmit}
                 />
               </box>
-              <text fg={theme.colors.text.muted}>
-                {findCounter() === "" ? "" : `${findCounter()}  `}
-              </text>
-              <text fg={theme.colors.text.faint}>esc</text>
+              {/* The counter steps to the next match once the find is committed, as `n`
+                  does; while typing, the bar's input owns the keys and `enter` commits. */}
+              <Show
+                when={state.findActive() && state.findMatches().length > 0}
+                fallback={
+                  <text fg={theme.colors.text.muted}>
+                    {findCounter() === "" ? "" : `${findCounter()}  `}
+                  </text>
+                }
+              >
+                <ActionText
+                  label={`${findCounter()}  `}
+                  onPress={() => {
+                    state.cycleFind(1);
+                  }}
+                />
+              </Show>
+              <ActionText
+                label="esc"
+                fg={theme.colors.text.faint}
+                onPress={() => {
+                  state.resetFind();
+                }}
+              />
             </box>
           </Show>
           {/* Nothing is selectable (an empty repository, or selection cleared):
@@ -343,10 +418,31 @@ export const Viewer = () => {
                 <Show
                   when={!isPlaceholder()}
                   fallback={
-                    <box height={state.viewerHeight()} paddingLeft={1}>
-                      <text fg={theme.colors.text.muted}>
-                        {placeholderText(state.diffView()?.fileContent)}
-                      </text>
+                    <box
+                      height={state.viewerHeight()}
+                      paddingLeft={1}
+                      flexDirection="row"
+                      onMouseDown={onPreviewPress}
+                    >
+                      {/* A file too large to show loads on a click, as `f` loads it. */}
+                      <Show
+                        when={
+                          state.diffView()?.fileContent?.kind === "too-large"
+                        }
+                        fallback={
+                          <text fg={theme.colors.text.muted}>
+                            {placeholderText(state.diffView()?.fileContent)}
+                          </text>
+                        }
+                      >
+                        <ActionText
+                          label={placeholderText(state.diffView()?.fileContent)}
+                          wraps
+                          onPress={() => {
+                            state.loadFullContent();
+                          }}
+                        />
+                      </Show>
                     </box>
                   }
                 >
@@ -356,6 +452,7 @@ export const Viewer = () => {
             >
               {(preview) => (
                 <BinaryPreview
+                  onMouseDown={onPreviewPress}
                   path={preview().path}
                   height={state.viewerHeight()}
                   single={preview().single}
@@ -369,22 +466,7 @@ export const Viewer = () => {
           the content it describes. The whole row loads the rest, mirroring the `f`
           key. */}
           <Show when={state.truncated()}>
-            <box
-              height={1}
-              flexDirection="row"
-              paddingLeft={1}
-              paddingRight={1}
-              backgroundColor={theme.colors.surface.panel}
-              onMouseDown={() => {
-                state.loadFullContent();
-              }}
-            >
-              <text selectable={false} fg={theme.colors.text.muted}>
-                {`⋯ ${state.truncatedHidden()} more ${
-                  state.truncatedHidden() === 1 ? "line" : "lines"
-                } · f to load`}
-              </text>
-            </box>
+            <TruncationFooter />
           </Show>
         </Match>
       </Switch>

@@ -7,6 +7,11 @@ import { state } from "@/state";
 import { theme } from "@/theme/context";
 import { relativeTime } from "@/utils/relative-time";
 
+import { ActionText } from "./action-text";
+import { leftPress } from "./mouse";
+import { hoverable } from "./pointer";
+import { scrollboxBar } from "./scrollbar";
+
 const commitsView = () => state.scopeMenuView() === "commits";
 
 // Wall-clock captured at drill-in (state.now() is the recency clock, which freezes
@@ -43,12 +48,8 @@ export const ScopeMenu = () => {
     scopeMenuRef?.scrollChildIntoView(`scope-menu-${state.scopeMenuIndex()}`);
   });
 
-  const scrollbarOptions = {
-    trackOptions: {
-      backgroundColor: theme.rgba.transparent,
-      foregroundColor: theme.colors.scrollbar.thumb,
-    },
-  };
+  const kindsBar = scrollboxBar();
+  const commitsBar = scrollboxBar();
 
   return (
     <box
@@ -76,10 +77,13 @@ export const ScopeMenu = () => {
         <scrollbox
           ref={(el) => {
             scopeMenuRef = el;
+            kindsBar.ref(el);
           }}
           width="100%"
           height={scopeKinds.length + 3}
-          scrollbarOptions={scrollbarOptions}
+          scrollbarOptions={kindsBar.options()}
+          onMouseDown={kindsBar.onMouseDown}
+          onMouseUp={kindsBar.onMouseUp}
         >
           {/* Id-by-index is required: reordering must never change a live renderable's id.
               The "changes"/"history" section labels are interleaved off the grouped
@@ -101,10 +105,14 @@ export const ScopeMenu = () => {
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={rowBackground(active())}
-                    onMouseDown={() => {
+                    ref={hoverable("pointer").ref}
+                    onMouseMove={() => {
+                      state.setScopeMenuIndex(index);
+                    }}
+                    onMouseDown={leftPress(() => {
                       state.selectScope(kind());
                       state.setScopeMenuOpen(false);
-                    }}
+                    })}
                   >
                     <text
                       selectable={false}
@@ -126,11 +134,15 @@ export const ScopeMenu = () => {
             backgroundColor={rowBackground(
               state.scopeMenuIndex() === scopeKinds.length
             )}
-            onMouseDown={() => {
+            ref={hoverable("pointer").ref}
+            onMouseMove={() => {
+              state.setScopeMenuIndex(scopeKinds.length);
+            }}
+            onMouseDown={leftPress(() => {
               state.setScopeMenuView("commits");
               state.setScopeMenuIndex(0);
               state.loadCommits(state.gitModel().repoRoot);
-            }}
+            })}
           >
             <text
               selectable={false}
@@ -176,10 +188,13 @@ export const ScopeMenu = () => {
           <scrollbox
             ref={(el) => {
               scopeMenuRef = el;
+              commitsBar.ref(el);
             }}
             width="100%"
             height={Math.min(14, Math.max(1, state.commits().length))}
-            scrollbarOptions={scrollbarOptions}
+            scrollbarOptions={commitsBar.options()}
+            onMouseDown={commitsBar.onMouseDown}
+            onMouseUp={commitsBar.onMouseUp}
           >
             <Index each={state.commits()}>
               {(commit, index) => {
@@ -197,11 +212,15 @@ export const ScopeMenu = () => {
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={rowBackground(active())}
-                    onMouseDown={() => {
+                    ref={hoverable("pointer").ref}
+                    onMouseMove={() => {
+                      state.setScopeMenuIndex(index);
+                    }}
+                    onMouseDown={leftPress(() => {
                       if (state.selectCommit(index)) {
                         state.setScopeMenuOpen(false);
                       }
-                    }}
+                    })}
                   >
                     {/* One line: subjects run long, so the sha column never shrinks and
                         the subject clips at the overlay edge. */}
@@ -225,12 +244,18 @@ export const ScopeMenu = () => {
         </Show>
         <box
           height={1}
+          flexDirection="row"
           paddingLeft={1}
           backgroundColor={theme.colors.surface.panel}
         >
-          <text fg={theme.colors.text.muted}>
-            ↑↓ navigate · ⏎ view · esc back
-          </text>
+          <text fg={theme.colors.text.muted}>{"↑↓ navigate · ⏎ view · "}</text>
+          {/* The one way back to the kinds without a key. */}
+          <ActionText
+            label="esc back"
+            onPress={() => {
+              state.leaveScopeCommits();
+            }}
+          />
         </box>
       </Show>
     </box>

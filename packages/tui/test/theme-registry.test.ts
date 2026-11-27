@@ -181,6 +181,7 @@ describe("built-in icon colors", () => {
           Object.entries({
             base: theme.surface.base,
             cursor: theme.surface.cursor,
+            hover: theme.surface.hover,
             panel: theme.surface.panel,
           })
             .map(([surface, background]) => ({

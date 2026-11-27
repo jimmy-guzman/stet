@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { rgbToHex, ScrollBoxRenderable } from "@opentui/core";
+import type { CapturedFrame, Renderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createSignal } from "solid-js";
@@ -9,6 +11,7 @@ import { createSignal } from "solid-js";
 import { App } from "@/app";
 import { ListScrollbar } from "@/components/list-scrollbar";
 import { state } from "@/state";
+import { theme } from "@/theme/context";
 import { toCodePoints } from "@/utils/text";
 
 import {
@@ -48,6 +51,17 @@ const bigDirectory = (count: number) =>
       `content ${i}\n`,
     ])
   );
+
+// The foreground of one cell. Spans carry no column, so a row is spread into one color per cell.
+const fgAt = (frame: CapturedFrame, x: number, y: number) =>
+  (frame.lines[y]?.spans ?? []).flatMap((span) =>
+    Array.from({ length: span.width }, () => rgbToHex(span.fg))
+  )[x];
+
+const scrollboxes = (root: Renderable): ScrollBoxRenderable[] => [
+  ...(root instanceof ScrollBoxRenderable ? [root] : []),
+  ...root.getChildren().flatMap(scrollboxes),
+];
 
 // The windowed lists mount only their visible slice, so their scrollbar is a standalone one fed the
 // List's own numbers. Each fixture overflows one list only, which proves that list wired its own.
@@ -94,6 +108,32 @@ describe("list scrollbar", () => {
     }
   }, 20_000);
 
+  test("a track click that closes the context menu scrolls nothing", async () => {
+    const repoRoot = createFixtureRepo("stet-scrollbar-", bigDirectory(300));
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, mockMouse, renderOnce, captureCharFrame } =
+      await testRender(() => <App />, { height: 16, width: 90 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("first render", (current) =>
+        current.includes("f000.txt")
+      );
+
+      const { height, width, x, y } = state.layout().sidebar.content;
+      await mockMouse.click(x + 2, y + 1, MouseButtons.RIGHT);
+      await settleUntil("menu", () => state.commandMenuOpen());
+
+      await mockMouse.click(x + width - 1, y + height - 1);
+      await settleUntil("menu closed", () => !state.commandMenuOpen());
+      expect(state.sidebarScrollTop()).toBe(0);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
   test("dragging the thumb scrolls the tree, and a track click jumps", async () => {
     const repoRoot = createFixtureRepo("stet-scrollbar-", bigDirectory(300));
     seedState(await loadModel(repoRoot, scope), scope);
@@ -131,6 +171,129 @@ describe("list scrollbar", () => {
       await mockMouse.click(column, y + Math.floor(height / 2));
       await settleUntil("jumped", () => state.sidebarScrollTop() < last);
       expect(state.sidebarScrollTop()).toBeGreaterThan(0);
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("the tree's thumb lights under the pointer and through a drag", async () => {
+    const repoRoot = createFixtureRepo("stet-scrollbar-", bigDirectory(300));
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const { renderer, mockMouse, renderOnce, captureCharFrame, captureSpans } =
+      await testRender(() => <App />, { height: 16, width: 90 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("first render", (current) =>
+        current.includes("f000.txt")
+      );
+
+      const { width, x, y } = state.layout().sidebar.content;
+      const column = x + width - 1;
+
+      // Whether every cell the thumb covers, wherever it has scrolled to, paints in `color`.
+      const thumbIs = (color: string) => {
+        const frame = captureSpans();
+        const rows = tree(captureCharFrame());
+
+        return (
+          rows.length > 0 &&
+          rows.every((row) => fgAt(frame, column, y + row) === color)
+        );
+      };
+
+      expect(thumbIs(theme.colors.scrollbar.thumb)).toBe(true);
+
+      await mockMouse.moveTo(column, y + 1);
+      await settleUntil("lit", () => thumbIs(theme.colors.scrollbar.active));
+
+      await mockMouse.moveTo(x + 2, y + 1);
+      await settleUntil("unlit", () => thumbIs(theme.colors.scrollbar.thumb));
+
+      // A drag keeps it lit after the pointer leaves the column, until the next move off it.
+      await mockMouse.moveTo(column, y);
+      await mockMouse.pressDown(column, y);
+      await mockMouse.moveTo(x + 2, y + 3);
+      await settleUntil("scrolled", () => state.sidebarScrollTop() > 0);
+      expect(thumbIs(theme.colors.scrollbar.active)).toBe(true);
+
+      await mockMouse.release(x + 2, y + 3);
+      await mockMouse.moveTo(x + 3, y + 3);
+      await settleUntil("unlit after the drag", () =>
+        thumbIs(theme.colors.scrollbar.thumb)
+      );
+    } finally {
+      renderer.destroy();
+    }
+  }, 20_000);
+
+  test("an overlay's native scrollbar lights under the pointer", async () => {
+    const repoRoot = createFixtureRepo("stet-scrollbar-help-", {
+      "a.txt": "a\n",
+    });
+
+    seedState(await loadModel(repoRoot, scope), scope);
+
+    const {
+      renderer,
+      mockInput,
+      mockMouse,
+      renderOnce,
+      captureCharFrame,
+      captureSpans,
+    } = await testRender(() => <App />, { height: 16, width: 90 });
+
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("first render", (current) => current.includes("a.txt"));
+      mockInput.pressKey("?");
+      await settleUntil("help overlay", (frame) =>
+        frame.includes("navigation")
+      );
+
+      const [list] = scrollboxes(renderer.root);
+      const bar = list?.verticalScrollBar;
+      expect(bar?.visible).toBe(true);
+
+      const column = bar?.x ?? 0;
+      const top = bar?.y ?? 0;
+      const span = { height: bar?.height ?? 0, width: 1, x: column, y: top };
+
+      // Whether every cell the thumb covers, wherever it has scrolled to, paints in `color`.
+      const thumbIs = (color: string) => {
+        const frame = captureSpans();
+        const rows = thumbRows(captureCharFrame(), span);
+
+        return (
+          rows.length > 0 &&
+          rows.every((row) => fgAt(frame, column, top + row) === color)
+        );
+      };
+
+      expect(thumbIs(theme.colors.scrollbar.thumb)).toBe(true);
+
+      await mockMouse.moveTo(column, top + 1);
+      await settleUntil("lit", () => thumbIs(theme.colors.scrollbar.active));
+
+      // Over the rows beside it, the bar is dark again.
+      await mockMouse.moveTo(column - 4, top + 1);
+      await settleUntil("unlit", () => thumbIs(theme.colors.scrollbar.thumb));
+
+      // A drag keeps it lit after the pointer leaves the bar, until the next move off it.
+      await mockMouse.moveTo(column, top);
+      await mockMouse.pressDown(column, top);
+      await mockMouse.moveTo(column - 4, top + 3);
+      await settleUntil("scrolled", () => (list?.scrollTop ?? 0) > 0);
+      expect(thumbIs(theme.colors.scrollbar.active)).toBe(true);
+
+      await mockMouse.release(column - 4, top + 3);
+      await mockMouse.moveTo(column - 5, top + 3);
+      await settleUntil("unlit after the drag", () =>
+        thumbIs(theme.colors.scrollbar.thumb)
+      );
     } finally {
       renderer.destroy();
     }

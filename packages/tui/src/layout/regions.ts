@@ -206,6 +206,45 @@ const carve = (band: Rect, pane: DockedPane) => {
   };
 };
 
+/**
+ * The extent a docked pane takes when its divider is dragged to a terminal cell, along the dock's
+ * axis. It passes through the same clamp `computeLayout` applies, so a drag past either limit
+ * stores what is drawn rather than a value later presses would have to work back through.
+ *
+ * @param input - The layout's current inputs; only the terminal size and the dock edge are read.
+ * @param point - The pointer's cell, in absolute terminal coordinates.
+ */
+export const draggedExtent = (
+  input: LayoutInput,
+  point: { x: number; y: number }
+) => {
+  const bandHeight = Math.max(
+    0,
+    input.terminalHeight - HEADER_ROWS - STATUS_ROWS
+  );
+
+  const reach = {
+    bottom: HEADER_ROWS + bandHeight - point.y,
+    left: point.x + 1,
+    right: input.terminalWidth - point.x,
+    top: point.y - HEADER_ROWS + 1,
+  } satisfies Record<Dock, number>;
+
+  return horizontalDock(input.sidebar.position)
+    ? clampExtent(
+        reach[input.sidebar.position],
+        input.terminalWidth,
+        PANE_MIN_WIDTH,
+        VIEWER_MIN_WIDTH
+      )
+    : clampExtent(
+        reach[input.sidebar.position],
+        bandHeight,
+        PANE_MIN_HEIGHT,
+        VIEWER_MIN_HEIGHT
+      );
+};
+
 /** The column a vertical divider occupies; a top or bottom dock's divider meets no rule. */
 const junctionOf = (pane: PaneRect) => {
   if (pane.divider === "right") {

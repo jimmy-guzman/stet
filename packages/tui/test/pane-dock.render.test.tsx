@@ -156,3 +156,67 @@ test("a bare d never fires the move while the search pane owns the keys", async 
     renderer.destroy();
   }
 });
+
+test("dragging the divider sizes the tree on its axis, and a double-click resets it", async () => {
+  const repoRoot = createFixtureRepo("stet-pane-drag-", {
+    "src/a.ts": "export const a = 1;\n",
+  });
+
+  const scope = { kind: "all", ref: "HEAD" } as const;
+  seedState(await loadModel(repoRoot, scope), scope);
+
+  const { renderer, mockInput, mockMouse, renderOnce, captureCharFrame } =
+    await testRender(() => <App />, { height: 24, width: 100 });
+
+  try {
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    await settleUntil("first render", (current) => current.includes("a.ts"));
+
+    const left = state.layout().sidebar;
+    const column = left.x + left.width - 1;
+    await mockMouse.drag(column, 5, column + 10, 5);
+    await renderOnce();
+    expect(state.layout().sidebar.width).toBe(left.width + 10);
+
+    await mockMouse.doubleClick(column + 10, 5);
+    await renderOnce();
+    expect(state.layout().sidebar.width).toBe(left.width);
+
+    // Docked on top, the divider is the tree's last row and sizes it in rows.
+    mockInput.pressKey("d");
+    await settleUntil("docked top", () => state.sidebarPosition() === "top");
+
+    const top = state.layout().sidebar;
+    const row = top.y + top.height - 1;
+    await mockMouse.drag(40, row, 40, row + 3);
+    await renderOnce();
+    expect(state.layout().sidebar.height).toBe(top.height + 3);
+  } finally {
+    renderer.destroy();
+  }
+});
+
+test("a text selection dragged across the divider leaves the tree's size alone", async () => {
+  const repoRoot = createFixtureRepo("stet-pane-select-", {
+    "src/a.ts": "export const a = 1;\n",
+  });
+
+  const scope = { kind: "all", ref: "HEAD" } as const;
+  seedState(await loadModel(repoRoot, scope), scope);
+
+  const { renderer, mockMouse, renderOnce, captureCharFrame } =
+    await testRender(() => <App />, { height: 24, width: 100 });
+
+  try {
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+    await settleUntil("first render", (current) => current.includes("a.ts"));
+
+    // The viewer's title path is selectable text; drag from it back across the divider.
+    const { sidebar, viewer } = state.layout();
+    await mockMouse.drag(viewer.x + 3, viewer.y, sidebar.x + 5, viewer.y);
+    await renderOnce();
+    expect(state.layout().sidebar.width).toBe(sidebar.width);
+  } finally {
+    renderer.destroy();
+  }
+});

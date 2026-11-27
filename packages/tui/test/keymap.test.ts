@@ -416,6 +416,34 @@ describe("createKeyHandler", () => {
     expect(state.mainView()).toBe("file");
     expect(state.quitConfirmOpen()).toBe(false);
   });
+
+  test("a viewer selection left under the search view doesn't swallow the esc that closes it", () => {
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
+
+    state.select({
+      anchor: { column: 0, index: 0 },
+      focus: { column: 3, index: 0 },
+      unit: "character",
+    });
+    state.openSearch();
+    state.setFocusedPane("tree");
+    handle(keyEvent({ name: "escape" }));
+
+    expect(state.mainView()).toBe("file");
+    expect(state.viewerSelection()).toBeDefined();
+  });
+
+  test("a committed find left under the search view doesn't swallow the esc that closes it", () => {
+    const handle = createKeyHandler({ openInEditor: noopOpen, quit: noop });
+
+    state.setFindActive(true);
+    state.openSearch();
+    state.setFocusedPane("tree");
+    handle(keyEvent({ name: "escape" }));
+
+    expect(state.mainView()).toBe("file");
+    expect(state.findActive()).toBe(true);
+  });
 });
 
 test("tree keys follow natural ordering and toggle folders without opening a file", () => {

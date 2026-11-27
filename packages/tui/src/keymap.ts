@@ -602,10 +602,8 @@ const handleFindBar: KeyStep = ({ key }) => {
 
 // A committed find rebinds n/N to cycle matches and esc to clear it; every
 // Other key falls through so diff navigation still works over the highlights.
-// Only while the file view is showing: with the search view up, cycling
-// Would move the cursor of a diff that isn't on screen.
 const handleCommittedFind: KeyStep = ({ key }) => {
-  if (!state.findActive() || state.mainView() !== "file") {
+  if (!state.findActive()) {
     return false;
   }
 
@@ -630,9 +628,8 @@ const handleCommittedFind: KeyStep = ({ key }) => {
   return false;
 };
 
-// A selection is dismiss-on-esc, claimed after the find handlers (so an open or
-// Committed find dismisses first) but before the global esc; the cursor stays where
-// The selection's focus was.
+// A selection is dismiss-on-esc, after a committed find (which dismisses first);
+// The cursor stays where the selection's focus was.
 const handleSelectionEscape: KeyStep = ({ key }) => {
   if (state.viewerSelection() !== undefined && key.name === "escape") {
     state.clearSelection();
@@ -642,6 +639,13 @@ const handleSelectionEscape: KeyStep = ({ key }) => {
 
   return false;
 };
+
+// The viewer's committed-find and selection keys, claimed before the global esc.
+// One gate for all of them: with the search view up they would act on a viewer
+// That isn't on screen, and a selection left there swallowed the esc that closes
+// Search (#409).
+const handleViewerKeys: KeyStep = (ctx) =>
+  fileViewShowing() && (handleCommittedFind(ctx) || handleSelectionEscape(ctx));
 
 const leadingGlobalBindings: readonly Binding[] = [
   {
@@ -1096,8 +1100,7 @@ const keyChain: readonly KeyStep[] = [
   handleThemeCombobox,
   handleSearchPane,
   handleFindBar,
-  handleCommittedFind,
-  handleSelectionEscape,
+  handleViewerKeys,
   runBindings(leadingGlobalBindings),
   handleGlobalEscape,
   runBindings(globalBindings),

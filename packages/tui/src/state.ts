@@ -1842,8 +1842,11 @@ const createState = () => {
       return ["enter find", "esc cancel"].join(BAR_SEP);
     }
 
+    // The keymap ignores a committed find's keys under the search view, so the hint goes with them.
     return (
-      findActive() ? ["n/N next/prev", "esc clear"] : ["? help", "q quit"]
+      findActive() && mainView() === "file"
+        ? ["n/N next/prev", "esc clear"]
+        : ["? help", "q quit"]
     ).join(BAR_SEP);
   });
 

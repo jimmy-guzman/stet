@@ -54,6 +54,13 @@ test("the find modes carry their own guidance", () => {
   });
 });
 
+test("a committed find left under the search view hands guidance back", () => {
+  state.setFindActive(true);
+  state.openSearch();
+
+  expect(state.statusBarModel()).toMatchObject({ text: "? help ─ q quit" });
+});
+
 test("a recent changed file surfaces as ambient activity", () => {
   state.setTerminalWidth(300);
   state.setActivityLog(
